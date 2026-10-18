@@ -23,13 +23,6 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 # ---------------------------------------------------------------------------
 # Helpers
 
@@ -855,13 +848,13 @@ test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the 
         [lsearch -all -inline -glob $lines {*static*}]
 } -cleanup {unset -nocomplain lines} -result {1 {}}
 
-test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the same managed-heap report as the unwrapped body} -constraints nativeLinux -body {
+test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the same managed-heap report as the unwrapped body} -constraints nativeCoroutines -body {
     set a [native::allocationReport [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nf(5)\n"] summary]
     set b [native::allocationReport [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nf(5)\n"] summary]
     list [dict get $a total allocations] [expr {[dict get $a total] eq [dict get $b total]}]
 } -cleanup {unset -nocomplain a b} -result {0 1}
 
-test sc-alloc-rejected {item 47: a rejected block's failure allocates what its payload's fields hold -- the primary SourceLocation struct and the related List; the message is a String constant, never allocated per failure -- and a handler that binds the payload whole materializes one struct more} -constraints nativeLinux -body {
+test sc-alloc-rejected {item 47: a rejected block's failure allocates what its payload's fields hold -- the primary SourceLocation struct and the related List; the message is a String constant, never allocated per failure -- and a handler that binds the payload whole materializes one struct more} -constraints nativeCoroutines -body {
     set whole [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError details:\n        details\nr.code == compiler::DiagnosticCode::Unbound\n"] summary]
     set code [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError \{code\}:\n        code == compiler::DiagnosticCode::Unbound\nr\n"] summary]
     list [dict get $whole total allocations] [dict get $code total allocations]
@@ -872,7 +865,7 @@ test sc-uncaught-rendering {item 95: an uncaught CompilerError (reachable only w
     lsort -unique [lmap b {interp compile cranelift} {lrange [outcomeUnderHir $b $hir] 0 2}]
 } -cleanup {unset -nocomplain hir} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error compiler::CompilerError {code: compiler::DiagnosticCode::Unbound, message: "unbound name \"missing\"", primary: compiler::SourceLocation {line: 4, column: 9}, related: []}>}}}
 
-test sc-gc-stress {item 84: a rejected block's payload (message String, related List, location structs) and an accepted body's runtime error and affine values survive a GC attempt at every allocation} -constraints nativeLinux -body {
+test sc-gc-stress {item 84: a rejected block's payload (message String, related List, location structs) and an accepted body's runtime error and affine values survive a GC attempt at every allocation} -constraints nativeCoroutines -body {
     set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
     try {

@@ -16,12 +16,7 @@ source [file join $::projectRoot tests golden run.tcl]
 
 interp recursionlimit {} 100000
 
-# Native coroutines exist on Linux x86-64 and AArch64 only (COROUTINES.md),
-# and the runner is a coroutine: elsewhere the framework runs on the Tcl
-# backends.
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-set gfBackends [expr {[testConstraint nativeLinux] ? {interp compile cranelift} : {interp compile}}]
+set gfBackends [expr {[testConstraint nativeCoroutines] ? {interp compile cranelift} : {interp compile}}]
 
 proc gfProbeImpl {v} {
     lappend ::gfProbes [core::value::intOf $v]
@@ -285,7 +280,7 @@ test gf-registration-does-not-run {registering a case stores its check: the body
     lmap backend {interp compile} {gfProbed [gfCounted {test::count()}] $backend}
 } -result {{1 {}} {1 {}}}
 
-test gf-registration-does-not-run-native {natively: registration allocates the body's closure and the case, but nothing at the body's own List literal (line 7)} -constraints nativeLinux -body {
+test gf-registration-does-not-run-native {natively: registration allocates the body's closure and the case, but nothing at the body's own List literal (line 7)} -constraints nativeCoroutines -body {
     list [gfNativeAllocationsAt [gfCounted {test::count()}] 7] [gfNativeAllocationsAt [gfCounted {test::report()}] 7]
 } -result {0 1}
 
@@ -315,7 +310,7 @@ test gf-repeated-runs {re-running starts every registered case again: two runs, 
     lmap backend {interp compile} {gfProbed [gfCounted {[test::report(), test::report()]}] $backend}
 } -result {{{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}} {{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}}}
 
-test gf-repeated-runs-native {natively, two runs execute the body twice} -constraints nativeLinux -body {
+test gf-repeated-runs-native {natively, two runs execute the body twice} -constraints nativeCoroutines -body {
     gfNativeAllocationsAt [gfCounted {[test::report(), test::report()]}] 7
 } -result 2
 
@@ -646,7 +641,7 @@ test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each 
     lmap backend {interp compile} {gfReleases $gfCoroutineSuite $backend}
 } -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}}}
 
-test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the abandoned and the early-returning case's while suspended), none swept by the collector; the same under GC stress} -constraints nativeLinux -body {
+test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the abandoned and the early-returning case's while suspended), none swept by the collector; the same under GC stress} -constraints nativeCoroutines -body {
     set plain [gfNativeCoroutines $gfCoroutineSuite]
     set stressed [withGcStress {gfNativeCoroutines $gfCoroutineSuite}]
     list [dict get $plain released] [dict get $plain sweptSuspended] \
@@ -826,7 +821,7 @@ test gf-code-name-complete {test::code_name spells every compiler::DiagnosticCod
 # ---------------------------------------------------------------------------
 # GC stress and warnings
 
-test gf-gc-stress {natively under GC stress: many registered checks capturing Strings and structs, CompilerError payloads, coroutines and failing results retained until the report; the report equals the Tcl backends'} -constraints nativeLinux -body {
+test gf-gc-stress {natively under GC stress: many registered checks capturing Strings and structs, CompilerError payloads, coroutines and failing results retained until the report; the report equals the Tcl backends'} -constraints nativeCoroutines -body {
     set source {import compiler
 import str
 import test
@@ -1149,7 +1144,7 @@ proc gfMigratedBody {imports decls params args code expected names} {
     return [list $verdict $equal [expr {$suiteAllocations eq $plainAllocations}]]
 }
 
-test gf-nir-migrated-bodies {representative migrated golden bodies are their code: for a closure (values.bot 03-closure), closures made per loop iteration (loop-in-closure-per-iteration), an error propagated through a declaring caller and handled (errors-propagation-through-declaring-caller) and a coroutine protocol (ownership.bot co-principal), every function the body defines has the same native NIR, and the same native allocations, as the same code written plainly without the framework and without static compile} -constraints nativeLinux -body {
+test gf-nir-migrated-bodies {representative migrated golden bodies are their code: for a closure (values.bot 03-closure), closures made per loop iteration (loop-in-closure-per-iteration), an error propagated through a declaring caller and handled (errors-propagation-through-declaring-caller) and a coroutine protocol (ownership.bot co-principal), every function the body defines has the same native NIR, and the same native allocations, as the same code written plainly without the framework and without static compile} -constraints nativeCoroutines -body {
     set cases [list \
         closure {} {} {} {} "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add\n\nadd10 = make_adder(10)\nadd10(32)" 42 {body make_adder add} \
         loop-closures {} {} {} {} "fs = loop x in \[1, 2, 3\]:\n    fn f():\n        x\n    f\nresults = loop g in fs:\n    g()\nresults" {[1, 2, 3]} {body f} \
