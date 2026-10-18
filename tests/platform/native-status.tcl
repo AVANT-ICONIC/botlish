@@ -98,7 +98,7 @@ fib(20)
     c-convention [list convention {import ffi::c
 
 extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
-extern c fn abs(x: ffi::c::Char) -> ffi::c::Int
+extern c fn abs(x: ffi::c::SChar) -> ffi::c::Int
 
 labs(-5) + abs(-3)
 } {}] \

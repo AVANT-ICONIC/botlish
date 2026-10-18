@@ -182,7 +182,7 @@ proc tmForeignConventions {clif} {
 }
 
 test tm-foreign-signature-convention {a foreign C function's signature, compiled for the host, is in the host target's C calling convention (the driver's reading of its triple: apple_aarch64 on macOS arm64, system_v on Linux), narrow arguments extended by their class; CLIF compiles no C call} -constraints nativeBuilt -body {
-    set hir [tmHir "import ffi::c\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn abs(x: ffi::c::Char) -> ffi::c::Int\n\nlabs(0 - 5) + abs(0 - 3)\n" ""]
+    set hir [tmHir "import ffi::c\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn abs(x: ffi::c::SChar) -> ffi::c::Int\n\nlabs(0 - 5) + abs(0 - 3)\n" ""]
     set clif [native::clif $hir]
     set expected [dict get [native::targetFacts [dict get [core::cabi::target [core::cabi::hostTarget]] triple]] c-call-conv]
     list [expr {[tmForeignConventions $clif] eq [list labs $expected abs $expected]}] \

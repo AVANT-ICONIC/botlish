@@ -432,6 +432,13 @@ needs, and one on C linking. With the two files main added since,
 c-bindgen.test (next paragraph, in `notYet`) and diagnostic-recovery.test
 (passes), 174 of 190 (run 7).
 
+**Milestone 2's census** (run 39128806972, `CI-Tests: all`, at 20957e9)
+found the same failures file by file, but for one Linux-importing test in a
+`notYet` file that the milestone then fixed (static-compile.test's
+`sc-tx-context`; MACOS-AARCH64-MILESTONE-2.md, section 11). The golden
+suites that import a Linux namespace now compile for linux-aarch64 on macOS
+and run on the Tcl backends only.
+
 **A file main added during the milestone.** tests/c-bindgen.test (the C
 binding generator, C-BINDGEN.md) arrived with the merge of main and failed
 two tests on macOS in the acceptance tier (run 6).

@@ -224,9 +224,13 @@ Checked three ways:
   `target` report for each table row.
 - **On the macOS runner,** native-status's `c-convention` probe compiles
   `extern c fn labs(x: ffi::c::Long)` and `extern c fn abs(x:
-  ffi::c::Char)` to CLIF and reads `labs apple_aarch64 abs apple_aarch64`;
+  ffi::c::SChar)` to CLIF and reads `labs apple_aarch64 abs apple_aarch64`;
   `tm-foreign-signature-convention` also checks the `(i8 sext) -> i32`
-  signature there.
+  signature there. The narrow parameter is `SChar`, signed on every
+  target, so that the program means the same thing on each host: with
+  plain `Char` its `abs(0 - 3)` is a type error on linux-aarch64, where
+  plain char is unsigned (the first tests-arm64 run found it, section
+  13).
 
 Cranelift owns everything the convention implies: registers, stack
 placement, the extension of narrow arguments. Nothing in Botlish spells
@@ -401,8 +405,52 @@ own making that the Linux runs and the simulated macOS host had not shown:
 
 Shard 1 ran 3740 tests (3600 passed, 139 skipped, 1 failed) and shard 2
 3495 (3356, 136, 3), and all 47 golden suites of shard 2 passed on interp
-and compile, the 16 Linux-importing ones compiled for linux-aarch64 by
-`golden::target`.
+and compile, the Linux-importing ones among them compiled for
+linux-aarch64 by `golden::target`.
+
+| Run | Commit | Jobs | Result |
+|---|---|---|---|
+| [39128806972](https://github.com/mwagner-webdev/botlish/actions/runs/39128806972) (run 10) | 20957e9 | smoke, acceptance 1/2 and 2/2, linux control, **Tier C census** (`[ci-full]`, `CI-Tests: all`, 3 shards) | smoke, both acceptance shards and linux control: **success**; the census: failure as designed (below) |
+
+The census is milestone 1's (`tier.tcl all`: every test file on interp and
+compile, every golden suite on all four backends, the examples, cabi and
+the Rust tests). It fails on macOS until the port is done, and the question
+is whether anything moved:
+
+- **Tcl test files.** 119 failing tests on interp, all in the 16 files of
+  tier.tcl's `notYet`, and per file the same counts as milestone 1's census
+  (MACOS-AARCH64-PORT-AUDIT.md section 15):
+  - affine 31, coroutines 39, mutable-vector 11, error-payloads 8,
+    mutable-array 6, hir-interchange 5;
+  - branch-form-boolean, compilation-isolation and
+    structural-contract-completions 3 each;
+  - namespaced-errors 2;
+  - c-abi-types, enums and native-listloop 1 each;
+  - c-ffi 1 (`cf-missing-library`), c-bindgen 1 (`cb-fixture-current`).
+
+  The two Tcl 9.0.4 artefacts (argv, native-tcl-unicode) are gone, as since
+  run 5. The one exception was static-compile.test: 3 failures where the
+  census had 2. The third, `sc-tx-context`, compiled a `linux::io` program
+  for the host's target; it was fixed in 95f0069, and both of its other
+  failures are native coroutines (`sc-affine-rollback`,
+  `sc-affine-rollback-next-block`).
+- **Golden suites.** Every native failure is the coroutine refusal
+  (`native coroutines need stack switching ...`: 78 cranelift and 71
+  cranelift-generic suite runs), as in milestone 1. The 14 suites that
+  import a Linux namespace and make no live syscall ran on interp and
+  compile with their native backends excluded by `golden::target`:
+  abi-bytes, abi-bytes-native, contexts, imports-abi-child,
+  imports-library-modules, linux-io, linux-transports, modules, opaque,
+  refinements, static-compile, traits-path, traits and
+  validators-and-proofs. The other two that import one,
+  abi-numeric-native and linux-io-native, declare `golden-host:
+  linux-x86_64` and compile without running, as before.
+- **The Rust tests** (`cargo test --release`, every target): 215 library
+  tests and the driver's 37. The 4 `codegen::target` tests are among them,
+  `c_call_conv_is_the_platform_c_convention_of_each_target` and
+  `apple_aarch64_is_not_the_linux_aarch64_convention` included: all pass on
+  macOS.
+- **The examples and cabi:** ok on all four backends.
 
 The smoke job's evidence (Darwin 24.6.0, `RELEASE_ARM64_VMAP`, `uname -m`
 `arm64`):
@@ -481,6 +529,15 @@ GitHub Actions: PENDING.
   native backends with the reason. The test that checks a Linux program's
   native replay of a -strict 0 contract now carries `nativeLinux`. No test
   was weakened, skipped by OS or added to `notYet`.
+- **A plain-char assumption of this milestone's own,** found by the first
+  tests-arm64 run on the branch (39128820551): `tm-foreign-signature-convention`
+  declared `abs(x: ffi::c::Char)` and called `abs(0 - 3)`, a type error on
+  linux-aarch64, where plain char is unsigned (`argument 1 of abs cannot be
+  proven to satisfy ffi::c::Char`). It was the only failure of the interp
+  job and the cranelift-generic coverage job. The test and native-status's
+  `c-convention` probe now declare `ffi::c::SChar`, signed on every target,
+  and still check the `(i8 sext)` parameter: the facts were right and the
+  test was wrong.
 - **The plain-char oracles** of c-ffi.test and the C FFI fuzzer now read the
   OS and the architecture (unsigned on Linux AArch64 only). The fuzzer keeps
   its own model, independent of the registry, as its header requires; both
@@ -508,9 +565,9 @@ GitHub Actions: PENDING.
   a cross-compiler.
 - **Per-target cache entries** for programs every target shares (section 9).
 - **The Tcl backends run any target's program** (section 10).
-- **Platforms are read from namespaces** of the operating systems of the
-  table. A future macOS standard namespace (`macos::*`, milestone 9) is
-  macOS's by the same rule, with no code change.
+- **Platforms are designated,** in core/cabi.tcl's `platforms`, which has
+  one row today (`linux`). A future macOS standard namespace (`macos::*`,
+  milestone 9) becomes macOS's by a row there, never by its spelling.
 - **Unchanged and still explicit:** native coroutines (milestone 4), the
   native stack overflow crash (5), executables (6), C calls (7), Darwin
   system APIs (9).
