@@ -854,9 +854,8 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   cover programs that write.
 * **The neighbouring mutation harnesses**, every mutant killed: native views
   29/29, binary layout 39/39, C ABI types 26/26, direct modules 18/18,
-  compilation isolation 14/14, HIR interchange 27/27, affine values 29/29
-  (the coroutine harness, whose mutants this change does not touch, was not
-  rerun). A static check of every audit's `mutants.txt` applies all
+  compilation isolation 14/14, HIR interchange 27/27, affine values 29/29,
+  coroutines 52/52. A static check of every audit's `mutants.txt` applies all
   755 mutants of the 26 harnesses to the tree.
 * **Mutants this milestone moved.** Ten mutants of other areas no longer
   applied, because the code they mutate had moved or grown:
@@ -891,7 +890,19 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   tests do, and fails without that on x86-64 too. The golden shards (both
   architectures), the Rust unit tests without stress, the warning gate,
   macOS Tier A, Tier B shard 1 and the ubuntu control were green.
-* **CI after the fixes**: CI-SECOND
+* **CI after the fixes** (`6e8ccc2`), every workflow on the branch green:
+  - `tests`: interp, compile, cranelift and cranelift-generic coverage, the
+    four golden shards beside their Tcl originals, the native Rust unit
+    tests, the stub-linked executables and the warning gate.
+  - `tests (linux arm64)` on ubuntu-24.04-arm: interp, compile, cranelift
+    and cranelift-generic coverage, the four golden shards, the native Rust
+    unit tests (also under GC stress), and the whole Tcl suite under GC
+    stress (`BOTLISH_NATIVE_GC_STRESS=1`, 79 minutes) -- native-edit.test's
+    stores, byte writes and executable included.
+  - `tests (macos arm64)`: Tier A and both Tier B shards.
+  - `static-decisions` (`4e94962`; the later commits change no front-end
+    file): every suite's batched decisions agree with the sequential
+    reference.
 
 ## 21. The read milestone's questions, answered
 
