@@ -766,6 +766,229 @@ r
     }
 } -cleanup {unset -nocomplain case text} -result {{{value 23} 1} {{value 9} 1} {{value 22} 1} {{value 9} 1} {{value {[1, 12]}} 0} {{value -1} 2} {{value {[1, 2, 3, 33, 3]}} 0}}
 
+# Last uses per path (hir/mutvec.tcl's NoLaterUse and ReadsPath): a read-out
+# of a place path moves its header on when no later use may read a header
+# at that path -- the path itself, a prefix of it (the binding, an
+# enclosing struct field) or an extension of it holding one -- in any later
+# statement, later operand (arguments left to right, struct literal fields
+# in written order), branch after a condition, handler after a handled call
+# or later iteration of a loop the binding is not bound inside. A use of a
+# disjoint path (a sibling field) or of an extension holding no header (an
+# Int field) does not count; a context parameter's path never moves.
+set mvPathDecls {import mutable_vector
+
+error Boom
+
+struct T:
+    keys: MutableVector[int]
+    vals: MutableVector[int]
+    count: int
+
+struct N:
+    inner: T
+    tag: int
+
+struct Two:
+    a: MutableVector[int]
+    t: T
+
+struct Put:
+    old: int
+    table: T
+
+fn table() -> T:
+    T {keys: mutable_vector::from_list([1]), vals: mutable_vector::from_list([2]), count: 0}
+
+fn spend(a: MutableVector[int], x: int) -> int errors Boom:
+    a.push(x)
+    if x > 50:
+        fail Boom
+    a.length()
+
+fn grow1(a: MutableVector[int], x: int) -> int:
+    a.push(x)
+    a.length()
+
+fn pair(a: MutableVector[int], b: MutableVector[int]) -> int:
+    a.push(3)
+    b.push(4)
+    b.push(4)
+    a.length() * 10 + b.length()
+
+fn bump_all(t: T, c: int) -> T:
+    t.keys.push(50)
+    t.vals.push(60)
+    T {keys: t.keys, vals: t.vals, count: c}
+
+}
+
+test mv-path-last-use-semantics {a read-out of a place path is copied while a later use may read its header -- the binding itself, the same path, a vector-bearing extension, in a later statement, a later argument or struct literal field, a branch, a handler or the next iteration of a loop -- so the copy stays independent; it moves (no copy) when only disjoint or Int paths are read after it; a context member never moves. On every backend, with the copies the elaboration wrote} -body {
+    lmap case {
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    u = T {keys: t.keys, vals: t.vals, count: 0}
+    u.keys.push(9)
+    u.vals.push(9)
+    w = t
+    [w.keys.length(), w.vals.length(), u.keys.length(), u.vals.length()]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    u = T {keys: t.keys, vals: t.vals, count: 0}
+    u.keys.push(9)
+    u.vals.push(9)
+    [t.keys.length(), u.keys.length(), u.vals.length()]
+}
+        {fn f():
+    n = N {inner: table(), tag: 4}
+    n.inner.vals.push(5)
+    u = n.inner
+    u.keys.push(9)
+    [n.inner.keys.length(), u.keys.length(), n.inner.count, n.tag]
+}
+        {fn f():
+    n = N {inner: table(), tag: 4}
+    n.inner.vals.push(5)
+    u = n.inner
+    u.keys.push(9)
+    [u.keys.length(), u.vals.length(), n.inner.count, n.tag]
+}
+        {fn g(x: int) -> int:
+    t = table()
+    t.vals.push(x)
+    r = spend(t.keys, x):
+        on Boom:
+            t.keys.length()
+    r
+fn h(x: int) -> int:
+    t = table()
+    t.vals.push(x)
+    r = spend(t.keys, x):
+        on Boom:
+            t.count - 1
+    r + t.vals.length()
+fn f():
+    [g(60), g(3), h(60), h(3)]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    xs = loop i from 0 to 3:
+        x = grow1(t.keys, 10)
+        x + t.count
+    ys = loop i from 0 to 3:
+        u = table()
+        y = grow1(u.keys, i)
+        y + u.count
+    [xs, ys]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    if grow1(t.keys, 10) > 1:
+        [t.keys.length()]
+    else:
+        [0]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    x = pair(t.keys, t.keys)
+    y = pair(t.vals, t.vals)
+    [x, y]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    w = Two {a: t.keys, t: t}
+    w.a.push(9)
+    s = table()
+    s.vals.push(5)
+    v = Two {t: s, a: s.keys}
+    v.a.push(9)
+    [w.t.keys.length(), w.a.length(), v.t.keys.length(), v.a.length()]
+}
+        {fn f():
+    t = table()
+    t.vals.push(5)
+    x = bump_all(t, t.count + 7)
+    [x.keys.length(), x.vals.length(), x.count, t.count]
+}
+        {context struct Store:
+    keys: MutableVector[int]
+fn take_keys(context s: Store) -> MutableVector[int]:
+    k = s.keys
+    k.push(42)
+    k
+fn peek(context s: Store) -> int:
+    s.keys.length()
+fn f():
+    k = take_keys()
+    [k.length(), peek()]
+with context Store {keys: mutable_vector::from_list([1, 2])}
+}
+    } {
+        set text "${::mvPathDecls}${case}f()\n"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value {[1, 2, 2, 3]}} 2} {{value {[1, 2, 3]}} 1} {{value {[1, 2, 0, 4]}} 1} {{value {[2, 2, 0, 4]}} 0} {{value {[1, 2, 1, 4]}} 1} {{value {[[2, 2, 2], [2, 2, 2]]}} 1} {{value {[1]}} 1} {{value {[23, 34]}} 2} {{value {[1, 2, 1, 2]}} 2} {{value {[2, 3, 7, 0]}} 0} {{value {[3, 2]}} 2}}
+
+test mv-path-last-use-copies {the natural ways to update a struct of vectors copy nothing once each read-out is the last use of its own path: a rebuild from the struct's own fields after mutating them, a result struct whose vector field is passed on before its Int field is read, the whole struct handed to a mutating call while only its Int field is read after it, and a sub-struct field rebuilt beside an Int sibling -- natively no share and no detach, and the elaboration wrote no copy} -constraints nativeLinux -body {
+    lmap case {
+        {fn put(t: T, x: int) -> T:
+    t.keys.push(x)
+    t.vals.push(x * 10)
+    T {keys: t.keys, vals: t.vals, count: t.count + 1}
+fn fill(t: T, i: int, n: int) -> T:
+    if i >= n:
+        return t
+    fill(put(t, i), i + 1, n)
+fn f():
+    t = fill(table(), 0, 20)
+    [t.count, t.keys.length(), t.vals.length()]
+}
+        {fn put2(t: T, x: int) -> Put:
+    old = t.keys.length()
+    t.keys.push(x)
+    Put {old: old, table: t}
+fn fill2(t: T, i: int, n: int, acc: int) -> int:
+    if i >= n:
+        return acc * 100 + t.keys.length()
+    r = put2(t, i)
+    fill2(r.table, i + 1, n, acc + r.old)
+fn f():
+    [fill2(table(), 0, 20, 0)]
+}
+        {fn put3(t: T, x: int) -> T:
+    bump_all(t, t.count + x)
+fn fill3(t: T, i: int, n: int) -> T:
+    if i >= n:
+        return t
+    fill3(put3(t, i), i + 1, n)
+fn f():
+    t = fill3(table(), 0, 20)
+    [t.count, t.keys.length(), t.vals.length()]
+}
+        {fn retag(n: N, x: int) -> N:
+    n.inner.keys.push(x)
+    N {inner: n.inner, tag: n.tag + 1}
+fn retags(n: N, i: int, k: int) -> N:
+    if i >= k:
+        return n
+    retags(retag(n, i), i + 1, k)
+fn f():
+    n = retags(N {inner: table(), tag: 0}, 0, 20)
+    [n.tag, n.inner.keys.length()]
+}
+    } {
+        set text "${::mvPathDecls}${case}f()\n"
+        set mv [lindex [mvNative $text] 1]
+        list [mvAgree $text] [mvShares $text] [dict get $mv shares] [dict get $mv detaches]
+    }
+} -cleanup {unset -nocomplain case text mv} -result {{{value {[20, 21, 21]}} 0 0 0} {{value {[21021]}} 0 0 0} {{value {[190, 21, 21]}} 0 0 0} {{value {[20, 21]}} 0 0 0}}
+
 test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}]

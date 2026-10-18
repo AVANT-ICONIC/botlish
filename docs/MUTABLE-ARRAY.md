@@ -218,7 +218,10 @@ fresh source half the time.
 ### 12. Struct-field semantics
 
 A struct literal holds a copy of the array put in (descriptor `s`N...); a
-field path (`b.values`) is a place; a projection read out of it is a copy;
+field path (`b.values`) is a place; a projection read out of it is a copy
+unless it is the last use of its own path (MUTABLE-VECTOR.md, "Last uses per
+path": a struct rebuilt from its own fields after mutating them copies
+nothing);
 a destructured binding is a copy (`destructure-bound-mutable-value-is-the-same-value`
 now pins independence). An affine array makes its struct affine.
 `ma-cow-routes` route 6 (`Box {values: a}`); `ma-cow-extraction` (a
