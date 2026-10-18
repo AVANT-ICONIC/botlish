@@ -460,6 +460,7 @@ is whether anything moved:
 | [39136630261](https://github.com/mwagner-webdev/botlish/actions/runs/39136630261) (run 12, `workflow_dispatch`: tier full, tests `static-compile.test target-model.test`) | 28356fc | smoke, acceptance 1/2 and 2/2, linux control, Tier C | smoke, both acceptance shards and linux control: **success**; Tier C: failure as designed, static-compile.test's 2 census failures on interp and on compile (the two native-coroutine tests above), target-model.test 24 of 24, 3 tests skipped by `nativeLinux` |
 
 | [39140319302](https://github.com/mwagner-webdev/botlish/actions/runs/39140319302) (run 13) | 98d4487 (main merged: Compilerpedia) | smoke, acceptance 1/2 and 2/2, linux control | **every job success**: main's compilerpedia.test and main-cli.test pass on macOS with the milestone |
+| [39146652021](https://github.com/mwagner-webdev/botlish/actions/runs/39146652021) (run 14) | d561d76 (main merged again: native layout views) | smoke, acceptance 1/2 and 2/2, linux control | **every job success** |
 
 Run 11's commit asked for `CI-Tests: static-compile.test target-model.test`,
 but the line was not in the message's last paragraph, which is all `git
@@ -541,6 +542,13 @@ On GitHub Actions (every workflow dispatched on the branch):
 | tests.yml | [39140323637](https://github.com/mwagner-webdev/botlish/actions/runs/39140323637) | 98d4487 (main merged) | **success**, every job |
 | tests-arm64.yml | [39140325574](https://github.com/mwagner-webdev/botlish/actions/runs/39140325574) | 98d4487 | **success**, every job |
 | static-decisions.yml | [39140327387](https://github.com/mwagner-webdev/botlish/actions/runs/39140327387) | 98d4487 | **success**: the merged front end's decisions agree under both schedulers |
+| tests.yml | [39146738377](https://github.com/mwagner-webdev/botlish/actions/runs/39146738377) | d561d76 (main merged again) | **success**, every job |
+| tests-arm64.yml | [39146740801](https://github.com/mwagner-webdev/botlish/actions/runs/39146740801) | d561d76 | **success**, every job |
+| static-decisions.yml | [39146742789](https://github.com/mwagner-webdev/botlish/actions/runs/39146742789) | d561d76 | **success**, mutable-array and the four shards |
+
+d561d76 is the last commit that changes code. The commits after it change
+Markdown only: they start no macOS run, and the results above stand for
+them. main (e414ad5) is contained in the branch.
 
 ## 13. Test and oracle discrepancies
 
@@ -651,5 +659,10 @@ section 17) can rely on:
 - **native-status.tcl's `target`, `c-convention` and `other-target` probes**
   will catch a regression of the boundary on both hosts.
 
-Before merging: the macOS acceptance tier, a Tier C census and the Linux
-workflows on the branch (section 11, 12).
+Before merging, the milestone needed the macOS acceptance tier, a Tier C
+census and the Linux workflows on the branch (sections 11 and 12):
+- **The macOS acceptance tier and every Linux workflow** passed on the
+  final code, d561d76, which contains main.
+- **The Tier C census** (run 10, at 20957e9) failed only where milestone
+  1's did, except for one test of this milestone, since fixed (run 12).
+- **Tier C under GC stress** passed at 28356fc.
