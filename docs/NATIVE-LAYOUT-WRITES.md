@@ -316,7 +316,7 @@ value; every byte the field does not own is d's (`ne-write-value-semantics`:
 d, a copy held in a List and a struct field, and a second write from d all
 keep their own bytes). This is MUTABLE-BYTES.md's rule unchanged -- published
 storage is never written -- so each write allocates one fresh storage and
-copies the record into it (32 bytes: about 190 ns; section 18). Incremental
+copies the record into it (32 bytes: about 100 ns; section 18). Incremental
 building is a chain of writes, each binding a new value
 (`ne-write-builds-a-record`); inside a function the `MutableBytes` wrapper of
 an intermediate value is never built (hir/escape.tcl recognizes a write's
@@ -615,12 +615,66 @@ skip by their capability constraints, as every other file's do there.
 
 ## 18. Performance
 
-`bench/native-edit.tcl -runs 5 -n 200000`: see the tables below (measured
-after the change; section 20 has the date and the machine). Programs repeat
-one operation 200,000 times in a collecting loop, reported as the time per
-operation over the loop's baseline, natively.
+`bench/native-edit.tcl -runs 5 -n 200000` (4-core container, 2026-10-18,
+idle; three runs, the range shown): programs that repeat one operation
+200,000 times in a collecting loop, the time per operation over the loop's
+baseline (about 50 ns an iteration: the collecting loop itself), natively.
+The record is the views benchmark's 32 bytes: a u8, a nested `Outer` (u32, a
+nested `Inner`, u8), a u32 and a pointer; `Big` is 4,096 bytes with a field
+at each end.
 
-MEASUREMENTS-TABLE
+| operation | Cranelift `-specialize 0` | Cranelift |
+|---|---:|---:|
+| edit: one scalar store (`Rec.word`) | noise-23 ns | 18-46 ns |
+| edit: eight scalar stores | 136-143 ns | 143-147 ns |
+| edit: a store two layouts deep, by path (`Rec.outer.inner.x`) | 2-19 ns | 14-22 ns |
+| edit: the same store through the subrecord `e.outer.inner` | noise-16 ns | 15-24 ns |
+| edit: a pointer store (`Rec.next`) | 12-14 ns | 10-15 ns |
+| edit: make an edit (`binary::native::edit`: a null test) | about 0-3 ns | about 1-5 ns (one outlier, 48) |
+| edit: a store, then a read of the field | 32-36 ns | 34-36 ns |
+| edit: one scalar store into a 4,096-byte record | noise-22 ns | 16-20 ns |
+| bytes: one `binary::write` (32 bytes) | 436-451 ns | 98-119 ns |
+| bytes: three `binary::write`s in a chain | 647-678 ns | 334-367 ns |
+| bytes: one `binary::write_foreign` (a pointer field) | 420-452 ns | 92-99 ns |
+| bytes: one `binary::write` into a 4,096-byte record | 1,099-1,166 ns | 677-752 ns |
+| reference: `abi::bytes::replace` of one byte (32 bytes) | 394-442 ns | 249-253 ns |
+
+("noise": a negative difference in one of the runs; the single-store rows
+are within the loop's jitter, and the eight-store row is the measurement.)
+
+Heap allocations per operation (Cranelift's counters, specialized): every
+store -- scalar, nested by path or through a subrecord, pointer, into the
+4,096-byte record -- and making an edit **0**, the program's allocations
+exactly its baseline's; one `binary::write` or `binary::write_foreign` **1**
+(its fresh `MutableBytes` storage, no struct: the wrapper of a write's result
+is never built when the result is consumed in place), three chained writes
+**3** (three storages, still no wrapper), `abi::bytes::replace` 2 (its storage
+and its wrapper). With specialization off, a write allocates its storage and
+two structs -- the `MutableBytes` wrapper and the benchmark's
+`abi::bytes::mutable_length` result -- exactly as `replace` does there; a
+chain still builds no intermediate wrapper.
+
+* **A store is about 17-18 ns** (eight of them: 136-147 ns): one runtime
+  helper call -- the value's encoding check, one unaligned copy of the
+  field's width -- the cost a `binload` or view read has. It is a fixed cost
+  per store, never per record: the 4,096-byte record's store costs the 32-byte
+  record's, there is no copy, no allocation and no layout walk, and a path or
+  a subrecord folds to one store at the absolute offset. Making an edit costs
+  its null test. A store then a read is two calls (34-36 ns): nothing is
+  forwarded or cached.
+* **A byte write is about 100 ns for 32 bytes, specialized**: one allocation
+  and one copy of the record, then the field. Its cost grows with the record
+  (677-752 ns for 4,096 bytes), which is value semantics (section 9), not a
+  surprise: a program that builds a large record field by field pays one copy
+  per field. A write is cheaper than the existing per-byte
+  `abi::bytes::replace` (249-253 ns), which also builds its wrapper.
+* **Surprising fixed overhead**: none in the operations themselves. The
+  unspecialized byte rows are 3-4x the specialized ones because of the two
+  wrapper structs above, the same overhead every `MutableBytes` operation has
+  there. The deferred optimizations are the ones the read report names --
+  an inline store with the offset and encoding as NIR immediates -- and,
+  for bytes, reusing a dead operand's storage (copy-on-write or a deadness
+  analysis), which neither exists nor is needed for the semantics.
 
 ## 19. Tests, the oracles, fuzzing, mutants
 
