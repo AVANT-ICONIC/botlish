@@ -243,13 +243,22 @@ silently runs without a guard.
 
 ## 8. Coroutines
 
+**Resolved (milestone 3, MACOS-AARCH64-MILESTONE-3.md).** Native coroutines
+run on macOS arm64 through both native backends. The refusal that section 15
+recorded was a conservative guard (`CoStack::new` returned `Unsupported`
+unless the host was Linux) over machinery that needed three adaptations: the
+ELF-only switch text, `MAP_STACK` and the 4 KiB page assumption. The
+coroutine model, ownership, GC walk and error handling are unchanged and
+shared.
+
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| runtime/coroutine.rs `CoStack::new` (:195-228), Drop (:238-258) | `mmap(MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE|MAP_STACK)` + a 64 KiB `PROT_NONE` guard | linux | no `MAP_STACK` for Apple in libc; `MAP_NORESERVE`'s meaning there to verify; the guard size is a multiple of 16 KiB already | medium | 4 | M |
-| coroutine.rs `stack_bytes` (:169-176) | rounds `BOTLISH_NATIVE_COROUTINE_STACK_BYTES` to 4 KiB | arch + linux | round to the runtime page size (16 KiB on Apple Silicon) | low | 4 | M |
-| coroutine.rs switch assembly (:268-365), `extern "C"` (:367-374) | `global_asm!` with ELF directives (`.type X,@function`/`%function`, `.size`) and bare labels | elf | the AArch64 switch is reusable on Apple arm64 (callee-saved x19-x28, d8-d15, x29/x30, FPCR; never x18) once the directives are Mach-O's and the labels `_bl_co_switch`/`_bl_co_trampoline` (or per-format `#[cfg]` text) | medium | 4 | M |
-| coroutine.rs `prepare` (:498-516) | the initial FPCR is 0, "the Linux default" | arch | verify Darwin's default FPCR | low | 4 | M |
-| coroutine.rs :230-235 (non-Linux `new`) | refuses: "native coroutines need stack switching, implemented for x86-64 Linux only" (stale: AArch64 Linux works too) | linux | the explicit refusal macOS gets today (section 15); remove it with the port | low | 4 | M (refusal verified) |
+| runtime/coroutine.rs `CoStack::new`, `MAP_FLAGS`, Drop | `mmap(MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE|MAP_STACK)` + a 64 KiB `PROT_NONE` guard | linux | **resolved (milestone 3)**: Darwin has no `MAP_STACK` and `MAP_NORESERVE` is a no-op there, so a stack is `MAP_PRIVATE|MAP_ANONYMOUS`; guard and size are rounded to the host page size (`round_to_page`, 16 KiB on Apple Silicon). The pool, the guard and the `NativeStack` bounds are shared | medium | 3 (done) | M (done) |
+| coroutine.rs `stack_bytes` | rounds `BOTLISH_NATIVE_COROUTINE_STACK_BYTES` to 4 KiB | arch + linux | **resolved**: `round_to_page` (`sysconf(_SC_PAGESIZE)`) | low | 3 (done) | M (done) |
+| coroutine.rs switch assembly, `extern "C"` | `global_asm!` with ELF directives and bare labels | elf | **resolved**: the AArch64 instructions are one text (`aarch64_switch!`, `aarch64_trampoline!`) under two headers: ELF (`.type`/`.size`, `bl_co_switch`) and Mach-O (`_bl_co_switch`, no `.type`/`.size`). The Mach-O object was inspected: both symbols global, `bl` to `co_body` relocated. x18 is never touched; the frame record is the switch's first store; no store lies below sp | medium | 3 (done) | M (done) |
+| coroutine.rs `prepare` | the initial FPCR is 0, "the Linux default" | arch | **resolved**: a unit test (`a_new_context_starts_with_the_threads_fpcr`) asserts a new thread's FPCR is 0, and it passes on the macOS runner | low | 3 (done) | M (done) |
+| coroutine.rs non-Linux `new` | refuses: "implemented for x86-64 Linux only" | linux | **resolved**: the refusal remains for hosts without a switch (macOS x86-64, Windows) and now names the three supported ones | low | 3 (done) | M (done) |
+| shadow-stack depth token (codegen/clif.rs `prologue_depth_token`, vm.rs `ss_top`) | none on Linux: its native overflow guard replaces the token | posix | **audited (milestone 3)**: on macOS every calling function bumps `ss_top` by one slot, zeroed, and restores the absolute value on exit. Coroutine segments interleave non-LIFO, but the slots only ever hold zeros (never roots: storage is `NativeFrame` for every function) and `ss_top` only takes values some frame once saw, so the interleaving cannot make the collector read stale data. The token does not bound a recursion by a coroutine's 8 MiB stack, though: that overflow is the guard page's, i.e. milestone 5's | medium | 3 (done), 5 | M (done), L |
 
 ## 9. Syscall transports, direct modules and contextual IO
 
@@ -698,8 +707,8 @@ branch as `ref`. A port milestone runs them before it merges.
   `tests/platform/native-status.tcl` (the smoke job fails until you do),
   remove the files that now pass from tier.tcl's `notYet` (run them with
   `CI-Tests:` first), and update section 15.
-- **Native golden runs** (after coroutines work): drop the interp/compile
-  restriction from the acceptance tier's golden suites in tier.tcl.
+- **Native golden runs** (coroutines work since milestone 3): the acceptance
+  tier's golden suites run on all four backends.
 - **More backends in Tier B:** the acceptance job's `-backends`.
 - **A new macOS-only check:** a step in `smoke` (cheap) or an item of
   tier.tcl (anything a test file or suite cannot express); never a
