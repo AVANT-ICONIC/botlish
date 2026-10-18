@@ -845,6 +845,41 @@ for anything but running the x86-64 instruction set or syscall ABI. A change to 
 walker, the switch or root lowering needs a GC-stress run on both
 architectures; CI's arm64 workflow has one.
 
+## macOS arm64 (the port in progress)
+
+The native backend is being ported to macOS on Apple Silicon
+(MACOS-AARCH64-PORT-AUDIT.md: the Linux assumptions by subsystem, the
+census of what passes there today, the CI and the roadmap; one milestone
+at a time). Develop on Linux (or macOS); the Apple Silicon testing runs in
+GitHub Actions, `.github/workflows/macos-arm64.yml`, on every push to any
+branch (not documentation-only ones) -- never on a shared development Mac,
+and no acceptance depends on one.
+
+* Every push runs Tier A on macOS (`smoke`: the host and its toolchains,
+  Tcl 9 from Homebrew, `tests/platform/cabi-facts.tcl`, the native build
+  and its Rust unit tests, `tests/platform/native-status.tcl`,
+  `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
+  shards) and the same smoke on ubuntu as a control. Locally, `tclsh9.0
+  tests/platform/tier.tcl smoke` takes seconds, and `tier.tcl X.test
+  Y.bot` runs any file or suite the way CI does.
+* Tier C is opt-in: `[ci-full]` in the message of a push's head commit
+  runs the acceptance tier under GC stress, in three shards; a `CI-Tests:`
+  trailer in that message narrows it to tier.tcl items (`CI-Tests:
+  coroutines.test enums.bot`; `all` is the whole census), and
+  `CI-GC-Stress: 1` adds GC stress to them. Once the workflow is on main, a
+  manual run (`workflow_dispatch`: `tier`, `tests`, `gc_stress`) does the
+  same on any branch.
+* What each native capability does on each host -- works, or its exact
+  refusal -- is recorded in `tests/platform/native-status.tcl`, and the
+  test files that do not pass on macOS yet, with their causes, in
+  `tier.tcl`'s `notYet`. A milestone that changes either updates it in the
+  same change (and the audit's census); never weaken a test or widen
+  `notYet` to make macOS green.
+* Linux CI is unchanged and stays the authority for Linux: run tests.yml
+  and tests-arm64.yml (and static-decisions.yml for a front-end change) on
+  the branch with workflow_dispatch before a port change merges. A
+  macOS-motivated test constraint names a capability, never the OS.
+
 ## Linux syscall transports
 
 A raw Linux syscall is one architecture's transport

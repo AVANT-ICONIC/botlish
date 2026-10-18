@@ -59,21 +59,21 @@ set smokeFiles {
 # on macOS for a capability not ported yet is added with its cause.
 set notYet {
     affine.test                            {4 native coroutines}
-    argv.test                              {? under investigation}
-    branch-form-boolean.test               {? under investigation}
-    c-abi-types.test                       {? under investigation}
-    c-ffi.test                             {? under investigation}
-    compilation-isolation.test             {? under investigation}
+    argv.test                              {- Tcl 9.0.4's Unicode 17 case tables}
+    branch-form-boolean.test               {4 native coroutines}
+    c-abi-types.test                       {4 native coroutines}
+    c-ffi.test                             {7 C calls are refused before the linker runs}
+    compilation-isolation.test             {4 native coroutines, the golden runner's too}
     coroutines.test                        {4 native coroutines}
-    enums.test                             {? under investigation}
-    error-payloads.test                    {? under investigation}
-    hir-interchange.test                   {? under investigation}
-    mutable-array.test                     {? under investigation}
+    enums.test                             {4 native coroutines}
+    error-payloads.test                    {4 native coroutines}
+    hir-interchange.test                   {4 native coroutines}
+    mutable-array.test                     {4 native coroutines}
     mutable-vector.test                    {4 native coroutines}
-    namespaced-errors.test                 {? under investigation}
+    namespaced-errors.test                 {4 native coroutines}
     native-listloop.test                   {4 native coroutines}
-    native-tcl-unicode.test                {? under investigation}
-    static-compile.test                    {? under investigation}
+    native-tcl-unicode.test                {- Tcl 9.0.4's Unicode 17 case tables}
+    static-compile.test                    {4 native coroutines}
     structural-contract-completions.test   {4 native coroutines}
 }
 
