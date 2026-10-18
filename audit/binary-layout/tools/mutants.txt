@@ -184,12 +184,10 @@ proc core::binary::Encode {descriptor value bytes base} {
 @@ width-rust the native load reads one byte of a 2-byte field
 ## native/src/runtime/ops.rs
 <<<<
-    let mut word = [0u8; 8];
-    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+    bin_decode(p, &bytes_of(storage)[at..at + width], signed, big)
 ====
-    let mut word = [0u8; 8];
     let width = if width == 2 { 1 } else { width };
-    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+    bin_decode(p, &bytes_of(storage)[at..at + width], signed, big)
 >>>>
 
 @@ width-subrange-hir a narrower integer domain (Int in 0..100) is accepted as the fixed-width encoding containing it, so parse can imprint a value outside the field's type
@@ -355,16 +353,18 @@ proc hir::types::subtype {a b} {
 @@ arbitrary-layout-struct-argument LayoutStruct[T] of any type T that is not a layout denotes T itself
 ## hir/layouts.tcl
 <<<<
-    set spelled [ShowTypeExpr $arg]
     set what [ArgumentKind $arg $ns]
     if {$what eq ""} {
+        return -code error -errorcode {BOTLISH UNKNOWN-LAYOUT} \
+            "unknown layout \"$spelled\" in LayoutStruct\[
 ====
-    set spelled [ShowTypeExpr $arg]
     set what [ArgumentKind $arg $ns]
     if {$what ne "" && ![catch {hir::resolve::ResolveTypeExpr $arg $ns} type]} {
         return $type
     }
     if {$what eq ""} {
+        return -code error -errorcode {BOTLISH UNKNOWN-LAYOUT} \
+            "unknown layout \"$spelled\" in LayoutStruct\[
 >>>>
 
 # --- further mutants -----------------------------------------------------

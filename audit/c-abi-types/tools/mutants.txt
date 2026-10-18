@@ -64,9 +64,11 @@
 >>>>
 ## hir/range.tcl
 <<<<
-            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
+            || [hir::types::IsNativeView $declared]} {
 ====
-            || [hir::types::IsEnum $declared] || [hir::types::IsImprint $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsImprint $declared]
+            || [hir::types::IsNativeView $declared]} {
 >>>>
 
 @@ null-loses-pointee null[T]() returns Ptr[Void] whatever T is imprinted
