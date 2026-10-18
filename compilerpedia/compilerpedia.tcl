@@ -48,6 +48,8 @@ namespace eval compilerpedia {
     # The loaded catalogue: topics (ID -> topic dict, in file order) and the
     # lookup tables built from them; "" until first use.
     variable catalogue ""
+    # The diagnostic tables read without the catalogue (DiagnosticTables).
+    variable diagnosticTables ""
     # The indices, in the order the overview lists them. Each is a view: the
     # topics whose `index:` names it.
     variable indices {
@@ -278,7 +280,54 @@ proc compilerpedia::Load {} {
 # Drops the loaded catalogue (tests that write topic files of their own).
 proc compilerpedia::reset {} {
     variable catalogue
+    variable diagnosticTables
     set catalogue ""
+    set diagnosticTables ""
+}
+
+# The diagnostic tables alone, {matches {{CODE GLOB ID}...} codes {CODE
+# IDS...}}, equal to Load's (tests/compilerpedia.test): read from the
+# topics' header lines without parsing the catalogue, so the help line under
+# a diagnostic costs a scan of the files, not a load.
+proc compilerpedia::DiagnosticTables {} {
+    variable catalogue
+    variable diagnosticTables
+    if {$catalogue ne ""} {
+        return [dict create matches [dict get $catalogue matches] codes [dict get $catalogue codes]]
+    }
+    if {$diagnosticTables ne ""} {
+        return $diagnosticTables
+    }
+    set matches {}
+    set codes [dict create]
+    set seen [dict create]
+    foreach path [files] {
+        set id ""
+        set header 0
+        foreach line [split [ReadFile $path] \n] {
+            set line [string trimright $line "\r"]
+            if {[regexp {^@topic\s+(\S+)\s*$} $line -> id]} {
+                # The first topic of an ID wins, as in Load.
+                set header [expr {![dict exists $seen $id]}]
+                dict set seen $id 1
+                continue
+            }
+            if {!$header} {
+                continue
+            }
+            if {[string trim $line] eq ""} {
+                set header 0
+            } elseif {[regexp {^code:\s*(.*)$} $line -> code]} {
+                dict lappend codes [string trim $code] $id
+            } elseif {[regexp {^match:\s*(.*)$} $line -> match]} {
+                set cut [string first | $match]
+                lappend matches [list [string trim [string range $match 0 [expr {$cut - 1}]]] \
+                    [string trim [string range $match [expr {$cut + 1}] end]] $id]
+            }
+        }
+    }
+    set diagnosticTables [dict create matches $matches codes $codes]
+    return $diagnosticTables
 }
 
 # The lookup tables over TOPICS:
@@ -475,7 +524,8 @@ proc compilerpedia::codeTopics {code} {
 # reads only the catalogue, never the diagnostic's compiler state.
 proc compilerpedia::topicForDiagnostic {code message} {
     regsub {^\S+:\d+:\d+: } $message {} message
-    foreach match [dict get [Load] matches] {
+    set tables [DiagnosticTables]
+    foreach match [dict get $tables matches] {
         lassign $match matchCode glob id
         if {$matchCode eq $code && [string match $glob $message]} {
             return $id
@@ -484,7 +534,7 @@ proc compilerpedia::topicForDiagnostic {code message} {
     # A code whose last words vary (NATIVE UNSUPPORTED value, CORE
     # DECLARED-ERROR NAME) falls back to its documented prefix.
     while 1 {
-        set ids [codeTopics $code]
+        set ids [expr {[dict exists $tables codes $code] ? [dict get $tables codes $code] : {}}]
         if {[llength $ids] > 0} {
             return [expr {[llength $ids] == 1 ? [lindex $ids 0] : ""}]
         }

@@ -919,6 +919,7 @@ tests/compilerpedia.test cp-check-structure-and-coverage pass
 tests/compilerpedia.test cp-diagnostic-code-prefix pass
 tests/compilerpedia.test cp-diagnostic-every-target-exists pass
 tests/compilerpedia.test cp-diagnostic-specific-rule pass
+tests/compilerpedia.test cp-diagnostic-tables-equal-load pass
 tests/compilerpedia.test cp-every-recoverable-kind-documented pass
 tests/compilerpedia.test cp-every-warning-documented pass
 tests/compilerpedia.test cp-examples pass

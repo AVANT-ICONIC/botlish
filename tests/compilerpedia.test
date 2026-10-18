@@ -238,6 +238,15 @@ test cp-diagnostic-code-prefix {a code whose last words vary (a value kind, an e
         [compilerpedia::topicForDiagnostic {SURFACE SYNTAX} "x.bot:1:1: no rule says this"]
 } -result {error.native-unsupported error.native-unsupported error.core-declared-error {} warning.same-return-value error.surface-syntax}
 
+test cp-diagnostic-tables-equal-load {the header scan main.tcl's help lines use finds exactly the matchers and codes the full catalogue load does} -body {
+    compilerpedia::reset
+    set light [compilerpedia::DiagnosticTables]
+    set full [compilerpedia::Load]
+    list [expr {[dict get $light matches] eq [dict get $full matches]}] \
+        [expr {[lsort -stride 2 [dict get $light codes]] eq [lsort -stride 2 [dict get $full codes]]}] \
+        [expr {[llength [dict get $light matches]] > 50}]
+} -cleanup {unset -nocomplain light full} -result {1 1 1}
+
 test cp-diagnostic-every-target-exists {every topic a help line can name exists: each matcher's topic, and each code's} -body {
     set missing {}
     foreach id [compilerpedia::topics] {
