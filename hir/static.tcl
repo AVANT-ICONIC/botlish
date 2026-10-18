@@ -54,9 +54,9 @@
 # other diagnostic is the enclosing program's own. The site's diagnostic is
 # the first of its own in the build's diagnostic list: the one ordinary
 # compilation of the same code would raise first (surface::lower::Finish
-# raises the first of the list; resolution diagnostics stop a strict build
-# before typing, so they come first; a method-call decision prepends its
-# own).
+# raises the list, its first first: hir/recovery.tcl; resolution
+# diagnostics come first in it -- these rounds stop after them -- and a
+# method-call decision prepends its own).
 #
 # Deciding (decide)
 # -----------------

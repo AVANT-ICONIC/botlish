@@ -1,0 +1,12 @@
+fn sign(c: bool) -> int:
+    if c
+        1
+    elif true:
+        0
+    else:
+        2
+
+fn twice(x: int) -> int:
+    x * * 2
+
+sign(true)

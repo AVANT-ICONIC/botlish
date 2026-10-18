@@ -348,7 +348,7 @@ abi::i8(0 - 129)"] 2]
 test abi-numeric-conversion-failure-points-at-the-call {a conversion that may fail is an obligation at the creator call itself (an unhandled one is reported there); a dynamic failure is the declared error of the violated bound, which a handler receives -- on every backend} -body {
     list [strictError "import abi\nfn f(n: int):\n    abi::u8(n)\nf(3)"] \
         [agree "import abi\nfn f(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:\n    abi::u8(n).value\nloop n in \[1, 256, 0 - 1\]:\n    f(n):\n        on abi::AbiIntegerBelowRange:\n            0 - 100\n        on abi::AbiIntegerAboveRange:\n            100"]
-} -match glob -result {{UNHANDLED-ERROR 3:5 {this call may produce the declared error "abi::AbiInteger*Range", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}} {\[1, 100, -100\]}}
+} -match glob -result {{UNHANDLED-ERROR 3:5 {this call may produce the declared errors "abi::AbiIntegerAboveRange" and "abi::AbiIntegerBelowRange", which are neither handled here nor admitted by the enclosing function's own "errors" declaration}} {\[1, 100, -100\]}}
 
 test abi-numeric-field-domain-survives {inside fn f(x: abi::U8) the compiler knows 0 <= x.value <= 255 from the field's declared domain: byte::from_int(x.value) needs no handler (also as a direct argument), widening to U16 needs none, and narrowing to I8 can only fail above} -body {
     list [diagKinds "import abi\nimport byte\nfn f(x: abi::U8) -> int:\n    byte::from_int(x.value)\nf(abi::u8(3))"] \

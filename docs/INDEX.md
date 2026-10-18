@@ -221,6 +221,7 @@ Botlish to find what the language, library, compiler and tools need.
 
 - [2048-ENGINE-WORKLOAD.md](2048-ENGINE-WORKLOAD.md) -- a deterministic 2048 engine (`examples/games/2048/`), full-discovery baseline: findings, the GC root-slot fix it found, and what to fix before the restricted paired run
 - [POST-2048-PRODUCT-FIXES.md](POST-2048-PRODUCT-FIXES.md) -- the three product failures fixed before the paired run (application modules, native program output under main.tcl, the interpreter's recursion limit), and the findings deliberately left open
+- [DIAGNOSTIC-RECOVERY.md](DIAGNOSTIC-RECOVERY.md) -- after the first 15-puzzle run: failed method sugar is poison and the explicit spelling's MISSING-IMPORT (never `any`), one compilation reports every independent error (past resolution failures, a call's whole unhandled set, every rejected reference), and one malformed construct is one error; the diagnostic-efficiency corpus
 
 ## Audits, censuses and investigations
 

@@ -124,7 +124,11 @@ proc nsDiagnostics {text} {
     set hir [surface::compile $text -strict 0 -warnings off]
     return [lsort -unique [lmap d [hir::diagnostics $hir] {
         set message [dict get $d message]
-        if {[regexp {declared error "([^"]+)"} $message -> name]} {
+        if {[regexp {declared errors? (.*), which (?:is|are) neither} $message -> named]} {
+            # A call's unhandled set is one diagnostic naming every error
+            # (DIAGNOSTIC-RECOVERY.md): the names, sorted.
+            set message [lsort [lmap {- name} [regexp -all -inline {"([^"]+)"} $named] {set name}]]
+        } elseif {[regexp {declared error "([^"]+)"} $message -> name]} {
             set message $name
         }
         list [dict get $d kind] $message
@@ -529,7 +533,7 @@ test nerr-compiler-fixture {B27: compiler_fixture::Type and typesys::Type (and b
         list [sourceAgree $text] \
             [nsDiagnostics "import compiler_fixture\nimport typesys\nfn f(n: int) -> int:\n    compiler_fixture::check(n):\n        on typesys::Type:\n            0\n        on typesys::Unbound:\n            1\n        on compiler_fixture::CompilerError:\n            2\n0\n"]
     }
-} -result {{value {[["compiler Unbound", "x"], ["compiler Type", "too big"], ["compiler error"], ["typesys Type", "negative"]]}} {{UNHANDLED-ERROR compiler_fixture::Type} {UNHANDLED-ERROR compiler_fixture::Unbound}}}
+} -result {{value {[["compiler Unbound", "x"], ["compiler Type", "too big"], ["compiler error"], ["typesys Type", "negative"]]}} {{UNHANDLED-ERROR {compiler_fixture::Type compiler_fixture::Unbound}}}}
 
 # ---------------------------------------------------------------------------
 # Part C: the completion fallback keeps canonical identities

@@ -1,0 +1,9 @@
+# S17: an "if" written as an operand, across lines inside an open parenthesis, and a later independent syntax error.
+primary 4:27
+fix 4     x = if flag:
+fix 7         "no"
+cascade 4:26
+cascade 6:5
+cascade 7:13
+primary 11:8
+fix 11     n + 1

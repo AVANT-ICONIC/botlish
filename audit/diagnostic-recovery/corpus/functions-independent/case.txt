@@ -1,0 +1,7 @@
+# Three independent result-type errors in three functions of one module.
+primary 1:9
+fix 1 fn width(x: int) -> int:
+primary 4:10
+fix 4 fn height(y: int) -> int:
+primary 7:9
+fix 7 fn depth(z: int) -> int:

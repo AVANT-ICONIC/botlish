@@ -770,12 +770,11 @@ proc hir::affine::verifyInstance {viewVar block exprs} {
         }
         set fn [dict get $view scopes [dict get $node scope] invocation]
         set enclosing [expr {$fn eq "" ? {} : [dict get $view exprs $fn declaredErrors]}]
-        foreach name [hir::types::CoroutineErrors $calleeType] {
-            if {$name ni $handled && $name ni $enclosing} {
-                hir::Diagnose view UNHANDLED-ERROR [format \
-                    {this coroutine resume may produce the declared error "%s", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                    $name] $e
-            }
+        set unhandled [hir::completions::Unhandled [hir::types::CoroutineErrors $calleeType] $handled $enclosing]
+        if {$unhandled ne ""} {
+            hir::Diagnose view UNHANDLED-ERROR [format \
+                {this coroutine resume may produce %s, which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+                [hir::completions::UnhandledPhrase $unhandled] [hir::completions::UnhandledVerb $unhandled]] $e
         }
     }
 }

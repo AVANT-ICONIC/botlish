@@ -1051,17 +1051,12 @@ test me-nomethod-sugar-is-a-resolution-error {receiver-form call to a nomethod f
     list $code $message
 } -result {{CORE SEMANTIC NOMETHOD-CALL} {t.bot:3:3: `atan2` is declared nomethod and cannot be called with method syntax; call it as atan2(receiver, ...)}}
 
-test me-nomethod-error-before-typing {the error is raised by resolution: before type inference, like an unbound name} -body {
-    set calls 0
-    trace add execution hir::check enter {apply {{args} {incr ::checkCalls}}}
-    set ::checkCalls 0
-    try {
-        catch {compileWith "[nomethodDecl]5.atan2(1)" off}
-        set ::checkCalls
-    } finally {
-        trace remove execution hir::check enter {apply {{args} {incr ::checkCalls}}}
-    }
-} -result 0
+test me-nomethod-error-before-typing {the error is raised by resolution, like an unbound name: a resolution diagnostic, reported first, and the checks that run after it (DIAGNOSTIC-RECOVERY.md) report nothing about the code that depends on it -- not the field call it leaves} -body {
+    catch {compileWith "[nomethodDecl]5.atan2(1)" off} message options
+    set hir [surface::compile "[nomethodDecl]5.atan2(1)" t.bot -strict 0 -warnings off]
+    list [dict get $options -errorcode] [llength [dict get $options -diagnostics]] \
+        [lmap d [dict get $hir resolutionDiagnostics] {dict get $d kind}]
+} -cleanup {unset -nocomplain message options hir} -result {{CORE SEMANTIC NOMETHOD-CALL} 1 NOMETHOD-CALL}
 
 test me-nomethod-error-is-an-error-in-every-warning-mode {off, default and error all reject it: it is a language error, not a warning} -body {
     lmap mode {off default error} {lindex [rejection "[nomethodDecl]5.atan2(1)" $mode] 0}

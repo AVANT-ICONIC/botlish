@@ -116,6 +116,19 @@ source [file join $root native native.tcl]
 # tclsh's default 1000, which ends an interpreted recursion ~140 calls deep.
 core::useProgramRecursionLimit
 
+# Prints the error MESSAGE (OPTIONS: its return options) to CHANNEL as
+# "PREFIXMESSAGE (ERRORCODE)" -- one such line per diagnostic when a rejected
+# compilation reports several (core::raiseDiagnostics, DIAGNOSTIC-RECOVERY.md).
+proc printError {channel prefix message options} {
+    if {[dict exists $options -diagnostics]} {
+        foreach diagnostic [dict get $options -diagnostics] {
+            puts $channel "$prefix[dict get $diagnostic message] ([core::ShownCode $diagnostic])"
+        }
+        return
+    }
+    puts $channel "$prefix$message ([dict get $options -errorcode])"
+}
+
 proc probeValues {value} {
     switch -- [core::value::kind $value] {
         block   { return [list $value] }
@@ -151,7 +164,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
                 return 1
             }
         } elseif {[catch {surface::readProgramFile $path -warnings $warnings -target $target} hir options]} {
-            puts "   error: $hir ([dict get $options -errorcode])"
+            printError stdout "   error: " $hir $options
             return 1
         }
         # Core IR is only produced for the branch that consumes it, the
@@ -274,7 +287,7 @@ proc emitInterchange {path} {
         }
         hir::interchange::writeFile [file rootname $path].hirx $hir
     } message options]} {
-        puts stderr "$path: $message ([dict get $options -errorcode])"
+        printError stderr "$path: " $message $options
         return 1
     }
     puts "hir interchange: [file rootname $path].hirx"
@@ -292,7 +305,7 @@ proc emitExecutable {path} {
         }
         native::executable $hir [file rootname $path]
     } message options]} {
-        puts stderr "$path: $message ([dict get $options -errorcode])"
+        printError stderr "$path: " $message $options
         return 1
     }
     puts "executable: [file rootname $path]"

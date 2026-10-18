@@ -373,16 +373,100 @@ proc surface::parse {source args} {
     }
     set recover [dict get $options -recover]
     set lexed [surface::lexer::tokenize $source $filename]
-    if {!$recover} {
-        foreach diagnostic [dict get $lexed diagnostics] {
-            surface::raise $diagnostic
+    # Parsed with recovery either way: without -recover, the error raised is
+    # every syntax diagnostic the recovering parse reports (one per
+    # malformed construct and independent lexical problem, in source order).
+    set program [surface::parseTokens [dict get $lexed tokens] -recover 1]
+    set diagnostics [surface::parser::Independent $lexed $program]
+    dict unset program failed
+    if {!$recover && $diagnostics ne ""} {
+        core::raiseDiagnostics [lmap diagnostic $diagnostics {
+            dict create errorcode [list SURFACE SYNTAX $diagnostic] shown {SURFACE SYNTAX} \
+                message "[dict get $diagnostic file]:[dict get $diagnostic line]:[dict get $diagnostic column]: [dict get $diagnostic message]"
+        }]
+    }
+    dict set program diagnostics $diagnostics
+    return [surface::ast::assignIds $program]
+}
+
+# The syntax diagnostics of a parse -- LEXED the lexer's result
+# (surface::lexer::tokenize), PROGRAM the recovering parser's -- that are
+# independent of each other, sorted by position (DIAGNOSTIC-RECOVERY.md). A
+# malformed construct (surface::parser::Failed: the statement or import the
+# parser skipped, up to where it resumed) is one error, its first; within its
+# region the lexer's own recovery is decided by it:
+#
+#   * a bracket diagnostic of the lexer (never closed, unmatched, mismatched)
+#     in the region guesses where a bracket the construct leaves unparsed
+#     ends: dependent, unless
+#   * the construct's error is at a closer the lexer inserted (`f(1 +` at
+#     the end of a line), or at a token the lexer diagnosed itself (a `}`
+#     that does not match the open `(`): then that bracket's own diagnostic
+#     is the primary and the parser's, found at a token nobody wrote or one
+#     already reported, is dependent;
+#   * a construct whose source text the lexer skipped (an unexpected
+#     character) before its error has that skip as its primary: the
+#     parser's error is a consequence of the missing text.
+#
+# Every other diagnostic stands: two malformed constructs the parser
+# resynchronized between are two errors.
+proc surface::parser::Independent {lexed program} {
+    set lexical [dict get $lexed diagnostics]
+    set structural [dict get $lexed structural]
+    set skipped [dict get $lexed skipped]
+    set synthetic [dict get $lexed synthetic]
+    set parsed [dict get $program diagnostics]
+    set dropLexical [dict create]
+    set dropParsed [dict create]
+    if {[dict exists $program failed]} {
+        foreach region [dict get $program failed] {
+            set from [dict get $region start]
+            set to [dict get $region end]
+            set primary [dict get $region diagnostic]
+            set at [dict get $primary start]
+            if {[dict get $primary end] == $at && $at in $synthetic} {
+                dict set dropParsed $primary 1
+                continue
+            }
+            set atLexical ""
+            foreach index $structural {
+                if {[dict get [lindex $lexical $index] start] == $at} {
+                    set atLexical $index
+                }
+            }
+            foreach index $skipped {
+                set start [dict get [lindex $lexical $index] start]
+                if {$start >= $from && $start <= $at} {
+                    dict set dropParsed $primary 1
+                }
+            }
+            if {[dict exists $dropParsed $primary]} continue
+            if {$atLexical ne ""} {
+                dict set dropParsed $primary 1
+            }
+            foreach index $structural {
+                set start [dict get [lindex $lexical $index] start]
+                if {$start >= $from && $start < $to && $index ne $atLexical} {
+                    dict set dropLexical $index 1
+                }
+            }
         }
     }
-    set program [surface::parseTokens [dict get $lexed tokens] -recover $recover]
-    set all [concat [dict get $lexed diagnostics] [dict get $program diagnostics]]
+    set all {}
+    set index 0
+    foreach diagnostic $lexical {
+        if {![dict exists $dropLexical $index]} {
+            lappend all $diagnostic
+        }
+        incr index
+    }
+    foreach diagnostic $parsed {
+        if {![dict exists $dropParsed $diagnostic]} {
+            lappend all $diagnostic
+        }
+    }
     set decorated [lmap diagnostic $all {list [dict get $diagnostic start] $diagnostic}]
-    dict set program diagnostics [lmap entry [lsort -integer -index 0 $decorated] {lindex $entry 1}]
-    return [surface::ast::assignIds $program]
+    return [lmap entry [lsort -integer -index 0 $decorated] {lindex $entry 1}]
 }
 
 # The program node of TOKENS (without ids); -recover as for surface::parse.
@@ -395,6 +479,11 @@ proc surface::parseTokens {tokens args} {
         recover [dict get $options -recover] diagnostics {} topLevel 1]
     set program [surface::parser::Program p]
     dict set program diagnostics [dict get $p diagnostics]
+    if {[dict exists $p failed]} {
+        # The malformed constructs' regions (surface::parser::Failed), for
+        # surface::parse; never part of the AST.
+        dict set program failed [dict get $p failed]
+    }
     return $program
 }
 
@@ -490,13 +579,14 @@ proc surface::parser::Program {pVar} {
         Advance p
     }
     set direct ""
+    set first [Peek p]
     if {[catch {DirectModule p} direct options]} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $direct
         }
-        dict lappend p diagnostics [lindex [dict get $options -errorcode] 2]
         set direct [expr {[dict exists $p directSpan] ? [dict get $p directSpan] : ""}]
         Synchronize p
+        Failed p $first [lindex [dict get $options -errorcode] 2]
     }
     set imports [Imports p]
     set body [Statements p {EOF}]
@@ -593,12 +683,12 @@ proc surface::parser::Imports {pVar} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $import
         }
-        dict lappend p diagnostics [lindex [dict get $options -errorcode] 2]
         set before [dict get $p pos]
         Synchronize p
         if {[dict get $p pos] == $before} {
             Advance p
         }
+        Failed p $token [lindex [dict get $options -errorcode] 2]
     }
 }
 
@@ -1430,6 +1520,7 @@ proc surface::parser::Statements {pVar stop} {
             continue
         }
         set token [Peek p]
+        set from [dict get $p pos]
         if {![catch {Statement p} statement options]} {
             lappend body $statement
             continue
@@ -1437,17 +1528,52 @@ proc surface::parser::Statements {pVar stop} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $statement
         }
-        dict lappend p diagnostics [lindex [dict get $options -errorcode] 2]
+        # The blocks the malformed statement opened and was inside when it
+        # failed (a declaration's own body): its region ends where they do,
+        # never at a stray "end of block" of their own.
+        set open 0
+        foreach t [lrange [dict get $p tokens] $from [expr {[dict get $p pos] - 1}]] {
+            switch -- [dict get $t kind] {
+                INDENT { incr open }
+                DEDENT { incr open -1 }
+            }
+        }
         set before [dict get $p pos]
         Synchronize p
         if {[dict get $p pos] == $before && [Kind p] ni [concat $stop EOF]} {
             Advance p
         }
+        while {$open > 0 && [Kind p] ne "EOF"} {
+            switch -- [Kind p] {
+                INDENT { incr open }
+                DEDENT { incr open -1 }
+            }
+            Advance p
+        }
+        # An `elif` or `else` clause right after a malformed statement can
+        # only continue it (neither starts a statement): it is part of the
+        # construct that failed, never a second error of its own ("else"
+        # without a matching "if").
+        while {[Kind p] in {elif else}} {
+            Synchronize p
+        }
+        Failed p $token [lindex [dict get $options -errorcode] 2]
         set end [expr {[dict get $p last start] >= [dict get $token span start]
             ? [dict get $p last] : [dict get $token span]}]
         lappend body [surface::ast::node error [surface::ast::cover [dict get $token span] $end]]
     }
     return $body
+}
+
+# Records the syntax DIAGNOSTIC of a malformed construct that started at TOKEN
+# and that recovery has just skipped: the diagnostic, and the construct's
+# region -- from TOKEN to the token the parser resumes at -- in which no other
+# diagnostic is independent of it (surface::parse, DIAGNOSTIC-RECOVERY.md).
+proc surface::parser::Failed {pVar token diagnostic} {
+    upvar 1 $pVar p
+    dict lappend p diagnostics $diagnostic
+    dict lappend p failed [dict create start [dict get $token span start] \
+        end [dict get [Peek p] span start] diagnostic $diagnostic]
 }
 
 # Skips to the start of the next statement: past the end of the current line

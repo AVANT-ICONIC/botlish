@@ -1,0 +1,29 @@
+error Duplicate
+error Missing
+error Range
+error Shape
+
+fn validate(n: int) -> int errors Duplicate, Missing, Range, Shape:
+    if n < 0:
+        fail Range
+    if n == 0:
+        fail Missing
+    if n == 1:
+        fail Duplicate
+    if n == 2:
+        fail Shape
+    n
+
+fn checked(n: int) -> int:
+    v = validate(n):
+        on Shape:
+            0
+#       on Duplicate:
+#           0
+#       on Missing:
+#           0
+#       on Range:
+#           0
+    v
+
+0

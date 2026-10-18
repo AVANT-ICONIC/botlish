@@ -1,0 +1,7 @@
+# A resolution error (unbound name) beside two independent check errors in other functions.
+primary 5:9
+fix 5     x + 1
+primary 7:10
+fix 7 fn second(y: int) -> int:
+primary 11:7
+fix 11     p.a

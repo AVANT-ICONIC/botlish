@@ -1,0 +1,12 @@
+fn width(x: int) -> str:
+    x
+
+fn height(y: int) -> str:
+    y
+
+fn depth(z: int) -> str:
+    z
+
+width(1)
+height(2)
+depth(3)

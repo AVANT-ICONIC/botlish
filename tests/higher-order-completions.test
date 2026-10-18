@@ -144,7 +144,11 @@ proc hocDiagnostics {text} {
         set block [dict get $hir scopes [hir::get $hir $e scope] invocation]
         set where [expr {$block eq "" ? "top" : [hir::signatures::Name $hir $block]}]
         set message [dict get $d message]
-        if {[regexp {declared error "([^"]+)"} $message -> name]} {
+        if {[regexp {declared errors? (.*), which (?:is|are) neither} $message -> named]} {
+            # A call's unhandled set is one diagnostic naming every error
+            # (DIAGNOSTIC-RECOVERY.md): the names, sorted.
+            set message [lsort [lmap {- name} [regexp -all -inline {"([^"]+)"} $named] {set name}]]
+        } elseif {[regexp {declared error "([^"]+)"} $message -> name]} {
             set message $name
         }
         list [dict get $d kind] $where $message
@@ -269,11 +273,11 @@ test hoc-nested-handled {a handled call inside another handled call: partial han
 
 test hoc-undeclared-through-helper {a declaring function that lets an undeclared error through an untyped helper is diagnosed at its own body} -body {
     hocDiagnostics "${hocDecls}fn narrow(x: int) -> int errors E2:\n    call(raise, x)\n\nfn top(k: int):\n    narrow(k):\n        on E2 {code}:\n            code\n\ntop(0)\n"
-} -result {{UNHANDLED-ERROR narrow E1} {UNHANDLED-ERROR narrow E3} {UNHANDLED-ERROR top E1} {UNHANDLED-ERROR top E3}}
+} -result {{UNHANDLED-ERROR narrow {E1 E3}} {UNHANDLED-ERROR top {E1 E3}}}
 
 test hoc-top-level {an unhandled error through an untyped helper at the top level is UNHANDLED-ERROR (it used to escape at run time)} -body {
     hocDiagnostics "${hocDecls}call(raise, 1)\n"
-} -result {{UNHANDLED-ERROR top E1} {UNHANDLED-ERROR top E2} {UNHANDLED-ERROR top E3}}
+} -result {{UNHANDLED-ERROR top {E1 E2 E3}}}
 
 test hoc-mutable-array-factory {a factory closure that calls an erased callable: mutable_array::generate charges what it may raise} -body {
     set text "import mutable_array\n${hocDecls}fn gen(f, k):\n    fn factory(i):\n        f(k)\n    mutable_array::capacity(mutable_array::generate(1, factory))\n\n"

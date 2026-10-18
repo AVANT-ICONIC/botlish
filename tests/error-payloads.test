@@ -390,7 +390,7 @@ test ep-whole-binding-is-the-payload {item 15/16/42: the whole binding is the pa
     list [epAgree "${::epDecls}fn g(x: int) -> int errors ObjectNotFound:\n    if x > 1:\n        fail ObjectNotFound {uri: \"o\"}\n    x\nfn f(x: int) -> bool:\n    v = g(x):\n        on ObjectNotFound d:\n            return d == {uri: \"o\"}\n    false\n\[f(1), f(2)\]\n"] \
         [epAgree "${::epDecls}fn g(uri: str):\n    v = fetch(uri):\n        on PageNotFound details:\n            return \[details\]\n    \[\]\ng(\"/p\")\n"] \
         [epKinds "${::epDecls}fn g(uri: str) -> str:\n    v = fetch(uri):\n        on PageNotFound details:\n            return details.kind\n    \"\"\n1\n"]
-} -result {{value {[false, true]}} {value {[{response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/p"}]}} {TYPE UNKNOWN-FIELD}}
+} -result {{value {[false, true]}} {value {[{response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/p"}]}} UNKNOWN-FIELD}
 
 test ep-captured-payload-binding {a nested function may capture a payload binding like any binding (unrestricted payload): natively the payload object is built once, at the handler} -body {
     epAgree "${::epDecls}fn f(uri: str) -> str:\n    v = fetch(uri):\n        on PageNotFound details:\n            fn show() -> str:\n                str::concat(details.uri, \"?\")\n            return show()\n    \"ok\"\n\[f(\"\"), f(\"/c\")\]\n"
@@ -459,7 +459,7 @@ test ep-same-shape-not-interchangeable {item 65: a handler for one error does no
 test ep-multiple-payload-errors {item 54: a function may fail with several payload-bearing errors; each handler statically knows its own error's payload type (no union of payloads)} -body {
     list [epAgree "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound, ConnectionLost:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    if x == 2:\n        fail ConnectionLost\n    str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on PageNotFound {statusCode, response}:\n            statusCode + response.length\n        on ObjectNotFound {uri}:\n            str::length(uri)\n        on ConnectionLost:\n            -1\n\[f(1), f(2), f(3)\]\n"] \
         [epKinds "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on ObjectNotFound {statusCode}:\n            statusCode\n        on PageNotFound:\n            0\n1\n"]
-} -result {{value {[1, -1, 404]}} {TYPE UNKNOWN-FIELD}}
+} -result {{value {[1, -1, 404]}} UNKNOWN-FIELD}
 
 # ---------------------------------------------------------------------------
 # Contracts and propagation (items 10-12, 35, 56-58)

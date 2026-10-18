@@ -1,0 +1,13 @@
+struct Pair:
+    a: int
+
+fn first(x: int) -> int:
+    x + offset
+
+fn second(y: int) -> str:
+    y
+
+fn third(p: Pair) -> int:
+    p.b
+
+first(1)

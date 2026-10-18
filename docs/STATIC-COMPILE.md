@@ -837,10 +837,14 @@ diagnostic object at run time.
 ### 27. Primary-diagnostic selection
 
 The first of the block's own diagnostics in the build's diagnostic list --
-the one a strict compile of the same code raises first: resolution
-diagnostics (a strict build stops after them) before check diagnostics,
+the one a strict compile of the same code raises first (it raises every
+independent one, the first first: DIAGNOSTIC-RECOVERY.md): resolution
+diagnostics (the decision rounds stop after them) before check diagnostics,
 then the passes' order, with the frontend's own promotions (opacity, trait
-diagnostics, method-call decisions prepended). `sc-primary-selection`: an
+diagnostics, method-call decisions prepended). A CompilerError stays one
+diagnostic: only a block's first is the same whatever build rejects it
+(STATIC-DECISION-ECONOMICS.md), so a list would let the scheduler decide an
+outcome. `sc-primary-selection`: an
 UNBOUND after a TYPE error is reified (resolution first); of two UNBOUNDs
 the first in source order.
 

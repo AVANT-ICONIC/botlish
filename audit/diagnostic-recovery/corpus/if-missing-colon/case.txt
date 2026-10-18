@@ -1,0 +1,7 @@
+# A malformed if header whose elif and else clauses then dangle, and a later independent syntax error.
+primary 2:9
+fix 2     if c:
+cascade 4:5
+cascade 6:5
+primary 10:9
+fix 10     x * 2

@@ -1,0 +1,9 @@
+#import str
+
+fn label(name: str) -> str:
+    name
+
+fn show(prefix: str) -> str:
+    label(prefix.concat("x"))
+
+show("p")

@@ -57,6 +57,10 @@
 #   no-fallout        `if x.x:` -- only the opacity diagnostic, not a type error
 #                     (the ordinary twin: TYPE)
 #
+# A rejected access is poison (DIAGNOSTIC-RECOVERY.md): nothing that uses its
+# value is diagnosed again, so every shape's diagnostic set is the one opacity
+# kind.
+#
 # A real hidden field, a guessed one and a destructuring of either must give the
 # very same diagnostic (message-leaks counts a difference).
 #
@@ -394,15 +398,15 @@ proc NegativeProgram {shape k opaque} {
             return [list "${h}p = ${M}::make_Pt($a, $b)\n{y: why} = p\nwhy + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION}]
         }
         nested {
-            # (`w` is `any`, so the inner `v` is also an unproven projection:
-            # the existing, name-independent consequence of the rejected one.)
-            return [list "${h}o = ${M}::make_Outer($a, $b)\n{inner: {v: w}} = o\nw + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION UNPROVEN-FIELD}]
+            # (The rejected `inner` is poison, and so is `w`: the inner `v` is
+            # no second diagnostic.)
+            return [list "${h}o = ${M}::make_Outer($a, $b)\n{inner: {v: w}} = o\nw + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION}]
         }
         nested-partial {
             return [list "${h}o = ${M}::make_Outer($a, $b)\n{n} = o\nn + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION}]
         }
         inner-through {
-            return [list "${h}o = ${M}::make_Outer($a, $b)\ni = o.inner\ni.v + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION UNPROVEN-FIELD}]
+            return [list "${h}o = ${M}::make_Outer($a, $b)\ni = o.inner\ni.v + 1\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION}]
         }
         field-value-call {
             return [list "${h}g = ${M}::make_Gadget($a)\n(g.hook)($b)\n" OPAQUE-REPRESENTATION accepted {OPAQUE-REPRESENTATION}]
@@ -432,9 +436,9 @@ proc NegativeProgram {shape k opaque} {
         no-fallout {
             # The hidden field x.x is an int in the owner. Passed to a bool
             # parameter, an ordinary struct's field is the TYPE error naming
-            # int; here the rejected access is typed as an unknown field is,
-            # so no diagnostic of the program ever names the hidden type.
-            return [list "${h}fn f(b: bool):\n    b\nx = ${M}::make_Pt($a, $b)\nf(x.x)\n" OPAQUE-REPRESENTATION TYPE {OPAQUE-REPRESENTATION TYPE} int]
+            # int; here the rejected access is poison, with no consequence at
+            # all, so no diagnostic of the program ever names the hidden type.
+            return [list "${h}fn f(b: bool):\n    b\nx = ${M}::make_Pt($a, $b)\nf(x.x)\n" OPAQUE-REPRESENTATION TYPE {OPAQUE-REPRESENTATION} int]
         }
     }
     error "unknown shape $shape"

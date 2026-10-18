@@ -2,7 +2,9 @@
 # file that imports the type byte::Byte but not the namespace byte: the
 # receiver's type is never searched for the function, so a function of the
 # module that declares the receiver's type is no more visible than any
-# other, even with that type imported.
+# other, even with that type imported: the type import loads the module, so
+# the call is the missing import of its namespace (MissingImport,
+# DIAGNOSTIC-RECOVERY.md), never a call of it.
 #
 # Ports the type-import half of tests/method-sugar.test's
 # method-not-visible-no-type-import-needed-or-used (the Tcl test stays
@@ -17,12 +19,12 @@ import type byte::Byte
 
 fn register_visibility_tests():
     # method-not-visible-no-type-import-needed-or-used: importing the Byte
-    # type makes no function of byte a candidate.
+    # type makes no function of byte a candidate: byte is what is missing.
     fn b_type_import() errors compiler::CompilerError:
         static compile:
             x = 200
             x.complement()
-    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", compiler::DiagnosticCode::NotAStruct, "cannot project field \"complement\" from a value of type int: only a struct has fields; as a method-style call, no function named \"complement\" is visible here either", b_type_import)
+    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", compiler::DiagnosticCode::MissingImport, "namespace \"byte\" is not imported; add `import byte` to use `byte::complement`", b_type_import)
 
 with context test::suite()
 register_visibility_tests()

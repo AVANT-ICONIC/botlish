@@ -1,0 +1,5 @@
+fn side() -> int:
+    "four"
+
+fn perimeter(s: int) -> bool:
+    4 * s

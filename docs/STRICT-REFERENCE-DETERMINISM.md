@@ -90,9 +90,12 @@ source -> sequential lexical resolution -> resolved HIR (no forward refs)
 * `init` is `yes` for every resolved reference, `deferred` only for an
   ambient (sequence-mode) binding.
 * A strict build stops after resolution when it failed
-  (`hir::buildSyntax`, `-strict 1`, and `-halt-on-resolution-errors` for the
-  source frontend, which adds source locations): a program that does not
-  resolve is never typed, analyzed, specialized or lowered.
+  (`hir::buildSyntax`, `-strict 1`, and `-halt-on-resolution-errors`): a
+  program that does not resolve is never typed, analyzed, specialized or
+  lowered. The source frontend goes on to check such a program instead, and
+  reports what the checks find independently of the failure, never anything
+  in code that depends on it (DIAGNOSTIC-RECOVERY.md, hir/recovery.tcl);
+  it is still never specialized or lowered.
 
 ## Binding visibility rules (audit, item 17)
 

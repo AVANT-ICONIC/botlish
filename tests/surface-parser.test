@@ -567,18 +567,15 @@ test parse-recover-range-outside-type-decl {".." outside a type declaration: one
 (bind b (int 2))
 ! 1:6 expected end of line, found ".."}
 
-test parse-recover-elif {a bad elif header drops the whole chain, and the clauses after it are reported like any stray else} -body {
+test parse-recover-elif {a bad elif header drops the whole chain, and the clauses after it are part of it: the malformed construct is one error, never a stray elif or else of its own (DIAGNOSTIC-RECOVERY.md)} -body {
     recoveredAst "if a:\n    1\nelif b c:\n    x\nelif d:\n    4\nelse:\n    5\ny"
 } -result {(error)
-(error)
-(error)
 (name y)
-! 3:8 expected ":" after the "elif" condition, found name "c"
-! 5:1 "elif" without a matching "if"
-! 7:1 "else" without a matching "if"}
+! 3:8 expected ":" after the "elif" condition, found name "c"}
 
 test parse-recover-lexical {lexical and syntax errors together, in source order} -body {
-    # "2 ! 3": the lexer skips "!", then the parser finds a stray 3.
+    # "2 ! 3": the lexer skips "!", and the stray 3 the parser then finds is
+    # the skip's consequence, not an error of its own (DIAGNOSTIC-RECOVERY.md).
     recoveredAst "a = \"open\nb = f(1\nc = 2 ! 3\nd = 007"
 } -result {(bind a (str "open"))
 (bind b (call (name f) (int 1)))
@@ -587,7 +584,6 @@ test parse-recover-lexical {lexical and syntax errors together, in source order}
 ! 1:5 unterminated string
 ! 2:6 "(" is never closed
 ! 3:7 unexpected character "!"
-! 3:9 expected end of line, found integer 3
 ! 4:5 invalid integer literal "007": leading zeros are not allowed}
 
 test parse-recover-indentation {unexpected indentation is skipped as a block} -body {

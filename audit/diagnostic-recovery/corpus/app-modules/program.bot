@@ -1,0 +1,6 @@
+import shapes
+
+fn area(w: int, h: int) -> str:
+    w * h
+
+area(2, shapes::side())

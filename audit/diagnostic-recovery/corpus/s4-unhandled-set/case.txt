@@ -1,0 +1,10 @@
+# S4: a call whose declared error set has several unhandled members.
+primary 18:9 "Duplicate"
+fix 21         on Duplicate:
+fix 22             0
+primary 18:9 "Missing"
+fix 23         on Missing:
+fix 24             0
+primary 18:9 "Range"
+fix 25         on Range:
+fix 26             0

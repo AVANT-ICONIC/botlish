@@ -1379,10 +1379,12 @@ Queries: `hir::lookup`, `hir::visibleBindings`, `hir::refinementsAt`,
 `hir::children`.
 
 Static errors become diagnostics. With `-strict 1` (the default),
-`hir::build` raises the first one, with the interpreter's error code and
-message. With `-strict 0` (which the compiler uses), they stay in the HIR, and
-the lowered program raises them at run time exactly where the interpreter
-would. Malformed IR always raises `CORE MALFORMED`.
+`hir::build` raises them as one error, the first one's error code and message
+first, then a line per further one (`hir/recovery.tcl`, DIAGNOSTIC-RECOVERY.md;
+it stops after resolution when that failed). With `-strict 0` (which the
+compiler uses), they stay in the HIR, and the lowered program raises them at
+run time exactly where the interpreter would. Malformed IR always raises
+`CORE MALFORMED`.
 
 ### Types and refinements
 
@@ -1971,8 +1973,10 @@ operator's callee and constants, `ID/block` for a function's block,
 
 ### Errors and recovery
 
-`surface::parse` raises the first syntax error as
-`{SURFACE SYNTAX DIAGNOSTIC}` with `FILE:LINE:COLUMN: message`.
+`surface::parse` raises every syntax error a recovering parse reports (one
+per malformed construct, below) as one error: `{SURFACE SYNTAX DIAGNOSTIC}`
+of the first, with `FILE:LINE:COLUMN: message`, then a line per further one
+(DIAGNOSTIC-RECOVERY.md).
 
 `surface::parse SOURCE FILE -recover 1` always returns a program:
 
@@ -1981,16 +1985,23 @@ operator's callee and constants, `ID/block` for a function's block,
   brackets at the end of input or before a line that starts like a
   statement.
 * A statement that fails to parse becomes an `error` node. Parsing resumes
-  after its line and any block indented under it.
-* The program's `diagnostics` list every error in source order. `main.tcl`
-  uses this to report all syntax errors of a `.bot` file.
+  after its line and any block indented under it, the blocks it was inside
+  when it failed, and any `elif`/`else` clause right after it (part of the
+  construct that failed).
+* The program's `diagnostics` list every independent error in source order:
+  a malformed construct is one error, and the lexer's guesses inside it (an
+  unclosed or unmatched bracket) and the parser's errors at what the lexer
+  skipped or inserted are its consequences, not reported
+  (DIAGNOSTIC-RECOVERY.md). `main.tcl` uses this to report all syntax errors
+  of a `.bot` file.
 
 `surface::lowerToHir` refuses an AST with diagnostics.
 
 HIR's semantic diagnostics (`DUPLICATE`, including duplicate parameters,
-`UNBOUND`, control placement) are raised statically as
-`{CORE SEMANTIC KIND}`, with the source location before the message. With
-`-strict 0` they stay in the HIR and are raised at run time.
+`UNBOUND`, control placement, and every check's) are raised statically as one
+`{CORE SEMANTIC KIND}` error: every independent one, each with its source
+location before the message, the first one's kind (DIAGNOSTIC-RECOVERY.md).
+With `-strict 0` they stay in the HIR and are raised at run time.
 
 ### Samples and tests
 
@@ -2034,20 +2045,25 @@ references and hygiene.
 
 **Errors and recovery**
 
-* Only the first semantic error is raised. `surface::lowerToHir` (strict)
-  reports the first HIR diagnostic; the rest stay in the HIR
-  (`-strict 0`, `hir::diagnostics`). Syntax errors, in contrast, can all be
-  collected with `-recover 1`.
+* A strict compilation reports every independent error at once
+  (DIAGNOSTIC-RECOVERY.md): every function's and module's, past resolution
+  failures (what depends on one is not reported), a call's whole unhandled
+  error set in one diagnostic, every rejected qualified reference; the error
+  carries the list as its `-diagnostics` return option, and `main.tcl`
+  prints each on a line. A value the analysis rejected is poison: nothing
+  that uses it is diagnosed again.
 * Recovery is line-based:
   * An error anywhere in a statement discards the whole statement,
     including the block under its header. A typo in an `if` condition drops
-    the entire `if`, and errors inside that block go unreported.
-  * An error inside a line can cascade into one more diagnostic, for example
-    a stray token after an unexpected character (`2 ! 3`).
+    the entire `if` (its `elif` and `else` clauses too), and errors inside
+    that block go unreported.
+  * An error inside a line is one error: a stray token after an unexpected
+    character (`2 ! 3`) is its consequence, not reported.
   * An unclosed bracket is closed only at the end of input or before a line
-    that starts like a statement (a keyword or `name =`) and isn't indented
-    deeper than the line that opened it. Expression lines in between are
-    read as part of the bracket.
+    that starts like a statement (a keyword or `name =`) or a declaration
+    (`struct NAME`, `error NAME`, `import`, ...) and isn't indented deeper
+    than the line that opened it. Expression lines in between are read as
+    part of the bracket.
 * An AST with syntax errors can't be lowered, so there's no partial HIR for
   the valid parts of a broken file.
 

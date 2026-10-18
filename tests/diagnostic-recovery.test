@@ -1,0 +1,458 @@
+# diagnostic-recovery.test -- diagnostic recovery and method-resolution
+# correctness (DIAGNOSTIC-RECOVERY.md): more independent errors, fewer
+# dependent ones.
+#
+# A failed method-style call never becomes an unconstrained `any` (Part A):
+# its definitional failure is poison (hir/types.tcl), and a function of its
+# name in a namespace the code does not import is the same MISSING-IMPORT the
+# explicit spelling reports. One compilation reports every independent error
+# it finds -- in every function and module, across resolution failures, a
+# call's whole unhandled error set at once, every qualified reference the
+# loader rejects (Part B) -- and nothing that only restates an earlier
+# failure: no check finds fallout of poison, no check of code that depends on
+# a resolution failure is reported (hir/recovery.tcl), and a malformed
+# construct is one syntax error (surface::parse, Part C).
+#
+# Each cascade test states the primary diagnostics it expects and the
+# dependent ones it suppresses. The diagnostic-efficiency corpus
+# (audit/diagnostic-recovery/corpus/, its tool and its recorded results) has
+# the before/after numbers.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+interp recursionlimit {} 100000
+
+# One reported diagnostic D (core::raiseDiagnostics' entry, or a lone error's
+# message and code) as {CODE LINE:COLUMN MESSAGE}: CODE the kind (SYNTAX for a
+# syntax error), the location in the file and the message without it.
+proc drEntry {errorcode message} {
+    set kind [expr {[lrange $errorcode 0 1] eq {SURFACE SYNTAX} ? "SYNTAX" : [lindex $errorcode 2]}]
+    if {[regexp {^.*?\.bot:(\d+):(\d+): (.*)$} $message -> line column text]} {
+        return [list $kind $line:$column $text]
+    }
+    return [list $kind "" $message]
+}
+
+# What a strict compilation of the program file PATH reports: `accepted`, or
+# its diagnostics in reported order (drEntry).
+proc drReportFile {path} {
+    if {![catch {surface::readProgramFile $path -warnings off} hir options]} {
+        return accepted
+    }
+    if {![dict exists $options -diagnostics]} {
+        return [list [drEntry [dict get $options -errorcode] [lindex [split $hir \n] 0]]]
+    }
+    return [lmap d [dict get $options -diagnostics] {
+        drEntry [dict get $d errorcode] [dict get $d message]
+    }]
+}
+
+# drReportFile of the program SOURCE.
+proc drReport {source} {
+    set path [makeFile $source dr-case.bot]
+    try {
+        return [drReportFile $path]
+    } finally {
+        removeFile dr-case.bot
+    }
+}
+
+# The kinds and locations alone ({CODE LINE:COLUMN} pairs) of drReport.
+proc drSites {source} {
+    set report [drReport $source]
+    if {$report eq "accepted"} {
+        return accepted
+    }
+    return [lmap d $report {lrange $d 0 1}]
+}
+
+# The HIR of the program SOURCE, every diagnostic kept (-strict 0).
+proc drHir {source} {
+    set path [makeFile $source dr-case.bot]
+    try {
+        return [surface::readProgramFile $path -strict 0 -warnings off]
+    } finally {
+        removeFile dr-case.bot
+    }
+}
+
+# The value of the program SOURCE on each backend of BACKENDS, or its error.
+proc drValues {source {backends {interp compile cranelift-generic cranelift}}} {
+    set path [makeFile $source dr-case.bot]
+    try {
+        set hir [surface::readProgramFile $path -warnings off]
+        return [lmap backend $backends {outcomeUnderHir $backend $hir}]
+    } finally {
+        removeFile dr-case.bot
+    }
+}
+
+# Application modules: the files FILES (name -> source) in a directory of
+# their own, and drReportFile of its main.bot.
+proc drApplication {files} {
+    set dir [makeDirectory dr-application]
+    try {
+        dict for {name source} $files {
+            set f [open [file join $dir $name] w]
+            puts -nonewline $f $source
+            close $f
+        }
+        return [drReportFile [file join $dir main.bot]]
+    } finally {
+        removeDirectory dr-application
+    }
+}
+
+# Application modules FILES (as for drApplication) compiled leniently
+# (-strict 0: the diagnostics stay in the HIR and are run-time errors where
+# reached): {POISONED OUTCOMES}, whether the HIR keeps poison, and the program's
+# outcome on each backend of BACKENDS.
+proc drLenient {files {backends {interp compile cranelift-generic cranelift}}} {
+    set dir [makeDirectory dr-lenient]
+    try {
+        dict for {name source} $files {
+            set f [open [file join $dir $name] w]
+            puts -nonewline $f $source
+            close $f
+        }
+        set hir [surface::readProgramFile [file join $dir main.bot] -strict 0 -warnings off]
+        return [list [dict exists $hir poisoned] [lmap backend $backends {lrange [outcomeUnderHir $backend $hir] 0 1}]]
+    } finally {
+        removeDirectory dr-lenient
+    }
+}
+
+# What a recovering parse of SOURCE reports (main.tcl's first step): its
+# syntax diagnostics as {LINE:COLUMN MESSAGE}.
+proc drSyntax {source} {
+    set ast [surface::parse $source dr.bot -recover 1]
+    return [lmap d [dict get $ast diagnostics] {
+        list [dict get $d line]:[dict get $d column] [dict get $d message]
+    }]
+}
+
+# The S13 reduction (the 15-puzzle surprise log, r7.bot).
+set ::drS13 "fn f(s: str) -> str:\n    s.concat(\"ab\")\n\nf(\"q\")\n"
+
+# ---------------------------------------------------------------------------
+# Part A: failed method resolution never becomes `any`
+
+test dr-method-missing-import-s13 {S13: s.concat("ab") without `import str` is MISSING-IMPORT at the method name, the import the explicit spelling needs; no type error at the function result restates it (old: TYPE "function result does not prove declared type str" at 1:5, alone)} -body {
+    drReport $::drS13
+} -result {{MISSING-IMPORT 2:7 {namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name)}}}
+
+test dr-method-missing-import-imported {the same program with the import compiles and behaves as before, on every backend} -body {
+    drValues "import str\n\n$::drS13"
+} -result {{value {"qab"} {}} {value {"qab"} {}} {value {"qab"} {}} {value {"qab"} {}}}
+
+test dr-method-explicit-agrees {the explicit spelling and the method spelling diagnose the same missing prerequisite: MISSING-IMPORT for the namespace str and the function str::concat (the loader's, before analysis, and the analysis's, at the method name)} -body {
+    set explicit [drReport "fn f(s: str) -> str:\n    str::concat(s, \"ab\")\n\nf(\"q\")\n"]
+    set method [drReport $::drS13]
+    list [lindex $explicit 0 0] [lindex $method 0 0] \
+        [regexp {namespace "str" is not imported; add `import str` to use `str::concat`} [lindex $explicit 0 2]] \
+        [regexp {namespace "str" is not imported; add `import str` to use `str::concat`} [lindex $method 0 2]]
+} -cleanup {unset -nocomplain explicit method} -result {MISSING-IMPORT MISSING-IMPORT 1 1}
+
+test dr-method-no-any {failed method sugar is poison, never `any`: the call and its callee are typed never and recorded poisoned (no divergence: the function's result is the call), and HIR types no expression of the function's body `any`} -body {
+    set hir [drHir $::drS13]
+    set block [lindex [hirFind $hir block] 0]
+    set call [lindex [dict get $hir exprs $block body] 0]
+    set callee [dict get $hir exprs $call callee]
+    set region {}
+    hir::WalkInto $hir $call region
+    list [dict get $hir exprs $callee kind] [hir::types::show [hir::typeOf $hir $call]] \
+        [hir::types::Poisoned $hir $call] [hir::types::Poisoned $hir $callee] [hir::types::Poisoned $hir $block] \
+        [dict get $hir exprs $call reachable] \
+        [lmap e $region {expr {[hir::typeOf $hir $e] eq "any" ? $e : [continue]}}]
+} -cleanup {unset -nocomplain hir block call callee region} -result {project never 1 1 1 1 {}}
+
+test dr-method-unknown-genuine {a name no function has stays the projection's own diagnostic (NOT-A-STRUCT, with the method hint), and is poison: nothing restates it} -body {
+    drReport "fn f(s: str) -> str:\n    s.no_such_function(1)\n\nf(\"q\")\n"
+} -result {{NOT-A-STRUCT 2:7 {cannot project field "no_such_function" from a value of type str: only a struct has fields; as a method-style call, no function named "no_such_function" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)}}}
+
+test dr-method-not-applicable-unnamed {a function of that name the call would not apply (mutable_vector::empty? takes a MutableVector, the receiver is a str) is no missing import, and the hint no longer names it} -body {
+    set report [drReport "fn f(s: str) -> bool:\n    s.empty?()\n\nf(\"q\")\n"]
+    list [lindex $report 0 0] [lindex $report 0 1] [string first mutable_vector [lindex $report 0 2]] [llength $report]
+} -cleanup {unset -nocomplain report} -result {NOT-A-STRUCT 2:7 -1 1}
+
+test dr-method-module-member {a function of a module the compilation loaded (here through another import) but this file does not import is the missing import too; no import is implied} -body {
+    drApplication [dict create \
+        main.bot "import helper\n\nfn f() -> int:\n    helper::make().area()\n\nf()\n" \
+        helper.bot "import shapes\n\nfn make() -> shapes::Box:\n    shapes::Box {w: 2}\n" \
+        shapes.bot "struct Box:\n    w: int\n\nfn area(b: Box) -> int:\n    b.w\n"]
+} -result {{MISSING-IMPORT 4:20 {namespace "shapes" is not imported; add `import shapes` to use `shapes::area` (the method-style call ".area(...)" applies only a function visible by that name)}}}
+
+test dr-method-generic-instance {through a generic function: the instance for s : str is invalid, reported at its call with the explicit spelling's kind, and its result is poison: no type error at the caller's result (old: TYPE "function result does not prove declared type str" at 4:5 first)} -body {
+    drSites "fn f(s):\n    s.concat(\"ab\")\n\nfn g() -> str:\n    f(\"q\")\n\ng()\n"
+} -result {{MISSING-IMPORT 5:5}}
+
+test dr-method-generic-instance-no-divergence {the poisoned call of an invalid instance (f's generic body is not itself rejected: only its instance for str fails) is no divergence of its caller: the code after it stays reachable, and the caller's own result mismatch is reported} -body {
+    drSites "fn f(s):\n    s.concat(\"ab\")\n\nfn g() -> int:\n    t = f(\"q\")\n    \"s\"\n\ng()\n"
+} -result {{TYPE 4:5} {MISSING-IMPORT 5:9}}
+
+test dr-method-ambiguity-unchanged {two visible functions that both accept the receiver are still AMBIGUOUS-METHOD-CALL: no candidate is picked} -body {
+    drApplication [dict create \
+        main.bot "import left\nimport right\n\nfn f(x: int) -> int:\n    x.twice()\n\nf(1)\n" \
+        left.bot "fn twice(x) -> int:\n    2\n" \
+        right.bot "fn twice(x) -> int:\n    3\n"]
+} -match glob -result {{AMBIGUOUS-METHOD-CALL 5:7 {method-style call "twice" is ambiguous: more than one visible function accepts the receiver (left::twice, right::twice)*}}}
+
+test dr-callable-field-unchanged {a callable struct field called with method syntax (no function of its name visible) is the field's call, as before, on every backend} -body {
+    drValues "struct Op:\n    run: Fn\{args: \[int\], return: int\}\n\nfn twice(x: int) -> int:\n    x * 2\n\nfn f(o: Op) -> int:\n    o.run(4)\n\nf(Op \{run: twice\})\n"
+} -result {{value 8 {}} {value 8 {}} {value 8 {}} {value 8 {}}}
+
+# ---------------------------------------------------------------------------
+# Part C (semantic): poison has no fallout, and hides nothing independent
+
+test dr-cascade-return {primary: MISSING-IMPORT at the method name. Suppressed: the result-type mismatch of its poisoned value. Kept: an independent result mismatch elsewhere in the same function (an explicit return)} -body {
+    drSites "fn f(s: str, c: bool) -> str:\n    if c:\n        return 5\n    s.concat(\"ab\")\n\nf(\"q\", true)\n"
+} -result {{TYPE 1:5} {MISSING-IMPORT 4:7}}
+
+test dr-cascade-call-arguments {item 24: f(badA(), badB(), wrong) -- primaries: both failed method calls (each its own diagnostic: the poison of the first leaves the second reachable) and the independent wrong argument. Suppressed: the arguments' mismatches with their parameters (old: TYPE "argument for parameter name cannot be proven to satisfy str (argument type: any)" at 5:11, alone)} -body {
+    drSites "fn place(name: str, cells: int, n: int) -> int:\n    cells + n\n\nfn build(label: str, xs: List\[int\]) -> int:\n    place(label.trim_all(), xs.length(), \"three\")\n\nbuild(\"b\", \[1\])\n"
+} -result {{TYPE 5:42} {NOT-A-STRUCT 5:17} {MISSING-IMPORT 5:32}}
+
+test dr-cascade-poisoned-binding {primary: the failed method call bound to `loud`; suppressed: the projection from `loud` (old: UNPROVEN-FIELD from its `any`); kept: the independent result mismatch after it} -body {
+    drSites "fn shout(s: str) -> str:\n    loud = s.upper_case()\n    louder = loud.concat(\"!\")\n    7\n\nshout(\"x\")\n"
+} -result {{TYPE 1:9} {NOT-A-STRUCT 2:14}}
+
+test dr-cascade-poisoned-condition {a poisoned condition decides nothing: both branches stay reachable and keep their own diagnostics (the else branch's own missing import), and the if itself restates nothing} -body {
+    drSites "fn f(s: str) -> int:\n    if s.empty?():\n        1\n    else:\n        s.length()\n\nf(\"x\")\n"
+} -result {{NOT-A-STRUCT 2:10} {MISSING-IMPORT 5:11}}
+
+test dr-cascade-poisoned-iterable {a poisoned iterable's element is poison: the projection from it is suppressed, the loop body stays reachable} -body {
+    drSites "fn f(xs: List\[int\]) -> List\[int\]:\n    loop v in xs.reversed():\n        v.size\n\nf(\[1\])\n"
+} -result {{NOT-A-STRUCT 2:18}}
+
+test dr-cascade-opaque {an opaque projection is poison like any definitional failure: the representation is denied, and nothing about the value it would have had is reported (old: a TYPE error naming `any` for the argument)} -body {
+    drApplication [dict create \
+        main.bot "import vault\n\nfn need(b: bool) -> bool:\n    b\n\nneed(vault::make().secret)\n" \
+        vault.bot "opaque struct Box:\n    secret: int\n\nfn make() -> Box:\n    Box \{secret: 1\}\n"]
+} -match glob -result {{OPAQUE-REPRESENTATION 6:20 *}}
+
+test dr-poison-valid-program-absent {a valid program has no poison and no recovery bookkeeping in its HIR, even with a failing projection in code nothing reaches} -body {
+    set hir [drHir "fn f(s: str, c: bool) -> int:\n    if c:\n        return 1\n    else:\n        return 2\n    s.length\n\nf(\"q\", true)\n"]
+    list [hir::diagnostics $hir] [dict exists $hir poisoned] [dict exists $hir resolutionDiagnostics]
+} -cleanup {unset -nocomplain hir} -result {{} 0 0}
+
+test dr-poison-lenient-run {a lenient HIR keeps its poison (the checks' recovery state) and runs as it did before poison existed: every backend checks it again without poison first (hir::recovery::runnable). An inadmissible handler's value and an opaque field's value are values at run time, never a divergence. (The opaque program on cranelift is a NATIVE BUG, before this milestone as after it: not run here.)} -body {
+    list [drLenient [dict create main.bot "import mutable_array\n\nfn st(a, i):\n    mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\n\nb = mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), 3\]\n"]] \
+        [drLenient [dict create \
+            main.bot "import vault\n\nx = vault::make().secret\n\[x, 1\]\n" \
+            vault.bot "opaque struct Box:\n    secret: int\n\nfn make() -> Box:\n    Box \{secret: 7\}\n"] \
+            {interp compile cranelift-generic}]
+} -result {{1 {{value {[unit, 2, 3]}} {value {[unit, 2, 3]}} {value {[unit, 2, 3]}} {value {[unit, 2, 3]}}}} {1 {{value {[7, 1]}} {value {[7, 1]}} {value {[7, 1]}}}}}
+
+# ---------------------------------------------------------------------------
+# Part B: independent errors in one compilation
+
+test dr-independent-two-functions {two independent errors in two functions are reported together (old: only the first)} -body {
+    drSites "fn need(v: int) -> int:\n    v\n\nfn a(x: int) -> str:\n    x\n\nfn b() -> int:\n    need(\"s\")\n\na(1)\nb()\n"
+} -result {{TYPE 4:5} {TYPE 8:10}}
+
+test dr-independent-three-in-module {three independent errors of different kinds in one module: an unbound name (resolution), a result mismatch and an unknown field (checks) -- reported together; old: the unbound name alone (a strict build stopped after resolution)} -body {
+    drSites "struct Pair:\n    a: int\n\nfn first(x: int) -> int:\n    x + offset\n\nfn second(y: int) -> str:\n    y\n\nfn third(p: Pair) -> int:\n    p.b\n\nfirst(1)\n"
+} -result {{UNBOUND 5:9} {TYPE 7:10} {UNKNOWN-FIELD 11:7}}
+
+test dr-independent-application-modules {independent errors in separate application modules and the entry program are reported together, module first (old: the first only)} -body {
+    drSites "" ;# (drApplication below)
+    drApplication [dict create \
+        main.bot "import shapes\n\nfn area(w: int, h: int) -> str:\n    w * h\n\narea(2, shapes::side())\n" \
+        shapes.bot "fn side() -> int:\n    \"four\"\n\nfn perimeter(s: int) -> bool:\n    4 * s\n"]
+} -match glob -result {{TYPE 1:8 *} {TYPE 4:13 *} {TYPE 3:8 *}}
+
+test dr-resolution-taint {primaries: the unknown result type, and the independent error of a function that does not use it. Suppressed: the result check of render, whose value comes from the function whose result type is unknown, and the top level's calls} -body {
+    drSites "fn parse(text: str) -> Board:\n    text\n\nfn render() -> str:\n    parse(\"x\")\n\nfn score(n: int) -> str:\n    n\n\nscore(1)\nrender()\n"
+} -result {{TYPE 1:9} {TYPE 7:9}}
+
+test dr-resolution-taint-transitive {taint is transitive through bindings: a value computed by a function that does not resolve taints what reads it, at the top level as in a function} -body {
+    drSites "fn broken() -> int:\n    missing_name\n\nvalue = broken()\nfn use(v: int) -> str:\n    v\n\nshown = use(value)\nfn independent(n: int) -> str:\n    n\n\nindependent(1)\n"
+} -result {{UNBOUND 2:5} {TYPE 5:7} {TYPE 9:15}}
+
+# Three static compile blocks, two of which miss the same import (the shape
+# of imports-unimported.bot, where the static-decisions CI comparison found a
+# scheduler disagreement).
+set ::drThreeBlocks "import compiler\n\nfn b_list_at() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.at(0)\n\nfn b_str_length() errors compiler::CompilerError:\n    static compile:\n        s = \"ab\"\n        s.length()\n\nfn b_list_length() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.length()\n\nfn code(body):\n    r = body():\n        on compiler::CompilerError \{code, message\}:\n            message\n    r\n\n\[code(b_list_at), code(b_str_length), code(b_list_length)\]\n"
+
+test dr-missing-import-each-use {two uses of one missing import are two diagnostics, in both spellings: merging them (a first version did) made one static compile block's diagnostic depend on another's -- three blocks, two of them missing the same import, are decided alike by both schedulers, with no mispredicted build} -body {
+    set sites [list [drSites "fn f(xs: List\[int\]) -> int:\n    xs.length() + xs.length()\n\nf(\[1\])\n"] \
+        [drSites "fn f(xs: List\[int\]) -> int:\n    list::length(xs) + list::length(xs)\n\nf(\[1\])\n"]]
+    set path [makeFile $::drThreeBlocks dr-blocks.bot]
+    set outcomes {}
+    foreach scheduler {batched sequential} {
+        set saved $hir::static::scheduler
+        set hir::static::scheduler $scheduler
+        try {
+            set hir [surface::readProgramFile $path -warnings off]
+        } finally {
+            set hir::static::scheduler $saved
+        }
+        lappend outcomes [list [dict get $hir staticStats mispredicted] [lrange [outcomeUnderHir interp $hir] 0 1]]
+    }
+    removeFile dr-blocks.bot
+    list $sites [lindex $outcomes 0 0] [lindex $outcomes 1 0] [expr {[lindex $outcomes 0 1] eq [lindex $outcomes 1 1]}] [lindex $outcomes 0 1 0]
+} -result {{{{MISSING-IMPORT 2:8} {MISSING-IMPORT 2:22}} {{MISSING-IMPORT 2:5} {MISSING-IMPORT 2:24}}} {} {} 1 value}
+
+test dr-loader-references {every qualified reference the loader rejects is reported, in source order (old: the first only)} -body {
+    drSites "fn f(s: str) -> int:\n    str::length(s)\n\nfn g(xs: List\[int\]) -> int:\n    list::length(xs)\n\nfn h() -> int:\n    nosuch::thing()\n\nf(\"ab\")\n"
+} -result {{MISSING-IMPORT 2:5} {MISSING-IMPORT 5:5} {UNKNOWN-NAMESPACE 8:5}}
+
+test dr-single-diagnostic-unchanged {a program with one diagnostic raises exactly what it always did: the same error code and the same message} -body {
+    set path [makeFile "fn f(x: int) -> str:\n    x\n\nf(1)\n" dr-one.bot]
+    catch {surface::readProgramFile $path -warnings off} message options
+    list [dict get $options -errorcode] [regsub {^.*dr-one\.bot} $message dr-one.bot] [llength [dict get $options -diagnostics]]
+} -cleanup {removeFile dr-one.bot; unset -nocomplain path message options} -result {{CORE SEMANTIC TYPE} {dr-one.bot:1:5: function result does not prove declared type str} 1}
+
+test dr-message-lists-all {the error of a compilation with several diagnostics: the first one's code and text, then each further one on a line of its own with its code} -body {
+    set path [makeFile "fn a(x: int) -> str:\n    x\n\nfn b(y: int) -> int:\n    missing\n\na(1)\n" dr-two.bot]
+    catch {surface::readProgramFile $path -warnings off} message options
+    list [dict get $options -errorcode] [regsub -all {[^\n ]*dr-two\.bot} $message dr-two.bot]
+} -cleanup {removeFile dr-two.bot; unset -nocomplain path message options} -result {{CORE SEMANTIC UNBOUND} {dr-two.bot:5:5: unbound name "missing"
+dr-two.bot:1:5: function result does not prove declared type str (CORE SEMANTIC TYPE)}}
+
+test dr-order-deterministic {the reported order is the build's: resolution diagnostics first, then each check's in its own walk; compiling again gives the same list} -body {
+    set source "fn a(x: int) -> str:\n    x\n\nfn b(p: str) -> int:\n    p.size()\n\nfn c(y: int) -> int:\n    later\n\nlater = 1\na(1)\n"
+    set first [drReport $source]
+    set second [drReport $source]
+    list [expr {$first eq $second}] [lmap d $first {lrange $d 0 1}]
+} -cleanup {unset -nocomplain source first second} -result {1 {{UNBOUND 8:5} {TYPE 1:5} {NOT-A-STRUCT 5:7}}}
+
+# ---------------------------------------------------------------------------
+# Part B: the complete unhandled error set
+
+set ::drSet "error Duplicate\nerror Missing\nerror Range\n\nfn validate(n: int) -> int errors Duplicate, Missing, Range:\n    if n < 0:\n        fail Range\n    if n == 0:\n        fail Missing\n    if n == 1:\n        fail Duplicate\n    n\n\nfn checked(n: int) -> int:\n%s\n\n0\n"
+
+test dr-unhandled-set-complete {S4: a call with three unhandled declared errors reports the whole set at once, sorted (old: one per compilation)} -body {
+    drReport [format $::drSet "    validate(n)"]
+} -result {{UNHANDLED-ERROR 15:5 {this call may produce the declared errors "Duplicate", "Missing" and "Range", which are neither handled here nor admitted by the enclosing function's own "errors" declaration}}}
+
+test dr-unhandled-set-remaining {handling one member leaves exactly the rest; handling all is accepted} -body {
+    list [drReport [format $::drSet "    v = validate(n):\n        on Missing:\n            0\n    v"]] \
+        [drReport [format $::drSet "    v = validate(n):\n        on Missing:\n            0\n        on Range:\n            0\n    v"]] \
+        [drReport [format $::drSet "    v = validate(n):\n        on Missing:\n            0\n        on Range:\n            0\n        on Duplicate:\n            0\n    v"]]
+} -result {{{UNHANDLED-ERROR 15:9 {this call may produce the declared errors "Duplicate" and "Range", which are neither handled here nor admitted by the enclosing function's own "errors" declaration}}} {{UNHANDLED-ERROR 15:9 {this call may produce the declared error "Duplicate", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}}} accepted}
+
+test dr-unhandled-native-set {a native's unhandled errors are one diagnostic too: the single-error wording is unchanged} -body {
+    drSites "import list\n\nfn f(xs: List\[int\], i: int) -> int:\n    list::at(xs, i)\n\nf(\[1\], 0)\n"
+} -result {{UNHANDLED-ERROR 4:5}}
+
+# ---------------------------------------------------------------------------
+# Part C (syntax): one malformed construct, one error
+
+test dr-syntax-if-operand-s17 {S17: an "if" operand across lines in an open parenthesis. Primary: the if rule. Suppressed: "(" never closed (the lexer's guess where the parenthesis ended), "else" without a matching "if" (the failed construct's own clause) and the unmatched ")" (the parenthesis's own closer). Kept: a later independent error} -body {
+    drSyntax "fn f(c: bool) -> str:\n    x = \"a\".concat(if c:\n        \"y\"\n    else:\n        \"n\")\n    x\n\nfn g(n: int) -> int:\n    n +\n"
+} -result {{2:20 {an "if" value must be the whole right side of "=" or "return"}} {9:8 {expected an expression, found end of line}}}
+
+test dr-syntax-if-header-clauses {a malformed if header: its elif and else clauses are part of the failed construct, not errors of their own; a later independent error is kept} -body {
+    drSyntax "fn f(c: bool) -> int:\n    if c\n        1\n    elif true:\n        0\n    else:\n        2\n\nfn g(x: int) -> int:\n    x * * 2\n"
+} -result {{2:9 {expected ":" after the "if" condition, found end of line}} {10:9 {expected an expression, found "*"}}}
+
+test dr-syntax-paren-condition {`if (c:`: the missing ")" is the primary; the parenthesis the lexer then closes and the dangling else are suppressed} -body {
+    drSyntax "fn f(c: bool) -> int:\n    if (c:\n        1\n    else:\n        2\n"
+} -result {{2:10 {expected ")", found ":"}}}
+
+test dr-syntax-synthetic-closer {a parenthesis left open at the end of a line: its "never closed" is the primary; the parser's error at the closer the lexer inserted (no token anyone wrote) is suppressed} -body {
+    drSyntax "x = f(1 +\ny = 3\ny\n"
+} -result {{1:6 {"(" is never closed}}}
+
+test dr-syntax-orphan-closer {the closer of a parenthesis the lexer reported as never closed, written on the line that ended it, is not a second, unmatched closer} -body {
+    drSyntax "x = f(1,\ny = 2)\nx\n"
+} -result {{1:6 {"(" is never closed}}}
+
+test dr-syntax-skipped-character {a skipped character is the primary of its statement: the parser's error at what follows it is suppressed; a later statement's error is kept} -body {
+    drSyntax "x = 1 \$ 2\ny = 3 +\nx\n"
+} -result {{1:7 {unexpected character "$"}} {2:8 {expected an expression, found end of line}}}
+
+test dr-syntax-stray-else-kept {an else after a statement that parsed is a real error of its own} -body {
+    drSyntax "y = 1\nelse:\n    2\n"
+} -result {{2:1 {"else" without a matching "if"}}}
+
+test dr-syntax-independent-kept {two malformed constructs the parser resynchronizes between are two errors, and two brackets each left open are two} -body {
+    list [drSyntax "x = f(1,\n  2\nz = (3\n"] [drSyntax "fn a() -> int:\n    1 +\n\nfn b() -> int:\n    2 *\n"]
+} -result {{{1:6 {"(" is never closed}} {3:5 {"(" is never closed}}} {{2:8 {expected an expression, found end of line}} {5:8 {expected an expression, found end of line}}}}
+
+test dr-syntax-strict-reports-all {a strict compilation (surface::compile, no -recover) reports the same syntax errors a recovering parse does, the first one's code} -body {
+    set source "fn f(c: bool) -> int:\n    if c\n        1\n    else:\n        2\n\nfn g() -> int:\n    1 +\n"
+    catch {surface::compile $source dr.bot} message options
+    list [lrange [dict get $options -errorcode] 0 1] [lmap d [dict get $options -diagnostics] {dict get $d message}]
+} -cleanup {unset -nocomplain source message options} -result {{SURFACE SYNTAX} {{dr.bot:2:9: expected ":" after the "if" condition, found end of line} {dr.bot:8:8: expected an expression, found end of line}}}
+
+test dr-syntax-malformed-declaration {one malformed declaration does not prevent a later independent declaration's error: a struct declaration is a statement boundary for an unclosed parameter list (old: the struct's error was inside the parenthesis, unreported)} -body {
+    drSyntax "fn broken(x: int -> int:\n    x\n\nstruct Point:\n    x int\n"
+} -result {{1:18 {expected "," or ")" in the parameter list, found "->"}} {5:7 {expected ":" and a type after the field name "x" (a struct field always has an explicit type), found name "int"}}}
+
+test dr-syntax-declaration-body {a declaration that fails inside its own indented body is skipped to that body's end: no stray "end of block" error after it; a later independent error is kept} -body {
+    drSyntax "struct Point:\n    x int\n    y: int\n\nfn f() -> int:\n    1 +\n"
+} -result {{2:7 {expected ":" and a type after the field name "x" (a struct field always has an explicit type), found name "int"}} {6:8 {expected an expression, found end of line}}}
+
+# ---------------------------------------------------------------------------
+# Static compile
+
+# A program whose function probe(s) is the static block BODY (after PRELUDE),
+# and whose value is the rejected block's [code, message].
+proc drStatic {body {prelude ""}} {
+    set lines [lmap line [split [string trimright $body \n] \n] {string cat "        " $line}]
+    return "import compiler\n${prelude}fn probe(s: str) errors compiler::CompilerError:\n    static compile:\n[join $lines \n]\n\nr = probe(\"q\"):\n    on compiler::CompilerError {code, message}:\n        \[code, message\]\nr\n"
+}
+
+test dr-static-method-missing-import {static compile: a failed method call's block is rejected with the explicit spelling's code, MissingImport (old: NotAStruct)} -body {
+    drValues [drStatic "s.concat(\"ab\")"] interp
+} -match glob -result {{value {\[compiler::DiagnosticCode::MissingImport, *namespace \\"str\\" is not imported*}}}
+
+test dr-static-explicit-agrees {the explicit spelling's block: MissingImport, the same code} -body {
+    drValues [drStatic "str::concat(s, \"ab\")"] interp
+} -match glob -result {{value {\[compiler::DiagnosticCode::MissingImport, *namespace \\"str\\" is not imported*}}}
+
+test dr-static-unhandled-set {static compile: a block rejected for unhandled errors carries the whole set in its one diagnostic} -body {
+    drValues [drStatic "validate(str::length(s))" "import str\nerror A\nerror B\n\nfn validate(n: int) -> int errors A, B:\n    if n < 1:\n        fail A\n    if n == 1:\n        fail B\n    n\n\n"] interp
+} -match glob -result {{value {\[compiler::DiagnosticCode::UnhandledError, *the declared errors \\"A\\" and \\"B\\"*}}}
+
+test dr-static-program-diagnostics {a program with static sites reports all of its own independent diagnostics, as any program does} -body {
+    drSites "import compiler\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        1\n    0\n\nfn a(x: int) -> str:\n    x\n\nfn b() -> int:\n    missing\n\n0\n"
+} -result {{UNBOUND 12:5} {TYPE 8:5}}
+
+# ---------------------------------------------------------------------------
+# Isolation: recovery state is the compilation's own
+
+test dr-isolation {a rejected compilation (poison, resolution taint, a method decision) changes nothing about the next one: its HIR is the HIR a fresh process builds, with no recovery state} -body {
+    set valid "import str\n\nfn f(s: str) -> str:\n    s.concat(\"ab\")\n\nf(\"q\")\n"
+    set before [hir::format [drHir $valid]]
+    drReport "fn g(s: str) -> str:\n    s.concat(\"ab\")\n\nfn h() -> int:\n    missing\n\ng(\"q\")\n"
+    set hir [drHir $valid]
+    list [expr {[hir::format $hir] eq $before}] [dict exists $hir poisoned] [dict exists $hir resolutionDiagnostics] \
+        [lindex [drValues $valid interp] 0]
+} -cleanup {unset -nocomplain valid before hir} -result {1 0 0 {value {"qab"} {}}}
+
+test dr-interchange-rejected {an invalid program never produces HIR interchange text: emitting it fails with the compilation's diagnostics} -body {
+    set path [makeFile $::drS13 dr-interchange.bot]
+    list [catch {exec [info nameofexecutable] [file join $::projectRoot main.tcl] -emit-hir-interchange $path 2>@1} output] \
+        [regsub -all {[^ \n]*dr-interchange\.bot} $output dr-interchange.bot] \
+        [file exists [file rootname $path].hirx]
+} -cleanup {removeFile dr-interchange.bot; unset -nocomplain path output} -match glob -result {1 {dr-interchange.bot: dr-interchange.bot:2:7: namespace "str" is not imported*(CORE SEMANTIC MISSING-IMPORT)*} 0}
+
+test dr-main-prints-each {main.tcl prints each reported diagnostic on a line of its own, with its own code} -body {
+    set path [makeFile "fn a(x: int) -> str:\n    x\n\nfn b(s: str) -> str:\n    s.concat(\"!\")\n\na(1)\n" dr-main.bot]
+    catch {exec [info nameofexecutable] [file join $::projectRoot main.tcl] $path 2>@1} output
+    lmap line [lrange [split [string trim $output] \n] 1 end] {
+        if {![string match "*error:*" $line]} continue
+        regsub {^.*dr-main\.bot} [string trim $line] {dr-main.bot}
+    }
+} -cleanup {removeFile dr-main.bot; unset -nocomplain path output} -result {{dr-main.bot:1:5: function result does not prove declared type str (CORE SEMANTIC TYPE)} {dr-main.bot:5:7: namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)}}
+
+# ---------------------------------------------------------------------------
+# The diagnostic-efficiency corpus
+
+test dr-corpus-efficiency {every known primary of every corpus case is reported by its first compilation, with no known cascade and no other diagnostic, and the cases compile clean once the primaries' fixes are applied (audit/diagnostic-recovery/results.txt has the before/after table)} -body {
+    set data [exec [info nameofexecutable] [file join $::projectRoot audit diagnostic-recovery tools efficiency.tcl] -format data]
+    set wrong {}
+    dict for {name r} $data {
+        set f [dict get $r first]
+        if {[dict get $f primaries] != [dict get $r primaries] || [dict get $f cascades] != 0
+                || [dict get $f unexpected] ne {} || [dict get $r compilations] != 1 || ![dict get $r clean]} {
+            lappend wrong $name $r
+        }
+    }
+    list [dict size $data] $wrong
+} -cleanup {unset -nocomplain data wrong name r f} -result {14 {}}
+
+cleanupTests
