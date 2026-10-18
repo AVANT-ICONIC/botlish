@@ -465,7 +465,11 @@ mod tests {
     fn nedit_u64_store_of_a_bigint() {
         with_vm(|p| {
             let (v, storage) = sentinel(10);
+            // Every heap value is rooted before the next allocation, as
+            // compiled code's stack maps root operands: under
+            // BOTLISH_NATIVE_GC_STRESS=1 every allocation collects first.
             let big = vm(p).new_big(num_bigint::BigInt::from(u64::MAX));
+            vm(p).temp_roots.push(big);
             assert_eq!(rt_native_store(p, v, make_small(1), make_small(8), big), UNIT);
             assert_eq!(&storage[1..9], &[0xff; 8]);
             assert_eq!((storage[0], storage[9]), (0xA5, 0xA5));
@@ -550,13 +554,20 @@ mod tests {
     #[test]
     fn nedit_byte_writes_make_a_fresh_storage() {
         with_vm(|p| {
+            // Every storage is rooted before the next allocation, as compiled
+            // code's stack maps root an allocating op's operands: under
+            // BOTLISH_NATIVE_GC_STRESS=1 every allocation collects first, and
+            // an unrooted operand's memory would be the fresh storage's.
             let m = super::super::ops::rt_mbytes_new(p, make_small(12));
+            vm(p).temp_roots.push(m);
             let r = rt_mbytes_write(p, m, make_small(2), make_small(18), make_small(-2));
+            vm(p).temp_roots.push(r);
             assert_ne!(r, m);
             assert_eq!(mutbytes_of(r), &[0, 0, 0xfe, 0xff, 0, 0, 0, 0, 0, 0, 0, 0]);
             // The operand is never written (MUTABLE-BYTES.md).
             assert_eq!(mutbytes_of(m), &[0; 12]);
             let q = rt_mbytes_write_ptr(p, r, make_small(4), make_small(8), make_cptr(0x0102_0304_0506));
+            vm(p).temp_roots.push(q);
             assert_eq!(mutbytes_of(q), &[0, 0, 0xfe, 0xff, 6, 5, 4, 3, 2, 1, 0, 0]);
             assert_eq!(mutbytes_of(r), &[0, 0, 0xfe, 0xff, 0, 0, 0, 0, 0, 0, 0, 0]);
             // A field beyond the storage, a value outside the encoding, a
@@ -565,6 +576,7 @@ mod tests {
         });
         with_vm(|p| {
             let m = super::super::ops::rt_mbytes_new(p, make_small(4));
+            vm(p).temp_roots.push(m);
             assert_eq!(rt_mbytes_write(p, m, make_small(0), make_small(1), make_small(256)), NO_VALUE);
         });
         with_vm(|p| {
