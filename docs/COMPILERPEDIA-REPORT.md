@@ -72,7 +72,7 @@ report records what was done and what was measured.
   from the registry. The diagnostic inventory is scanned from the source,
   and the warning list is the pass registry.
 * **Help is presentation.** It never compiles, imports or starts a backend,
-  and an ordinary successful compilation never loads it.
+  and a compilation that prints no diagnostic or warning never loads it.
 
 ## B. CLI changes
 
@@ -113,8 +113,9 @@ report records what was done and what was measured.
   ```
 
   The usage names every option of main.tcl's option table (one table now
-  drives parsing, the usage and the `cli.options` topic; a test keeps them
-  equal). Lines fit 80 columns. The program name is the invocation's own:
+  drives parsing and the usage, and a test checks that each of its options
+  is documented in the `cli.options` topic and main.tcl's header). Lines fit
+  80 columns. The program name is the invocation's own:
   `botlish` for the single executable, `tclsh9.0 main.tcl` in a checkout.
 
 * Running the examples is explicit now: `tclsh9.0 main.tcl examples/*.ir`.
@@ -139,7 +140,7 @@ report records what was done and what was measured.
   `-help "bounds proof"` are one query.
 * `-help` never compiles a file named before it.
 * A reader that stops early (`botlish -help errors | head`) ends the output
-  quietly, without a write error.
+  quietly, without a write error (so do the usage and `-version`).
 
 **`-version`.** It prints the identity the build actually has, and exits 0.
 There is no invented version number:
@@ -208,7 +209,9 @@ run botlish with no arguments for the usage summary, or botlish -help cli.option
 * **Three tables.** IDs, codes, symbols and aliases are keys in three
   tables: as written, case-folded, and loose (`-`, `_`, `.` and spaces
   alike).
-* **Ranking.** An ID ranks first, then a code or symbol, then an alias.
+* **Ranking.** An ID ranks first, then a code or symbol, then an alias. A
+  key that names an index's introduction (`index.errors`, the alias
+  "best practices") shows the whole index.
 * **Code tails.** A code's last word is a key too. A hyphenated one such as
   `KNOWN-ERROR` is a key in any case; a plain word such as `TYPE`, `STRUCT`
   or `RANGE` only in capitals, so `-help struct` stays the concept and
@@ -241,7 +244,10 @@ run botlish with no arguments for the usage summary, or botlish -help cli.option
 
 **Rendering.**
 
-* A page is plain text wrapped at 78 columns, with no ANSI and no paging.
+* A page is plain text that fits 80 columns, with no ANSI and no paging.
+  The engine wraps what it composes at 78 columns; hand-written prose is
+  held to 76 by the check and shown four columns in; code lines are shown as
+  written (`cp-render-fits-80-columns`).
 * It has the ID and title, the indices, and these parts:
   * SUMMARY, then CODE or SYMBOL;
   * the topic's sections and examples (each with its expected outcome);

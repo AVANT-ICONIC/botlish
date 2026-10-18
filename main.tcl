@@ -304,24 +304,28 @@ proc versionText {} {
     return [join $lines \n]
 }
 
+# Runs SCRIPT, which prints, and exits with its result (STATUS when it
+# returns nothing). A reader that stops early (-help errors | head) ends the
+# output quietly, not with a write error.
+proc printing {script {status 0}} {
+    if {[catch {set result [uplevel 1 $script]; flush stdout} message options]} {
+        if {[lrange [dict get $options -errorcode] 0 1] eq {POSIX EPIPE}} {
+            exit 0
+        }
+        puts stderr [dict get $options -errorinfo]
+        exit 1
+    }
+    exit [expr {$result eq "" ? $status : $result}]
+}
+
 set commandLine [parseCommandLine $argv]
 switch -- [dict get $commandLine action] {
     usage {
-        puts [usage]
-        exit 0
+        printing {puts [usage]}
     }
     help {
         source [file join $root compilerpedia compilerpedia.tcl]
-        # A reader that stops early (-help errors | head) ends the help
-        # quietly, not with a write error.
-        if {[catch {compilerpedia::main [dict get $commandLine query]} status options]} {
-            if {[lrange [dict get $options -errorcode] 0 1] eq {POSIX EPIPE}} {
-                exit 0
-            }
-            puts stderr [dict get $options -errorinfo]
-            exit 1
-        }
-        exit $status
+        printing {compilerpedia::main [dict get $commandLine query]}
     }
 }
 
@@ -329,8 +333,7 @@ source [file join $root compiler compiler.tcl]
 source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
 if {[dict get $commandLine action] eq "version"} {
-    puts [versionText]
-    exit 0
+    printing {puts [versionText]}
 }
 # The Tcl backends evaluate a Botlish call as nested Tcl evaluations: run
 # programs under the entry points' recursion limit (core/core.tcl), not
