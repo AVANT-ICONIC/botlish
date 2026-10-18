@@ -28,8 +28,9 @@ name: tests (macos arm64)
 # this file is on main; a pull request from this repository's own branches
 # skips (its push already ran), one from a fork runs. Documentation-only
 # pushes skip. A newer push to the same branch cancels a running one, except
-# on main. The macOS runner label is MACOS_RUNNER below, the one place to
-# change it.
+# on main. No macOS job waits for a Linux runner. The runner label, macos-15
+# (an Apple Silicon image; the smoke job fails on anything else), is written
+# in the smoke, acceptance and full jobs: change all three together.
 
 on:
   push:
@@ -59,11 +60,6 @@ concurrency:
   group: macos-arm64-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-env:
-  # An Apple Silicon (arm64) GitHub-hosted runner; the smoke job fails on
-  # anything else.
-  MACOS_RUNNER: macos-15
-
 defaults:
   run:
     # bash -eo pipefail (a step's default shell on macOS is /bin/bash -e,
@@ -71,73 +67,11 @@ defaults:
     shell: bash
 
 jobs:
-  plan:
-    name: plan
-    # A same-repository pull request's push run already covers its commits.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
-    outputs:
-      runner: ${{ steps.plan.outputs.runner }}
-      full: ${{ steps.plan.outputs.full }}
-      tests: ${{ steps.plan.outputs.tests }}
-      gc-stress: ${{ steps.plan.outputs.gc-stress }}
-      shards: ${{ steps.plan.outputs.shards }}
-    steps:
-      - name: Decide the tiers
-        id: plan
-        env:
-          EVENT: ${{ github.event_name }}
-          MESSAGE: ${{ github.event.head_commit.message }}
-          INPUT_TIER: ${{ inputs.tier }}
-          INPUT_TESTS: ${{ inputs.tests }}
-          INPUT_GC_STRESS: ${{ inputs.gc_stress }}
-        run: |
-          full=false
-          tests=""
-          stress=0
-          case $EVENT in
-            workflow_dispatch)
-              [[ $INPUT_TIER == full ]] && full=true
-              tests=$INPUT_TESTS
-              [[ $INPUT_GC_STRESS == true ]] && stress=1
-              ;;
-            push)
-              [[ $MESSAGE == *"[ci-full]"* ]] && full=true
-              trailers=$(printf '%s\n' "$MESSAGE" | git interpret-trailers --parse)
-              tests=$(sed -n 's/^CI-Tests: *//p' <<< "$trailers" | tr '\n' ' ')
-              [[ $(sed -n 's/^CI-GC-Stress: *//p' <<< "$trailers") == 1 ]] && stress=1
-              ;;
-          esac
-          tests=$(echo $tests)
-          # The default payload is under GC stress.
-          [[ -z $tests ]] && stress=1
-          # Three shards for a tier, one job for named files and suites.
-          shards=1
-          if [[ -z $tests || " $tests " == *" all "* || " $tests " == *" acceptance "* ]]; then
-            shards=3
-          fi
-          {
-            echo "runner=$MACOS_RUNNER"
-            echo "full=$full"
-            echo "tests=$tests"
-            echo "gc-stress=$stress"
-            echo "shards=$(seq -s, 1 $shards | sed 's/^/[/; s/$/]/')"
-          } >> "$GITHUB_OUTPUT"
-          {
-            echo "## Plan"
-            echo "* event: $EVENT; macOS runner: \`$MACOS_RUNNER\`"
-            echo "* Tier A (smoke) and Tier B (acceptance): yes"
-            if [[ $full == true ]]; then
-              echo "* Tier C (full): yes; payload: ${tests:-the default, the acceptance tier}$([[ $stress == 1 ]] && echo ', under GC stress')"
-            else
-              echo "* Tier C (full): no (push a head commit whose message contains [ci-full], or run the workflow with tier full)"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
   smoke:
     name: smoke (Tier A, macOS arm64)
-    needs: plan
-    runs-on: ${{ needs.plan.outputs.runner }}
+    # A same-repository pull request's push run already covers its commits.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -149,7 +83,7 @@ jobs:
           echo "CPUs: $(sysctl -n hw.ncpu), memory: $(sysctl -n hw.memsize) bytes, page size: $(getconf PAGESIZE)"
           echo "Xcode: $(xcode-select -p), SDK $(xcrun --show-sdk-version)"
           if [[ $(uname -s) != Darwin || $(uname -m) != arm64 ]]; then
-            echo "::error::not a native arm64 macOS runner: $(uname -s) $(uname -m) (MACOS_RUNNER=$MACOS_RUNNER)"
+            echo "::error::not a native arm64 macOS runner: $(uname -s) $(uname -m)"
             exit 1
           fi
           if [[ $(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0) == 1 ]]; then
@@ -188,14 +122,14 @@ jobs:
           {
             echo "## Smoke (macOS arm64)"
             echo '```'
-            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "the smoke tier did not run"
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the smoke tier did not run"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
   acceptance:
     name: acceptance (Tier B, macOS arm64, shard ${{ matrix.shard }}/2)
-    needs: plan
-    runs-on: ${{ needs.plan.outputs.runner }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -223,13 +157,13 @@ jobs:
           {
             echo "## Acceptance (macOS arm64), shard $SHARD/2"
             echo '```'
-            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "the acceptance tier did not run"
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the acceptance tier did not run"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
   linux-control:
     name: linux control (Tier A, ubuntu x86-64)
-    needs: plan
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -257,51 +191,99 @@ jobs:
         run: tclsh9.0 tests/platform/tier.tcl smoke
 
   full:
-    name: full (Tier C, macOS arm64, shard ${{ matrix.shard }})
-    needs: plan
-    if: needs.plan.outputs.full == 'true'
-    runs-on: ${{ needs.plan.outputs.runner }}
+    name: full (Tier C, macOS arm64, shard ${{ matrix.shard }}/3)
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository)
+      && (contains(github.event.head_commit.message, '[ci-full]') || inputs.tier == 'full')
+    runs-on: macos-15
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
-    env:
-      SHARDS: ${{ strategy.job-total }}
+        shard: [1, 2, 3]
     steps:
+      # What this shard runs: the push's head commit message's CI-Tests and
+      # CI-GC-Stress trailers, or the manual run's inputs; the acceptance
+      # tier under GC stress when nothing is named. A tier is split in three
+      # shards; named files and suites run in shard 1, and the other two
+      # stop here.
+      - name: Decide this shard's items
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_TESTS: ${{ inputs.tests }}
+          INPUT_GC_STRESS: ${{ inputs.gc_stress }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          items=""
+          stress=0
+          if [[ $EVENT == workflow_dispatch ]]; then
+            items=$INPUT_TESTS
+            [[ $INPUT_GC_STRESS == true ]] && stress=1
+          else
+            trailers=$(printf '%s\n' "$MESSAGE" | git interpret-trailers --parse)
+            items=$(sed -n 's/^CI-Tests: *//p' <<< "$trailers" | tr '\n' ' ')
+            [[ $(sed -n 's/^CI-GC-Stress: *//p' <<< "$trailers") == 1 ]] && stress=1
+          fi
+          items=$(echo $items)
+          if [[ -z $items ]]; then
+            items=acceptance
+            stress=1
+          fi
+          shards=1
+          for item in $items; do
+            [[ $item == all || $item == acceptance || $item == smoke ]] && shards=3
+          done
+          work=true
+          (( SHARD > shards )) && work=false
+          {
+            echo "items=$items"
+            echo "stress=$stress"
+            echo "shards=$shards"
+            echo "work=$work"
+          } >> "$GITHUB_OUTPUT"
+          echo "items: $items; GC stress: $stress; shards: $shards; this shard ($SHARD) runs: $work"
+
       - uses: actions/checkout@v5
+        if: steps.decide.outputs.work == 'true'
 
       - name: Install prerequisites (Tcl 9, stable Rust)
+        if: steps.decide.outputs.work == 'true'
         run: tests/platform/setup-macos.sh "$GITHUB_PATH"
 
       - name: Build native (Cranelift) backend
+        if: steps.decide.outputs.work == 'true'
         uses: ./.github/actions/build-native
 
       - name: Tier C items, this shard
+        if: steps.decide.outputs.work == 'true'
         env:
-          ITEMS: ${{ needs.plan.outputs.tests }}
-          STRESS: ${{ needs.plan.outputs.gc-stress }}
+          ITEMS: ${{ steps.decide.outputs.items }}
+          STRESS: ${{ steps.decide.outputs.stress }}
+          SHARDS: ${{ steps.decide.outputs.shards }}
           SHARD: ${{ matrix.shard }}
         run: |
-          read -r -a items <<< "${ITEMS:-acceptance}"
+          read -r -a items <<< "$ITEMS"
           tclsh9.0 tests/platform/tier.tcl -shard "$SHARD/$SHARDS" -gc-stress "$STRESS" "${items[@]}" 2>&1 | tee tier.log
 
       - name: Publish summary
-        if: always()
+        if: always() && steps.decide.outputs.work == 'true'
         env:
+          ITEMS: ${{ steps.decide.outputs.items }}
+          STRESS: ${{ steps.decide.outputs.stress }}
+          SHARDS: ${{ steps.decide.outputs.shards }}
           SHARD: ${{ matrix.shard }}
-          ITEMS: ${{ needs.plan.outputs.tests }}
-          STRESS: ${{ needs.plan.outputs.gc-stress }}
         run: |
           {
-            echo "## Full, shard $SHARD/$SHARDS: ${ITEMS:-acceptance} (GC stress: $STRESS)"
+            echo "## Full, shard $SHARD/$SHARDS: $ITEMS (GC stress: $STRESS)"
             echo '```'
-            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "nothing ran in this shard"
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the tier did not run"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.decide.outputs.work == 'true'
         with:
           name: full-shard-${{ matrix.shard }}
           path: tier.log
