@@ -572,7 +572,7 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 * **The neighbouring mutation harnesses**, every mutant killed:
   compilation isolation 14/14, HIR interchange 27/27, direct modules 18/18,
   binary layout 39/39, C ABI types 26/26, affine values 29/29, coroutines
-  REGRESSION-COROUTINES-PENDING; native views 29/29 on the final tree (the
+  52/52; native views 29/29 on the final tree (the
   Tcl suite kills all 29, the fuzzer 19, the Rust tests the 7 native ones).
   The affine fuzzer, seeds 1, 17, 41: 0 disagreements.
 * **Mutants this milestone moved.** Five mutants of other areas no longer
