@@ -752,7 +752,83 @@ the Rust tests all 8 native mutants. None survived the first run.
 
 ## 20. Regression and CI
 
-REGRESSION-SECTION
+Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
+
+* **`tclsh9.0 tests/local.tcl -jobs 2`** (every Tcl test file on interp and
+  compile, every golden suite on all four backends through the front-end
+  cache; two jobs, beside a mutation run): 482 entries, 5,629 s. All 94
+  golden suites passed on every backend. Two entries failed, one test on
+  both Tcl backends: `abi-bytes-natives-registered`, an inventory pinning
+  that no native is named for writing (its regexp
+  `write|keepalive|pointer|ptr`), which `binary::write` and
+  `binary::write_foreign` now are -- each returns a new `MutableBytes` and
+  writes through no address. The test now expects exactly those two, and
+  abi-bytes.test passes whole (73/73). The other inventories this milestone
+  grows were updated as it was written and pass whole:
+  stdlib-namespaces.test (74/74: `NativeEditNull`, the seventh builtin
+  error), linux-syscall.test (37/37: the four natives),
+  method-eligible.test (153/153: four more `-nomethod` natives),
+  golden-framework.test (42/42) and static-compile.test (83/83: 99
+  diagnostic codes, `LayoutForeignWrite`), compilerpedia.test (34/34).
+* **The neighbouring suites**, whole: native-view.test 39/39 (three of its
+  tests name the edit now: `nv-read-only`, `nv-load-operand`,
+  `nv-untyped-receiver`), binary-layout.test 51/51, c-abi-types.test 73/73,
+  c-pointer-borrowing.test 61/61, direct-modules.test 55 (1 skipped),
+  c-ffi.test 59 (2 skipped), abi-mutable-bytes.test 76/76, affine.test
+  48/48, compilation-isolation.test 19/19, hir-interchange.test 11/11,
+  hir-cache.test 17/17.
+* **`cargo test --release --lib`**: 250 passed, the eight `nedit_` tests
+  included; under `BOTLISH_NATIVE_GC_STRESS=1` 250 too (after the fix
+  below).
+* **Stub linker** (`BOTLISH_NATIVE_LINKER=stub`): `tests/native-edit.test`
+  50 passed, 4 skipped -- the C-oracle tests (`neCFixture`): a program that
+  calls C links with the system linker, which the stub linker refuses
+  (C-FFI.md).
+* **GC stress** (`BOTLISH_NATIVE_GC_STRESS=1`): `tests/native-edit.test`
+  GCSTRESS-EDIT; `tests/native-view.test` GCSTRESS-VIEW; the fuzzers, seed 5
+  × 20 programs each, 0 disagreements.
+* **The neighbouring fuzzers**: native-view seeds 1, 17, 41 (× 40) and 5
+  (× 20, GC stress); binary-layout seeds 1, 17, 41 (× 30) and 5 (× 15, GC
+  stress); c-abi-types seeds 1, 17, 41 (× 40); direct-modules seeds 1, 17,
+  41 (× 60): 0 disagreements. ISOLATION-AFFINE-FUZZ
+* **The neighbouring mutation harnesses**, every mutant killed: native views
+  29/29, binary layout 39/39, C ABI types 26/26, direct modules 18/18.
+  ISOLATION-MUTANTS A static check of every audit's `mutants.txt` applies all
+  755 mutants of the 26 harnesses to the tree.
+* **Mutants this milestone moved.** Ten mutants of other areas no longer
+  applied, because the code they mutate had moved or grown:
+  - binary-layout `byte-order-rust-store` and `store-truncates-rust`:
+    binstore's encoding is now `bin_encode`, shared with the native store
+    and the byte writes (and names its caller in its message);
+  - c-abi-types `implicit-ptr-conversion`, enums `cross-enum-parameter`
+    and traits `witness-leaks-into-applicability`: the identity-only
+    admission and the subtype rule ask `IsNativeMemory` (a view or an edit)
+    where they asked `IsNativeView`;
+  - native-view `null-check-inverted-native` (the view's null test sits
+    beside the edit's), `views-structural` and `view-is-a-pointer` (the
+    rule and the not-a-pointer check cover both kinds),
+    `view-field-shape-lost` (`OfNativeType`) and
+    `pointer-field-read-unowned` (a read through an edit is a load too).
+
+  Each text was updated to keep the same rule, and each mutant is killed
+  again, by its harness's tests and its fuzzer (and, for the two Rust ones,
+  the Rust tests).
+* **CI, first run** (`4e94962`, every workflow dispatched on the branch):
+  `static-decisions` green -- every suite's batched decisions agree with
+  the sequential reference. Everything else failed on exactly two causes:
+  the abi-bytes inventory above (the Linux `tests (interp)` and
+  `tests (compile)` jobs, 8,144 tests, 1 failed; both coverage jobs; the
+  stub-linked executables; arm64 interp, compile, coverage and the whole
+  suite under GC stress; macOS Tier B shard 2) and, on arm64 only,
+  `nedit_byte_writes_make_a_fresh_storage` under GC stress: the test held
+  its operand storage only in a Rust local, so the stress collection freed
+  it and the write's fresh storage took its address. The runtime was
+  right (compiled code roots an allocating op's operands); the test now
+  roots every heap value it makes in `temp_roots`, as the other runtime
+  tests do, and fails without that on x86-64 too. The golden shards (both
+  architectures), the Rust unit tests without stress, the warning gate,
+  macOS Tier A, Tier B shard 1 and the ubuntu control were green.
+* **CI after the fixes**: CI-SECOND
 
 ## 21. The read milestone's questions, answered
 
