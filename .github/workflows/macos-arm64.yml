@@ -1,0 +1,290 @@
+name: tests (macos arm64)
+
+# The macOS Apple Silicon port's CI (MACOS-AARCH64-PORT-AUDIT.md, section
+# 16): real arm64 macOS runners for an agent that develops on Linux. The
+# native backend is not ported yet; these jobs test what runs on macOS today
+# and check that what does not is refused the way the audit records.
+#
+#   smoke          Tier A, every push: the host and its C and Rust
+#                  toolchains (not Botlish), Tcl 9.0.1, core::cabi's macOS row,
+#                  the native build and its Rust unit tests, the native
+#                  status, the smoke tier (tests/platform/tier.tcl smoke)
+#   acceptance     Tier B, every push, two shards: the acceptance tier --
+#                  the test files and golden suites that pass on macOS
+#   linux control  Tier A on ubuntu-latest, every push: the same smoke
+#                  commands on Linux x86-64, for telling a macOS failure from
+#                  a Linux one at the same commit
+#   full           Tier C, opt-in: "[ci-full]" in the pushed head commit's
+#                  message, or a manual run with tier "full". By default
+#                  three shards of the acceptance tier on both Tcl backends
+#                  under BOTLISH_NATIVE_GC_STRESS=1; with a "CI-Tests:"
+#                  trailer in that commit message (or the "tests" input)
+#                  exactly the tier.tcl items it names -- "CI-Tests:
+#                  coroutines.test enums.bot", or "all" for the whole census
+#                  -- under GC stress only with a "CI-GC-Stress: 1" trailer
+#                  (or the "gc_stress" input)
+#
+# Pushes to any branch run it, so a feature branch gets macOS results before
+# this file is on main; a pull request from this repository's own branches
+# skips (its push already ran), one from a fork runs. Documentation-only
+# pushes skip. A newer push to the same branch cancels a running one, except
+# on main. No macOS job waits for a Linux runner. The runner label, macos-15
+# (an Apple Silicon image; the smoke job fails on anything else), is written
+# in the smoke, acceptance and full jobs: change all three together.
+
+on:
+  push:
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "acceptance: the ordinary jobs; full: also Tier C"
+        type: choice
+        options: [acceptance, full]
+        default: acceptance
+      tests:
+        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust)"
+        required: false
+        default: ""
+      gc_stress:
+        description: "Run the named Tier C items under BOTLISH_NATIVE_GC_STRESS=1"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-arm64-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    # bash -eo pipefail (a step's default shell on macOS is /bin/bash -e,
+    # without pipefail, which would hide a failure piped through tee).
+    shell: bash
+
+jobs:
+  smoke:
+    name: smoke (Tier A, macOS arm64)
+    # A same-repository pull request's push run already covers its commits.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Host
+        run: |
+          sw_vers
+          uname -a
+          echo "CPUs: $(sysctl -n hw.ncpu), memory: $(sysctl -n hw.memsize) bytes, page size: $(getconf PAGESIZE)"
+          echo "Xcode: $(xcode-select -p), SDK $(xcrun --show-sdk-version)"
+          if [[ $(uname -s) != Darwin || $(uname -m) != arm64 ]]; then
+            echo "::error::not a native arm64 macOS runner: $(uname -s) $(uname -m)"
+            exit 1
+          fi
+          if [[ $(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0) == 1 ]]; then
+            echo "::error::this shell runs under Rosetta translation"
+            exit 1
+          fi
+
+      # The toolchain, not Botlish: a C program (also linked against a
+      # static library) and Rust programs built and run as Mach-O arm64.
+      - name: Toolchain smoke (C, Rust, Cargo; not Botlish)
+        run: tests/platform/toolchain-smoke.sh
+
+      - name: Install prerequisites (Tcl 9.0.1, stable Rust)
+        uses: ./.github/actions/setup-macos
+
+      - name: C ABI facts against core::cabi's macos-aarch64 row
+        run: tclsh9.0 tests/platform/cabi-facts.tcl
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Native Rust unit tests
+        run: cargo test --release --manifest-path native/Cargo.toml --lib
+
+      # Each native capability works or is refused exactly as recorded for
+      # macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md, section 15).
+      - name: Native status
+        run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Smoke tier
+        run: tclsh9.0 tests/platform/tier.tcl smoke 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Smoke (macOS arm64)"
+            echo '```'
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the smoke tier did not run"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  acceptance:
+    name: acceptance (Tier B, macOS arm64, shard ${{ matrix.shard }}/2)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install prerequisites (Tcl 9.0.1, stable Rust)
+        uses: ./.github/actions/setup-macos
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Acceptance tier, this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: tclsh9.0 tests/platform/tier.tcl -shard "$SHARD/2" -backends interp acceptance 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          {
+            echo "## Acceptance (macOS arm64), shard $SHARD/2"
+            echo '```'
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the acceptance tier did not run"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  linux-control:
+    name: linux control (Tier A, ubuntu x86-64)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain smoke (C, Rust, Cargo; not Botlish)
+        run: tests/platform/toolchain-smoke.sh
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: C ABI facts against core::cabi's linux-x86_64 row
+        run: tclsh9.0 tests/platform/cabi-facts.tcl
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Native status
+        run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Smoke tier
+        run: tclsh9.0 tests/platform/tier.tcl smoke
+
+  full:
+    name: full (Tier C, macOS arm64, shard ${{ matrix.shard }}/3)
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository)
+      && (contains(github.event.head_commit.message, '[ci-full]') || inputs.tier == 'full')
+    runs-on: macos-15
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      # What this shard runs: the push's head commit message's CI-Tests and
+      # CI-GC-Stress trailers, or the manual run's inputs; the acceptance
+      # tier under GC stress when nothing is named. A tier is split in three
+      # shards; named files and suites run in shard 1, and the other two
+      # stop here.
+      - name: Decide this shard's items
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_TESTS: ${{ inputs.tests }}
+          INPUT_GC_STRESS: ${{ inputs.gc_stress }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          items=""
+          stress=0
+          if [[ $EVENT == workflow_dispatch ]]; then
+            items=$INPUT_TESTS
+            [[ $INPUT_GC_STRESS == true ]] && stress=1
+          else
+            trailers=$(printf '%s\n' "$MESSAGE" | git interpret-trailers --parse)
+            items=$(sed -n 's/^CI-Tests: *//p' <<< "$trailers" | tr '\n' ' ')
+            [[ $(sed -n 's/^CI-GC-Stress: *//p' <<< "$trailers") == 1 ]] && stress=1
+          fi
+          items=$(echo $items)
+          if [[ -z $items ]]; then
+            items=acceptance
+            stress=1
+          fi
+          shards=1
+          for item in $items; do
+            [[ $item == all || $item == acceptance || $item == smoke ]] && shards=3
+          done
+          work=true
+          (( SHARD > shards )) && work=false
+          {
+            echo "items=$items"
+            echo "stress=$stress"
+            echo "shards=$shards"
+            echo "work=$work"
+          } >> "$GITHUB_OUTPUT"
+          echo "items: $items; GC stress: $stress; shards: $shards; this shard ($SHARD) runs: $work"
+
+      - uses: actions/checkout@v5
+        if: steps.decide.outputs.work == 'true'
+
+      - name: Install prerequisites (Tcl 9.0.1, stable Rust)
+        if: steps.decide.outputs.work == 'true'
+        uses: ./.github/actions/setup-macos
+
+      - name: Build native (Cranelift) backend
+        if: steps.decide.outputs.work == 'true'
+        uses: ./.github/actions/build-native
+
+      - name: Tier C items, this shard
+        if: steps.decide.outputs.work == 'true'
+        env:
+          ITEMS: ${{ steps.decide.outputs.items }}
+          STRESS: ${{ steps.decide.outputs.stress }}
+          SHARDS: ${{ steps.decide.outputs.shards }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          read -r -a items <<< "$ITEMS"
+          tclsh9.0 tests/platform/tier.tcl -shard "$SHARD/$SHARDS" -gc-stress "$STRESS" "${items[@]}" 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always() && steps.decide.outputs.work == 'true'
+        env:
+          ITEMS: ${{ steps.decide.outputs.items }}
+          STRESS: ${{ steps.decide.outputs.stress }}
+          SHARDS: ${{ steps.decide.outputs.shards }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          {
+            echo "## Full, shard $SHARD/$SHARDS: $ITEMS (GC stress: $STRESS)"
+            echo '```'
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a . || echo "the tier did not run"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.decide.outputs.work == 'true'
+        with:
+          name: full-shard-${{ matrix.shard }}
+          path: tier.log
+          if-no-files-found: ignore
