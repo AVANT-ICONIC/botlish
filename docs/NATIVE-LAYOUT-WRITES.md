@@ -785,7 +785,7 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   calls C links with the system linker, which the stub linker refuses
   (C-FFI.md).
 * **GC stress** (`BOTLISH_NATIVE_GC_STRESS=1`): `tests/native-edit.test`
-  GCSTRESS-EDIT; `tests/native-view.test` GCSTRESS-VIEW; the fuzzers, seed 5
+  55/55; `tests/native-view.test` 39/39; the fuzzers, seed 5
   × 20 programs each, 0 disagreements.
 * **The neighbouring fuzzers**: native-view seeds 1, 17, 41 (× 40) and 5
   (× 20, GC stress); binary-layout seeds 1, 17, 41 (× 30) and 5 (× 15, GC
