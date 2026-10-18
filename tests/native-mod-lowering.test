@@ -1,10 +1,11 @@
 # native-mod-lowering.test -- the native lowering of the root `mod`
 # (native/lower.tcl's "Euclidean mod" section; native/src/nir.rs's RIMod/
-# RIModTotal; native/src/codegen/clif.rs's euclid_mod): a divisor
+# RIModTotal; native/src/codegen/clif.rs's euclid_mod/int_mod): a divisor
 # proved a single +-2^k is a mask (`riand`, or the tagged `iand`), two
 # operands proved small are the raw `rimodtotal` (the divisor's Range excludes
 # 0) or `rimod` (an inline zero test), and everything else is the tagged
-# `imod`, a call of rt_int_mod. Every form computes Euclidean
+# `imod`, whose code reduces two small operands inline and calls rt_int_mod
+# only for a BigInt operand or a zero divisor. Every form computes Euclidean
 # mod exactly (core/primitives.tcl's modulo: 0 <= r < |d|) and raises its
 # ARITHMETIC error for a zero divisor; only the tagged form is a safepoint.
 # Nothing here names a function or a divisor the lowering looks for: the

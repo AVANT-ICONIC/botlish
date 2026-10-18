@@ -8596,10 +8596,11 @@ proc native::lower::WantConvert {fnVar reg want} {
 #               inline zero test whose cold branch raises rt_int_mod's own
 #               ARITHMETIC error. Fallible, never allocates: no safepoint.
 #
-# Everything else is the tagged `imod`, a call of rt_int_mod, which may
-# allocate a BigInt remainder, so a tagged `imod` stays a safepoint and
-# fallible (native/src/runtime/ops.rs's op_may_allocate/op_may_error are per
-# opcode).
+# Everything else is the tagged `imod`, whose code tests both operands small
+# inline (the same srem and fix-up on the decoded words) and calls rt_int_mod
+# only for a BigInt operand or a zero divisor; that helper may allocate a
+# BigInt remainder, so a tagged `imod` stays a safepoint and fallible
+# (native/src/runtime/ops.rs's op_may_allocate/op_may_error are per opcode).
 
 # 1 if Range R excludes 0: wholly positive, wholly negative, or an exact
 # value set without 0. A divisor with such a Range can never make `mod` fail.

@@ -1851,6 +1851,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let a: Vec<ir::Value> = args.iter().map(|r| self.get(*r)).collect();
         match op {
             IAdd | ISub | IMul => self.int_arith(op, a[0], a[1]),
+            IMod => self.int_mod(a[0], a[1]),
             IAnd | IOr | IXor => self.int_bitop(op, a[0], a[1]),
             ILt | ILe | IGt | IGe | IEq => self.int_compare(op, a[0], a[1]),
             ListGet if self.listget_fast => self.list_get(a[0], a[1]),
@@ -2093,9 +2094,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 // `call_allocating`. None for helpers that never allocate.
                 let (helper, extra, fallible, alloc): (&str, Option<u64>, bool, Option<(&'static str, u8)>) =
                     match op {
-                        IMod => ("rt_int_mod", None, true, None),
-                        // Shifts always take the plain helper path (like
-                        // IMod): unlike IAdd/ISub/IMul/IAnd/IOr/IXor, a
+                        // Shifts always take the plain helper path: unlike
+                        // IAdd/ISub/IMul/IMod/IAnd/IOr/IXor, a
                         // shift's tagged-word representation does not
                         // correspond to shifting the logical integer at all,
                         // so there is no cheap tagged-word trick to inline
@@ -2463,6 +2463,33 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let fixed = self.b.ins().iadd(r, abs);
         let negative = self.b.ins().icmp_imm_s(IntCC::SignedLessThan, r, 0);
         self.b.ins().select(negative, fixed, r)
+    }
+
+    /// Tagged `imod`: two small Ints with a nonzero divisor are decoded,
+    /// reduced inline (`euclid_mod`) and re-tagged -- the remainder is small,
+    /// |r| < |y| <= 2^62. A BigInt operand or a zero divisor (the tagged word
+    /// 1) takes rt_int_mod, which allocates a BigInt remainder (so the op
+    /// stays a safepoint, ops.rs's op_may_allocate, its stack map on that
+    /// one call, like int_arith's) and raises ARITHMETIC for 0.
+    fn int_mod(&mut self, a: ir::Value, b: ir::Value) -> ir::Value {
+        let (fast, slow, done, result) = self.both_small_split(a, b);
+        self.b.switch_to_block(fast);
+        let compute = self.b.create_block();
+        let zero = self.b.ins().icmp_imm_s(IntCC::Equal, b, 1);
+        self.b.ins().brif(zero, slow, &[], compute, &[]);
+        self.b.switch_to_block(compute);
+        let x = self.b.ins().sshr_imm_s(a, 1);
+        let y = self.b.ins().sshr_imm_s(b, 1);
+        let r = self.euclid_mod(x, y);
+        let shifted = self.b.ins().ishl_imm_s(r, 1);
+        let tagged = self.b.ins().bor_imm_s(shifted, 1);
+        self.b.ins().jump(done, &[BlockArg::Value(tagged)]);
+        self.b.switch_to_block(slow);
+        let r = self.call_helper("rt_int_mod", &[self.vm, a, b]);
+        self.check(r);
+        self.b.ins().jump(done, &[BlockArg::Value(r)]);
+        self.b.switch_to_block(done);
+        result
     }
 
     /// Bitwise AND/OR/XOR directly on the tagged words, never falling to a

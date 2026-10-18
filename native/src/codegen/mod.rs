@@ -686,8 +686,9 @@ mod packed_ascii_generic_entry_tests {
 /// Euclidean mod's three native forms (native/lower.tcl's "Euclidean mod"):
 /// the raw `rimodtotal` (no zero test), the raw `rimod` (an inline zero test,
 /// rt_int_mod's ARITHMETIC error on a cold path) and the tagged `imod`
-/// (rt_int_mod), each JIT-compiled and called over a grid of operands against
-/// an independent reference (i128 / BigInt `rem_euclid`).
+/// (inline when both operands are small, rt_int_mod for a BigInt or a zero
+/// divisor), each JIT-compiled and called over a grid of operands against an
+/// independent reference (i128 / BigInt `rem_euclid`).
 #[cfg(test)]
 mod euclid_mod_tests {
     use super::*;

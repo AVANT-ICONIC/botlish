@@ -398,8 +398,9 @@ pub extern "C" fn rt_int_mul(p: *mut Vm, a: Value, b: Value) -> Value {
 /// negative, add |b|" always lands on the unique representative in [0, |b|)
 /// congruent to a mod b, so both paths agree with each other and with the
 /// reference interpreter's identical fixup (core::primitives::modulo).
-/// The raw `rimod` (codegen::clif) calls it with a zero divisor, to raise the
-/// same error.
+/// Generated code computes the small x small case inline (codegen::clif's
+/// `euclid_mod`): it calls this only for a BigInt operand or a zero divisor,
+/// and the raw `rimod` calls it with a zero divisor to raise the same error.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_int_mod(p: *mut Vm, a: Value, b: Value) -> Value {
     if let (Some(x), Some(y)) = (int_small(a), int_small(b)) {
