@@ -1,0 +1,52 @@
+# freq -- word frequencies over generated text with String keys
+# (audit/hash-table/SPEC.md section 6's mixed workloads; the Rust
+# reference's `freq`): T tokens over a vocabulary of V = max(1, T / 16)
+# words, token i being word mod(i * 40503 + 7, V), word w the String "w"
+# followed by the hexadecimal of mod(w * 2654435761, 2^32). Every token is a
+# lookup and an update. The result is the sum of the counts read before
+# their updates.
+#
+#   argv: T ?MODE?   (MODE "none" builds the tokens and counts nothing: the
+#                    baseline tools/mixed.tcl subtracts)
+import list
+import str
+import char
+import table
+import keys
+
+fn int_of(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    digits(0, 0)
+
+fn counted(t: table::Table, tokens: List[str], i: int, sum: int) errors IndexNotFound:
+    if i >= list::length(tokens):
+        return sum
+    w = tokens.at(i)
+    c = table::get(t, w, 0)
+    counted(table::put(t, w, c + 1), tokens, i + 1, sum + c)
+
+fn main(args: List[str]) errors IndexNotFound:
+    n = int_of(args.get(1, "100"))
+    v = if n >= 32:
+        shift_right(n, 4)
+    else:
+        1
+    words = loop w from 0 to v:
+        keys::hex_after("w", mod(w * 2654435761, 4294967296))
+    tokens = loop i from 0 to n:
+        words.get(mod(i * 40503 + 7, v), "")
+    if args.get(2, "count") == "none":
+        return list::length(tokens)
+    counted(table::fresh(0), tokens, 0, 0)
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(args):
+    on IndexNotFound:
+        -1
+result

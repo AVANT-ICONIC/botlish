@@ -1,0 +1,250 @@
+# Mutants of the hash-table experiment's compact dict, impl/cd.bot
+# (audit/hash-table/tools/mutate.tcl -file THIS; the format of
+# tools/mutants.txt): each a deliberate bug of the kind the brief names
+# (wrong bucket index, collision not checked, duplicate insert, resize
+# loses an entry, wraparound broken, probe terminates too early, load
+# threshold off by one, equality omitted after a hash match) or of the
+# compact dict's own invariants: the index holds entry numbers, not slots
+# (an entry is addressed by its number, -1 alone is empty, entry 0 is an
+# entry), an appended entry's number is the entry count before the push,
+# the index rebuild after growth (every entry, its own number, homed by the
+# new capacity, at the first empty slot), and the insert that triggers
+# growth.
+#
+#   @@ NAME DESCRIPTION
+#   ## impl/IMPL.bot
+#   <<<<
+#   text to replace (must occur exactly once in the file)
+#   ====
+#   replacement
+#   >>>>
+#
+# The brief's kinds that are equivalent, or do not exist, in this
+# representation, and what replaces them here:
+#
+#   * "equality omitted after hash match" with the full stored 61-bit hash
+#     is unobservable (tools/mutants.txt explains why: no two keys of one
+#     kind with equal 61-bit hashes are known). Listed instead, as in
+#     tools/mutants-chain.txt: a lookup that trusts a match of the hashes'
+#     low 6 bits and omits the key comparison, the bug of a table that
+#     stores a truncated hash -- killed by the collide profiles, whose keys
+#     share their low hash bits. Omitting the stored-hash comparison
+#     instead (key equality alone) is correct by construction: it only
+#     costs time. Not listed.
+#   * home() itself shifted by one (h + 1) is equivalent: every operation
+#     (lookup, insert, rebuild) agrees on the shifted home, so the index is
+#     a consistent linear-probing index over another hash. The listed
+#     wrong-index mutants shift or truncate one side only.
+#   * The rebuild placing the entries in another order (reversed, say) is
+#     equivalent through the interface: linear probing without removal
+#     leaves every key reachable from its home whatever the insertion
+#     order (each key's slot is the first empty slot of its sequence when
+#     it was placed, and slots only fill), so only which index slot holds
+#     which number -- the probe counts -- changes, and `probes` is a
+#     diagnostic the fuzzer does not check. Not listed.
+#   * Growth recomputing the triggering key's hash and probe (a recursive
+#     put on the grown table instead of placed) is equivalent: the key is
+#     still absent and the grown table is not full. Not listed.
+#   * "Resize to the same capacity" (create(slots(t), -1)) and an index
+#     created without its -1 fill are not listed: the first never grows the
+#     index, so it fills up and the probe for an empty slot never
+#     terminates -- a hang on the backends that turn tail calls into loops,
+#     not a kill (tools/mutants-rh.txt says the same of its non-terminating
+#     mutants); the second fails the first lookup of an empty table.
+#   * Removal does not exist (`# drop: no`: the fuzzer sends no drops), and
+#     `from_lists` is not exercised by the trace driver (it is lpa's loop
+#     over `put`, unchanged). Neither is mutated.
+
+# ---------------------------------------------------------------------------
+# The probe sequence
+
+@@ cd-lookup-home-shifted lookups (and the insert they precede) start one slot after the key's home, growth's rebuild at the home (wrong bucket index)
+## impl/cd.bot
+<<<<
+    find_from(t, h, key, home(h, slots(t)))
+====
+    find_from(t, h, key, home(h + 1, slots(t)))
+>>>>
+
+@@ cd-wraparound-broken the probe sequence runs off the index's last slot instead of wrapping to slot 0
+## impl/cd.bot
+<<<<
+    mod(i + 1, cap)
+====
+    i + 1
+>>>>
+
+@@ cd-probe-stops-early a lookup that meets another key's entry at its home stops there (probe terminates too early)
+## impl/cd.bot
+<<<<
+        return i
+    find_from(t, h, key, next_slot(i, slots(t)))
+====
+        return i
+    i
+>>>>
+
+@@ cd-equality-omitted-truncated-hash a lookup takes the first entry whose stored hash agrees in its low 6 bits, without comparing the key (equality omitted after a truncated-hash match)
+## impl/cd.bot
+<<<<
+    if e < 0 or t.entries.ehash.at(e) == h and t.entries.ekey.at(e) == key:
+====
+    if e < 0 or mod(t.entries.ehash.at(e), 64) == mod(h, 64):
+>>>>
+
+@@ cd-key-compared-with-value a lookup compares the key with the entry's value instead of its key
+## impl/cd.bot
+<<<<
+t.entries.ekey.at(e) == key
+====
+t.entries.eval.at(e) == key
+>>>>
+
+# ---------------------------------------------------------------------------
+# Entry numbers
+
+@@ cd-entry-zero-taken-for-empty a lookup takes the index slot holding entry number 0 for an empty slot
+## impl/cd.bot
+<<<<
+    if e < 0 or t.entries.ehash.at(e) == h
+====
+    if e <= 0 or t.entries.ehash.at(e) == h
+>>>>
+
+@@ cd-hash-read-at-slot a lookup reads the stored hash at the index slot's number, not at the entry number the slot holds
+## impl/cd.bot
+<<<<
+t.entries.ehash.at(e) == h
+====
+t.entries.ehash.at(i) == h
+>>>>
+
+@@ cd-entry-number-after-push an appended entry's number is taken after its push (the count plus one)
+## impl/cd.bot
+<<<<
+    t.index.set(i, size(t))
+    t.entries.ehash.push(h)
+    t.entries.ekey.push(key)
+    t.entries.eval.push(value)
+    t
+====
+    t.entries.ehash.push(h)
+    t.entries.ekey.push(key)
+    t.entries.eval.push(value)
+    t.index.set(i, size(t))
+    t
+>>>>
+
+@@ cd-replace-at-slot a replacement writes the value of the entry numbered like the key's index slot, not the key's entry
+## impl/cd.bot
+<<<<
+        t.entries.eval.swap(e, value)
+====
+        t.entries.eval.swap(i, value)
+>>>>
+
+# ---------------------------------------------------------------------------
+# Insertion
+
+@@ cd-insert-ignores-collision an insert of an absent key stores its entry number at its home slot, overwriting the number already there (collision not checked)
+## impl/cd.bot
+<<<<
+    appended(t, i, h, key, value)
+
+# Removal
+====
+    appended(t, home(h, slots(t)), h, key, value)
+
+# Removal
+>>>>
+
+@@ cd-duplicate-insert put of a present key appends a second entry instead of replacing the value
+## impl/cd.bot
+<<<<
+    if e >= 0:
+        t.entries.eval.swap(e, value)
+====
+    if e >= 0 and e < 0:
+        t.entries.eval.swap(e, value)
+>>>>
+
+# ---------------------------------------------------------------------------
+# Load and growth
+
+@@ cd-load-threshold-off-by-one the index grows one insert later than the policy says
+## impl/cd.bot
+<<<<
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+====
+    size(t) * load_den() > slots(t) * load_num()
+>>>>
+
+@@ cd-presize-ignored fresh(expected) ignores the expected size
+## impl/cd.bot
+<<<<
+    empty_table(slots_for(expected, min_slots()))
+====
+    empty_table(min_slots())
+>>>>
+
+@@ cd-replace-grows a replacement of a present key grows a full index (only an insert of an absent key may grow)
+## impl/cd.bot
+<<<<
+    e = t.index.at(i)
+    if e >= 0:
+        t.entries.eval.swap(e, value)
+====
+    e = t.index.at(i)
+    if e >= 0 and full?(t):
+        return put(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, key, value)
+    if e >= 0:
+        t.entries.eval.swap(e, value)
+>>>>
+
+@@ cd-rebuild-loses-last-entry growth's rebuild never indexes the last entry (resize loses an entry)
+## impl/cd.bot
+<<<<
+    if e >= hashes.length():
+====
+    if e >= hashes.length() - 1:
+>>>>
+
+@@ cd-rebuild-ignores-collision growth's rebuild stores each entry number at its home, overwriting a number already there
+## impl/cd.bot
+<<<<
+    i = empty_from(index, home(hashes.at(e), index.capacity()))
+====
+    i = home(hashes.at(e), index.capacity())
+>>>>
+
+@@ cd-rebuild-old-capacity growth's rebuild homes the entries by half the new capacity (the old one), lookups by the new one
+## impl/cd.bot
+<<<<
+    i = empty_from(index, home(hashes.at(e), index.capacity()))
+====
+    i = empty_from(index, home(hashes.at(e), shift_right(index.capacity(), 1)))
+>>>>
+
+@@ cd-rebuild-number-off growth's rebuild stores each entry's successor's number
+## impl/cd.bot
+<<<<
+    index.set(i, e)
+====
+    index.set(i, e + 1)
+>>>>
+
+@@ cd-growth-insert-old-slot the insert that triggers growth stores its entry number at the slot the old index's probe ended at, in the grown index
+## impl/cd.bot
+<<<<
+        return placed(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
+====
+        return appended(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, i, h, key, value)
+>>>>
+
+@@ cd-growth-insert-home-unprobed the insert that triggers growth stores its entry number at its home in the grown index, overwriting the number already there
+## impl/cd.bot
+<<<<
+    i = empty_from(t.index, home(h, slots(t)))
+====
+    i = home(h, slots(t))
+>>>>

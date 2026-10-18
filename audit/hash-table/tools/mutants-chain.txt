@@ -1,0 +1,291 @@
+# Mutants of the hash-table experiment's separate-chaining implementation,
+# impl/chain.bot (audit/hash-table/tools/mutate.tcl -file THIS; the format
+# of tools/mutants.txt): each a deliberate bug of the kind the brief names
+# (wrong bucket index, collision not checked, duplicate insert, resize
+# loses an entry, probe terminates too early, load threshold off by one,
+# equality omitted after a hash match) or of chaining's own invariants (the
+# bucket rebuilt by a replacement or a removal, the count, growth's rehash
+# and the insert that triggers it).
+#
+#   @@ NAME DESCRIPTION
+#   ## impl/IMPL.bot
+#   <<<<
+#   text to replace (must occur exactly once in the file)
+#   ====
+#   replacement
+#   >>>>
+#
+# The brief's kinds that are equivalent, or do not exist, in this
+# representation, and what replaces them here:
+#
+#   * "wraparound broken": chaining has no probe sequence (a lookup examines
+#     one bucket), so there is nothing to wrap. Not listed.
+#   * "wrong bucket index" made consistently -- every operation using the
+#     same wrong in-range home, e.g. `bit_and(h, cap - 2)` -- is equivalent
+#     through the interface: any in-range function of the hash is a valid
+#     (worse-distributed) home. Only the slots it fills differ, and the
+#     interface does not expose them (`probes` is a diagnostic the fuzzer
+#     does not check). The listed wrong-index mutants are inconsistent
+#     between operations (lookups, the post-growth insert, growth's rehash)
+#     or leave the range (`bit_and(h, cap)`, the power-of-two mask off by
+#     one).
+#   * "equality omitted after hash match" with the full stored 61-bit hash
+#     is unobservable (tools/mutants.txt explains why: no two keys of one
+#     kind with equal 61-bit hashes are known). Listed instead: a lookup
+#     that trusts a match of the hashes' low 6 bits and omits the key
+#     comparison, the bug of a table that stores a truncated hash -- killed
+#     by the collide profiles, whose keys share their low hash bits.
+#   * "compare the stored hash" omitted (key equality alone) is correct by
+#     construction: it only costs time. Not listed.
+#   * Growth walking the old buckets in another order is equivalent
+#     outright: with doubling, new bucket k receives entries from old bucket
+#     k mod cap only, so the walk order over old buckets never changes a
+#     bucket. Not listed.
+#   * The order of a bucket's entries (growth reversing each bucket, a
+#     replacement moved to the bucket's end) changes only `probes` of single
+#     keys, never a lookup's result, so it is equivalent through what the
+#     fuzzer checks -- and through a probe sum over every key (a bucket of
+#     length L contributes 1 + ... + L in any order). It is checked instead by
+#     bench.bot's probes mode on a key subset (N 1024, M 100) against an
+#     independent model of the bucket states; the reversed-growth edit is
+#     caught there. Not listed.
+#   * `from_lists` is not exercised by the trace driver; it is lpa's loop
+#     over `put`, unchanged. Not mutated.
+
+# ---------------------------------------------------------------------------
+# Bucket index
+
+@@ chain-lookup-wrong-bucket lookups scan the bucket after the key's home while inserts use the home (wrong bucket index)
+## impl/chain.bot
+<<<<
+    t.buckets.at(home(h, slots(t)))
+====
+    t.buckets.at(home(h + 1, slots(t)))
+>>>>
+
+@@ chain-home-mask-off-by-one the home is bit_and(h, cap), not bit_and(h, cap - 1): an index outside the bucket array (wrong bucket index)
+## impl/chain.bot
+<<<<
+    h.mod(cap)
+====
+    bit_and(h, cap)
+>>>>
+
+# ---------------------------------------------------------------------------
+# Collisions and duplicates
+
+@@ chain-insert-overwrites-bucket an insert of an absent key replaces its bucket by the new entry alone, losing the entries it collides with (collision not checked)
+## impl/chain.bot
+<<<<
+    t.buckets.set(i, list::append(b, Entry {hash: h, key: key, value: value}))
+====
+    t.buckets.set(i, [Entry {hash: h, key: key, value: value}])
+>>>>
+
+@@ chain-duplicate-insert put of a present key appends a second entry instead of replacing the value
+## impl/chain.bot
+<<<<
+    if j >= 0:
+====
+    if j >= 0 and size(t) < 0:
+>>>>
+
+@@ chain-equality-omitted-truncated-hash a lookup returns the first entry whose hash agrees in its low 6 bits, without comparing the key (equality omitted after a truncated-hash match)
+## impl/chain.bot
+<<<<
+        if e.hash == h and e.key == key:
+            return e.value
+====
+        if mod(e.hash, 64) == mod(h, 64):
+            return e.value
+>>>>
+
+# ---------------------------------------------------------------------------
+# Scans that stop too early
+
+@@ chain-get-scan-stops-early get examines only the bucket's first entry (probe terminates too early)
+## impl/chain.bot
+<<<<
+            return e.value
+    default
+====
+            return e.value
+        return default
+    default
+>>>>
+
+@@ chain-position-scan-stops-early the position scan (has?, put, drop) examines only the bucket's first entry (probe terminates too early)
+## impl/chain.bot
+<<<<
+            return j
+    -1
+====
+            return j
+        return -1
+    -1
+>>>>
+
+# ---------------------------------------------------------------------------
+# Replacement and removal rebuild the bucket
+
+@@ chain-replace-wrong-entry a replacement overwrites the bucket's first entry instead of the key's
+## impl/chain.bot
+<<<<
+        if k == j:
+            e
+====
+        if k == 0:
+            e
+>>>>
+
+@@ chain-replace-drops-rest a replacement rebuilds the bucket without the entries after the replaced one
+## impl/chain.bot
+<<<<
+        if k == j:
+            e
+        else:
+====
+        if k == j:
+            e
+        elif k > j:
+            continue
+        else:
+>>>>
+
+@@ chain-replace-increments-count a replacement counts the key as a new entry
+## impl/chain.bot
+<<<<
+        t.buckets.set(i, replaced(b, j, Entry {hash: h, key: key, value: value}))
+        return t
+====
+        t.buckets.set(i, replaced(b, j, Entry {hash: h, key: key, value: value}))
+        return counted(t, 1)
+>>>>
+
+@@ chain-insert-not-counted an insert without growth does not count the new entry
+## impl/chain.bot
+<<<<
+    counted(t, 1)
+====
+    t
+>>>>
+
+@@ chain-drop-wrong-entry a removal leaves the key's entry and removes the bucket's first entry instead
+## impl/chain.bot
+<<<<
+        if k == j:
+            continue
+====
+        if k == 0:
+            continue
+>>>>
+
+@@ chain-drop-loses-rest a removal also removes every entry after the key's in its bucket
+## impl/chain.bot
+<<<<
+        if k == j:
+            continue
+====
+        if k >= j:
+            continue
+>>>>
+
+@@ chain-drop-count a removal does not decrease the entry count
+## impl/chain.bot
+<<<<
+    counted(t, -1)
+====
+    t
+>>>>
+
+@@ chain-drop-absent-counted a removal of an absent key still decreases the entry count
+## impl/chain.bot
+<<<<
+    if j < 0:
+        return t
+    t.buckets.set(i, without(b, j))
+====
+    t.buckets.set(i, without(b, j))
+>>>>
+
+# ---------------------------------------------------------------------------
+# Load and capacity
+
+@@ chain-load-threshold-late the table grows one insert later than the policy says (count > cap, not count + 1 > cap)
+## impl/chain.bot
+<<<<
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+====
+    size(t) * load_den() > slots(t) * load_num()
+>>>>
+
+@@ chain-load-threshold-early the table grows one insert earlier than the policy says (>= for >)
+## impl/chain.bot
+<<<<
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+====
+    (size(t) + 1) * load_den() >= slots(t) * load_num()
+>>>>
+
+@@ chain-presize-ignored fresh(expected) ignores the expected size
+## impl/chain.bot
+<<<<
+    empty_table(slots_for(expected, min_slots()))
+====
+    empty_table(min_slots())
+>>>>
+
+# ---------------------------------------------------------------------------
+# Growth
+
+@@ chain-resize-loses-last-bucket growth never moves the entries of the old table's last bucket
+## impl/chain.bot
+<<<<
+    if i >= slots(old):
+        return dest
+====
+    if i >= slots(old) - 1:
+        return dest
+>>>>
+
+@@ chain-resize-loses-chained-entries growth moves only the first entry of each old bucket, losing the entries chained after it
+## impl/chain.bot
+<<<<
+    rehomed(b, j + 1, appended(dest, list::at(b, j)))
+====
+    appended(dest, list::at(b, j))
+>>>>
+
+@@ chain-growth-rehash-old-capacity growth and the insert after it home entries by half the new capacity (the old one), lookups by the new one
+## impl/chain.bot
+<<<<
+    i = home(e.hash, slots(t))
+====
+    i = home(e.hash, shift_right(slots(t), 1))
+>>>>
+
+@@ chain-growth-count-lost the grown table starts with a count of zero
+## impl/chain.bot
+<<<<
+    counted(dest, count)
+====
+    dest
+>>>>
+
+@@ chain-growth-insert-old-home the insert that triggers growth stores its entry in its old-capacity bucket of the grown table (wrong bucket index after a resize)
+## impl/chain.bot
+<<<<
+        return counted(appended(grown(t), Entry {hash: h, key: key, value: value}), 1)
+====
+        g = grown(t)
+        g.buckets.set(i, list::append(g.buckets.at(i), Entry {hash: h, key: key, value: value}))
+        return counted(g, 1)
+>>>>
+
+@@ chain-growth-insert-lost the insert that triggers growth counts its key but never stores it
+## impl/chain.bot
+<<<<
+        return counted(appended(grown(t), Entry {hash: h, key: key, value: value}), 1)
+====
+        return counted(grown(t), 1)
+>>>>

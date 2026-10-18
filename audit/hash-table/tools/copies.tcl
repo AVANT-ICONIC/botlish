@@ -2,7 +2,7 @@
 # for each implementation, the native allocation report of the bench
 # driver's build, replace, drop and hit modes, its mutableArray (and
 # mutableVector) counters and its object allocations. Steady state must show
-# 0 shares and 0 detaches.
+# 0 shares and 0 detaches, of arrays and of vectors (exit status 1 otherwise).
 #
 #   tclsh9.0 audit/hash-table/tools/copies.tcl ?-n N? ?-m M? ?-keys KIND? IMPL...
 
@@ -35,6 +35,7 @@ try {
             puts [format "%-10s %-8s objects %8d  mutableArray {%s}%s" $impl $mode $objects $ma \
                 [expr {$mv ne "" ? "  mutableVector {$mv}" : ""}]]
             if {[dict get $ma shares] || [dict get $ma detaches]} { set status 1 }
+            if {$mv ne "" && ([dict get $mv shares] || [dict get $mv detaches])} { set status 1 }
         }
     }
 } finally {

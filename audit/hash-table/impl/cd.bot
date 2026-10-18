@@ -1,0 +1,195 @@
+# cd -- the compact dict (audit/hash-table/SPEC.md section 3): the entries
+# are dense, in insertion order, in three MutableVectors -- `ehash` (each
+# entry's hash), `ekey` and `eval` -- and the table proper is an index, a
+# MutableArray[int] of `cap` slots, each -1 (empty) or an entry's number,
+# its position in the vectors. Lookup probes the index linearly from the
+# home slot, i0, i0+1, ... mod cap (i0 = hash mod cap), and stops at an
+# empty slot (absent) or at a slot whose entry's stored hash equals the
+# key's and, only then, whose key equals it (present).
+#
+# An insert of a present key replaces the value in its entry; of an absent
+# key it appends an entry (entry number = the entry count) and stores the
+# number at the first empty index slot of the key's sequence, the slot the
+# lookup stopped at. Growth (7/10 on the index capacity, SPEC.md section 2)
+# doubles the index and rebuilds only it, placing the entries in entry
+# order; the entries never move, and since nothing is ever removed
+# (`# drop: no`; drop returns the table unchanged) entry numbers stay dense
+# and the entry count is the vectors' length: there is no count to keep.
+#
+# The table's state is held the way the value-semantics rules ask
+# (HASH-TABLE-EXPERIMENT.md, "Value semantics"; SPEC.md section 7;
+# impl/lpa.bot):
+#
+#   * the vectors grow in place (mutable_vector::push through the field
+#     places `t.entries.ehash` ...), so an insert never builds a new Table;
+#   * every mutating helper takes the table as its last use and returns it;
+#     readers only read;
+#   * growth, the one update that needs a new Table (a MutableArray's
+#     length never changes), builds it with the index's constructor inline
+#     in the struct literal and the entries as the literal's last read of
+#     the old table: one collection-bearing projection, read last, so it
+#     moves. That is why the vectors sit in one sub-struct, Entries: as
+#     three fields of Table only the last one read could move, and the
+#     other two would be shared, then copied by their next push (measured:
+#     2 vector shares and detaches per growth, building 1024 Int keys);
+#   * the empty vectors are `mutable_vector::from_list([])` inline in the
+#     literal: a constructor call is fresh, and the fields' declared types
+#     type the empty Lists' vectors.
+#
+# Keys and values are untyped; their vectors are MutableVector[any], so a
+# key read back is `any` even in an Int-specialized instance (its `==` is
+# the generic equality).
+#
+# policy: 7/10
+# drop: no
+import list
+import mutable_array
+import mutable_vector
+
+struct Entries:
+    ehash: MutableVector[int]
+    ekey: MutableVector[any]
+    eval: MutableVector[any]
+
+struct Table:
+    index: MutableArray[int]
+    entries: Entries
+
+# ---------------------------------------------------------------------------
+# Policy (SPEC.md section 2)
+
+fn min_slots() -> int:
+    8
+
+fn load_num() -> int:
+    7
+
+fn load_den() -> int:
+    10
+
+# The smallest power-of-two capacity from CAP on that holds EXPECTED entries
+# under the maximum load.
+fn slots_for(expected: int, cap: int) -> int:
+    if expected * load_den() <= cap * load_num():
+        return cap
+    slots_for(expected, cap * 2)
+
+fn empty_table(cap: int) -> Table:
+    Table {index: mutable_array::create(cap, -1), entries: Entries {ehash: mutable_vector::from_list([]), ekey: mutable_vector::from_list([]), eval: mutable_vector::from_list([])}}
+
+fn fresh(expected: int) -> Table:
+    empty_table(slots_for(expected, min_slots()))
+
+fn slots(t: Table) -> int:
+    t.index.capacity()
+
+fn size(t: Table) -> int:
+    t.entries.ehash.length()
+
+# Whether one more entry would exceed the maximum load.
+fn full?(t: Table) -> bool:
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+
+# ---------------------------------------------------------------------------
+# Probing the index
+
+fn home(h: int, cap: int) -> int:
+    h.mod(cap)
+
+fn next_slot(i: int, cap: int) -> int:
+    mod(i + 1, cap)
+
+# The index slot holding KEY's entry number (KEY's hash H), or the empty
+# slot that ends its probe sequence, from slot I on.
+fn find_from(t: Table, h: int, key, i: int) -> int errors IndexNotFound:
+    e = t.index.at(i)
+    if e < 0 or t.entries.ehash.at(e) == h and t.entries.ekey.at(e) == key:
+        return i
+    find_from(t, h, key, next_slot(i, slots(t)))
+
+fn find(t: Table, h: int, key) -> int errors IndexNotFound:
+    find_from(t, h, key, home(h, slots(t)))
+
+# The first empty slot of INDEX from slot I on.
+fn empty_from(index: MutableArray[int], i: int) -> int errors IndexNotFound:
+    if index.at(i) < 0:
+        return i
+    empty_from(index, next_slot(i, index.capacity()))
+
+# ---------------------------------------------------------------------------
+# Lookup
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    e = t.index.at(find(t, hash(key), key))
+    if e < 0:
+        return default
+    t.entries.eval.at(e)
+
+fn has?(t: Table, key) -> bool errors IndexNotFound:
+    t.index.at(find(t, hash(key), key)) >= 0
+
+# The index slots a lookup of KEY examines.
+fn probes(t: Table, key) -> int errors IndexNotFound:
+    h = hash(key)
+    mod(find(t, h, key) - home(h, slots(t)), slots(t)) + 1
+
+# ---------------------------------------------------------------------------
+# Insertion and growth
+
+# T with the entry (H, KEY, VALUE) appended and its number stored at index
+# slot I.
+fn appended(t: Table, i: int, h: int, key, value) -> Table errors IndexNotFound:
+    t.index.set(i, size(t))
+    t.entries.ehash.push(h)
+    t.entries.ekey.push(key)
+    t.entries.eval.push(value)
+    t
+
+# T with the entry (H, KEY, VALUE) appended at the first empty slot of H's
+# probe sequence (KEY is absent).
+fn placed(t: Table, h: int, key, value) -> Table errors IndexNotFound:
+    i = empty_from(t.index, home(h, slots(t)))
+    appended(t, i, h, key, value)
+
+# INDEX with the numbers of the entries E... of HASHES (the entries' hashes)
+# stored, each at the first empty slot of its probe sequence.
+fn indexed(index: MutableArray[int], hashes: MutableVector[int], e: int) -> MutableArray[int] errors IndexNotFound:
+    if e >= hashes.length():
+        return index
+    i = empty_from(index, home(hashes.at(e), index.capacity()))
+    index.set(i, e)
+    indexed(index, hashes, e + 1)
+
+# Growth is written inside put rather than as a helper `grown(t)` returning
+# the new Table: put mutates T, so T is a held place and the literal's
+# `t.entries`, T's last use, moves. In a helper that only reads T, T is not
+# held, the literal is not fresh (a struct literal passes no demand on to
+# its fields), and placed's argument is shared -- the whole Table, index and
+# vectors -- and copied by the next write (measured: 8 array and 24 vector
+# shares and detaches building 1024 Int keys).
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    e = t.index.at(i)
+    if e >= 0:
+        t.entries.eval.swap(e, value)
+        return t
+    if full?(t):
+        return placed(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
+    appended(t, i, h, key, value)
+
+# Removal is not part of the algorithm (SPEC.md section 3): T unchanged.
+fn drop(t: Table, key) -> Table:
+    t
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)
