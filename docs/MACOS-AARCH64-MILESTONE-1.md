@@ -168,15 +168,24 @@ reads every workflow's text). The evidence:
   0548757), which the second merge brought in.
 - **tests.yml, dispatched again** at 2f174d4, after the second merge
   ([39109833044](https://github.com/mwagner-webdev/botlish/actions/runs/39109833044)):
-  pending.
+  green -- all eleven jobs that run on a dispatch (the Tcl suite on interp
+  and compile, both coverage jobs, the four golden shards, the stub-linked
+  executables, the Rust unit tests, the warning gate); GC stress skipped,
+  as on any dispatch.
 - **tests-arm64.yml, dispatched on the branch** at 6b357ed, after the
   second merge of main
   ([39108139741](https://github.com/mwagner-webdev/botlish/actions/runs/39108139741)):
-  pending.
+  green -- all ten jobs, the native GC-stress run among them (the Tcl
+  suite on interp and compile, both coverage jobs, the four golden shards,
+  the Rust unit tests).
 - **The Linux control job** (ubuntu-latest, x86-64) ran the same
   host-generic scripts as the macOS smoke job -- the toolchain smoke, the C
   ABI facts, native-status's Linux expectations (every capability works)
   and `tier.tcl smoke` -- green in runs 4 to 7.
+
+Not dispatched: static-decisions.yml (no front-end change), and
+single-executable.yml, bench.yml, c-bindgen.yml and scalar-asm-audit.yml,
+none of whose inputs the milestone changes.
 
 ## The tiers and their invocation
 
@@ -205,7 +214,8 @@ a milestone lands.
    tcltest 2.5) in every macOS job since run 5; Homebrew's 9.0.4 before.
 8. **Botlish tests on macOS:** the smoke tier (runs 4-7), the acceptance
    tier (runs 4, 6 and 7; wholly green in run 7), the census (run 2).
-9. **Linux:** below.
+9. **Linux:** tests.yml and tests-arm64.yml green on the branch's head
+   after the last merge of main (below).
 10. **The opt-in trigger:** `[ci-full]` with `CI-Tests:` in runs 4 and 5
     (one shard working, two stopping at once), and with a tier and
     `CI-GC-Stress: 1` in run 6 (three shards under GC stress) -- each a
@@ -309,3 +319,8 @@ program that recurses deeply on macOS dies today instead of failing with
   (Ubuntu's 18.1.3), and one test pinned linux-x86_64's declaration count
   for every host target -- which main fixed during the milestone after
   Linux arm64 found it.
+- **Main was red when it was first merged in:** the first tests.yml
+  dispatch on the branch failed one c-bindgen test exactly as main's own
+  run at the merged commit had; merging main again, after its fix, made
+  the branch green. Comparing a branch failure with main's run at the
+  merge base settled it in one look.
