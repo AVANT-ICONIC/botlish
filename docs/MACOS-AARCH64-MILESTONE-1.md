@@ -20,8 +20,8 @@ milestones, is MACOS-AARCH64-PORT-AUDIT.md.
 - **Host-generic scripts** in `tests/platform/`: the toolchain smoke, the
   C ABI fact check, the macOS prerequisites, the native status check and
   the tier runner, each runnable locally exactly as CI runs it.
-- **A census** of what the existing tests do on macOS arm64 today (173 of
-  189 test files pass with the baseline Tcl; every golden suite passes on
+- **A census** of what the existing tests do on macOS arm64 today (174 of
+  190 test files pass with the baseline Tcl; every golden suite passes on
   the Tcl backends), and an opt-in mechanism (`[ci-full]` plus `CI-Tests:`
   trailers) that ran from this branch.
 - **A roadmap** of nine further milestones, each independently mergeable.
@@ -131,14 +131,14 @@ workflow existed on main.
 | [4](https://github.com/mwagner-webdev/botlish/actions/runs/39102645922) | 542f054 | the tiered workflow; `[ci-full]` with `CI-Tests:` naming 12 census files | smoke and Linux control green; Tier C ran the 12 files in one shard (the other two stopped after 4 s) and reported their causes; acceptance shard 2 green, shard 1 failed only `unicode-strings.bot` (Tcl 9.0.4) |
 | [5](https://github.com/mwagner-webdev/botlish/actions/runs/39104616134) | 073e331 (main merged) | Tcl 9.0.1 built from source; `[ci-full]` with `CI-Tests:` naming 8 items | the Tcl build and the Linux control green; Tier C: argv.test, native-tcl-unicode.test and unicode-strings.bot pass under 9.0.1, the five coroutine files fail as recorded; its smoke and acceptance were superseded by run 6 |
 | [6](https://github.com/mwagner-webdev/botlish/actions/runs/39105397358) | 8e0e03a | the final tiers; `[ci-full]` with `CI-Tests: smoke` and `CI-GC-Stress: 1` | smoke, Linux control and all three Tier C shards (the smoke tier split three ways, under GC stress) green; acceptance shard 1 green; shard 2 failed only tests/c-bindgen.test, which main's merge had brought in (section 15 of the audit), now in `notYet` |
-@RUN7@
+| [7](https://github.com/mwagner-webdev/botlish/actions/runs/39108051808) | 6b357ed (main merged again) | c-bindgen.test in `notYet`; no `[ci-full]` | green: smoke, the Linux control and both acceptance shards -- 174 Tcl test files on interp (main's new diagnostic-recovery.test among them), 94 golden suites on interp and compile, the C ABI facts and the examples on all four backends; Tier C skipped, as it should be without the marker |
 
 ## Botlish on macOS today
 
 MACOS-AARCH64-PORT-AUDIT.md, sections 1 and 15. In short: the front end,
 the interpreter and the Tcl compiler run everything; the native crate
 builds and its unit tests pass; the JIT runs programs; the GC frame walk
-works under stress; 173 of 189 Tcl test files (with Tcl 9.0.1) and every
+works under stress; 174 of 190 Tcl test files (with Tcl 9.0.1) and every
 golden suite on the Tcl backends pass; coroutines (and so the native golden runner),
 Linux syscalls, executables and C calls refuse explicitly; a native stack
 overflow crashes the driver.
@@ -162,18 +162,18 @@ a milestone lands.
 ## Feature-branch remote testing, verified
 
 1. **Feature branch:** every change is on `ccr-ea92b43b-fbi8ez`.
-2. **Pushed:** runs 1-6 were started by ordinary pushes to it.
+2. **Pushed:** runs 1-7 were started by ordinary pushes to it.
 3. **Executed from the branch before merge:** the workflow is new; it ran
    from its very first commit on the branch.
 4. **Native ARM64:** `uname -m` `arm64`, `sysctl.proc_translated` 0 -- the
-   smoke job's Host step fails otherwise (runs 4-6).
+   smoke job's Host step fails otherwise (runs 4-7).
 5. **C:** compiled, linked (also against a static archive with `-L -l`),
    run, and `file` says `Mach-O 64-bit executable arm64`.
 6. **Rust:** rustc and Cargo executables built and run, Mach-O arm64.
 7. **Tcl:** 9.0.1 built from the pinned source and checked (patchlevel and
    tcltest 2.5) in every macOS job since run 5; Homebrew's 9.0.4 before.
-8. **Botlish tests on macOS:** the smoke tier (runs 4-6), the acceptance
-   tier (runs 4 and 6), the census (run 2).
+8. **Botlish tests on macOS:** the smoke tier (runs 4-7), the acceptance
+   tier (runs 4, 6 and 7; wholly green in run 7), the census (run 2).
 9. **Linux:** below.
 10. **The opt-in trigger:** `[ci-full]` with `CI-Tests:` in runs 4 and 5
     (one shard working, two stopping at once), and with a tier and
@@ -190,7 +190,7 @@ a milestone lands.
   9.0.1 build about 2 minutes once (run 5's setup step, rustup included,
   took 2 min 37 s cold).
 - **Jobs:** with warm caches the smoke job takes 1 min 18 s, an
-  acceptance shard 20-27 minutes (shard 1 holds the slowest golden suite,
+  acceptance shard 17-27 minutes (shard 1 holds the slowest golden suite,
   mutable-array.bot, 171 s to compile), the Linux control 1-4 minutes, a
   Tier C shard with nothing to do 4 seconds.
 - **Queues:** the account runs at most 5 macOS jobs at once (run 2's sixth

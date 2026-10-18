@@ -398,8 +398,9 @@ causes and owners -- tests/platform/tier.tcl's `notYet` holds the first
 With the baseline Tcl, then, 173 of the 188 files pass, and every one of
 the 15 that does not fails on a capability the port has not reached yet:
 14 on native coroutines, which every native run of an affine value
-needs, and one on C linking. With main's c-bindgen.test (next paragraph),
-173 of 189.
+needs, and one on C linking. With the two files main added since,
+c-bindgen.test (next paragraph, in `notYet`) and diagnostic-recovery.test
+(passes), 174 of 190 (run 7).
 
 **A file main added during the milestone.** tests/c-bindgen.test (the C
 binding generator, C-BINDGEN.md) arrived with the merge of main and failed
@@ -506,7 +507,7 @@ secret or a self-hosted runner.
 | Job | Tier | Runner | What | Typical time |
 |---|---|---|---|---|
 | `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `.github/actions/setup-macos` (tests/platform/setup-macos.sh: Tcl 9.0.1 from source, cached; stable Rust); `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
-| `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | 20 and 27 min (run 4) |
+| `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | 20 and 27 min (run 4), 23 and 17 (run 7) |
 | `linux-control` | A | `ubuntu-latest` | the smoke commands on Linux x86-64 at the same commit | 1-4 min |
 | `full` (3 shards) | C | `macos-15` | opt-in (below) | 4-5 min for a dozen named files (runs 4 and 5); 4 s for a shard with nothing to run; the default payload was not run in milestone 1 |
 
@@ -548,7 +549,7 @@ cargo test --release --manifest-path native/Cargo.toml --lib NAME   # one Rust t
 **Tier B, CI acceptance** (every push): `tier.tcl acceptance` -- every
 Tcl test file except `notYet`'s, and every golden suite on interp and
 compile. CI runs it on interp only (`-backends interp`) in two shards,
-about 47 minutes of macOS runner time together (run 4); the default
+40 to 47 minutes of macOS runner time together (runs 7 and 4); the default
 `-backends interp,compile` of a local run doubles the Tcl test files'
 share.
 
