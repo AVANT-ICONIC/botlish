@@ -584,6 +584,18 @@ means every call, in the whole program, has the target it had.
   the alias cannot be used to obtain method syntax (intended).
 * The message names a module function's qualified spelling even when the call
   wrote the bare sibling name inside the module (hygiene's canonical spelling).
+* **Successor note (COMPILERPEDIA-REPORT.md, "Lint audit").** An Int literal
+  receiver is no longer reported (`hir::warnings::IntLiteralReceiver`): it
+  stays an accepted receiver form, and the two spellings are still one
+  program, but a written number is almost always a constant parameter of an
+  operation on something else (`0.scan_while(p)`, `500.drive(0)`: the
+  refactor's finding 6; the 15-puzzle study's
+  `register_empty_position(0, ...)`), and the compiler cannot judge whether
+  a constant is the subject. String, character, Bool, list and struct
+  literal receivers are still reported. Pinned by `me-form-int-literal`,
+  `me-int-literal-receivers-not-reported`, `me-int-valued-receiver-still-reported`,
+  the fuzzer's `intlit` statements and the mutant
+  `int-literal-receivers-reported`.
 * **Successor note (REFACTOR-WARNINGS-CLEAN.md).** The warning-driven refactor
   respelled all 355 remaining `METHOD-ELIGIBLE` calls of the corpus with this
   milestone's rewrite machinery, each verified by the round-trip law, and

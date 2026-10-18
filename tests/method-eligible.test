@@ -404,11 +404,35 @@ test me-form-parenthesized-call {a parenthesized call is the call: parentheses a
     return (one(x)).two(1)"
 } -result {METHOD-ELIGIBLE {}}
 
-test me-form-int-literal {an Int literal is a receiver: Botlish has no float literal, so `5.f` cannot re-lex} -body {
+test me-form-int-literal {an Int literal is a receiver the grammar accepts (Botlish has no float literal, so `5.f` cannot re-lex), and the two spellings are one program, but the call is not reported: a written number is almost always a constant parameter -- a position, a count -- of an operation on something else (COMPILERPEDIA-REPORT.md, "Lint audit")} -body {
     formRow "${::prelude}fn t(x):
     return two(5, x)" "${::prelude}fn t(x):
     return 5.two(x)"
-} -result {METHOD-ELIGIBLE {}}
+} -result {{} {}}
+
+test me-int-literal-receivers-not-reported {Int literal receivers are silent wherever they are written; String, character, Bool, list and struct literal receivers of the same call are still reported} -body {
+    list [codes "${::prelude}fn t(x) -> list:
+    a = two(0, x)
+    b = two(500, x)
+    c = two(12345678901234567890, x)
+    \[a, b, c\]"] [codes "${::prelude}fn t(x) -> list:
+    a = two(\"ab\", x)
+    b = two('a', x)
+    c = two(true, x)
+    d = two(\[1\], x)
+    e = two({p: 1}, x)
+    \[a, b, c, d, e\]"]
+} -result {{} {METHOD-ELIGIBLE METHOD-ELIGIBLE METHOD-ELIGIBLE METHOD-ELIGIBLE METHOD-ELIGIBLE}}
+
+test me-int-valued-receiver-still-reported {only the literal is exempt: an Int-valued name, field or call receiver is reported} -body {
+    codes "${::prelude}fn t(x: int) -> list:
+    n = 5
+    s = {k: 5}
+    a = two(n, x)
+    b = two(s.k, x)
+    c = two(one(x), x)
+    \[a, b, c\]"
+} -result {METHOD-ELIGIBLE METHOD-ELIGIBLE METHOD-ELIGIBLE}
 
 test me-form-string-literal {a String literal is a receiver} -body {
     formRow "${::prelude}fn t(x):
@@ -460,7 +484,7 @@ ${::prelude}fn t(x):
     }
 } -result {METHOD-ELIGIBLE {}}
 
-test me-form-receiver-forms-recorded {data receiverForm classifies the receiver the grammar accepted} -body {
+test me-form-receiver-forms-recorded {data receiverForm classifies the receiver the grammar accepted (the Int literal receiver two(5, 1) is accepted too, and not reported)} -body {
     set program "struct P:
     a: int
 ${::prelude}fn t(x):
@@ -480,7 +504,7 @@ ${::prelude}fn t(x):
     lmap w [warningsOf $program] {
         dict get $w data receiverForm
     }
-} -result {name field call method-call literal literal literal list struct struct name}
+} -result {name field call method-call literal literal list struct struct name}
 
 # Receivers that are not, as written, a postfix/primary expression need added
 # parentheses: `.` binds tighter than every operator.
@@ -788,7 +812,7 @@ test me-generic-callee-and-receiver-silent-where-unprovable {an untyped receiver
     set decls "fn two(a, b):\n    a\nstruct Box:\n    two: int\n"
     list [codes "${decls}fn t(x):
     return two(x, 1)"] [codes "${decls}fn t():
-    return two(5, 1)"]
+    return two(\"ab\", 1)"]
 } -result {{} METHOD-ELIGIBLE}
 
 # ---------------------------------------------------------------------------
@@ -886,7 +910,7 @@ t(1)"]
 } -result {7:9 {}}
 
 test me-top-level-call {a top-level call is reported} -body {
-    where "${::prelude}two(5, 1)"
+    where "${::prelude}two(\"ab\", 1)"
 } -result 5:1
 
 # ---------------------------------------------------------------------------

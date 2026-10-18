@@ -1,0 +1,749 @@
+# warnings.topic -- the warnings, Botlish's built-in linter: one topic per
+# warning code (hir/warnings.tcl's pass registry; tools/compilerpedia.tcl
+# check fails for a registered warning without its topic, its five required
+# sections and examples both ways), and the linter's policy. The @nowarn
+# examples are the precision corpus: the legitimate cases each rule must stay
+# silent on (COMPILERPEDIA.md, "The warning precision corpus").
+
+@topic lint.policy
+title: Warning modes: default, off, error
+summary: Warnings are on by default and form one global policy per compilation, -warnings default|off|error; there are no per-warning switches and no source suppression.
+index: lint warnings backends
+alias: warning modes; -warnings; warnings off; warnings as errors; Werror; disable warnings; suppress warning; lint policy
+keywords: policy, mode, BOTLISH_WARNINGS, stderr, suppression, pragma
+related: lint.warnings-vs-errors principle.lint-precision principle.investigate-warnings cli.options
+docs: WARNINGS-SAME-RETURN.md REFACTOR-WARNINGS-CLEAN.md
+
+== THE MODES
+    -warnings default   warnings are found and printed on stderr; the
+                        program compiles and runs (the default)
+    -warnings off       no warning pass runs at all (generated source,
+                        benchmarks, embedding)
+    -warnings error     the first warning is a compilation error carrying
+                        the warning's own code, e.g.
+                        (CORE SEMANTIC METHOD-ELIGIBLE), raised before any
+                        backend runs
+
+A compilation given no -warnings option uses the environment's
+BOTLISH_WARNINGS (default, off or error), else default. Warnings are about
+the source program, computed once, before any backend: every backend sees
+the same warnings, and warnings never change what the program does. A
+program with an error is not warned about.
+
+== WHAT BOTLISH DELIBERATELY DOES NOT HAVE
+No per-warning switches (-Wfoo, -Wno-foo, -Werror=foo), no groups (-Wall),
+no levels, no lint-ignore comment, pragma or annotation. Every warning is on
+for everyone, so a warning must be precise enough that a programmer normally
+benefits from investigating it; where the compiler cannot establish its
+fact, it is silent (principle.lint-precision). Two declarations look like
+opt-outs and are not: `nomethod fn` changes what call forms are legal
+(concept.nomethod), and a list result type `-> List[T]` is a real type the
+checker proves (warning.fixed-arity-list-return). Both state something true
+about a function's interface.
+
+== THE SHIPPED CODE
+The standard library, examples and benchmarks compile clean under these
+warnings, except the findings a reviewed manifest lists with the reason each
+stays open (audit/refactor/manifest.txt in a checkout). A library's warnings
+print for every program that loads it; of the shipped modules only
+lib/web.bot and lib/linux/path.bot carry any (ONE-CHAR-STRING-LITERAL).
+
+== HELP LINES
+After the warnings of a compilation, the compiler prints one line per
+distinct warning code naming its topic here, e.g.
+    help: botlish -help warning.method-eligible
+
+@topic lint.warnings-vs-errors
+title: Errors, warnings and principles
+summary: An error rejects an invalid program; a warning marks a pattern in a valid program that is usually worth investigating; a principle is advice the compiler may not be able to check at all.
+index: lint principles warnings errors
+alias: errors versus warnings; error or warning; what is a warning; linter; lint
+keywords: difference, rule, advice, invalid, valid
+related: lint.policy principle.lint-precision index.errors index.principles
+
+== ERRORS
+An error is a violation of a language or compilation requirement: a name
+that is not bound, a value that cannot be proven to have its declared type,
+a declared error nobody handles, a syntax error. The program is rejected
+(exit status 1) and nothing runs. -help errors lists every code.
+
+== WARNINGS
+A warning is a pattern that may be undesirable in a program that is valid,
+backed by a fact the compiler proves -- "this call is provably the same as
+its method spelling", "these two exits return the same value". It is a
+claim that the code is worth a second look, with a stated reason; it is
+not a claim that the code is wrong. Every warning page says what the rule
+detects, what problem it is meant to prevent, the evidence the compiler
+uses and the legitimate cases it cannot tell apart. -help warnings lists
+them.
+
+== PRINCIPLES
+A principle is a recommended practice: name the parts of a multi-value
+result, keep a function's receiver first, prefer declared errors to
+sentinel values. Some principles are backed by a warning, most are not:
+not every good practice can be detected with enough precision to warn
+about. -help principles lists them.
+
+== HOW THEY RELATE
+A principle explains *why*; a warning is the subset of a principle the
+compiler can detect precisely; an error is a rule the language requires.
+When a warning fires on code that is reasonable, the warning -- not the
+code -- may be too broad: that is evidence to report, not a pattern to
+silence mechanically (principle.lint-precision).
+
+@topic warning.same-return-value
+title: SAME-RETURN-VALUE: several exits return one proven value
+summary: Two or more distinct exits of a function are proven to return the same value: the control flow separates cases that the result does not.
+index: warnings lint
+code: SAME-RETURN-VALUE
+code: CORE SEMANTIC SAME-RETURN-VALUE
+alias: same return value; repeated return value; returned from distinct exits
+keywords: return, exit, sentinel, guard, early return, redundant branch
+related: warning.same-failure principle.guard-clauses principle.errors-over-sentinels principle.lint-precision proof.exact-values
+docs: WARNINGS-SAME-RETURN.md
+
+== WHAT IT DETECTS
+A function whose exits -- its `return`s and the value its body ends with
+(each leaf of a final if/elif/else) -- include two or more that the compiler
+proves return the same value: the same exact constant (`-1`, `false`, `[]`,
+through immutable aliases such as `invalid = -1`) or the same immutable
+binding. One warning per repeated value, at its first exit, with the other
+exits as notes:
+    f.bot:3:9: warning: value `-1` is returned from 2 distinct exits
+        (SAME-RETURN-VALUE)
+    f.bot:5:9: note: also returned here
+
+== WHY IT MATTERS
+Each exit of a function is a decision the reader has to follow. When two
+paths end with the same value, either the branching that separates them does
+not matter to the result -- redundant control flow, a condition the reader
+studies for nothing -- or one in-band value stands for several situations
+(a sentinel), which the caller can no longer tell apart. Both are worth a
+second look: the first usually simplifies to one condition or one exit, the
+second may be a failure in disguise that a declared error would name.
+
+== RECOMMENDED PRACTICE
+Investigate what the repetition means:
+  * the branches do not affect the result: merge them (`if a or b:`, drop
+    an `if` whose arms agree, let the paths fall through to one exit);
+  * the value is a sentinel for "no result": consider a declared error
+    (`fail NotFound`), which the caller must handle and which names the
+    situation (principle.errors-over-sentinels);
+  * the repetition is the honest answer (two situations really have one
+    result): keep it; the warning states a fact, not a defect.
+A kept finding stays: there is no way to silence one warning (no
+annotation, no per-code switch), by design (lint.policy). The program
+compiles and runs as usual; only -warnings error rejects it, and
+-warnings off turns every warning of the compilation off.
+
+== EVIDENCE
+The compiler's exact-value facts (hir::exact): equal exact values through
+immutable aliases, or the very same immutable binding. A call -- however
+identical it looks --, a parameter-dependent expression or two separately
+built mutable values are never assumed equal. An exit counts only if it can
+execute: statically decided branches and branches the range facts prove
+infeasible are not exits. A nested function's exits are its own.
+
+== LEGITIMATE EXCEPTIONS
+Recognized, and therefore silent:
+  * unit: procedural functions end in unit from many places; nothing is
+    collapsed.
+  * a Bool answered from several exits beside an exit of the other value:
+    Bool has two values, so a predicate with three or more exits -- the
+    guard style, `if bad: return false` per condition, then `true` --
+    repeats one by necessity, and the repetition says nothing about the
+    function. A Bool is reported only when it is the function's only
+    answer (every value exit returns it).
+  * the handlers of one call: each declared error has its own `on NAME:`
+    (there is no `on A, B:`), so `on A: return []` / `on B: return []` is
+    one decision written once per error. Exits that end the handlers of
+    one call count as one exit.
+Not recognized: guard clauses that return the same non-Bool sentinel
+(`return -1` from two guards). The compiler cannot tell a deliberate shared
+result from a collapsed failure there; the warning asks the question, and
+"this really is one result" is a valid answer.
+
+== EXAMPLES
+@example accept
+fn classify(x: int) -> int:
+    if x < 0:
+        return -1
+    if x > 100:
+        return -1
+    x
+
+classify(5)
+@caption One sentinel for two situations
+@warn SAME-RETURN-VALUE
+@value 5
+@end
+
+@example accept
+fn valid?(xs: List[int]) -> bool:
+    if xs == []:
+        return false
+    if xs == [0]:
+        return false
+    true
+
+valid?([1])
+@caption A guard-style predicate: repeated false beside true is not reported
+@nowarn SAME-RETURN-VALUE
+@value true
+@end
+
+@example accept
+error Unsolvable
+error LimitExceeded
+
+fn solve(n: int) -> List[int] errors Unsolvable, LimitExceeded:
+    if n < 0:
+        fail Unsolvable
+    if n > 40:
+        fail LimitExceeded
+    [n]
+
+fn solution(n: int) -> List[int]:
+    moves = solve(n):
+        on Unsolvable:
+            return []
+        on LimitExceeded:
+            return []
+    moves
+
+solution(3)
+@caption The handlers of one call returning one value are one exit
+@nowarn SAME-RETURN-VALUE
+@value [3]
+@end
+
+@example accept
+fn always?(x: int) -> bool:
+    if x < 0:
+        return false
+    false
+
+always?(1)
+@caption A predicate that can only answer false is reported
+@warn SAME-RETURN-VALUE
+@value false
+@end
+
+@topic warning.same-failure
+title: SAME-FAILURE: several exits fail the same declared error
+summary: Two or more distinct `fail` statements of a function raise the same declared error (with a proven-identical payload): the caller cannot tell the situations apart.
+index: warnings lint
+code: SAME-FAILURE
+code: CORE SEMANTIC SAME-FAILURE
+alias: same failure; repeated fail
+keywords: fail, error, exit, guard, translate errors
+related: warning.same-return-value concept.errors concept.error-payloads principle.errors-over-sentinels rule.one-handler-per-error
+docs: WARNINGS-SAME-FAILURE.md
+
+== WHAT IT DETECTS
+A function whose own body contains two or more reachable `fail NAME`
+statements of the same declared error -- and, for an error with a payload,
+with payloads the compiler proves identical. One warning per repeated
+failure, at its first `fail`, the others as notes.
+
+== WHY IT MATTERS
+SAME-RETURN-VALUE's question for the other way a function ends. A declared
+error is part of the function's contract: callers handle it by name. When
+two different situations fail with the same error and nothing that tells
+them apart, the caller -- and the person reading a report -- cannot know
+which one happened. Either the guards could be one guard, or the failures
+deserve names (two errors, or one error with a payload field saying which
+problem it was: ERROR-PAYLOADS.md).
+
+== RECOMMENDED PRACTICE
+Ask whether a caller would want to tell the situations apart. If yes, give
+them distinct errors or a payload (`fail Invalid {problem: Problem::Empty}`;
+payloads that differ are not grouped). If the situations are one failure
+for every caller, merge the guards or keep the uniform failure -- that is a
+legitimate answer.
+
+== EVIDENCE
+The written `fail` statements of the function's own body (branches, loops,
+handler bodies; never a nested function's), the error's resolved identity,
+the payload's exact identity, and reachability (decided branches and range
+facts). A call that propagates a callee's error is not a `fail` of this
+function.
+
+== LEGITIMATE EXCEPTIONS
+Recognized: translating a call's errors into one of the function's own,
+`on A: fail Bad` / `on B: fail Bad`. Each error has its own handler, so the
+translation is one decision written once per error; fails that end the
+handlers of one call count as one exit. Not recognized: guards that fail
+the same error for different reasons -- the warning cannot know whether
+callers care, and a uniform failure is a valid answer.
+
+== EXAMPLES
+@example accept
+error Invalid
+
+fn parse(text: str, pos: int) -> int errors Invalid:
+    if text == "":
+        fail Invalid
+    if pos == 3:
+        fail Invalid
+    pos + 1
+
+"ab".parse(1):
+    on Invalid:
+        0
+@caption Two guards fail the same error with nothing to tell them apart
+@warn SAME-FAILURE
+@value 2
+@end
+
+@example accept
+error A
+error B
+error Bad
+
+fn risky(x: int) -> int errors A, B:
+    if x < 0:
+        fail A
+    if x > 100:
+        fail B
+    x
+
+fn checked(x: int) -> int errors Bad:
+    r = risky(x):
+        on A:
+            fail Bad
+        on B:
+            fail Bad
+    r
+
+checked(5):
+    on Bad:
+        0
+@caption Translating a call's errors: one decision per handled call
+@nowarn SAME-FAILURE
+@value 5
+@end
+
+@topic warning.method-eligible
+title: METHOD-ELIGIBLE: a call that method syntax would express
+summary: A call written f(x, y) to a named function of two or more parameters is proven to mean exactly x.f(y): Botlish's preferred receiver form.
+index: warnings lint
+code: METHOD-ELIGIBLE
+code: CORE SEMANTIC METHOD-ELIGIBLE
+alias: method eligible; eligible for method syntax; method syntax warning
+keywords: method, receiver, sugar, functional call, nomethod
+related: concept.method-sugar concept.nomethod rule.method-resolution principle.receiver-first principle.lint-precision
+docs: WARNINGS-METHOD-ELIGIBLE.md METHOD-SUGAR.md REFACTOR-WARNINGS-CLEAN.md
+
+== WHAT IT DETECTS
+A call written in functional form, `f(x, y)` or `list::at(xs, i)`, whose
+method spelling `x.f(y)` / `xs.at(i)` the compiler proves to parse and to
+resolve to the identical function, where the function is a declared named
+function (not a function value) with at least two ordinary parameters, not
+declared `nomethod`. One warning per call:
+    f.bot:2:12: warning: call to `list::at` is eligible for method syntax
+        (METHOD-ELIGIBLE)
+
+== WHY IT MATTERS
+Receiver-oriented calls make the relationship between an operation and its
+primary value visible: `cells.at(i)`, `name.concat(suffix)`, `board.move(d)`
+read as "this value, this operation", chain left to right
+(`text.trim().concat(x)` instead of nested calls read inside out), and put
+the subject first where the eye starts. Botlish chose method syntax as its
+preferred call form (METHOD-SUGAR.md) and made it exact sugar -- the same
+function, the same HIR -- so writing it costs nothing and the warning can
+promise that the rewrite changes nothing but the spelling.
+
+== RECOMMENDED PRACTICE
+Prefer the method spelling when the first argument is the value the
+operation is about. When the first parameter is *not* a receiver -- the
+function is procedural or symmetric, or its first argument is a parameter of
+the operation rather than its subject (a name, a position, a count, a
+destination) -- declare the function `nomethod fn`: that is a statement
+about its interface (method syntax becomes an error for it,
+NOMETHOD-CALL), not a way to silence a call site. The shipped library marks
+bit_and, bit_or, bit_xor (symmetric), mutable_array::copy (destination
+first) and mutable_array::create (length first).
+
+== EVIDENCE
+The compiler's own parser rule for what may precede a `.` (a name, a field
+chain, a call or method-call result, a literal, a list or struct literal --
+never an operator expression, which would need parentheses), the resolver's
+own method-candidate search from the call's scope (exactly one candidate,
+the same function; no struct field of that name that could compete), how
+the call was written (the frontend's provenance), and reachability.
+Anything it cannot prove is silence.
+
+== LEGITIMATE EXCEPTIONS
+Recognized, and therefore silent:
+  * one-parameter functions: `length(xs)` has nothing to move behind the
+    dot.
+  * an Int literal receiver: `register_tile(0, 0, "x")`,
+    `scan_while(0, pred)`. A written number is almost always a constant
+    parameter of an operation on something else -- a position, a count, a
+    size -- and `0.scan_while(pred)` presents it as the subject; whether a
+    constant is the subject is a judgment the compiler cannot make
+    (`5.between(1, 10)` stays legal, just not suggested).
+  * function values (parameters, aliases) and `nomethod` functions.
+Not recognized: whether a parameter is a natural receiver in general. A
+helper `label(prefix, n)` or `register(name, rows)` called with a String
+first warns; the structure of the call cannot tell a label from a text
+being operated on (`"move: ".concat(name)` is a natural receiver). That is
+the author's decision, made once at the declaration with `nomethod`.
+
+== EXAMPLES
+@example accept
+import list
+
+fn first(xs: List[int]) -> int:
+    list::at(xs, 0):
+        on IndexNotFound:
+            -1
+
+first([7, 8])
+@caption The receiver is the list the operation reads
+@warn METHOD-ELIGIBLE
+@value 7
+@end
+
+@example accept
+import list
+
+fn first(xs: List[int]) -> int:
+    xs.at(0):
+        on IndexNotFound:
+            -1
+
+first([7, 8])
+@caption The method spelling: the same call
+@nowarn METHOD-ELIGIBLE
+@value 7
+@end
+
+@example accept
+fn tile_name(row: int, column: int) -> int:
+    row * 10 + column
+
+tile_name(0, 3)
+@caption An Int literal receiver is not suggested
+@nowarn METHOD-ELIGIBLE
+@value 3
+@end
+
+@example accept
+import str
+
+nomethod fn label(prefix: str, n: str) -> str:
+    prefix.concat(n)
+
+label("legal moves at ", "12")
+@caption A function whose first parameter is not a receiver, declared so
+@nowarn METHOD-ELIGIBLE
+@value "legal moves at 12"
+@end
+
+@topic warning.fixed-arity-list-return
+title: FIXED-ARITY-LIST-RETURN: a function returns positional multi-value lists
+summary: Every value exit of a function returns a written list literal of one arity N >= 2: a multi-value result whose parts have positions instead of names.
+index: warnings lint
+code: FIXED-ARITY-LIST-RETURN
+code: CORE SEMANTIC FIXED-ARITY-LIST-RETURN
+alias: fixed arity list return; tuple return; positional result
+keywords: list, tuple, struct, multi-value, result, named parts
+related: principle.name-the-parts concept.structs concept.destructuring rule.no-list-destructuring concept.lists
+docs: WARNINGS-FIXED-ARITY-LIST-RETURN.md MULTI-VALUE-RESULTS.md
+
+== WHAT IT DETECTS
+A function none of whose value exits is anything but a written list literal
+of the same arity N >= 2 (or a binding of one, or a direct self-call), with
+no list type declared for its result. One warning per function, at its
+first exit:
+    t.bot:10:13: warning: a 2-element list is returned from all 3 value
+        exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
+
+== WHY IT MATTERS
+A result like `[field, index + 1]` is a pair whose parts the caller reads
+by position: `list::at(r, 0)` and `list::at(r, 1)`, each of which must
+handle IndexNotFound, none of which says what the part is, and all of which
+silently break when the order changes. Botlish deliberately gives Lists no
+positional destructuring (a List is a sequence) and gives structs named
+fields and destructuring: `{field, next} = scan(...)`. A struct result is
+checked by name at every use.
+
+== RECOMMENDED PRACTICE
+Return a struct (an anonymous one is enough: `{field: f, next: i + 1}`) and
+destructure it at the call. When the result really is a list -- a row of
+data for output, a sequence that happens to have a fixed length -- declare
+it: `-> list` or `-> List[T]`. That annotation is a real type the checker
+proves, and it tells the reader the positions are a sequence, not parts.
+
+== EVIDENCE
+How each exit was written (the frontend records a written list literal),
+binding identity for exits that read a binding of a literal, the resolver's
+identity for self-calls, reachability, and the function's declared result
+type. Element types are never consulted.
+
+== LEGITIMATE EXCEPTIONS
+A genuine fixed-length sequence (rows of a table, a coordinate written as a
+list for an external format): the author says so with the list result
+type, which is the language's statement of intent, not a suppression.
+Silent by construction: any exit that is computed, a struct, unit (a
+"list or nothing" result), a call of another function, or of another
+arity; one-element lists. The warning cannot know how callers use the
+result; that is why the declaration decides.
+
+== EXAMPLES
+@example accept
+fn split_at(text: str, i: int):
+    if i < 0:
+        return [text, 0]
+    [text, i]
+
+"ab".split_at(1)
+@caption Two parts, read by position at every use
+@warn FIXED-ARITY-LIST-RETURN
+@value ["ab", 1]
+@end
+
+@example accept
+fn split_at(text: str, i: int):
+    if i < 0:
+        return {text: text, at: 0}
+    {text: text, at: i}
+
+{text, at} = "ab".split_at(1)
+at
+@caption A struct names the parts
+@nowarn FIXED-ARITY-LIST-RETURN
+@value 1
+@end
+
+@example accept
+nomethod fn row(name: str, solved: bool) -> list:
+    [name, solved, 16]
+
+row("solved board", true)
+@caption A declared list result: a row of data for output
+@nowarn FIXED-ARITY-LIST-RETURN
+@value ["solved board", true, 16]
+@end
+
+@topic warning.proves-naming
+title: PROVES-NAMING: a proof-producing function named outside its convention
+summary: A function with a `proves` contract of one of the two refinement shapes is not named by that shape's convention: a predicate ends in ?, a validator is validate or validate_*.
+index: warnings lint
+code: PROVES-NAMING
+code: CORE SEMANTIC PROVES-NAMING
+alias: proves naming; predicate name; validator name
+keywords: proves, refinement, predicate, validator, naming, question mark
+related: concept.refinements principle.predicate-naming
+docs: WARNINGS-PROVES-NAMING.md REFINEMENT-VALUES.md
+
+== WHAT IT DETECTS
+A function whose declaration carries a `proves PARAM: Type` clause and has
+exactly one ordinary parameter, and is either a predicate (result `bool`)
+whose name does not end in `?`, or a validator (result `unit`) whose name is
+neither `validate` nor begins with `validate_`. One warning at the `fn`:
+    f.bot:2:1: warning: `emailish` proves a contract and returns bool;
+        predicate names end in `?` (PROVES-NAMING)
+
+== WHY IT MATTERS
+A refinement's proof is invisible at the call: `if emailish?(s):` narrows
+`s` to `Emailish` in the branch, and `validate_emailish(s)` makes `s` an
+`Emailish` for the rest of the path. The name is the only thing at the call
+that tells the reader a proof is being made and which kind: a `?` reads as a
+question whose true answer proves something, `validate_` as a step that
+either establishes the fact or fails. A proof-producing function named like
+an ordinary computation hides the fact the code below depends on.
+
+== RECOMMENDED PRACTICE
+Rename: `emailish?`, `validate_emailish` (or `validate` in a module whose
+namespace names the subject). A rename is the whole response; it changes
+nothing else.
+
+== EVIDENCE
+The resolved proof contract of each declaration, its ordinary parameter
+count (flags and context parameters do not count), its declared result and
+the name as written. No call site, no walk.
+
+== LEGITIMATE EXCEPTIONS
+None within its scope: the scope guard is the boundary. A function without
+`proves` is never looked at, whatever its name (`is_empty` is fine), and a
+proves function with two or more ordinary parameters is outside the two
+shapes and silent. There is no reverse rule: a `?` name that returns an
+Int is not reported.
+
+== EXAMPLES
+@example accept
+refined type Positive = int
+
+fn positive(n: int) -> bool proves n: Positive:
+    n > 0
+
+positive(3)
+@caption A predicate named like a computation
+@warn PROVES-NAMING
+@value true
+@end
+
+@example accept
+refined type Positive = int
+
+fn positive?(n: int) -> bool proves n: Positive:
+    n > 0
+
+positive?(3)
+@caption The predicate convention
+@nowarn PROVES-NAMING
+@value true
+@end
+
+@topic warning.one-char-string-literal
+title: ONE-CHAR-STRING-LITERAL: a String literal of one character
+summary: A written String literal whose value is exactly one character: a single character is written as a character literal ('x'), a value of its own type.
+index: warnings lint
+code: ONE-CHAR-STRING-LITERAL
+code: CORE SEMANTIC ONE-CHAR-STRING-LITERAL
+alias: one char string literal; one character string; single character string
+keywords: character, UnicodeChar, char literal, String, append_char, char_at
+related: principle.characters-not-strings concept.strings stdlib.str::append_char stdlib.str::char_at
+docs: WARNINGS-ONE-CHAR-STRING-LITERAL.md ENCODE-UTF8-ALLOCATION-RESEARCH.md
+
+== WHAT IT DETECTS
+Every written String literal whose exact value is one character, measured as
+str::length measures (escapes resolved: "\n" and "\"" are one character; a
+supplementary-plane character is one; a letter plus a combining accent is
+two). One warning per literal, wherever it is written:
+    f.bot:5:21: warning: the String literal `"\""` is one character long; a
+        single character is written as a character literal
+        (ONE-CHAR-STRING-LITERAL)
+
+== WHY IT MATTERS
+Botlish has a character type, UnicodeChar ('a', '\n'), distinct from String.
+A one-character String is a String: classifying text by comparing
+one-character Strings allocates a String per position on the native
+backends and states a character question in String terms. The character
+idiom -- `text.char_at(i) == '%'`, `text.append_char('\n')` -- says what is
+meant and allocates nothing.
+
+== RECOMMENDED PRACTICE
+Write characters as character literals and use the character operations:
+str::char_at to read one, str::append_char to append one, ==
+between characters to compare. Where an API you call takes a String for
+what is really a character, the finding is about that API; changing the
+API (to take a UnicodeChar) is the response the warning is meant to prompt.
+
+== EVIDENCE
+The literal's own exact value and its length in Unicode scalar values. The
+warning is deliberately context-blind: it never looks at what consumes the
+literal, follows no value, evaluates no call, and has no reachability rule.
+
+== LEGITIMATE EXCEPTIONS
+Not recognized, by design: a one-character String that really is text (a
+separator passed to a function that takes a String, a table of
+one-character Strings). The warning fires there too, because those
+findings are its purpose: they catalogue the APIs that take a String where
+a character is meant. It is also deliberately not autofixable: replacing
+"x" by 'x' changes the program where the consumer takes a String (a type
+error, a run-time error, or a comparison of a String with a character that
+is silently false). The shipped library's open findings are of this kind
+(lib/web.bot, lib/linux/path.bot).
+
+== EXAMPLES
+@example accept
+import str
+
+fn quoted?(text: str, i: int) -> bool:
+    s = text.substring(i, i + 1):
+        on LowerUnderrun:
+            return false
+        on UpperOverrun:
+            return false
+    s == "\""
+
+"a\"b".quoted?(1)
+@caption A character question asked in String terms
+@warn ONE-CHAR-STRING-LITERAL
+@value true
+@end
+
+@example accept
+import str
+
+fn quoted?(text: str, i: int) -> bool:
+    c = text.char_at(i):
+        on IndexNotFound:
+            return false
+    c == '"'
+
+"a\"b".quoted?(1)
+@caption The character idiom
+@nowarn ONE-CHAR-STRING-LITERAL
+@value true
+@end
+
+@topic warning.many-boolean-arguments
+title: MANY-BOOLEAN-ARGUMENTS: a call passes several boolean literals
+summary: A written call passes two or more true/false literals to a function that takes a subject and boolean options: anonymous options that flags would name.
+index: warnings lint
+code: MANY-BOOLEAN-ARGUMENTS
+code: CORE SEMANTIC MANY-BOOLEAN-ARGUMENTS
+alias: many boolean arguments; boolean literals arguments; boolean trap
+keywords: bool, true, false, flags, options, arguments
+related: concept.flags principle.options-are-flags rule.flags
+docs: WARNINGS-MANY-BOOLEAN-ARGUMENTS.md FLAGS.md
+
+== WHAT IT DETECTS
+A written call that passes two or more `true`/`false` literals at ordinary
+argument positions to a declared function (or a native) whose parameters
+include at least two proven `bool` -- declared, or a trusted inferred
+type -- and at least one that is not (a subject). One warning per call:
+    f.bot:4:1: warning: the call to `open_file` passes 3 boolean literals;
+        flags name options (MANY-BOOLEAN-ARGUMENTS)
+
+== WHY IT MATTERS
+`open_file("f.txt", true, false, true)` cannot be read without the
+declaration: `true` carries no name, and swapping two of them is a silent,
+type-correct bug. Botlish has flags for options:
+`fn open_file(path, flags :append, :create, :sync)`, called
+`open_file("f.txt", :append, :sync)` -- every option named where it is
+used, absent options false.
+
+== RECOMMENDED PRACTICE
+Give the function flag parameters for its options. Values the caller
+computes or names (`append: should_append`) already say what they mean and
+are never counted.
+
+== EVIDENCE
+The call's written arguments (a `true`/`false` token only; a named binding
+or a computed bool never counts), the callee's declared or trusted
+parameter types, flags excluded, and structural reachability.
+
+== LEGITIMATE EXCEPTIONS
+Silent by construction: a function whose parameters are all bool
+(`xor(a: bool, b: bool)` takes data, not options), a single literal, calls
+through function values, untyped (only run-time-checked) bool parameters.
+Not recognized: a function whose bools are data despite the subject
+(rare); flags are then still the clearer interface, or name the values with
+bindings.
+
+== EXAMPLES
+@example accept
+fn open_file(path: str, append: bool, create: bool) -> str:
+    path
+
+"log.txt".open_file(true, false)
+@caption Two anonymous options
+@warn MANY-BOOLEAN-ARGUMENTS
+@value "log.txt"
+@end
+
+@example accept
+fn open_file(path: str, flags :append, :create) -> str:
+    path
+
+open_file("log.txt", :append)
+@caption Flags name the options
+@nowarn MANY-BOOLEAN-ARGUMENTS
+@value "log.txt"
+@end

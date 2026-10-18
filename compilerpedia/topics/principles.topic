@@ -1,0 +1,335 @@
+# principles.topic -- recommended practices and the reasoning behind them.
+# Some are backed by a warning (the page names it); most are not, because not
+# every good practice can be detected precisely enough to warn about.
+
+@topic principle.lint-precision
+title: A warning must be worth investigating
+summary: Botlish's warnings aim for precision over coverage: a legitimate exception to a rule is first evidence that the rule is too broad, not a reason to suppress it.
+index: principles lint
+alias: lint precision; false positive; overbroad warning; why is this warning wrong
+keywords: precision, exception, suppress, silence, linter design
+related: lint.policy lint.warnings-vs-errors principle.investigate-warnings warning.same-return-value warning.method-eligible
+docs: WARNINGS-SAME-RETURN.md COMPILERPEDIA-REPORT.md
+
+== THE PRINCIPLE
+A warning makes a claim: this code is worth a second look. Because Botlish
+has no per-warning switches and no suppression (lint.policy), every warning
+is on for everyone, and a warning that habitually fires on reasonable code
+teaches programmers to rewrite it mechanically until the warning stops --
+which helps nobody. So a rule should claim only what the compiler can
+establish, and missing some questionable code is better than flagging
+reasonable code.
+
+== IN PRACTICE
+When a warning fires on code that is reasonable as written, that is
+evidence about the rule. The compiler's maintainers narrow rules on such
+evidence when a principled distinction can be made reliably -- and leave
+them as they are, documenting the limit, when it cannot. Examples of the
+former: SAME-RETURN-VALUE no longer counts the handlers of one call as
+separate exits nor reports a guard-style predicate's repeated false;
+METHOD-ELIGIBLE no longer suggests an Int literal as a receiver. Examples
+of the latter: whether a function's first parameter is a natural receiver
+is the author's judgment, declared with `nomethod`.
+
+== WHEN IT DOES NOT APPLY
+Errors are not lint: they are rules of the language, and precision there
+means a clear diagnostic, not silence.
+
+@topic principle.investigate-warnings
+title: Investigate a warning; do not silence it mechanically
+summary: Read what a warning claims and why; change the code when the claim points at a real problem, and keep it when the code is right.
+index: principles lint
+alias: respond to warnings; silence warning; fix warning
+keywords: warning, investigate, rewrite, declaration
+related: principle.lint-precision lint.policy
+
+== THE PRINCIPLE
+Each warning page (-help CODE) says what problem the rule is meant to
+prevent. The useful response is to check whether the problem is there: a
+SAME-RETURN-VALUE may reveal a condition that does not matter, or a sentinel
+that should be a declared error; a METHOD-ELIGIBLE may reveal that a
+function's first parameter is not a receiver and should be declared so.
+
+== IN PRACTICE
+  * The claim holds: change the code (merge the branches, name the parts,
+    use a character literal, use method syntax).
+  * The claim is about the function's interface: say it at the declaration
+    (`nomethod fn`, a list result type, flags) -- each changes what the
+    function is, not whether the warning prints.
+  * The code is right and the rule cannot tell: keep the code. Restructuring
+    correct code only to move the pattern out of the rule's sight hides the
+    question instead of answering it; the evidence belongs in a report about
+    the rule (principle.lint-precision).
+
+@topic principle.name-the-parts
+title: Name the parts of a multi-value result
+summary: A function that returns several values returns a struct with named fields, which callers destructure, not a fixed-length list read by position.
+index: principles
+alias: name the parts; multi-value result; return several values; return two values; tuple
+keywords: struct, result, destructure, positional, list
+related: warning.fixed-arity-list-return concept.structs concept.destructuring rule.no-list-destructuring
+docs: MULTI-VALUE-RESULTS.md STRUCT-DESTRUCTURING.md
+
+== THE PRINCIPLE
+`{field, next} = scan(text, i)` says what each part is at every use, is
+checked by name, and survives a reordering. `r = scan(text, i)` followed by
+`list::at(r, 0)` and `list::at(r, 1)` says nothing, must handle
+IndexNotFound twice, and breaks silently when the order changes. Botlish
+deliberately gives Lists no positional destructuring: a List is a
+sequence.
+
+== IN PRACTICE
+Return an anonymous struct (`{field: f, next: i + 1}`) or a declared one,
+and destructure it. Declare `-> List[T]` when the result really is a
+sequence.
+
+@example accept
+fn scan(text: str, i: int):
+    {field: text, next: i + 1}
+
+{field, next} = "abc".scan(0)
+next
+@value 1
+@quiet
+@end
+
+== CHECKED BY
+FIXED-ARITY-LIST-RETURN (warning.fixed-arity-list-return), for a function
+whose every exit is a list literal of one length.
+
+@topic principle.receiver-first
+title: Put the value an operation is about first
+summary: Design functions so that their first parameter is the value they operate on, and call them with method syntax; declare `nomethod` when no parameter is a receiver.
+index: principles
+alias: receiver first; API design; method syntax style; receiver-oriented
+keywords: method, receiver, API, nomethod, first parameter
+related: concept.method-sugar concept.nomethod warning.method-eligible
+docs: METHOD-SUGAR.md WARNINGS-METHOD-ELIGIBLE.md
+
+== THE PRINCIPLE
+Botlish's method syntax is exact sugar: `board.move(d)` is `move(board, d)`.
+A function whose first parameter is its subject reads naturally as a
+method, chains left to right, and finds its candidates through the
+namespace the caller imports. A function whose first parameter is not a
+subject (a name, a position, a count, a destination, symmetric operands)
+reads badly as a method: `0.scan_while(p)`, `"rows".register(...)`.
+
+== IN PRACTICE
+Order parameters subject first; call with method syntax. For a function
+with no receiver, write `nomethod fn`: method syntax becomes an error for
+it, and METHOD-ELIGIBLE never suggests it.
+
+== CHECKED BY
+METHOD-ELIGIBLE (warning.method-eligible) reports functional calls the
+method spelling would express, except where the compiler cannot judge the
+receiver (an Int literal).
+
+== WHEN IT DOES NOT APPLY
+Constructors and other functions of no receiver (`solved()`,
+`from_rows(rows)`), and symmetric operations (`bit_and(a, b)`).
+
+@topic principle.options-are-flags
+title: Options are flags
+summary: A function's boolean options are flag parameters, named where they are used; positional true/false arguments are anonymous.
+index: principles
+alias: options are flags; boolean options; boolean parameters
+keywords: flag, option, bool, argument
+related: concept.flags warning.many-boolean-arguments rule.flags
+docs: FLAGS.md
+
+== THE PRINCIPLE
+`open("f", :append)` says which option is on; `open("f", true, false)`
+needs the declaration to be read, and two swapped literals are a silent
+bug. A flag is false unless named at the call.
+
+== CHECKED BY
+MANY-BOOLEAN-ARGUMENTS (warning.many-boolean-arguments).
+
+@topic principle.characters-not-strings
+title: A character is a character, not a one-character String
+summary: Write single characters as character literals ('x') and work with them through character operations (char_at, append_char, ==).
+index: principles
+alias: characters not strings; char vs string
+keywords: UnicodeChar, character, literal, char_at, append_char
+related: concept.strings warning.one-char-string-literal stdlib.str::char_at stdlib.str::append_char
+docs: WARNINGS-ONE-CHAR-STRING-LITERAL.md
+
+== THE PRINCIPLE
+UnicodeChar is its own type: comparing `text.char_at(i) == ','` states a
+character question exactly and allocates nothing; comparing one-character
+substrings states it in String terms and allocates a String per position on
+the native backends.
+
+== CHECKED BY
+ONE-CHAR-STRING-LITERAL (warning.one-char-string-literal), context-blind by
+design: where an API takes a String for a character, the finding is about
+the API.
+
+@topic principle.errors-over-sentinels
+title: Declared errors over sentinel values
+summary: A function that can fail declares an error the caller must handle, instead of returning an in-band value (-1, "", []) that means "no result".
+index: principles
+alias: errors over sentinels; sentinel value; magic value; return -1
+keywords: sentinel, error, fail, handle, optional, null
+related: concept.errors warning.same-return-value warning.same-failure capability.null concept.error-payloads
+docs: EXPLICIT-ERROR-COMPLETIONS.md ERROR-PAYLOADS.md
+
+== THE PRINCIPLE
+A sentinel is an ordinary value that the caller must remember to test, and
+that may be a legitimate answer (-1 is an Int). A declared error is part of
+the function's type: the compiler makes every caller handle it, admit it,
+or prove it cannot happen, and a payload can say which failure occurred.
+Botlish has no null and no optional type; declared errors are its failure
+channel.
+
+== IN PRACTICE
+`fn find(xs, p) errors NotFound` rather than returning -1; `on NotFound:`
+at the call. A function that genuinely has a default answer (`get(xs, i,
+default)`) takes the default from its caller.
+
+== WHEN IT DOES NOT APPLY
+When the "empty" result is a real answer, not a failure: an empty List of
+matches is a result.
+
+@topic principle.guard-clauses
+title: Guard clauses
+summary: Dismiss the special cases first, each with its own early exit, so the main computation reads without nesting.
+index: principles
+alias: guard clauses; early return; early exit
+keywords: guard, return, fail, nesting, precondition
+related: warning.same-return-value warning.same-failure principle.errors-over-sentinels proof.list-bounds
+
+== THE PRINCIPLE
+`if xs == []: return 0` and `if i < 0 or i >= xs.length(): fail Invalid`
+at the top of a function state its preconditions where they are checked
+and keep the main path unindented. A guard is also how the compiler learns
+facts: a guard on a parameter against a list's length proves later
+`list::at` calls in range (proof.list-bounds).
+
+== IN PRACTICE
+One condition per guard when the reasons differ (each guard documents one
+reason); one guard with `or` when they are one reason. Several guards that
+answer the same non-Bool value report SAME-RETURN-VALUE: is it one result,
+or a failure that should be named? A predicate's repeated false is not
+reported.
+
+@topic principle.restate-in-proven-form
+title: Write what the compiler can prove
+summary: When the compiler cannot prove an obligation away, restate the code in a form its analyses recognize, or make the outcome explicit -- never assume a check away.
+index: principles proofs
+alias: restate in proven form; unproven obligation; make it provable
+keywords: proof, guard, handler, obligation, recognized form
+related: proof.overview proof.list-bounds proof.slices proof.completions
+docs: STATIC-COMPLETION-PROOFS.md
+
+== THE PRINCIPLE
+A proof page lists the forms the compiler recognizes. Code in such a form
+needs no handler for an error that cannot happen; code outside them must
+say what happens if it does. Both are correct programs: the first is shorter
+and states its invariant in a way the compiler checks.
+
+== IN PRACTICE
+Bind a field's list to a local name before a counted loop; guard a
+parameter rather than a computed local (pass the computed index to a small
+helper); iterate ascending, or iterate the elements. When the code is
+clearer as it is, handle the error where it can occur, or use the
+operation's explicit-default form (list::get).
+
+@topic principle.bind-before-use
+title: Bind compound values before using them as operands
+summary: An `if` or a collecting loop produces a value only as the whole right side of `=` or the value of `return`: bind it to a name, then use the name.
+index: principles
+alias: bind before use; if as argument; loop as argument
+keywords: if, loop, operand, argument, binding, helper
+related: rule.if-placement rule.loop-placement concept.if-expressions concept.loops
+
+== THE PRINCIPLE
+Botlish's block-shaped expressions need their own lines, so they cannot sit
+inside an operator or an argument list. Naming the value first is the
+idiom, and it names what the value is.
+
+== IN PRACTICE
+    flags = loop b in boards:
+        b.ok?()
+    all_true?(flags)
+
+    answer = if solved:
+        "yes"
+    else:
+        "no"
+    "status: ".concat(answer)
+
+A small named helper (`fn yes_no(flag) -> str:`) serves when the choice
+recurs.
+
+@example accept
+import str
+
+fn status(solved: bool) -> str:
+    answer = if solved:
+        "yes"
+    else:
+        "no"
+    "solved: ".concat(answer)
+
+status(true)
+@value "solved: yes"
+@end
+
+@topic principle.explicit-dependencies
+title: Dependencies are explicit
+summary: A file names what it uses (imports), a function names the environment it needs (context parameters), and nothing is reached through a global or by receiver type.
+index: principles
+alias: explicit dependencies; no globals
+keywords: import, context, global, dependency, visibility
+related: concept.imports concept.contexts rule.method-requires-import rule.imports-not-transitive
+docs: IMPORTS.md CONTEXTS.md
+
+== THE PRINCIPLE
+Botlish has no global mutable state and no implicit imports: a namespace's
+functions are visible only after `import NAME` (method syntax included), and
+an execution environment such as the output channel is a context a
+function declares and a program installs. What a file depends on is in its
+header; what a function needs is in its signature.
+
+@topic principle.predicate-naming
+title: Name predicates with ?, validators with validate_
+summary: A function answering a yes/no question ends in ?; a function that establishes a fact or fails is validate or validate_*; the name tells the reader a proof is made.
+index: principles
+alias: predicate naming; question mark names
+keywords: predicate, validator, ?, naming, proves
+related: warning.proves-naming concept.refinements
+docs: REFINEMENT-VALUES.md
+
+== CHECKED BY
+PROVES-NAMING (warning.proves-naming), for functions with a `proves`
+contract only.
+
+@topic principle.immutability
+title: Values do not change
+summary: Bindings are immutable and values are immutable; a new value is computed instead of modifying an old one, except inside the explicit mutable collections.
+index: principles concepts
+alias: immutability; no mutation
+keywords: immutable, value, mutation, MutableVector, MutableArray
+related: concept.values concept.bindings capability.assignment concept.mutable-vector concept.mutable-array
+
+== THE PRINCIPLE
+`moved = board.move(d)` returns a new board; `board` is unchanged. A value
+can be shared freely and reasoned about locally. Where in-place growth is
+the point, MutableVector and MutableArray are mutable values with explicit,
+checked places (concept.mutable-vector).
+
+@topic principle.small-functions
+title: Small named helpers
+summary: Factor a recurring expression or a step that needs its own proof into a small named function: it gets a name, its parameters get guards, and the compiler proves it once.
+index: principles
+alias: small functions; helper functions
+keywords: helper, function, refactor, guard, parameter
+related: principle.restate-in-proven-form principle.bind-before-use proof.list-bounds
+
+== THE PRINCIPLE
+Several of the compiler's proofs work on parameters: an index guarded as a
+parameter is related to a list's length, a computed local is not. A helper
+that takes the computed value as a parameter both names the step and gives
+the compiler the form it proves. Helpers are also how a value-producing
+`if` is used as an operand (principle.bind-before-use).

@@ -62,7 +62,9 @@ jobs:
         run: tclsh9.0 tests/all.tcl
 
       - name: Run examples
-        run: tclsh9.0 main.tcl -backend ${{ matrix.backend }}
+        # The core IR samples, named explicitly: without a file main.tcl
+        # prints its usage summary (COMPILERPEDIA.md).
+        run: tclsh9.0 main.tcl -backend ${{ matrix.backend }} examples/*.ir
 
   native:
     # The whole suite with each native backend as CORE_BACKEND: specialized

@@ -205,7 +205,7 @@ if {$shard != 1} { set checks {} }
 
 # The sample programs main.tcl runs on BACKEND, as CI's jobs run them
 # (.github/workflows/tests.yml): one list per main.tcl run. The Tcl backends
-# also run the core IR examples (main.tcl's default) and the module and enum
+# also run the core IR examples (examples/*.ir) and the module and enum
 # samples; the native ones the HIR samples, and cranelift-generic not the
 # stdlib programs whose struct shapes only a semantic instance proves.
 proc examplePrograms {backend} {
@@ -217,7 +217,8 @@ proc examplePrograms {backend} {
     switch -- $backend {
         interp - compile {
             set more [lsort [glob -directory [file join $root examples surface] {1[45]*.bot}]]
-            return [list {} [concat $surface $more $stdlib]]
+            set coreIr [lsort [glob -directory [file join $root examples] *.ir]]
+            return [list $coreIr [concat $surface $more $stdlib]]
         }
         cranelift { return [list [concat $surface $stdlib $hirSamples]] }
         cranelift-generic { return [list [concat $surface $hirSamples]] }

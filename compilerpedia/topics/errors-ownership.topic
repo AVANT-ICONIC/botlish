@@ -1,0 +1,2921 @@
+# errors-ownership.topic -- the diagnostics of affine values, coroutines,
+# mutable places, traits and context traits, one topic per code.
+
+@topic error.use-after-move
+title: USE-AFTER-MOVE: an affine value is used after it was moved
+summary: A binding whose affine value (a coroutine handle, or a struct, List or vector owning one) was moved to another owner is used again.
+index: errors
+alias: used after it was moved; moved coroutine used again; use of a moved binding
+keywords: affine, move, moved, owner, coroutine, handle, argument, destructuring, dead binding
+related: rule.affine-use concept.affine proof.ownership concept.coroutines error.affine-not-definitely-live error.affine-field-move-requires-destructure
+docs: AFFINE-VALUES.md COROUTINES.md
+code: CORE SEMANTIC USE-AFTER-MOVE
+
+== MEANING
+An affine value has exactly one usable owner. Binding it to another name
+(`other = step`), passing it as an argument, storing it in a struct field,
+a List literal or a MutableVector, returning it, or destructuring the
+struct that holds it MOVES it: the new owner owns it, and the old binding
+is dead from then on. A later use of the old binding -- a resume,
+`coroutine::done?`, a field read, another move -- is USE-AFTER-MOVE. The
+message prints where the value was moved and where it was used.
+
+The rule exists because a coroutine handle is the state of one running
+execution: two usable names for it would let two parts of the program
+resume or release one continuation. Ownership is static only: nothing at
+run time records a move, so every use of a dead owner is rejected at
+compile time.
+
+Not moves: resuming a handle (`step()`), `coroutine::done?(step)`,
+reading an unrestricted field (`job.name`) and `list::length(xs)` keep
+the owner owning. An affine value may be dropped unused: it is released
+where its owner dies.
+
+== LIKELY CAUSES
+  * a handle passed to a function and then resumed in the caller: the
+    callee's parameter owns it now;
+  * `other = step` followed by `step()` (resume `other`);
+  * a handle stored in a struct or a List literal, and the old name used;
+  * a struct used after it was destructured: `{step} = job` consumes
+    `job`, so even `job.name` afterwards is a use after move.
+
+== HOW TO INVESTIGATE
+The message prints the move ("moved here", with the statement that moved
+the value) and the use ("used here"). Decide which owner should hold the
+value after the move.
+
+== WHAT TO DO
+Use the new owner's name. If a callee must hand the value back, give it
+a result of the same affine type, return the parameter (`return s`), and
+bind the call's result to a new name (`next = advance(step)`; a binding
+is never reassigned). When the caller must keep the value, pass the
+callee only what it needs (an unrestricted field, a resume's result).
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step} = counter()
+other = step
+step()
+@caption `other = step` moves the handle: `step` is dead afterwards
+@error CORE SEMANTIC USE-AFTER-MOVE
+@at 9:1
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step} = counter()
+other = step
+other()
+@caption The new owner resumes the same coroutine
+@value 3
+@end
+
+@topic error.affine-not-definitely-live
+title: AFFINE-NOT-DEFINITELY-LIVE: an affine value moved on some path only
+summary: An affine binding is used where it may already have been moved: a move on one branch, in a handler or in an earlier loop iteration reaches the use.
+index: errors
+alias: moved on some path; maybe moved affine value; conditionally moved coroutine
+keywords: affine, move, branch, if, handler, loop, join, owner, liveness
+related: error.use-after-move rule.affine-use concept.affine proof.ownership error.affine-path-release-unsupported
+docs: AFFINE-VALUES.md COROUTINES.md
+code: CORE SEMANTIC AFFINE-NOT-DEFINITELY-LIVE
+
+== MEANING
+The ownership analysis follows each affine binding through the code in
+evaluation order. Where paths join (after an `if`, a handled call or a
+loop), a binding moved on some paths but not on others is "maybe moved".
+Using it there is AFFINE-NOT-DEFINITELY-LIVE: on one of the paths it is
+already dead. There is no run-time moved flag to test, so the compiler
+cannot let the program find out at run time; it rejects the use and lists
+every move that can reach it.
+
+A path that does not complete normally -- one that ends in `return`,
+`fail`, `break` or `continue` -- does not reach the join, so a move inside
+a branch that then returns leaves the binding live on the other path.
+
+== LIKELY CAUSES
+  * an `if` without `else` (or a branch of an if/else) that moves the
+    value, followed by a use after the `if`;
+  * a handler (`on E:`) that moves the value, followed by a use;
+  * a move inside a loop body: the next iteration sees the binding moved
+    by the previous one (the diagnostic then points at the move itself).
+
+== HOW TO INVESTIGATE
+Each "moved here" line is a move on some path that reaches the use. In
+a loop the move and the use can be the same expression: an earlier
+iteration moved the value.
+
+== WHAT TO DO
+  * end the moving branch with `return` (or `break`/`continue`/`fail`), so
+    only the paths that still own the value reach the use;
+  * move the value on every path (an if/else whose branches both pass it
+    on), or on none;
+  * move it once, after the loop, instead of inside the loop body.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn finish(s: Coroutine{args: [], return: int}) -> int:
+    s()
+
+fn run(early: bool) -> int:
+    coroutine {step} = counter()
+    if early:
+        finish(step)
+    step()
+
+run(true)
+@caption The `if` moves `step` on one path only
+@error CORE SEMANTIC AFFINE-NOT-DEFINITELY-LIVE
+@at 14:5
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn finish(s: Coroutine{args: [], return: int}) -> int:
+    s()
+
+fn run(early: bool) -> int:
+    coroutine {step} = counter()
+    if early:
+        return finish(step) * 10
+    step()
+
+[run(true), run(false)]
+@caption The moving branch returns: the other path still owns `step`
+@value [30, 3]
+@end
+
+@topic error.affine-capture-unsupported
+title: AFFINE-CAPTURE-UNSUPPORTED: a closure captures an affine value
+summary: A nested function refers to an affine binding of an enclosing scope; a closure may run any number of times and be copied freely, so it cannot own an affine value.
+index: errors
+alias: closure captures a coroutine; capture of an affine binding
+keywords: affine, closure, nested function, capture, coroutine, owner
+related: concept.closures concept.affine rule.affine-use proof.ownership error.mutable-place-capture
+docs: AFFINE-VALUES.md COROUTINES.md
+code: CORE SEMANTIC AFFINE-CAPTURE-UNSUPPORTED
+
+== MEANING
+A nested function that refers to a binding of its enclosing function (or
+a top-level function that refers to a top-level binding) captures it.
+Capturing an affine value is not supported: a closure is an ordinary,
+unrestricted function value that may be called any number of times and
+copied freely, so a captured handle would get several owners. Closure
+values stay unrestricted; there are no affine (call-once) closures.
+
+The one capture that is allowed is internal: a coroutine construction
+captures its own arguments, because it runs exactly once.
+
+== LIKELY CAUSES
+  * a helper declared inside a function that resumes or inspects a
+    coroutine of the enclosing function;
+  * a top-level function that uses a handle bound at the top level.
+
+== WHAT TO DO
+Pass the value to the nested function as an argument (its parameter then
+owns it, and returns it if the caller needs it back), or construct the
+coroutine inside the nested function.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn run() -> int:
+    coroutine {step} = counter()
+    fn next() -> int:
+        step()
+    next()
+
+run()
+@caption `next` would capture the handle of its enclosing function
+@error CORE SEMANTIC AFFINE-CAPTURE-UNSUPPORTED
+@at 10:9
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn run() -> int:
+    coroutine {step} = counter()
+    fn next(s: Coroutine{args: [], return: int}) -> int:
+        s()
+    next(step)
+
+run()
+@caption Passed as an argument instead, the handle moves into `next`
+@value 3
+@end
+
+@topic error.affine-container-unsupported
+title: AFFINE-CONTAINER-UNSUPPORTED: affine values in a set or recursive struct
+summary: An ImmutableSet of affine elements, or an affine struct that holds its own type in a List, MutableVector or MutableArray, is not supported.
+index: errors
+alias: set of coroutines; recursive affine struct
+keywords: affine, ImmutableSet, set, recursive struct, tree, container, release, descriptor
+related: concept.affine concept.immutable-set concept.structs concept.mutable-vector error.affine-equality-unsupported
+docs: AFFINE-VALUES.md MUTABLE-ARRAY.md
+code: CORE SEMANTIC AFFINE-CONTAINER-UNSUPPORTED
+
+== MEANING
+Reported where the type is written, for two forms:
+
+  * `ImmutableSet[T]` with an affine T, in any position (a parameter, a
+    field, a result, an element type). A set compares and hashes its
+    members, and an affine value has no equality or hash
+    (error.affine-equality-unsupported), so a set cannot own one. A List,
+    a MutableVector and a MutableArray can: they are affine exactly when
+    their element type is.
+  * an affine struct that holds values of its own type in a List,
+    MutableVector or MutableArray, directly or through other structs (a
+    tree of coroutines). This is a limit of the implementation: an affine
+    value is released by a static, finite walk of its type, and such a
+    value nests to any depth. An unrestricted struct may hold itself in a
+    container, and an affine struct may name itself through plain fields.
+
+== LIKELY CAUSES
+  * a set of handles used to track "which workers are running";
+  * a task tree whose nodes own coroutines and hold their children in a
+    List[Node].
+
+== WHAT TO DO
+For a set: keep the affine values in a List or MutableVector and track
+membership by an unrestricted key (an int or str stored beside each
+value). For a recursive structure: keep the coroutines out of it -- store
+them in one MutableVector and let the tree hold their indices.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn size(s: ImmutableSet[Coroutine{args: [], return: int}]) -> int:
+    1
+
+0
+@caption A set would have to compare and hash its coroutine members
+@error CORE SEMANTIC AFFINE-CONTAINER-UNSUPPORTED
+@at 7:8
+@end
+
+@example reject
+struct Node:
+    step: Coroutine{args: [], return: int}
+    children: List[Node]
+
+0
+@caption An affine struct holding its own type in a List
+@error CORE SEMANTIC AFFINE-CONTAINER-UNSUPPORTED
+@at 3:15
+@end
+
+@topic error.affine-duplication-unsupported
+title: AFFINE-DUPLICATION-UNSUPPORTED: one affine value in several slots
+summary: mutable_array::create(n, value) places one value in every slot; an affine value would get several owners, so it must be made once per slot with mutable_array::generate.
+index: errors
+alias: mutable_array::create with a coroutine; affine value repeated in an array
+keywords: affine, MutableArray, create, generate, factory, repeat, slots, coroutine
+related: concept.mutable-array concept.affine stdlib.mutable_array::create stdlib.mutable_array::generate error.affine-erasure-unsupported
+docs: MUTABLE-ARRAY.md AFFINE-VALUES.md
+code: CORE SEMANTIC AFFINE-DUPLICATION-UNSUPPORTED
+
+== MEANING
+An operation that logically duplicates its argument -- registered with
+the `repeat` ownership role; today that is the value of
+`mutable_array::create(n, value)` -- cannot take an affine value: every
+slot would hold the same coroutine, one value with several owners. For an
+unrestricted value the slots are logical copies and nothing is wrong. The
+check follows the value through user functions: a wrapper that passes its
+parameter on to `create` is rejected for an affine argument too.
+
+== LIKELY CAUSES
+  * building a pool of workers with `mutable_array::create(n, make())`.
+
+== WHAT TO DO
+Make one value per slot with a factory: `mutable_array::generate(n, f)`
+calls `f(i)` once for each slot, in index order, and moves each result
+into its slot. The factory is an ordinary named function taking the
+index; it cannot itself be affine.
+
+@example reject
+import coroutine
+import mutable_array
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+slots = mutable_array::create(2, make())
+0
+@caption One coroutine would be placed in both slots
+@error CORE SEMANTIC AFFINE-DUPLICATION-UNSUPPORTED
+@at 12:34
+@end
+
+@example accept
+import coroutine
+import mutable_array
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make(i: int) -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+slots = mutable_array::generate(2, make)
+results = loop step in slots:
+    step()
+results
+@caption A factory makes one coroutine per slot; the loop consumes them
+@value [3, 3]
+@end
+
+@topic error.affine-element-copy-out
+title: AFFINE-ELEMENT-COPY-OUT: reading an affine element would copy it out
+summary: at, freeze or copy of a MutableVector or MutableArray of affine elements would make a second owner of an element the collection still owns; move it out instead.
+index: errors
+alias: mutable_vector::at of a coroutine; copy an affine element out of a vector
+keywords: affine, MutableVector, MutableArray, at, freeze, copy, take, pop, swap, element
+related: concept.mutable-vector concept.mutable-array concept.affine stdlib.mutable_vector::take stdlib.mutable_vector::pop stdlib.mutable_vector::swap stdlib.mutable_array::swap error.affine-list-operation-unsupported
+docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
+code: CORE SEMANTIC AFFINE-ELEMENT-COPY-OUT
+
+== MEANING
+A MutableVector[T] or MutableArray[T] of an affine T owns its elements.
+An operation that reads elements out while the collection keeps owning
+them -- `at`, `mutable_array::freeze`, the source of `mutable_array::copy`
+-- would give an element a second owner, so it is rejected for an affine
+collection. There are no references to elements: an element leaves the
+collection only by an operation that moves it out.
+
+== LIKELY CAUSES
+  * `queue.at(i)` to look at a coroutine in a scheduler queue;
+  * freezing an array of coroutines into a List.
+
+== WHAT TO DO
+Move the element out:
+  * MutableVector: `take(i)` removes element i, `pop()` the last one,
+    `swap(i, replacement)` exchanges it for another value;
+  * MutableArray: `swap(i, replacement)` (an array has no empty slot);
+  * either: `loop x in v:` consumes the collection, moving each element
+    into the loop variable in order.
+Put the element back with `push` (vector) or `swap` when the collection
+should keep it.
+
+@example reject
+import coroutine
+import mutable_vector
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+fn first() -> int errors IndexNotFound:
+    queue = mutable_vector::from_list([make(), make()])
+    step = queue.at(0)
+    step()
+
+0
+@caption `at` would copy the coroutine out while the vector keeps it
+@error CORE SEMANTIC AFFINE-ELEMENT-COPY-OUT
+@at 14:12
+@end
+
+@example accept
+import coroutine
+import mutable_vector
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+fn first() -> int errors IndexNotFound:
+    queue = mutable_vector::from_list([make(), make()])
+    step = queue.take(0)
+    step() + queue.length()
+
+first():
+    on IndexNotFound:
+        -1
+@caption `take(0)` moves the element out; one is left in the vector
+@value 4
+@end
+
+@topic error.affine-equality-unsupported
+title: AFFINE-EQUALITY-UNSUPPORTED: comparing or hashing an affine value
+summary: ==, hash and the ImmutableSet operations are rejected for an affine value (a coroutine handle, or a struct or List owning one): it has no equality and no hash.
+index: errors
+alias: compare two coroutines; equality of coroutine handles
+keywords: affine, equality, ==, !=, hash, ImmutableSet, coroutine, identity
+related: rule.equality concept.affine concept.coroutines error.affine-container-unsupported stdlib.immutable_set::from_list
+docs: AFFINE-VALUES.md COROUTINES.md
+code: CORE SEMANTIC AFFINE-EQUALITY-UNSUPPORTED
+
+== MEANING
+Comparing two affine values with `==` (or `!=`), hashing one, or giving
+one to `immutable_set::from_list` or `immutable_set::contains` is
+rejected: the result would observe the identity of the execution the
+value owns, and a coroutine handle has no value equality. The check also
+applies inside a generic function: a call that gives it an affine
+argument it compares is rejected at the call.
+
+== LIKELY CAUSES
+  * testing whether two variables hold "the same" coroutine;
+  * comparing whole structs, one field of which is a handle.
+
+== WHAT TO DO
+Compare unrestricted data instead: give each worker an int or str
+identity in a struct field beside its handle and compare that, or use
+`coroutine::done?` to ask about a coroutine's state.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step: a} = counter()
+coroutine {step: b} = counter()
+a == b
+@caption Two coroutine handles cannot be compared
+@error CORE SEMANTIC AFFINE-EQUALITY-UNSUPPORTED
+@at 9:1
+@end
+
+@topic error.affine-erasure-unsupported
+title: AFFINE-ERASURE-UNSUPPORTED: an affine value where ownership is lost
+summary: An affine value reaches a position whose type does not carry ownership -- any, an untyped native argument, a non-affine field, element or result type, the program's result, a module binding.
+index: errors
+alias: coroutine passed as any; affine value erased; coroutine as the program result
+keywords: affine, erasure, any, untyped, program result, module binding, factory, declined instance, coroutine
+related: concept.affine proof.ownership rule.affine-use concept.specialization error.affine-instance-budget error.affine-generic-nested-unsupported
+docs: AFFINE-VALUES.md MUTABLE-ARRAY.md
+code: CORE SEMANTIC AFFINE-ERASURE-UNSUPPORTED
+
+== MEANING
+Ownership is tracked through types: a binding, a parameter, a result, a
+struct field or a List, MutableVector or MutableArray element of an
+affine type owns the value. A position whose type is not affine (`any`,
+or a type that cannot hold the value) does not carry ownership, so the
+value would be duplicated or lost there. The message names the position:
+
+  * a parameter declared `any` (or another non-affine type), an argument
+    of a native that takes any value, an argument of a function value
+    whose parameter types are unknown;
+  * a struct field, a List element or a function result whose type is not
+    affine (`[step, 2]` is a List of any; an `if` whose other branch is an
+    int has type any);
+  * the program's result: a result is shown, never owned;
+  * a module binding: module values are immutable and shared by every
+    user of the module;
+  * an affine callable as the factory of `mutable_array::generate`,
+    which calls it once per element;
+  * an untyped parameter of a function whose specialization for this
+    argument was declined ("its semantic instance was declined"). This is
+    a limit of the implementation: a generic (untyped) function given an
+    affine argument is specialized for it, and that analysis has a
+    nesting limit -- a chain of about two dozen untyped functions handing
+    the value on reaches it.
+
+== LIKELY CAUSES
+  * ending the program (or a test) with a handle;
+  * a helper `fn keep(x: any)` or a struct field typed `any`;
+  * mixing a handle and other values in one List literal or `if`.
+
+== WHAT TO DO
+Give the position an affine type: declare the parameter, field or result
+as `Coroutine{...}` (or the affine struct, List or vector type), or keep
+the value in a binding. End the program with an unrestricted value (a
+result of resuming, not the handle). For a declined specialization,
+declare the parameter's type: a typed parameter needs no specialization.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn keep(x: any) -> int:
+    1
+
+coroutine {step} = counter()
+keep(step)
+@caption A parameter declared `any` cannot own the handle
+@error CORE SEMANTIC AFFINE-ERASURE-UNSUPPORTED
+@at 11:6
+@end
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step} = counter()
+step
+@caption The program's result is shown, never owned
+@error CORE SEMANTIC AFFINE-ERASURE-UNSUPPORTED
+@at 8:1
+@end
+
+@topic error.affine-field-move-requires-destructure
+title: AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE: an affine field projected
+summary: s.field of an affine field would make a second owner of what the struct owns; an affine field leaves a struct only through a destructuring that consumes it.
+index: errors
+alias: read a coroutine field of a struct; move a field out of a struct
+keywords: affine, field, projection, struct, destructuring, partial move, coroutine
+related: concept.destructuring concept.structs concept.affine error.use-after-move error.affine-temporary-unsupported
+docs: AFFINE-VALUES.md
+code: CORE SEMANTIC AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE
+
+== MEANING
+A struct that has an affine field owns the field's value. Reading that
+field with a projection (`job.step`) outside a destructuring would leave
+two owners -- the new binding and the struct, which stays usable -- and
+the ownership analysis has no "partially moved struct" state. The only
+way to move an affine field out is a destructuring, which consumes the
+whole struct: `{step} = job` moves `step` out and releases the other
+affine fields at once. Reading an unrestricted field (`job.name`) is
+fine and leaves the struct live.
+
+== LIKELY CAUSES
+  * `s = job.step` or `job.step()` on a struct holding a coroutine;
+  * `coroutine::done?(job.step)`.
+
+== WHAT TO DO
+Destructure the struct, as the message suggests (`{step} = job`, or
+`{step: s, name} = job` to rename and keep other fields). If the struct
+is needed afterwards, build a new one from the parts:
+`again = Job {name: name, step: s}`.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+struct Job:
+    name: str
+    step: Coroutine{args: [], return: int}
+
+coroutine {step} = counter()
+job = Job {name: "count", step: step}
+s = job.step
+s()
+@caption A projection cannot move the coroutine out of `job`
+@error CORE SEMANTIC AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE
+@at 13:5
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+struct Job:
+    name: str
+    step: Coroutine{args: [], return: int}
+
+coroutine {step} = counter()
+job = Job {name: "count", step: step}
+{step: s} = job
+s()
+@caption A destructuring consumes `job` and moves the field out
+@value 3
+@end
+
+@topic error.affine-generic-nested-unsupported
+title: AFFINE-GENERIC-NESTED-UNSUPPORTED: an affine argument to a nested generic
+summary: An affine argument at an untyped parameter needs a per-type specialization, which a function declared inside another function (or one requiring a context trait) does not get.
+index: errors
+alias: nested generic function with a coroutine; untyped parameter of a nested function
+keywords: affine, generic, untyped parameter, nested function, specialization, context trait, clone
+related: concept.specialization concept.affine concept.functions error.affine-erasure-unsupported error.trait-nested-polymorphic
+docs: AFFINE-VALUES.md TRAITS.md
+code: CORE SEMANTIC AFFINE-GENERIC-NESTED-UNSUPPORTED
+
+== MEANING
+A generic (untyped) function given an affine argument is specialized for
+it: the compiler makes a clone of the function with the argument's type,
+so the clone owns and releases it correctly. Two kinds of function are
+not specialized per argument type, and giving them an affine value at an
+untyped parameter is rejected:
+
+  * a function declared inside another function: its specializations
+    would have to be made per activation of the enclosing function;
+  * a function whose context requirement includes a context trait: it is
+    specialized once for its installed context, not per argument type.
+
+This is a limit of the implementation, not a language rule.
+
+== LIKELY CAUSES
+  * a small untyped helper (`fn drive(c): c()`) declared inside the
+    function that owns the coroutine.
+
+== WHAT TO DO
+Declare the parameter's type (`c: Coroutine{args: [], return: int}`): a
+typed parameter owns the argument with no specialization. Or move the
+function to the top level of the module or program.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn run() -> int:
+    fn drive(c):
+        c()
+    coroutine {step} = counter()
+    drive(step)
+
+run()
+@caption An untyped parameter of a nested function cannot take the handle
+@error CORE SEMANTIC AFFINE-GENERIC-NESTED-UNSUPPORTED
+@at 11:5
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn run() -> int:
+    fn drive(c: Coroutine{args: [], return: int}) -> int:
+        c()
+    coroutine {step} = counter()
+    drive(step)
+
+run()
+@caption With a declared parameter type no specialization is needed
+@value 3
+@end
+
+@topic error.affine-instance-budget
+title: AFFINE-INSTANCE-BUDGET: no specialization for an affine argument
+summary: A call gives an affine argument to an untyped parameter, but the compiler declined to specialize it; there is no run-time fallback, so the call is rejected.
+index: errors
+alias: affine specialization budget; declined specialization of an affine call
+keywords: affine, generic, untyped parameter, specialization, budget, semantic instance, nesting limit
+related: error.affine-erasure-unsupported error.trait-instance-budget concept.specialization concept.affine
+docs: AFFINE-VALUES.md TRAITS.md
+code: CORE SEMANTIC AFFINE-INSTANCE-BUDGET
+
+== MEANING
+A call that gives an affine value to an untyped parameter needs a
+specialization of the callee for the value's type (a clone that owns it);
+there is no run-time ownership tracking and no run-time dispatch between
+callable kinds to fall back on. The compiler makes these specializations
+with its semantic-instance analysis, which has budgets (a nesting limit).
+When the analysis declined such a call, the specialization plan reports
+AFFINE-INSTANCE-BUDGET.
+
+In practice a declined instance is reported earlier, by the ownership
+check, as AFFINE-ERASURE-UNSUPPORTED ("its semantic instance was
+declined"); this code is the plan's own check of the same condition, and
+no small program is known to reach it. It is a limit of the compiler,
+not a language rule.
+
+== LIKELY CAUSES
+  * those of the declined-instance case of AFFINE-ERASURE-UNSUPPORTED,
+    which reports them first: a long chain of untyped (generic)
+    functions handing an affine value on, each specialized inside the
+    previous one.
+
+== WHAT TO DO
+Declare the type of the parameter that receives the affine value (a
+typed parameter needs no specialization), or shorten the chain of untyped
+functions the value passes through.
+
+@topic error.affine-list-operation-unsupported
+title: AFFINE-LIST-OPERATION-UNSUPPORTED: elements of an affine List accessed
+summary: list::at, list::append, iterating a List of affine values and collecting affine values in a loop would copy elements a List still owns; a List of them only moves whole.
+index: errors
+alias: list::at of a coroutine; iterate a list of coroutines; collect coroutines in a loop
+keywords: affine, List, list::at, list::append, loop, iteration, collecting loop, MutableVector, coroutine
+related: concept.lists concept.mutable-vector concept.affine error.affine-element-copy-out stdlib.mutable_vector::from_list stdlib.list::at
+docs: AFFINE-VALUES.md MUTABLE-VECTOR.md
+code: CORE SEMANTIC AFFINE-LIST-OPERATION-UNSUPPORTED
+
+== MEANING
+A List is immutable, and a List of affine values owns them: it moves
+whole (bound, passed, returned) and releases every element where it
+dies, and `list::length` reads it. Every operation that would copy an
+element out while the List keeps owning it is rejected:
+
+  * `list::at`, `list::append` and the other List functions;
+  * `loop s in xs:` over a List of affine values (the loop variable would
+    be a second owner);
+  * a collecting loop whose body produces affine values (its List would
+    own them across abrupt exits it cannot release yet).
+
+Lists have no ownership-moving element operations; MutableVector does.
+
+== LIKELY CAUSES
+  * keeping workers in a List literal and picking one with `list::at`;
+  * `loop s in steps:` to resume each coroutine of a List;
+  * `loop i from 0 to n: make()` to start n coroutines.
+
+== WHAT TO DO
+Use a MutableVector: `mutable_vector::from_list(xs)` moves the List into
+a vector, whose `take`, `pop` and `swap` move elements out and whose
+`loop s in v:` consumes it element by element. To collect values in a
+loop, `push` each one into a vector.
+
+@example reject
+import coroutine
+import list
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+steps = [make(), make()]
+first = list::at(steps, 0)
+0
+@caption `list::at` would copy a coroutine the List still owns
+@error CORE SEMANTIC AFFINE-LIST-OPERATION-UNSUPPORTED
+@at 13:18
+@end
+
+@example accept
+import coroutine
+import mutable_vector
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+steps = [make(), make()]
+queue = mutable_vector::from_list(steps)
+loop step in queue:
+    step()
+@caption A vector made from the List is consumed one element at a time
+@value [3, 3]
+@end
+
+@topic error.affine-path-release-unsupported
+title: AFFINE-PATH-RELEASE-UNSUPPORTED: nowhere to release a value on one path
+summary: A value moved on some paths through a statement must be released on the others, but a handled call's normal completion or a counting loop's end has no statement to hold the release.
+index: errors
+alias: moved in a handler but not on success; moved before break in a counting loop
+keywords: affine, release, path, handler, break, loop, join, move, coroutine
+related: error.affine-not-definitely-live concept.affine proof.ownership concept.loops concept.errors
+docs: AFFINE-VALUES.md MUTABLE-VECTOR.md
+code: CORE SEMANTIC AFFINE-PATH-RELEASE-UNSUPPORTED
+
+== MEANING
+An affine value is released where its owner dies. When the last
+statement that uses a binding moves it on some paths only, the compiler
+releases it at the end of each path that still owns it: the last
+statement of an `if` branch (an empty `else` gets one), the end of a
+handler body, the `break` of an infinite `loop:`. Two kinds of path end
+in no statement of their own, so there is nowhere to put the release:
+
+  * a handled call that completes normally while a handler moved the
+    value;
+  * a counting or iterating loop (`loop i from ...`, `loop x in ...`)
+    that runs to its end while a `break` path moved the value.
+
+This is a limit of the implementation: the program is meaningful, but
+the compiler cannot place the release yet.
+
+== LIKELY CAUSES
+  * an `on E:` handler that hands the coroutine to a cleanup function;
+  * a search loop that moves the value and breaks when it finds a match.
+
+== WHAT TO DO
+Move the value on every path, or on none. For a handler: bind the call's
+result first and move the value in an `if` on that result. For a loop:
+use an infinite `loop:` whose every exit is a `break`, or decide inside
+the loop and move the value after it.
+
+@example reject
+import coroutine
+
+error Boom
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn finish(s: Coroutine{args: [], return: int}) -> int:
+    s()
+
+fn risky(n: int) -> int errors Boom:
+    if n > 0:
+        fail Boom
+    n
+
+fn run(n: int) -> int:
+    coroutine {step} = counter()
+    risky(n):
+        on Boom:
+            finish(step)
+
+run(1)
+@caption The handler moves `step`; the normal completion still owns it
+@error CORE SEMANTIC AFFINE-PATH-RELEASE-UNSUPPORTED
+@at 19:5
+@end
+
+@example accept
+import coroutine
+
+error Boom
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn finish(s: Coroutine{args: [], return: int}) -> int:
+    s()
+
+fn risky(n: int) -> int errors Boom:
+    if n > 0:
+        fail Boom
+    n
+
+fn run(n: int) -> int:
+    coroutine {step} = counter()
+    status = risky(n):
+        on Boom:
+            -1
+    if status < 0:
+        finish(step)
+    else:
+        status
+
+[run(1), run(0)]
+@caption Bind the result, then move the value in an if: the else releases it
+@value [3, 0]
+@end
+
+@topic error.affine-temporary-unsupported
+title: AFFINE-TEMPORARY-UNSUPPORTED: a fresh affine value with no owner
+summary: A fresh affine value (a call's result, a construction) is given to an operation that only observes it, or a field of it is read, so nothing would own it.
+index: errors
+alias: done? of a fresh coroutine; field of a fresh affine struct
+keywords: affine, temporary, owner, coroutine::done?, field, observe, bind first
+related: concept.affine rule.affine-use error.affine-field-move-requires-destructure stdlib.coroutine::done?
+docs: AFFINE-VALUES.md
+code: CORE SEMANTIC AFFINE-TEMPORARY-UNSUPPORTED
+
+== MEANING
+An operation that does not take ownership -- `coroutine::done?`, a
+length, a read of a field -- needs an owner that keeps the value, so its
+operand must be a binding that owns it. A fresh value, such as the
+result of `make()`, has no owner there: the compiler would have no
+binding to release it from afterwards, and the rest of a struct whose
+field is read would be lost.
+
+== LIKELY CAUSES
+  * `coroutine::done?(make())`;
+  * `make_job().name` on a function returning an affine struct.
+
+== WHAT TO DO
+Bind the value to a name first, then observe the binding:
+`step = make()` and `coroutine::done?(step)`; `job = make_job()` and
+`job.name`. The binding owns the value and releases it after its last
+use.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+coroutine::done?(make())
+@caption `done?` only observes; the fresh coroutine would have no owner
+@error CORE SEMANTIC AFFINE-TEMPORARY-UNSUPPORTED
+@at 11:18
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+step = make()
+coroutine::done?(step)
+@caption Bound to a name, the coroutine has an owner
+@value false
+@end
+
+@topic error.mutable-place-receiver
+title: MUTABLE-PLACE-RECEIVER: a mutation's receiver is not a place
+summary: A MutableVector or MutableArray operation that mutates must be applied to a place -- a local, parameter or context parameter of the same function, or a field path from one.
+index: errors
+alias: push to a temporary vector; mutate a captured vector
+keywords: MutableVector, MutableArray, push, set, swap, take, pop, place, receiver, temporary, nested function, module binding
+related: concept.mutable-vector concept.mutable-array concept.values error.mutable-place-capture stdlib.mutable_vector::push
+docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
+code: CORE SEMANTIC MUTABLE-PLACE-RECEIVER
+
+== MEANING
+MutableVector[T] and MutableArray[T] are mutable VALUES, not references:
+a mutation (push, pop, take, swap, clear; set, swap, copy into) changes
+the header of the place it is applied to, in place, and never stores a
+new value anywhere else. So the receiver must be a place this function
+owns: a local binding, a parameter or a context parameter of the same
+function, or a chain of fields from one (`state.queue.push(x)`), whose
+binding's static type is the collection type. The message says which
+rule the receiver breaks:
+
+  * a temporary value (a call's result, a List element): the update
+    would be lost;
+  * a binding of an enclosing function, from a nested function: a
+    collection is a value; the nested function cannot mutate the copy
+    its enclosing function sees;
+  * a module binding, which every user of the module shares;
+  * a binding whose static type is not the collection type (an `any`
+    narrowed by a test): bind the narrowed value to a name first.
+
+== LIKELY CAUSES
+  * `make_vector().push(x)`;
+  * a nested helper that pushes to its enclosing function's vector.
+
+== WHAT TO DO
+Bind the value to a name, mutate the name, and use the name afterwards.
+For a helper, pass the collection in and return the updated one, or keep
+it in a field of a context struct: a function mutates it through its
+context parameter (`log.lines.push(n)`), and every function sharing the
+installed context sees the change.
+
+@example reject
+import mutable_vector
+
+fn fresh() -> MutableVector[int]:
+    mutable_vector::from_list([1, 2])
+
+fn grow() -> int:
+    fresh().push(3)
+    0
+
+grow()
+@caption The pushed element would be lost with the temporary vector
+@error CORE SEMANTIC MUTABLE-PLACE-RECEIVER
+@at 7:5
+@end
+
+@example accept
+import mutable_vector
+
+fn fresh() -> MutableVector[int]:
+    mutable_vector::from_list([1, 2])
+
+fn grow() -> int:
+    v = fresh()
+    v.push(3)
+    v.length()
+
+grow()
+@caption Bound to a name, the vector is a place
+@value 3
+@end
+
+@topic error.mutable-place-capture
+title: MUTABLE-PLACE-CAPTURE: a nested function captures a mutated collection
+summary: A nested function refers to a MutableVector or MutableArray binding that its enclosing function mutates in place; it would observe a binding that changes.
+index: errors
+alias: closure captures a mutated vector; capture of a mutable place
+keywords: MutableVector, MutableArray, closure, nested function, capture, place, value semantics
+related: concept.mutable-vector concept.mutable-array concept.closures error.mutable-place-receiver error.affine-capture-unsupported
+docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
+code: CORE SEMANTIC MUTABLE-PLACE-CAPTURE
+
+== MEANING
+A binding that a function mutates in place (the root of a mutation's
+receiver: `log.push(2)`) is a place. Bindings in Botlish never change,
+and a closure captures values; a nested function that refers to a place
+would observe a binding that does change under it. Since a collection is
+a value and not a shared reference, this is rejected rather than turned
+into aliasing.
+
+== LIKELY CAUSES
+  * a nested helper that reads (or reports the length of) a vector the
+    enclosing function keeps pushing to.
+
+== WHAT TO DO
+Pass the collection as an argument: the callee gets its own logical copy
+(copy-on-write, so passing is cheap). A nested function that must change
+it takes it as a parameter and returns the updated collection.
+
+@example reject
+import mutable_vector
+
+fn fill() -> int:
+    log = mutable_vector::from_list([1])
+    log.push(2)
+    fn size() -> int:
+        log.length()
+    size()
+
+fill()
+@caption `size` captures `log`, which `fill` mutates
+@error CORE SEMANTIC MUTABLE-PLACE-CAPTURE
+@at 7:9
+@end
+
+@example accept
+import mutable_vector
+
+fn fill() -> int:
+    log = mutable_vector::from_list([1])
+    log.push(2)
+    fn size(v: MutableVector[int]) -> int:
+        v.length()
+    size(log)
+
+fill()
+@caption Passed as an argument, the nested function gets its own copy
+@value 2
+@end
+
+@topic error.coroutine-binding-field
+title: COROUTINE-BINDING-FIELD: a malformed coroutine binding
+summary: A coroutine binding names its results in braces, `coroutine {step, first} = f(...)`; any other field, a nested pattern, a positional form or `coroutine NAME = ...` is a syntax error.
+index: errors
+alias: coroutine binding syntax; coroutine step first fields
+keywords: coroutine, binding, step, first, braces, pattern, construction, syntax
+related: concept.coroutines error.surface-syntax error.duplicate-field error.coroutine-rhs-not-yielding
+docs: COROUTINES.md
+code: COROUTINE-BINDING-FIELD
+match: SURFACE SYNTAX | COROUTINE-BINDING-FIELD: *
+
+== MEANING
+A coroutine is started by a coroutine binding:
+
+    coroutine {step, first} = worker(10)
+
+which runs `worker(10)` to its first outward `yield` (or its return) and
+binds two results: `step`, the handle that resumes it, and `first`, the
+first outward value. Each field may be renamed (`{step: next, first:
+initial}`) or omitted; no other field exists. The parser reports
+COROUTINE-BINDING-FIELD (a syntax error whose message starts with the
+code) for:
+
+  * an unknown field (`coroutine {handle} = ...`);
+  * a nested pattern in a field (`{step: {a}}`): destructure `first` in
+    a separate statement;
+  * the positional form (`coroutine (a, b) = ...`);
+  * `coroutine step = worker(10)`: there is no sugar without braces.
+
+A field written twice is DUPLICATE-FIELD. Outside this form, `coroutine`
+is an ordinary name (`coroutine::done?`, a variable called coroutine).
+
+== LIKELY CAUSES
+  * `coroutine step = f()` written by analogy with an ordinary binding;
+  * a misspelled field (`{steps}`, `{handle}`) or a pattern that
+    destructures the first value in place.
+
+== WHAT TO DO
+Write the braced form with the fields you need: `coroutine {step} =
+f(...)` keeps only the handle, `coroutine {first} = f(...)` only the
+first value (the coroutine still runs eagerly and is then released).
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine step = counter()
+step()
+@caption The results of a coroutine binding are named in braces
+@error SURFACE SYNTAX
+@at 7:11
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step, first} = counter()
+[first, step()]
+@caption `step` is the handle, `first` the first yielded value
+@value [1, 3]
+@end
+
+@topic error.coroutine-contract
+title: COROUTINE-CONTRACT: an invalid coroutine type or protocol
+summary: A Coroutine{...} type resumes with no message or one struct message, and a coroutine cannot yield, return, receive or fail with affine values.
+index: errors
+alias: Coroutine type args; affine coroutine result; coroutine message must be a struct
+keywords: Coroutine type, args, message, struct, affine result, yield, error payload, protocol
+related: concept.coroutines concept.function-types concept.affine error.coroutine-resume-type error.coroutine-not-function
+docs: AFFINE-VALUES.md COROUTINES.md ERROR-PAYLOADS.md
+code: CORE SEMANTIC COROUTINE-CONTRACT
+
+== MEANING
+A coroutine handle's type is written like a function type,
+`Coroutine{args: [M], return: R, errors: [E]}`: `args` is its resume
+protocol, `return` its outward type (what every yield and the final
+return send), `errors` the declared errors a resume may raise.
+COROUTINE-CONTRACT is reported for:
+
+  * a `Coroutine{...}` type whose `args` lists more than one type, or one
+    that is not a declared struct: a coroutine is resumed with no message
+    or with exactly one structured message;
+  * a construction whose coroutine would end its segments with an affine
+    value (yield or return a handle, or a struct owning one): a completed
+    coroutine returns its cached final result again on every later
+    resume, which would give one affine value several owners;
+  * a construction whose resume message type is affine: a message sent
+    to a coroutine that has already completed is never received, so
+    nothing would own or release it;
+  * a construction whose coroutine may fail with an error whose payload
+    is affine: a failed coroutine raises its cached error again on every
+    later resume.
+
+== LIKELY CAUSES
+  * `Coroutine{args: [int], ...}` or two message types in `args`;
+  * a coroutine that spawns workers and yields their handles;
+  * a coroutine whose message or result struct has a handle field.
+
+== WHAT TO DO
+Put several message values in the fields of one struct and name that
+struct in `args` (or the function's `resume` clause). Keep a coroutine's
+outward values, messages and error payloads unrestricted; give it affine
+values when it is constructed, as arguments of the coroutine's function
+(a coroutine construction moves its arguments in).
+
+@example reject
+import coroutine
+
+fn drive(s: Coroutine{args: [int], return: int}) -> int:
+    s(1)
+
+0
+@caption A coroutine message is a struct, never an int
+@error CORE SEMANTIC COROUTINE-CONTRACT
+@at 3:9
+@end
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn make() -> Coroutine{args: [], return: int}:
+    coroutine {step} = counter()
+    step
+
+fn spawner() -> Coroutine{args: [], return: int}:
+    yield make()
+    make()
+
+coroutine {step} = spawner()
+0
+@caption A coroutine may not yield or return a coroutine handle
+@error CORE SEMANTIC COROUTINE-CONTRACT
+@at 15:1
+@end
+
+@topic error.coroutine-not-function
+title: COROUTINE-NOT-FUNCTION: a coroutine handle passed as a function value
+summary: A coroutine handle is passed where a structural Fn{...} type is declared; Coroutine and Fn are distinct callable kinds even with the same contract, with no conversion.
+index: errors
+alias: coroutine passed as a function value; Coroutine versus Fn
+keywords: coroutine, Fn, function type, callable kind, contract, parameter, handle
+related: concept.function-types concept.coroutines concept.affine error.coroutine-contract error.unwrapped-yield
+docs: AFFINE-VALUES.md COROUTINES.md STRUCTURAL-FUNCTION-TYPES.md
+code: CORE SEMANTIC COROUTINE-NOT-FUNCTION
+
+== MEANING
+`Fn{args, return, errors}` and `Coroutine{args, return, errors}` share
+one callable contract, but they are different kinds of callable: calling
+a function value runs the same code each time, while calling a handle
+resumes one evolving execution, which has one owner. A parameter
+declared with an `Fn{...}` type admits exact functions and function
+values only; passing a handle to it is COROUTINE-NOT-FUNCTION, even when
+the contracts agree. (A handle given to an `Fn`-typed struct field or
+function result is a TYPE error with the same explanation.) There is no
+implicit conversion in either direction: a function where a Coroutine is
+expected is a TYPE error too.
+
+== LIKELY CAUSES
+  * a higher-order helper declared `f: Fn{...}` reused for a coroutine.
+
+== WHAT TO DO
+Declare the parameter with the coroutine type the message suggests
+(`Coroutine{args: [], return: int}`), or leave it untyped: an untyped
+parameter is specialized for the handle (the call becomes a resume) and
+for functions alike.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn apply(f: Fn{args: [], return: int}) -> int:
+    f()
+
+coroutine {step} = counter()
+apply(step)
+@caption A handle is not a function value of the same contract
+@error CORE SEMANTIC COROUTINE-NOT-FUNCTION
+@at 11:7
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+fn drive(s: Coroutine{args: [], return: int}) -> int:
+    s()
+
+coroutine {step} = counter()
+drive(step)
+@caption A parameter of the coroutine type takes the handle (and owns it)
+@value 3
+@end
+
+@topic error.coroutine-result-mismatch
+title: COROUTINE-RESULT-MISMATCH: yields and return have no common type
+summary: A coroutine's yields and its final return share one outward type: its root function's declared result, or one type all the others fit.
+index: errors
+alias: coroutine outward type; yield type does not match the result
+keywords: coroutine, yield, return, outward type, declared result, segment, root function
+related: concept.coroutines concept.types error.coroutine-resume-conflict
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RESULT-MISMATCH
+
+== MEANING
+Every call that starts or resumes a coroutine returns the value its
+segment ends with: a `yield` sends a value outward, and the final
+`return` (or last statement) of the coroutine's root function is the
+last one. All of them have ONE type, the coroutine's outward type: the
+root function's declared result type, else the one type among its return
+and every yield it can reach (deep ones included) that all others are
+subtypes of. When there is none, the construction is rejected. Against a
+declared result the message names the offending yield; otherwise it
+lists the types a segment can end with.
+
+A helper function's own `return` goes to its caller as for any call; only
+the root's return is outward.
+
+== LIKELY CAUSES
+  * yielding progress values of one type and returning a final result of
+    another type;
+  * a deep helper that yields a value of another type than the root
+    returns.
+
+== WHAT TO DO
+Use one type for both: a struct with the fields of the progress values
+and of the final result (e.g. a `finished` flag), declared as the root's
+result type.
+
+@example reject
+import coroutine
+
+struct Progress:
+    done: int
+
+struct Report:
+    total: int
+
+fn work() -> Report:
+    yield Progress {done: 1}
+    Report {total: 2}
+
+coroutine {step} = work()
+0
+@caption The yield sends a Progress, the declared result is Report
+@error CORE SEMANTIC COROUTINE-RESULT-MISMATCH
+@at 13:1
+@end
+
+@example accept
+import coroutine
+
+struct Status:
+    done: int
+    finished: bool
+
+fn work() -> Status:
+    yield Status {done: 1, finished: false}
+    Status {done: 2, finished: true}
+
+coroutine {step, first} = work()
+last = step()
+[first.done, last.done]
+@caption One outward type for every segment
+@value [1, 2]
+@end
+
+@topic error.coroutine-resume-arity
+title: COROUTINE-RESUME-ARITY: a resume with the wrong number of messages
+summary: A coroutine with the zero-message protocol is resumed as step(), one with a struct protocol with exactly one message, step(Message {...}).
+index: errors
+alias: resume with an argument; wrong number of resume messages
+keywords: coroutine, resume, message, protocol, zero-message, argument count, step
+related: concept.coroutines error.coroutine-resume-type error.coroutine-resume-conflict error.arity
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RESUME-ARITY
+
+== MEANING
+Each coroutine has one fixed resume protocol, its root function's: either
+no message (the default, when nothing determines a message type), or one
+message of a declared struct type (declared by `resume Message`, or
+inferred from how the yields' values are used). A resume passes
+exactly that: `step()` for the zero-message protocol, `step(Message
+{...})` for a struct protocol. Any other number of arguments is
+COROUTINE-RESUME-ARITY; a message of another type is a TYPE error.
+
+== LIKELY CAUSES
+  * passing a value to a coroutine that declares no `resume` clause;
+  * passing several values instead of one struct.
+
+== WHAT TO DO
+Resume with the protocol the message states. To send values, declare
+`resume T` (a struct with one field per value) as the last entry of the
+root function's parameter list and read the fields of the yield's value.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step} = counter()
+step(5)
+@caption `counter` takes no message
+@error CORE SEMANTIC COROUTINE-RESUME-ARITY
+@at 8:1
+@end
+
+@topic error.coroutine-resume-conflict
+title: COROUTINE-RESUME-CONFLICT: two resume protocols in one coroutine
+summary: One coroutine has exactly one resume protocol; a function reaching yields with two different message types (declared or inferred) is rejected, with both chains.
+index: errors
+alias: two resume protocols; conflicting resume message types
+keywords: coroutine, resume, protocol, message type, inference, yield, helper, conflict
+related: concept.coroutines error.coroutine-resume-type error.coroutine-resume-underconstrained error.coroutine-resume-arity
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RESUME-CONFLICT
+
+== MEANING
+A yield evaluates to the message of the resume that continues the
+coroutine, so every yield one coroutine can reach -- in its root function
+and in every helper it calls, at any depth -- receives the same message
+type. The compiler derives each yielding function's protocol from its
+`resume T` clause, from how its yields' values are used (passed to a
+parameter declared with a struct type), and from the yielding functions
+it calls. Two different protocols meeting in one function are a conflict:
+the message explains both through their call chains. No union of
+message types is ever inferred.
+
+A helper whose yields all discard their values adapts to its caller's
+protocol. A helper whose yield value is used but nothing types it
+defaults to the zero-message protocol, which conflicts with a struct
+protocol of its caller.
+
+== LIKELY CAUSES
+  * one coroutine calling two helpers written for different coroutines;
+  * a helper that uses its yield's value without declaring `resume T`,
+    called from a coroutine that declares one.
+
+== HOW TO INVESTIGATE
+Follow the two chains of the message ("resume Start: it calls first_half
+(...), which declares it") to the declarations or uses that fix each
+protocol. Protocols are inferred over every call written, reachable or
+not, so a call in dead code still counts.
+
+== WHAT TO DO
+Declare one struct with the fields both need and use it as the protocol
+everywhere, or split the work into two coroutines.
+
+@example reject
+import coroutine
+
+struct Start:
+    n: int
+
+struct Stop:
+    reason: str
+
+struct Ev:
+    n: int
+
+fn first_half(resume Start) -> int:
+    m = yield Ev {n: 1}
+    m.n
+
+fn second_half(resume Stop) -> int:
+    m = yield Ev {n: 2}
+    3
+
+fn both() -> Ev:
+    Ev {n: first_half() + second_half()}
+
+coroutine {step} = both()
+0
+@caption `both` reaches yields of two different message types
+@error CORE SEMANTIC COROUTINE-RESUME-CONFLICT
+@at 20:8
+@end
+
+@topic error.coroutine-resume-type
+title: COROUTINE-RESUME-TYPE: a resume clause that does not name a struct
+summary: The type of a `resume T` clause must be a declared struct type; a coroutine is resumed with one structured message, never an int, String, List or anonymous struct.
+index: errors
+alias: resume clause type; resume message of type int
+keywords: coroutine, resume clause, message, struct, protocol, parameter list
+related: concept.coroutines concept.structs error.coroutine-contract error.coroutine-resume-arity
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RESUME-TYPE
+
+== MEANING
+`fn worker(seed: int, resume Message) -> Event` declares the message the
+coroutine receives at each resume: every `yield` in it evaluates to a
+Message. The protocol is one named struct type or nothing; scalars,
+Strings, Lists and anonymous structs are rejected. Several values travel
+as the fields of one struct, so a later protocol can grow by adding
+fields.
+
+== LIKELY CAUSES
+  * `resume int` or `resume str` for a coroutine fed single values;
+  * `resume List[T]` for a batch of values.
+
+== WHAT TO DO
+Declare a struct with one field per value and name it in the clause:
+
+    struct Input:
+        n: int
+
+    fn echo(resume Input) -> int:
+        m = yield 0
+        m.n
+
+@example reject
+import coroutine
+
+fn echo(resume int) -> int:
+    n = yield 0
+    n
+
+0
+@caption The message type of a resume clause must be a struct
+@error CORE SEMANTIC COROUTINE-RESUME-TYPE
+@at 3:16
+@end
+
+@topic error.coroutine-resume-underconstrained
+title: COROUTINE-RESUME-UNDERCONSTRAINED: the message type is not determined
+summary: A yield's value has a field read, but no resume clause or typed use determines the message type of the function; declare `resume T`.
+index: errors
+alias: resume type not determined; field of a yield value
+keywords: coroutine, yield, resume clause, message type, field, inference, protocol
+related: concept.coroutines error.coroutine-resume-type error.coroutine-resume-conflict
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RESUME-UNDERCONSTRAINED
+
+== MEANING
+The message type of a yielding function is declared (`resume T`) or
+inferred from how its yields' values are used: passed to a parameter of
+an exact function declared with a struct type, or through the yielding
+functions it calls. A field read (`m.n`) does not say which struct `m`
+is, so a function whose yield value is projected needs its protocol from
+somewhere else; with nothing to determine it, the yield is rejected,
+naming the projection.
+
+== LIKELY CAUSES
+  * a function that reads fields of its yield's value but has no
+    `resume` clause, while nothing else fixes the message type.
+
+== WHAT TO DO
+Declare the protocol with `resume T` as the last entry of the function's
+parameter list (after its parameters, flags and context parameters).
+
+@example reject
+import coroutine
+
+struct Ev:
+    n: int
+
+fn echo() -> Ev:
+    m = yield Ev {n: 0}
+    Ev {n: m.n}
+
+coroutine {step} = echo()
+0
+@caption Nothing says which struct the yield's value `m` is
+@error CORE SEMANTIC COROUTINE-RESUME-UNDERCONSTRAINED
+@at 7:9
+@end
+
+@example accept
+import coroutine
+
+struct In:
+    n: int
+
+struct Ev:
+    n: int
+
+fn echo(resume In) -> Ev:
+    m = yield Ev {n: 0}
+    Ev {n: m.n}
+
+coroutine {step, first} = echo()
+last = step(In {n: 7})
+[first.n, last.n]
+@caption The resume clause fixes the message type
+@value [0, 7]
+@end
+
+@topic error.coroutine-rhs-not-yielding
+title: COROUTINE-RHS-NOT-YIELDING: starting a coroutine of a non-yielding call
+summary: The right side of a coroutine binding must be a direct call of a named function that may yield; a function that never yields, a function value or another expression is rejected.
+index: errors
+alias: coroutine of a function that never yields; start a coroutine of a plain function
+keywords: coroutine, binding, construction, yield, direct call, function value
+related: concept.coroutines error.coroutine-binding-field error.unwrapped-yield
+docs: COROUTINES.md
+code: CORE SEMANTIC COROUTINE-RHS-NOT-YIELDING
+
+== MEANING
+`coroutine {step, first} = f(args)` starts a coroutine of `f`. The
+compiler tracks which functions may suspend (a reachable `yield` of their
+own, or a reachable call of a function that may), so the right side must
+be a direct call of a named function in that set. Two cases are
+rejected:
+
+  * the callee never yields: there is no coroutine to start, call it
+    directly;
+  * the right side is not a direct call of a named function (a function
+    value, a parameter, any other expression): the compiler cannot see
+    what it would run.
+
+== LIKELY CAUSES
+  * a coroutine binding of a function whose only yield is in a branch
+    the compiler proves unreachable, or that has no yield at all;
+  * `coroutine {step} = f` with `f` a function value or a parameter.
+
+== WHAT TO DO
+Call a function that never yields directly. If it should yield, check
+that its `yield` is reachable (a yield in code proven unreachable does
+not count). Start coroutines of named functions only; to choose among
+several, wrap each construction in a function that returns the handle
+and choose between the calls (`s = if c: make_a() else: make_b()`, with
+one Coroutine{...} result type).
+
+@example reject
+import coroutine
+
+fn plain() -> int:
+    3
+
+coroutine {step} = plain()
+0
+@caption `plain` never yields
+@error CORE SEMANTIC COROUTINE-RHS-NOT-YIELDING
+@at 6:1
+@end
+
+@topic error.unwrapped-yield
+title: UNWRAPPED-YIELD: a suspending function called outside a coroutine
+summary: A function that may yield is called from top-level code, or used as a function value, without a coroutine binding to start it.
+index: errors
+alias: call a yielding function directly; may suspend but does not start a coroutine
+keywords: coroutine, yield, suspend, call chain, top level, function value, construction
+related: concept.coroutines error.yield-outside-function error.coroutine-rhs-not-yielding error.coroutine-not-function
+docs: COROUTINES.md
+code: CORE SEMANTIC UNWRAPPED-YIELD
+
+== MEANING
+`yield` suspends the coroutine the code runs in, at any call depth, so a
+function that may yield (directly, or through a function it calls) may
+only run inside a coroutine. A reachable call of such a function from
+top-level code does not start one: it is rejected, with the shortest
+call chain to the yield. A call from another function that may yield is
+fine -- that function runs inside a coroutine, or is itself reported
+where it is called.
+
+A function that may yield also cannot become a function value: a call
+through an unknown function value could run it outside every coroutine.
+
+== LIKELY CAUSES
+  * calling a generator-style function directly, expecting a value;
+  * passing a yielding function to a higher-order function.
+
+== HOW TO INVESTIGATE
+The message prints the shortest call chain from the called function to
+a yield ("..., which yields directly at FILE:LINE:COL").
+
+== WHAT TO DO
+Start it with a coroutine binding, `coroutine {step, first} = f(...)`,
+and resume `step()` for the next values. Call it directly only from
+functions that themselves run inside a coroutine.
+
+@example reject
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+counter()
+@caption A direct call does not start a coroutine
+@error CORE SEMANTIC UNWRAPPED-YIELD
+@at 7:1
+@end
+
+@example accept
+import coroutine
+
+fn counter() -> int:
+    yield 1
+    3
+
+coroutine {step, first} = counter()
+[first, step(), step()]
+@caption Started by a binding; once completed, it repeats its result
+@value [1, 3, 3]
+@end
+
+@topic error.yield-outside-function
+title: YIELD-OUTSIDE-FUNCTION: a yield in top-level code
+summary: `yield` suspends the coroutine whose function it is written in; top-level code is not in a function, so a yield there is rejected.
+index: errors
+alias: yield at the top level; top-level yield
+keywords: coroutine, yield, top level, program, function
+related: concept.coroutines error.unwrapped-yield error.yield-outside-coroutine
+docs: COROUTINES.md
+code: CORE SEMANTIC YIELD-OUTSIDE-FUNCTION
+
+== MEANING
+A coroutine is an execution of a function started by a coroutine
+binding; a `yield` suspends that execution. The program's top-level code
+is not a function and can never run as a coroutine, so a yield written
+there has nothing to suspend.
+
+== LIKELY CAUSES
+  * script-style code that yields progress values from the top level.
+
+== WHAT TO DO
+Move the yielding code into a function and start it with
+`coroutine {step, first} = f(...)`.
+
+@example reject
+import coroutine
+
+x = yield 3
+x
+@caption A yield in top-level code
+@error CORE SEMANTIC YIELD-OUTSIDE-FUNCTION
+@at 3:5
+@end
+
+@topic error.trait-nested
+title: TRAIT-NESTED: a trait declared inside a function
+summary: A trait (or context trait) declaration is allowed only at the top level of a module or the entry program, never inside a function, if or loop.
+index: errors
+alias: trait declared inside a function; nested trait declaration
+keywords: trait, declaration, top level, nested, function
+related: concept.traits concept.context-traits error.surface-syntax error.trait-nested-polymorphic
+docs: TRAITS.md CONTEXT-TRAITS.md
+code: TRAIT-NESTED
+match: SURFACE SYNTAX | TRAIT-NESTED: *
+
+== MEANING
+A trait is a named member of its module, like a struct: its identity is
+`module::Name` (or the bare name in the entry program), other modules
+import it with `import type`, and the compiler resolves every use of it
+statically. A declaration nested in a function body would have no such
+identity, so the parser rejects it (a syntax error whose message starts
+with TRAIT-NESTED).
+
+== LIKELY CAUSES
+  * a trait written next to the only function that uses it, inside it.
+
+== WHAT TO DO
+Move the declaration to the top level of the file. Functions that use
+the trait may stay where they are, but a function with a trait-typed
+parameter must itself be top-level (error.trait-nested-polymorphic).
+
+@example reject
+fn f() -> int:
+    trait Named:
+        fn name(value: Named) -> str
+    1
+
+f()
+@caption A trait declaration inside a function body
+@error SURFACE SYNTAX
+@at 2:5
+@end
+
+@topic error.trait-empty
+title: TRAIT-EMPTY: a trait with no requirement
+summary: A trait (or context trait) declares at least one requirement in an indented block; a requirement-free trait would be satisfied by every type.
+index: errors
+alias: trait without requirements; marker trait
+keywords: trait, requirement, declaration, marker, empty
+related: concept.traits concept.context-traits error.surface-syntax
+docs: TRAITS.md CONTEXT-TRAITS.md
+code: TRAIT-EMPTY
+match: SURFACE SYNTAX | TRAIT-EMPTY: *
+
+== MEANING
+A type satisfies a trait structurally, by providing every requirement
+in its owner namespace. With no requirement every type would satisfy it,
+so a trait view of it would allow no operation and say nothing: marker
+traits are not supported. The parser reports TRAIT-EMPTY (a syntax error
+whose message starts with the code) when no indented block of
+requirements follows `trait NAME:`.
+
+== LIKELY CAUSES
+  * a trait meant as a tag ("this type is serializable");
+  * requirements not indented under `trait NAME:`.
+
+== WHAT TO DO
+Declare the operations the trait's users need, each as a signature
+whose first parameter is the trait itself (`fn name(value: Named) ->
+str`); a context trait's requirements take ordinary parameters only. To
+mark values, use a struct field or an enum instead.
+
+@example reject
+trait Marker:
+
+0
+@caption `Marker` declares no requirement
+@error SURFACE SYNTAX
+@at 1:7
+@end
+
+@topic error.trait-requirement-body
+title: TRAIT-REQUIREMENT-BODY: a trait requirement with a body
+summary: A trait requirement is a signature only, with no body and no trailing colon; implementations are ordinary functions of the type's owner namespace.
+index: errors
+alias: trait requirement with a body; default method
+keywords: trait, requirement, body, signature, default method, implementation
+related: concept.traits error.surface-syntax error.trait-not-satisfied
+docs: TRAITS.md
+code: TRAIT-REQUIREMENT-BODY
+match: SURFACE SYNTAX | TRAIT-REQUIREMENT-BODY: *
+
+== MEANING
+A requirement such as `fn name(value: Named) -> str` states what a type
+must provide; it has no code of its own. There are no default methods:
+every satisfying type implements every requirement with an ordinary
+top-level function of the same name in the namespace that owns the type.
+A `:` after a requirement (the start of a body) is a syntax error whose
+message starts with TRAIT-REQUIREMENT-BODY.
+
+== LIKELY CAUSES
+  * a default implementation written in the trait, as in languages that
+    have default methods.
+
+== WHAT TO DO
+Remove the `:` and the body. Write the body as the implementation, next
+to the concrete type: `fn name(value: Person) -> str:`. Shared code can
+be an ordinary function taking a trait parameter (`fn describe(value:
+Named) -> str`).
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str:
+        "anonymous"
+
+0
+@caption A requirement has no body
+@error SURFACE SYNTAX
+@at 2:33
+@end
+
+@topic error.trait-requirement-flags
+title: TRAIT-REQUIREMENT-FLAGS: a trait requirement with flags
+summary: A trait requirement declares no flag section; flags in trait requirements and implementations are not supported yet.
+index: errors
+alias: trait requirement with flags
+keywords: trait, requirement, flags, flag section, signature
+related: concept.traits concept.flags error.surface-syntax
+docs: TRAITS.md FLAGS.md
+code: TRAIT-REQUIREMENT-FLAGS
+match: SURFACE SYNTAX | TRAIT-REQUIREMENT-FLAGS: *
+
+== MEANING
+A requirement's signature has ordinary parameters (and a result and an
+`errors` clause) only. Flag parameters (`flags :upper`) are not supported
+in requirements -- and an implementation with flags does not satisfy a
+requirement either. This is a limit of the current trait design; the
+parser reports it as a syntax error whose message starts with
+TRAIT-REQUIREMENT-FLAGS.
+
+== LIKELY CAUSES
+  * an option of the operation written as a flag, as for an ordinary
+    function.
+
+== WHAT TO DO
+Pass the option as an ordinary `bool` parameter of the requirement, or
+declare two requirements (`name`, `upper_name`).
+
+@example reject
+trait Named:
+    fn name(value: Named, flags :upper) -> str
+
+0
+@caption Flags are not supported in a requirement
+@error SURFACE SYNTAX
+@at 2:33
+@end
+
+@topic error.trait-context-requirement
+title: TRAIT-CONTEXT-REQUIREMENT: a trait requirement with a context parameter
+summary: A requirement declares no context parameter: an ordinary trait's operations are not context-supplied, and a context trait's installed context is the implicit receiver.
+index: errors
+alias: trait requirement with a context parameter
+keywords: trait, context trait, requirement, context parameter, receiver
+related: concept.traits concept.context-traits concept.contexts error.surface-syntax
+docs: TRAITS.md CONTEXT-TRAITS.md
+code: TRAIT-CONTEXT-REQUIREMENT
+match: SURFACE SYNTAX | TRAIT-CONTEXT-REQUIREMENT: *
+
+== MEANING
+The parser rejects a context section (`context log: Log`) in a
+requirement, with one of two messages:
+
+  * in an ordinary trait: context-supplied trait operations are not
+    supported yet; a requirement is an ordinary signature over the
+    trait's own values;
+  * in a context trait: the installed context is the requirement's
+    implicit receiver, so a requirement declares only its ordinary
+    parameters. The implementation, in the context's owner namespace,
+    is the one that takes exactly one context parameter of its context
+    type.
+
+== LIKELY CAUSES
+  * a requirement copied from an implementation that takes a context;
+  * a context trait's requirement written with the context as an
+    explicit parameter.
+
+== WHAT TO DO
+Drop the context parameter from the requirement. An implementation
+cannot take one either, so pass what an operation needs from the
+environment as an ordinary argument (its caller can read it through a
+context parameter of its own). For an abstraction of the environment
+itself, declare a `context trait`.
+
+@example reject
+context struct Log:
+    prefix: str
+
+trait Named:
+    fn name(value: Named, context log: Log) -> str
+
+0
+@caption An ordinary trait's requirement takes no context parameter
+@error SURFACE SYNTAX
+@at 5:35
+@end
+
+@topic error.trait-duplicate-requirement
+title: TRAIT-DUPLICATE-REQUIREMENT: two requirements of one name
+summary: A trait declares at most one requirement per operation name; there is no overloading.
+index: errors
+alias: trait requirement declared twice; overloaded trait requirement
+keywords: trait, requirement, duplicate, overloading, operation name
+related: concept.traits error.duplicate
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-DUPLICATE-REQUIREMENT
+
+== MEANING
+A trait operation is called by name (`value.name()`) and implemented by
+the one function of that name in the type's owner namespace, which has
+at most one binding per name. Two requirements of one name could never
+both be implemented, and there are no overload sets to choose between
+them, so the declaration is rejected.
+
+== LIKELY CAUSES
+  * two arities of one operation, as overloads in other languages.
+
+== WHAT TO DO
+Give each operation its own name (`name`, `short_name`), or merge them
+into one requirement with an extra ordinary parameter.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+    fn name(value: Named, short: bool) -> str
+
+0
+@caption `name` is declared twice
+@error CORE SEMANTIC TRAIT-DUPLICATE-REQUIREMENT
+@at 3:8
+@end
+
+@topic error.trait-name-collision
+title: TRAIT-NAME-COLLISION: a trait named like another type
+summary: Traits share the type namespace: a trait cannot have the name of a built-in type, a struct, a type, a refinement or another trait of the same module.
+index: errors
+alias: trait name already declared; trait named like a struct
+keywords: trait, name, type namespace, struct, built-in type, collision, declaration
+related: concept.traits concept.types error.duplicate
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-NAME-COLLISION
+
+== MEANING
+A trait's name is used where type names are (`value: Named`, `-> Named`,
+`import type m::Named`), so it shares one namespace with the structs,
+types (integer domains, refinements), enums and other traits of its
+module, and it cannot reuse a built-in type name (`str`, `int`, `List`,
+`Fn`, ...). A second declaration of the same identity is rejected at the
+trait; an enum named like a trait is reported as TYPE, at the enum.
+
+== LIKELY CAUSES
+  * a trait named after the struct that will implement it;
+  * a trait named like a built-in type.
+
+== WHAT TO DO
+Rename the trait (an adjective or capability name works well: `Named`,
+`Measured`) or the colliding type.
+
+@example reject
+struct Named:
+    value: str
+
+trait Named:
+    fn name(value: Named) -> str
+
+0
+@caption A struct already has the name `Named`
+@error CORE SEMANTIC TRAIT-NAME-COLLISION
+@at 4:7
+@end
+
+@topic error.trait-requirement-receiver
+title: TRAIT-REQUIREMENT-RECEIVER: a requirement without the trait as receiver
+summary: Every requirement of an ordinary trait has a first parameter declared as the trait itself, the receiver; static and constructor requirements are not supported.
+index: errors
+alias: trait requirement without a receiver; static trait requirement
+keywords: trait, requirement, receiver, first parameter, static, constructor
+related: concept.traits error.trait-self-position concept.method-sugar
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-REQUIREMENT-RECEIVER
+
+== MEANING
+A trait operation is called on a value: `value.name()` inside a function
+that takes `value: Named`. So every requirement's first ordinary
+parameter must be declared with the trait's own type (`fn name(value:
+Named) -> str`); it stands for the implementing type. A requirement
+with no parameter, an untyped first parameter or a first parameter of
+another type is rejected: there are no static or constructor
+requirements. (A context trait's requirements are different: they have
+no receiver parameter at all.)
+
+== LIKELY CAUSES
+  * a constructor-like requirement (`fn parse(text: str) -> Parse`);
+  * an untyped first parameter (`fn name(value) -> str`).
+
+== WHAT TO DO
+Make the first parameter the trait itself. To construct values, write an
+ordinary function in the type's module, or a requirement that returns
+the trait from an existing value (`fn reset(value: Parser) -> Parser`).
+
+@example reject
+trait Parse:
+    fn parse(text: str) -> Parse
+
+0
+@caption A requirement must take the trait itself first
+@error CORE SEMANTIC TRAIT-REQUIREMENT-RECEIVER
+@at 2:20
+@end
+
+@topic error.trait-self-position
+title: TRAIT-SELF-POSITION: the trait's own type in a later parameter
+summary: A requirement may use the trait's own type only as its first parameter and as its result; relational requirements over two values of one witness are not supported yet.
+index: errors
+alias: relational trait requirement; trait type in a second parameter
+keywords: trait, requirement, self type, relational, parameter, witness, equality
+related: concept.traits error.trait-requirement-receiver
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-SELF-POSITION
+
+== MEANING
+Inside a requirement the trait's name means "the implementing type".
+As the first parameter it is the receiver; as the result it says the
+operation returns a value of the same type (`fn normalize(value: Norm)
+-> Norm`). In any other parameter it would relate two values that must
+have the same concrete type (`fn same?(a: Same, b: Same) -> bool`) -- a
+relational requirement, which the current trait design does not support.
+
+== LIKELY CAUSES
+  * an equality or ordering requirement over two values of the trait.
+
+== WHAT TO DO
+Compare through an unrestricted projection instead: a requirement that
+returns a key (`fn key(value: Keyed) -> str`), compared by the caller. A
+later parameter may have any ordinary type, or be untyped.
+
+@example reject
+trait Same:
+    fn same?(a: Same, b: Same) -> bool
+
+0
+@caption The trait's own type in the second parameter
+@error CORE SEMANTIC TRAIT-SELF-POSITION
+@at 2:26
+@end
+
+@topic error.trait-other-trait
+title: TRAIT-OTHER-TRAIT: a requirement that mentions another trait
+summary: A requirement's parameters and result cannot mention another trait (or a context trait): trait composition and trait-typed results of other traits are not supported yet.
+index: errors
+alias: trait composition; requirement returning another trait
+keywords: trait, context trait, requirement, composition, supertrait, parameter, result
+related: concept.traits concept.context-traits error.trait-self-position
+docs: TRAITS.md CONTEXT-TRAITS.md
+code: CORE SEMANTIC TRAIT-OTHER-TRAIT
+
+== MEANING
+Each requirement is checked against one witness, the implementing type.
+A parameter or result typed with another trait (or a type containing
+one, such as a List of it) would need a second witness chosen jointly
+with the first; there is no trait composition, no supertrait and no
+associated type. For a context trait, a requirement takes and returns
+ordinary values only.
+
+== LIKELY CAUSES
+  * a requirement that returns or takes another trait, to compose two
+    abstractions.
+
+== WHAT TO DO
+Use concrete types in the requirement, or split the work: one
+trait-polymorphic function per trait, each taking its own trait
+parameter (`fn show(a: Named, b: Tagged)` may take two different traits).
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+trait Tagged:
+    fn tag(value: Tagged) -> Named
+
+0
+@caption A requirement of `Tagged` returns another trait
+@error CORE SEMANTIC TRAIT-OTHER-TRAIT
+@at 5:30
+@end
+
+@topic error.trait-not-satisfied
+title: TRAIT-NOT-SATISFIED: a value whose type does not satisfy the trait
+summary: A value passed to (or returned as) a trait type does not satisfy it: its owner namespace lacks a compatible function for some requirement, or the type has no owner at all.
+index: errors
+alias: type does not implement the trait; missing trait implementation
+keywords: trait, satisfy, conformance, implementation, owner namespace, witness, requirement, signature
+related: concept.traits concept.modules error.trait-unknown-operation error.trait-view-misuse error.type
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-NOT-SATISFIED
+
+== MEANING
+A concrete type satisfies a trait structurally: the namespace that owns
+the type -- a struct's declaring module (or the entry program), `str`
+for String, `char` for UnicodeChar -- declares, for every requirement, a
+top-level function of that name whose declared signature fits (the
+trait replaced by the type; parameters contravariant, result covariant,
+errors a subset). Only the owner counts: imports and functions at the
+call site do not. The message shows the first requirement that fails,
+what was required and what was found.
+
+Types with no owner satisfy nothing: `int`, `bool`, `any`, a List or
+other applied type, a function. A view of one trait is not accepted as
+another trait.
+
+== LIKELY CAUSES
+  * no implementation, or one with a different parameter or result type;
+  * an implementation for another type of the same name: one namespace
+    has one function per name, so two types of the entry program cannot
+    both implement `name` -- give the second type a module of its own;
+  * a value typed `any` (from a List of mixed values, an untyped
+    parameter): its concrete type is not recovered;
+  * an implementation with flags, context parameters or more declared
+    errors than the requirement allows.
+
+== HOW TO INVESTIGATE
+The message shows the requirement ("required:", with the trait replaced
+by the argument's type), the function the owner namespace has under that
+name ("found:", if any) and, last, why it does not fit.
+
+== WHAT TO DO
+Declare or fix the function in the type's owner module. Values reaching
+the trait parameter must have a concrete static type.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn describe(value: Named) -> str:
+    value.name()
+
+struct Robot:
+    serial: int
+
+describe(Robot {serial: 7})
+@caption The entry program's `name` takes a Person, not a Robot
+@error CORE SEMANTIC TRAIT-NOT-SATISFIED
+@at 16:10
+@end
+
+@example accept
+trait Measured:
+    fn length(value: Measured) -> int
+
+fn size(value: Measured) -> int:
+    value.length()
+
+size("hello")
+@caption String satisfies `Measured` through its owner's `str::length`
+@value 5
+@end
+
+@topic error.trait-unknown-operation
+title: TRAIT-UNKNOWN-OPERATION: an operation the trait does not declare
+summary: On a trait view (or a context-trait binding) only the trait's requirements can be called; any other method call is rejected, whatever the concrete type provides.
+index: errors
+alias: method not declared by the trait; unknown trait operation
+keywords: trait, context trait, view, operation, method call, requirement, duck typing
+related: concept.traits concept.context-traits error.trait-view-misuse error.no-applicable-method
+docs: TRAITS.md CONTEXT-TRAITS.md
+code: CORE SEMANTIC TRAIT-UNKNOWN-OPERATION
+
+== MEANING
+Inside a function that takes `value: Named`, `value` is a trait view:
+source code may use exactly the trait's requirements, as method calls.
+A generic body is checked once, against the trait alone -- also in a
+function nobody calls -- so an operation the trait does not declare is
+rejected even if every type passed in happens to provide it. The same
+holds for a context-trait binding (`context clock: Clock`) and its
+trait's operations. The message lists the operations that exist.
+
+== LIKELY CAUSES
+  * a function of the concrete type called on the view, expecting it to
+    be found on the type underneath;
+  * a misspelled operation name.
+
+== WHAT TO DO
+Add the operation to the trait as a requirement (every satisfying type
+must then implement it), or take a concrete type instead of the trait.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+fn shout(value: Named) -> str:
+    value.upper()
+
+0
+@caption `Named` declares only `name`
+@error CORE SEMANTIC TRAIT-UNKNOWN-OPERATION
+@at 5:11
+@end
+
+@topic error.trait-view-misuse
+title: TRAIT-VIEW-MISUSE: a trait view used as its concrete value
+summary: A trait view exposes only its trait's operations: no field access, no use as a condition, loop bound or callee, no type test and no kind-specific native.
+index: errors
+alias: field of a trait view; downcast a trait view
+keywords: trait, view, field, type test, cast, downcast, condition, native, witness
+related: concept.traits error.trait-unknown-operation error.trait-not-satisfied
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-VIEW-MISUSE
+
+== MEANING
+A trait is a one-way view: a concrete value enters it at a trait-typed
+parameter or result, and from then on the source sees only the trait.
+The compiler keeps the concrete type as hidden provenance to specialize
+the code, but nothing recovers it: reading a field (`value.value`),
+using the view as an `if` condition, a loop operand or a callee, testing
+its kind (`string?`) or giving it to a native that needs a kind of value
+(`+`) is rejected. A trait has no run-time membership test, cast or
+downcast.
+
+== LIKELY CAUSES
+  * a field of the concrete type read through the trait parameter;
+  * a trait parameter used directly as a String or number.
+
+== WHAT TO DO
+Express what the code needs as a requirement of the trait (`fn
+name(value: Named) -> str`) and call it, or take the concrete type as
+the parameter's type.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn raw(value: Named) -> str:
+    value.value
+
+raw(Person {value: "Ada"})
+@caption A view has no fields
+@error CORE SEMANTIC TRAIT-VIEW-MISUSE
+@at 11:11
+@end
+
+@topic error.trait-witness-join
+title: TRAIT-WITNESS-JOIN: one expression may hold views of different types
+summary: Two trait views with different concrete witnesses meet (an if, a handler, a function's exits); heterogeneous trait values are not supported, as no erased trait representation exists.
+index: errors
+alias: heterogeneous trait values; trait object
+keywords: trait, witness, join, if, result, heterogeneous, trait object, existential
+related: concept.traits error.trait-storage-unsupported error.trait-view-misuse
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-WITNESS-JOIN
+
+== MEANING
+Every trait-typed value has one concrete witness known at compile time,
+which is how the compiler turns trait operations into direct calls (one
+specialized copy per witness). When two views of one trait with
+different witnesses meet -- the branches of an `if`, a handler's value,
+the exits of a function declared `-> Named` -- the result would need a
+run-time choice between witnesses. There is no trait object: such a join
+is rejected, never erased. Inside a generic body two different trait
+parameters have different (abstract) witnesses, even if every caller
+passes one type.
+
+== LIKELY CAUSES
+  * a function declared `-> Named` that returns one of its two trait
+    parameters, or different concrete types on different paths;
+  * an `if` choosing between two trait views.
+
+== WHAT TO DO
+Apply the trait operation in each branch and join the unrestricted
+results (an int, a str), or return a concrete type.
+
+@example reject
+trait Measured:
+    fn length(value: Measured) -> int
+
+struct Box:
+    items: int
+
+fn length(value: Box) -> int:
+    value.items
+
+fn larger(a: Measured, b: Measured) -> Measured:
+    if a.length() >= b.length():
+        a
+    else:
+        b
+
+larger("abc", Box {items: 2})
+@caption `a` and `b` may have different concrete types
+@error CORE SEMANTIC TRAIT-WITNESS-JOIN
+@at 11:5
+@end
+
+@example accept
+trait Measured:
+    fn length(value: Measured) -> int
+
+struct Box:
+    items: int
+
+fn length(value: Box) -> int:
+    value.items
+
+fn longest(a: Measured, b: Measured) -> int:
+    if a.length() >= b.length():
+        a.length()
+    else:
+        b.length()
+
+"abc".longest(Box {items: 5})
+@caption The branches join two ints instead of two views
+@value 5
+@end
+
+@topic error.trait-storage-unsupported
+title: TRAIT-STORAGE-UNSUPPORTED: a trait as a field or element type
+summary: A struct field, an error payload field or a container element (List, MutableArray, ImmutableSet, a result such as List[Named]) cannot have a trait type.
+index: errors
+alias: trait typed struct field; list of trait values
+keywords: trait, storage, field, List, container, element, payload, heterogeneous collection
+related: concept.traits error.trait-witness-join concept.structs concept.error-payloads
+docs: TRAITS.md ERROR-PAYLOADS.md
+code: CORE SEMANTIC TRAIT-STORAGE-UNSUPPORTED
+
+== MEANING
+A stored value has one concrete representation. A trait-typed field or
+element would have to store a witness beside the value (an existential
+representation), which Botlish does not have, so `struct Card: owner:
+Named`, `List[Named]`, `MutableArray[Named]`, `ImmutableSet[Named]` and
+an error payload field of a trait type are rejected where the type is
+written. Heterogeneous trait collections are not supported.
+
+== LIKELY CAUSES
+  * a struct or List meant to hold "anything that is Named";
+  * a function returning `List[Named]`.
+
+== WHAT TO DO
+Store the concrete type (`owner: Person`), and use the trait at function
+boundaries only (`fn describe(value: Named)`). For values of several
+types, store what the code needs from each (e.g. the result of calling
+the trait operation), or one field per type.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Card:
+    owner: Named
+
+0
+@caption A struct field stores one concrete type
+@error CORE SEMANTIC TRAIT-STORAGE-UNSUPPORTED
+@at 5:12
+@end
+
+@topic error.trait-polymorphic-function-value
+title: TRAIT-POLYMORPHIC-FUNCTION-VALUE: a trait function used as a value
+summary: A function with a trait parameter or result can be called directly or through an immutable alias, never passed, stored or returned as a function value; Fn types cannot mention a trait.
+index: errors
+alias: trait function as a function value; Fn type over a trait
+keywords: trait, function value, higher-order, alias, Fn type, witness, dispatch
+related: concept.traits concept.function-types error.trait-nested-polymorphic
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-POLYMORPHIC-FUNCTION-VALUE
+
+== MEANING
+A function such as `fn describe(value: Named) -> str` is compiled once
+per concrete witness its calls pass (`describe<Person>`). Each call
+needs its witness at compile time; a function value -- an argument, a
+List element, a returned function, the value of a body -- has no place
+for it, and there is no run-time trait dispatch to supply it. So the
+function may be called directly or through an immutable alias (`f =
+describe; f(p)`), and nothing else. A structural function type
+mentioning a trait (`Fn{args: [Named], ...}`) is rejected for the same
+reason.
+
+== LIKELY CAUSES
+  * a trait-polymorphic function passed to a higher-order function, put
+    in a List or returned;
+  * an `Fn{args: [Named], ...}` parameter type.
+
+== WHAT TO DO
+Call the function directly. To pass behaviour around, wrap one concrete
+use in an ordinary function (`fn describe_person(p: Person) -> str:
+describe(p)`) and pass that.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn describe(value: Named) -> str:
+    value.name()
+
+fn apply(f, x):
+    f(x)
+
+apply(describe, Person {value: "Ada"})
+@caption `describe` cannot be passed as a value
+@error CORE SEMANTIC TRAIT-POLYMORPHIC-FUNCTION-VALUE
+@at 16:7
+@end
+
+@example accept
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn describe(value: Named) -> str:
+    value.name()
+
+say = describe
+say(Person {value: "Ada"})
+@caption An immutable alias called directly is the specialized call
+@value "Ada"
+@end
+
+@topic error.trait-nested-polymorphic
+title: TRAIT-NESTED-POLYMORPHIC: a nested function with a trait parameter
+summary: A function with a trait-typed parameter must be declared at the top level of a module or the entry program; nested trait-polymorphic functions are not supported yet.
+index: errors
+alias: nested trait polymorphic function; trait parameter in a nested function
+keywords: trait, nested function, specialization, monomorphization, top level
+related: concept.traits error.affine-generic-nested-unsupported error.trait-nested
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-NESTED-POLYMORPHIC
+
+== MEANING
+Trait-polymorphic functions are monomorphized: the compiler makes one
+copy per witness and places it at the top level, before the code that
+first needs it. A function declared inside another function would need
+its copies made per activation of the enclosing function (it may capture
+its locals), which the current specialization does not do. This is a
+limit of the implementation.
+
+== LIKELY CAUSES
+  * a helper with a trait parameter declared inside the function that
+    uses it.
+
+== WHAT TO DO
+Move the function to the top level, passing what it captured as
+parameters, or give the nested function a concrete parameter type. A
+nested closure inside a top-level trait-polymorphic function may capture
+a view: it is part of each specialization.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn greet(p: Person) -> str:
+    fn inner(v: Named) -> str:
+        v.name()
+    inner(p)
+
+greet(Person {value: "Ada"})
+@caption `inner` takes a trait parameter but is nested
+@error CORE SEMANTIC TRAIT-NESTED-POLYMORPHIC
+@at 11:13
+@end
+
+@topic error.trait-polymorphic-recursion
+title: TRAIT-POLYMORPHIC-RECURSION: recursion that changes the trait witness
+summary: Specializations for different witnesses that call each other in a cycle are rejected: each would need the other bound first.
+index: errors
+alias: polymorphic recursion; recursion across trait witnesses
+keywords: trait, recursion, witness, specialization, clone, cycle, mutual recursion
+related: concept.traits concept.mutual-recursion concept.definition-order error.trait-impl-order
+docs: TRAITS.md MUTUAL-RECURSION.md
+code: CORE SEMANTIC TRAIT-POLYMORPHIC-RECURSION
+
+== MEANING
+A recursive trait-polymorphic function is specialized once per witness,
+each copy calling itself. If the recursion passes a value of another
+concrete type (`flip(v: Measured, n)` calling `flip("ab", ...)` and
+`flip(Box {...}, ...)`), the copies for the two types call each other;
+in Botlish a function can only call functions bound before it, and two
+specializations cannot both be first. The message names the cycle.
+Swapping two parameters of the same witness is ordinary self recursion
+and fine.
+
+== LIKELY CAUSES
+  * a recursive function that alternates between values of different
+    concrete types through one trait parameter;
+  * swapping two trait parameters of different witnesses in a recursive
+    call.
+
+== WHAT TO DO
+Keep the witness unchanged across the recursion: recurse on the same
+view and handle the other types in a separate, non-recursive call, or
+convert to a concrete type (the trait operation's result) before
+recursing.
+
+@example reject
+trait Measured:
+    fn length(value: Measured) -> int
+
+struct Box:
+    items: int
+
+fn length(value: Box) -> int:
+    value.items
+
+fn flip(v: Measured, n: int) -> int:
+    if n == 0:
+        v.length()
+    else:
+        if mod(n, 2) == 0:
+            flip("ab", n - 1)
+        else:
+            flip(Box {items: 3}, n - 1)
+
+flip("x", 3)
+@caption flip<str> and flip<Box> would call each other
+@error CORE SEMANTIC TRAIT-POLYMORPHIC-RECURSION
+@at 10:8
+@end
+
+@topic error.trait-impl-order
+title: TRAIT-IMPL-ORDER: an implementation declared after its first use
+summary: A trait operation's implementation must be declared before the code that first needs a specialization calling it: the ordinary no-forward-reference rule.
+index: errors
+alias: trait implementation declared too late
+keywords: trait, implementation, order, forward reference, specialization, definition order
+related: concept.traits concept.definition-order rule.forward-references error.trait-polymorphic-recursion
+docs: TRAITS.md STRICT-REFERENCE-DETERMINISM.md
+code: CORE SEMANTIC TRAIT-IMPL-ORDER
+
+== MEANING
+Bindings are visible from their definition on, and functions cannot
+call functions defined after the statement that runs them. A trait
+operation becomes a direct call of its implementation in a
+specialization placed just before the statement that first needs it;
+when the implementation is defined after that statement, the
+specialization would refer forward. Whether a type satisfies the trait
+does not depend on order -- only where the implementation is defined
+relative to its first use.
+
+== LIKELY CAUSES
+  * implementations written at the end of the file, after the top-level
+    code that uses them;
+  * a type and its functions declared below a top-level binding that
+    already calls a trait-polymorphic function with it.
+
+== HOW TO INVESTIGATE
+The message names the specialization (`describe<Person>`), the statement
+it is needed before, and the implementation that comes too late.
+
+== WHAT TO DO
+Move the implementation (and the type) above the first statement that
+calls the trait-polymorphic function with that type.
+
+@example reject
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn describe(value: Named) -> str:
+    value.name()
+
+greeting = describe(Person {value: "Ada"})
+
+fn name(value: Person) -> str:
+    value.value
+
+greeting
+@caption `name` is defined after the statement that needs describe<Person>
+@error CORE SEMANTIC TRAIT-IMPL-ORDER
+@at 8:5
+@end
+
+@topic error.trait-instance-budget
+title: TRAIT-INSTANCE-BUDGET: no specialization for a trait-polymorphic call
+summary: A call of a trait-polymorphic function has no static specialization because the semantic-instance analysis declined it, and there is no run-time trait dispatch to fall back to.
+index: errors
+alias: trait specialization budget
+keywords: trait, specialization, budget, semantic instance, nesting limit, monomorphization
+related: concept.traits concept.specialization error.affine-instance-budget
+docs: TRAITS.md STATIC-DECISION-ECONOMICS.md
+code: CORE SEMANTIC TRAIT-INSTANCE-BUDGET
+
+== MEANING
+Every call of a trait-polymorphic function must be specialized for its
+witnesses: there is no generic, dynamically dispatched version to call
+instead. Specializations are made by the semantic-instance analysis,
+which has budgets; past the instance-count budgets a trait call still
+gets an instance keyed by its witnesses alone, so only the analysis's
+nesting limit can leave one without. This is a limit of the compiler,
+not a language rule, and ordinary programs do not reach it: a chain of
+150 trait-polymorphic functions calling each other still compiles. A
+call that can never run (an argument that always fails) is not reported:
+it gets no specialization and needs none.
+
+== LIKELY CAUSES
+  * very deep nesting of calls between trait-polymorphic functions.
+
+== WHAT TO DO
+Reduce the nesting of trait-polymorphic calls (give inner helpers
+concrete parameter types), and report the program if it is small.
+
+@topic error.trait-internal
+title: TRAIT-INTERNAL: an internal failure of trait specialization
+summary: An invariant of the trait monomorphization plan failed; this is a compiler bug, never a problem of the program.
+index: errors
+alias: trait specialization bug
+keywords: trait, internal, compiler bug, monomorphization, plan
+related: concept.traits error.context-trait-internal
+docs: TRAITS.md
+code: CORE SEMANTIC TRAIT-INTERNAL
+
+== MEANING
+After a program passes every check, the compiler plans its trait
+specializations (which copy each call uses, which implementation each
+trait operation calls). TRAIT-INTERNAL means the plan found something
+the checks should have excluded -- a missing witness, conflicting
+specializations of one expression.
+
+== WHAT TO DO
+You should never see this: it is a compiler bug. Please report the
+program (as small as you can make it) with the full message.
+
+@topic error.ambiguous-context-implementation
+title: AMBIGUOUS-CONTEXT-IMPLEMENTATION: two providers of one context trait
+summary: A call needs a context trait (such as io::IO) and more than one installed context implements it; the compiler never ranks providers, so exactly one must be installed.
+index: errors
+alias: two contexts implement the same context trait; ambiguous io provider
+keywords: context trait, installed context, provider, selection, with context, io::IO, LinuxIO, ranking
+related: concept.context-traits concept.contexts rule.context-installation error.missing-context stdlib.module.io stdlib.module.linux::io
+docs: CONTEXT-TRAITS.md CONTEXTS.md
+code: CORE SEMANTIC AMBIGUOUS-CONTEXT-IMPLEMENTATION
+
+== MEANING
+A function whose requirement includes a context trait (directly, as
+`context io: IO`, or through the functions it calls) is compiled against
+the one installed context that implements the trait: at every reachable
+top-level call the compiler collects the contexts installed at that
+point (`with context ...`, in source order) that satisfy the trait, and
+selects one statically. With none it reports MISSING-CONTEXT; with
+several, AMBIGUOUS-CONTEXT-IMPLEMENTATION, listing every provider and the
+call chain to the requirement. There is no ranking, no "most specific"
+rule and no preference for the first or last installation: the same
+program text must mean one implementation.
+
+A coroutine's providers are chosen where it is constructed; a new
+construction after a second installation is ambiguous too.
+
+== LIKELY CAUSES
+  * installing a test or capture context for io::IO beside
+    `linux::io::create()`;
+  * two libraries each installing a context that implements one trait.
+
+== HOW TO INVESTIGATE
+The message lists every installed provider of the trait, in installation
+order, then the call chain from the rejected call to the function that
+requires the trait.
+
+== WHAT TO DO
+Install exactly one context implementing the trait before the calls that
+need it. Installation is per program, so a program that needs a
+different provider (a test) installs only that one.
+
+@example reject
+import io
+import linux::io
+
+context struct Capture:
+    lines: int
+
+fn write_text(text: str, context c: Capture) -> unit:
+    unit
+
+fn write_error_text(text: str, context c: Capture) -> unit:
+    unit
+
+fn hello() -> unit errors io::WriteFailed:
+    io::print_line("hello")
+
+with context Capture {lines: 0}
+with context linux::io::create()
+hello()
+@caption Capture and LinuxIO both implement io::IO
+@error CORE SEMANTIC AMBIGUOUS-CONTEXT-IMPLEMENTATION
+@at 18:1
+@end
+
+@example accept
+import io
+
+context struct Capture:
+    lines: int
+
+fn write_text(text: str, context c: Capture) -> unit:
+    unit
+
+fn write_error_text(text: str, context c: Capture) -> unit:
+    unit
+
+fn hello() -> unit errors io::WriteFailed:
+    io::print_line("hello")
+
+with context Capture {lines: 0}
+hello():
+    on io::WriteFailed:
+        unit
+@caption One provider installed: io::print_line writes through Capture
+@value unit
+@end
+
+@topic error.context-trait-misuse
+title: CONTEXT-TRAIT-MISUSE: a context-trait binding used as a value
+summary: A context-trait binding (`context io: IO`) is not a value: its only use is calling one of the trait's operations on it; it cannot be passed, stored, returned, compared, projected or tested.
+index: errors
+alias: pass a context trait binding; context trait binding is not a value
+keywords: context trait, context parameter, binding, value, operation, method call, io::IO
+related: concept.context-traits concept.contexts error.trait-unknown-operation error.context-trait-position
+docs: CONTEXT-TRAITS.md
+code: CORE SEMANTIC CONTEXT-TRAIT-MISUSE
+
+== MEANING
+Inside `fn print_line(text: str, context io: IO)`, `io` stands for
+whichever installed context implements IO; the compiler selects it
+statically and turns `io.write_text(...)` into a direct call of that
+context's implementation. The binding has no value, slot or run-time
+representation, so every reference to it must be the receiver of a
+method call of one of the trait's operations. Returning it, passing it
+to a function, storing it, comparing it, reading a field of the hidden
+context or testing it is rejected -- also in a function nobody calls.
+
+== LIKELY CAUSES
+  * passing `io` on to a helper instead of letting the helper declare
+    its own context parameter;
+  * comparing, storing or returning the binding.
+
+== WHAT TO DO
+Call the operation where the binding is (`io.write_text(t)`). A function
+that needs the capability declares its own context parameter of the
+trait (`context io: IO`); the requirement propagates to its callers with
+no argument passing.
+
+@example reject
+context trait Clock:
+    fn now() -> int
+
+fn clock_of(context clock: Clock):
+    clock
+
+0
+@caption A context-trait binding cannot be returned
+@error CORE SEMANTIC CONTEXT-TRAIT-MISUSE
+@at 5:5
+@end
+
+@example accept
+context trait Clock:
+    fn now() -> int
+
+context struct Fixed:
+    at: int
+
+fn now(context c: Fixed) -> int:
+    c.at
+
+fn later(context clock: Clock) -> int:
+    clock.now() + 1
+
+with context Fixed {at: 41}
+later()
+@caption Calling the trait's operation is the binding's one use
+@value 42
+@end
+
+@topic error.context-trait-position
+title: CONTEXT-TRAIT-POSITION: a context trait used as a value type
+summary: A context trait is valid only as the type of a context parameter; as an ordinary parameter, a result, a field, a payload field, an element or part of a function type it is rejected.
+index: errors
+alias: context trait as a parameter type; context trait as a field type
+keywords: context trait, context parameter, value type, parameter, field, List element, function type
+related: concept.context-traits concept.contexts error.context-trait-misuse error.not-a-context
+docs: CONTEXT-TRAITS.md
+code: CORE SEMANTIC CONTEXT-TRAIT-POSITION
+
+== MEANING
+A context trait (`context trait Clock:`) is an execution-environment
+capability supplied by an installed context, not a type of values: it
+has no value, representation or storage. It may only be the type of a
+context parameter, `context clock: Clock`. Everywhere a value type goes
+-- an ordinary parameter, a function's result type, a struct field, an
+error payload field, a List, MutableVector or MutableArray element, an
+argument or result of an `Fn{...}` type -- it is rejected where the type
+is written.
+
+== LIKELY CAUSES
+  * a context trait written as an ordinary parameter type, without the
+    `context` keyword;
+  * a struct field or List meant to keep the capability.
+
+== WHAT TO DO
+For a parameter, move it to the function's context section, as the
+message suggests: `fn elapsed(context clock: Clock)`. Callers then pass
+nothing; the program installs a context implementing the trait. To keep
+a value obtained from the environment, store the operation's result
+(`clock.now()`), not the capability.
+
+@example reject
+context trait Clock:
+    fn now() -> int
+
+fn elapsed(clock: Clock) -> int:
+    0
+
+0
+@caption A context trait as the type of an ordinary parameter
+@error CORE SEMANTIC CONTEXT-TRAIT-POSITION
+@at 4:12
+@end
+
+@topic error.context-trait-internal
+title: CONTEXT-TRAIT-INTERNAL: inconsistent context-trait selection
+summary: Two calls selected different installed contexts for one context trait, which installation order makes impossible; this is a compiler bug.
+index: errors
+alias: context trait selection bug
+keywords: context trait, selection, installed context, internal, compiler bug
+related: concept.context-traits error.ambiguous-context-implementation error.trait-internal
+docs: CONTEXT-TRAITS.md
+code: CORE SEMANTIC CONTEXT-TRAIT-INTERNAL
+
+== MEANING
+Contexts are only ever added, in source order, so every call that finds
+exactly one installed provider of a context trait finds the same one.
+The compiler records that one selection per trait for the whole program;
+CONTEXT-TRAIT-INTERNAL means two calls disagreed.
+
+== WHAT TO DO
+You should never see this: it is a compiler bug. Please report the
+program (as small as you can make it) with the full message.

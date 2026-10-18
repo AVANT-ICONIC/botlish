@@ -1,11 +1,37 @@
-# main.tcl -- example runner.
+# main.tcl -- the Botlish compiler's command line.
 #
-#   tclsh9.0 main.tcl [-backend interp|compile|cranelift|cranelift-generic] [-code] [-hir] [-ast]
-#                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-direct] [-traits] [-emit-nir] [-emit-clif]
-#                    [-emit-native-executable] [-emit-hir-interchange]
-#                    [-argv TEXT]... [-argv-hex HEX]...
-#                    [-argv-none] [-warnings default|off|error] [-target NAME] [-L DIR]...
-#                    [FILE.bot|FILE.hir|FILE.hirx|FILE.ir ...]
+#   tclsh9.0 main.tcl [OPTION...] FILE.bot|FILE.hir|FILE.hirx|FILE.ir ...
+#   tclsh9.0 main.tcl -help [QUERY...]
+#   tclsh9.0 main.tcl -version
+#   tclsh9.0 main.tcl                     (no arguments: the usage summary)
+#
+# The options, one table (cliOptions below) that the parser, the usage
+# summary and Compilerpedia's cli.options topic (tests/main-cli.test checks
+# it) all follow:
+#
+#   -backend NAME          interp (default), compile, cranelift, cranelift-generic
+#   -warnings MODE         default | off | error
+#   -target NAME           the C ABI target of a .bot compilation
+#   -L DIR                 a library directory for a program that calls C
+#   -argv TEXT / -argv-hex HEX / -argv-none    the program's argv()
+#   -code -hir -ast -aot -aot-data -aot-spec -contexts -direct -traits
+#   -emit-nir -emit-clif   inspection output, before the program runs
+#   -emit-native-executable / -emit-hir-interchange    build, do not run
+#   -help [QUERY...]       Compilerpedia, the built-in reference
+#                          (compilerpedia/, COMPILERPEDIA.md); everything
+#                          after -help is the query
+#   -version               the compiler's version and build identity
+#
+# Without arguments it prints the usage summary and exits 0; -help and
+# -version print and exit without compiling anything (help needs neither the
+# compiler nor a backend: compilerpedia/ is data). An unknown option, an
+# option missing its argument, an invalid value, or options with no input
+# file are usage errors: a message on stderr, exit status 2. A run exits 1
+# when any input fails, 0 otherwise. Each printed diagnostic is followed,
+# once per topic, by a "help: ... -help TOPIC" line naming the Compilerpedia
+# topic of its rule or code (compilerpedia::topicForDiagnostic: presentation
+# only, read from the catalogue, never from or into the compiler's
+# diagnostics).
 #
 # -warnings sets the one global compiler-warning policy of a .bot compilation
 # (WARNINGS-SAME-RETURN.md): default prints warnings on stderr and runs the
@@ -24,8 +50,7 @@
 # program still runs on the host (where another architecture's syscall
 # transport is NATIVE UNSUPPORTED).
 #
-# Runs the given program files (default: every examples/*.ir) and prints
-# each program's value, with runtime evidence shown as "text"#{Type}. On the
+# Runs the given program files and prints each program's value, with runtime evidence shown as "text"#{Type}. On the
 # native backends what a program prints (io::print_line) goes to this
 # process's standard output and error as it writes it, between its "== FILE"
 # line and its value, as a standalone executable writes it; the Tcl backends
@@ -108,9 +133,208 @@
 # blocks can serve as scope probes.
 
 set root [file dirname [file normalize [info script]]]
+
+# The command-line options: NAME ARGUMENT GROUP SUMMARY, ARGUMENT "" for a
+# flag, SUMMARY one usage line. The parser and the usage summary read this
+# table; Compilerpedia's cli.options topic documents each entry in full
+# (tests/main-cli.test checks that it names every one).
+set cliOptions {
+    -backend NAME run {interp (default), compile, cranelift, cranelift-generic}
+    -warnings MODE run {default (print them), off, error (reject)}
+    -target NAME run {the C ABI target (default: the host's)}
+    -L DIR run {a library directory, for a program that calls C}
+    -argv TEXT argv {append the argument TEXT to argv()}
+    -argv-hex HEX argv {append an argument given as hex bytes}
+    -argv-none {} argv {run the program with an empty argv()}
+    -emit-native-executable {} build {build a standalone executable beside each input}
+    -emit-hir-interchange {} build {write each input's analyzed HIR as FILE.hirx}
+    -code {} inspect {the compile backend's generated Tcl code}
+    -hir {} inspect {the program's semantic HIR}
+    -ast {} inspect {a .bot file's surface syntax tree}
+    -aot {} inspect {every function's closed-AOT readiness}
+    -aot-data {} inspect {the closed-AOT analysis, as data}
+    -aot-spec {} inspect {the AOT report of each specialized instance}
+    -contexts {} inspect {contexts and each function's requirements}
+    -direct {} inspect {each module's directness}
+    -traits {} inspect {traits and conformances}
+    -emit-nir {} inspect {the native IR (NIR)}
+    -emit-clif {} inspect {the Cranelift IR of every function}
+    -help {[QUERY...]} help {Compilerpedia, the built-in reference (offline)}
+    -version {} help {the compiler's version and build identity}
+}
+# Spellings of -help and -version other tools taught people to type.
+set cliAliases {--help -help -h -help --version -version}
+
+# How this compiler is invoked, as messages name it: the single executable's
+# own name, or tclsh9.0 main.tcl in a checkout.
+proc cliInvocation {} {
+    if {[info exists ::single::app]} {
+        return [file tail [info nameofexecutable]]
+    }
+    return "[file tail [info nameofexecutable]] main.tcl"
+}
+set cliInvocation [cliInvocation]
+
+proc usage {} {
+    global cliOptions cliInvocation
+    set me $cliInvocation
+    set lines [list "usage: $me \[OPTION...\] FILE..." \
+        "       $me -help \[QUERY...\]" \
+        "       $me -version" "" \
+        "Compiles and runs Botlish programs: FILE.bot (source), FILE.hir (HIR text)," \
+        "FILE.hirx (HIR interchange) or FILE.ir (core IR text; interp and compile only)." \
+        "Each program's output is printed, then its value." ""]
+    foreach {group heading} {run Running argv {Program arguments} build Building inspect {Inspecting (printed before the program runs)} help Reference} {
+        lappend lines "$heading:"
+        foreach {name argument optionGroup description} $cliOptions {
+            if {$optionGroup ne $group} continue
+            set spelled [string trim "$name $argument"]
+            if {[string length $spelled] > 18} {
+                lappend lines "  $spelled" "  [string repeat " " 18]  $description"
+            } else {
+                lappend lines [format "  %-18s  %s" $spelled $description]
+            }
+        }
+        lappend lines ""
+    }
+    lappend lines "Examples:" \
+        "  $me -backend cranelift game.bot" \
+        "  $me -help                     the indices of Compilerpedia" \
+        "  $me -help cli.options         every option in detail" \
+        "  $me -help KNOWN-ERROR         a diagnostic or warning code" \
+        "  $me -help \"bounds proof\"      a search"
+    return [join $lines \n]
+}
+
+# A usage error: MESSAGE on stderr, a pointer to the usage, exit status 2.
+proc usageError {message} {
+    puts stderr "$::cliInvocation: $message"
+    puts stderr "run $::cliInvocation with no arguments for the usage summary, or $::cliInvocation -help cli.options"
+    exit 2
+}
+
+# Parses the command line ARGV (syntax only: values are checked once the
+# compiler is loaded) into a dict: action (run, help, version, usage),
+# options (the given options in order, as {NAME VALUE} pairs, VALUE "" for a
+# flag), files, query (the words after -help).
+proc parseCommandLine {argv} {
+    global cliOptions cliAliases
+    set result [dict create action run options {} files {} query {}]
+    if {$argv eq ""} {
+        dict set result action usage
+        return $result
+    }
+    set table [dict create]
+    foreach {name argument group description} $cliOptions {
+        dict set table $name $argument
+    }
+    for {set i 0} {$i < [llength $argv]} {incr i} {
+        set arg [lindex $argv $i]
+        if {[dict exists $cliAliases $arg]} {
+            set arg [dict get $cliAliases $arg]
+        }
+        if {$arg eq "-help"} {
+            dict set result action help
+            dict set result query [lrange $argv [expr {$i + 1}] end]
+            return $result
+        }
+        if {$arg eq "-version"} {
+            if {$i + 1 < [llength $argv]} {
+                usageError "-version takes no arguments (found \"[lindex $argv [expr {$i + 1}]]\")"
+            }
+            dict set result action version
+            return $result
+        }
+        if {[dict exists $table $arg]} {
+            set argument [dict get $table $arg]
+            if {$argument eq ""} {
+                dict lappend result options [list $arg ""]
+                continue
+            }
+            if {$i + 1 >= [llength $argv]} {
+                usageError "option $arg needs an argument ($argument)"
+            }
+            dict lappend result options [list $arg [lindex $argv [incr i]]]
+            continue
+        }
+        if {[string match -* $arg] && $arg ne "-"} {
+            usageError "unknown option \"$arg\""
+        }
+        dict lappend result files $arg
+    }
+    if {[dict get $result files] eq ""} {
+        usageError "no input file"
+    }
+    return $result
+}
+
+# The -version text: what this build is, from the information that exists
+# (no release version number does): the source revision (the single
+# executable's packaged BUILD file, or git in a checkout), the front end's
+# identity (the HIR interchange fingerprint, HIR-INTERCHANGE.md), Tcl, and
+# the native backend's state.
+proc versionText {} {
+    global root
+    set lines [list "Botlish compiler (no release version; this is a development build)"]
+    set revision unknown
+    set build [file join $root BUILD]
+    if {[file isfile $build]} {
+        set channel [open $build]
+        foreach line [split [read $channel] \n] {
+            if {[regexp {^commit (.+)$} $line -> commit]} {
+                set revision "$commit, packaged"
+            }
+        }
+        close $channel
+    } elseif {![catch {exec git -C $root rev-parse --short HEAD 2>/dev/null} commit]} {
+        set dirty [expr {[catch {exec git -C $root status --porcelain --untracked-files=no 2>/dev/null} status] || $status ne "" ? " (modified)" : ""}]
+        set revision "$commit$dirty"
+    }
+    lappend lines "source revision: $revision"
+    lappend lines "front end: [hir::interchange::fingerprint]"
+    lappend lines "Tcl: [info patchlevel]"
+    if {[info exists ::single::app]} {
+        lappend lines "native backend: packaged ([string trim [core::ReadFile [file join $::single::app native-bin ID]]])"
+    } elseif {[catch {native::binary} path]} {
+        lappend lines "native backend: not built (cargo build --release --manifest-path native/Cargo.toml)"
+    } else {
+        lappend lines "native backend: $path"
+    }
+    lappend lines "invocation: $::cliInvocation"
+    return [join $lines \n]
+}
+
+# Runs SCRIPT, which prints, and exits with its result (STATUS when it
+# returns nothing). A reader that stops early (-help errors | head) ends the
+# output quietly, not with a write error.
+proc printing {script {status 0}} {
+    if {[catch {set result [uplevel 1 $script]; flush stdout} message options]} {
+        if {[lrange [dict get $options -errorcode] 0 1] eq {POSIX EPIPE}} {
+            exit 0
+        }
+        puts stderr [dict get $options -errorinfo]
+        exit 1
+    }
+    exit [expr {$result eq "" ? $status : $result}]
+}
+
+set commandLine [parseCommandLine $argv]
+switch -- [dict get $commandLine action] {
+    usage {
+        printing {puts [usage]}
+    }
+    help {
+        source [file join $root compilerpedia compilerpedia.tcl]
+        printing {compilerpedia::main [dict get $commandLine query]}
+    }
+}
+
 source [file join $root compiler compiler.tcl]
 source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
+if {[dict get $commandLine action] eq "version"} {
+    printing {puts [versionText]}
+}
 # The Tcl backends evaluate a Botlish call as nested Tcl evaluations: run
 # programs under the entry points' recursion limit (core/core.tcl), not
 # tclsh's default 1000, which ends an interpreted recursion ~140 calls deep.
@@ -123,10 +347,53 @@ proc printError {channel prefix message options} {
     if {[dict exists $options -diagnostics]} {
         foreach diagnostic [dict get $options -diagnostics] {
             puts $channel "$prefix[dict get $diagnostic message] ([core::ShownCode $diagnostic])"
+            helpHint $channel $prefix [core::ShownCode $diagnostic] [dict get $diagnostic message]
         }
         return
     }
     puts $channel "$prefix$message ([dict get $options -errorcode])"
+    helpHint $channel $prefix [dict get $options -errorcode] $message
+}
+
+# After a printed diagnostic of error code CODE and MESSAGE, the line
+# "PREFIXhelp: ... -help TOPIC" naming the Compilerpedia topic of its rule or
+# code (compilerpedia::topicForDiagnostic), once per topic for each input
+# file (hintsShown, reset by runFile and the emit procs). Presentation only:
+# the topic is looked up in the catalogue from the printed code and text, and
+# nothing of the compiler's diagnostics changes.
+set hintsShown {}
+proc helpHint {channel prefix code message} {
+    global root hintsShown
+    if {[info commands compilerpedia::topicForDiagnostic] eq ""} {
+        source [file join $root compilerpedia compilerpedia.tcl]
+    }
+    set topic [compilerpedia::topicForDiagnostic $code $message]
+    if {$topic eq "" || $topic in $hintsShown} {
+        return
+    }
+    lappend hintsShown $topic
+    regsub {[^ ].*$} $prefix "" indent
+    puts $channel "${indent}help: $::cliInvocation -help $topic"
+}
+
+# After a compilation that printed warnings (on stderr), the topic of each
+# distinct warning code, once.
+proc warningHints {hir} {
+    global root hintsShown
+    set codes [lsort -unique [lmap w [hir::warnings::of $hir] {dict get $w code}]]
+    if {$codes eq ""} {
+        return
+    }
+    if {[info commands compilerpedia::topicForDiagnostic] eq ""} {
+        source [file join $root compilerpedia compilerpedia.tcl]
+    }
+    foreach code $codes {
+        set topic [compilerpedia::topicForDiagnostic $code ""]
+        if {$topic ne "" && $topic ni $hintsShown} {
+            lappend hintsShown $topic
+            puts stderr "help: $::cliInvocation -help $topic"
+        }
+    }
 }
 
 proc probeValues {value} {
@@ -138,7 +405,8 @@ proc probeValues {value} {
 }
 
 proc runFile {path showCode showHir showAst showAot showNative} {
-    global backend nativeBackends warnings target showContexts showDirect showTraits
+    global backend nativeBackends warnings target showContexts showDirect showTraits hintsShown
+    set hintsShown {}
     puts "== [file tail $path] ($backend)"
     set hir ""
     set extension [file extension $path]
@@ -151,6 +419,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         if {[dict get $ast diagnostics] ne ""} {
             foreach diagnostic [dict get $ast diagnostics] {
                 puts "   error: [dict get $diagnostic file]:[dict get $diagnostic line]:[dict get $diagnostic column]: [dict get $diagnostic message] (SURFACE SYNTAX)"
+                helpHint stdout "   " {SURFACE SYNTAX} [dict get $diagnostic message]
             }
             return 1
         }
@@ -160,12 +429,14 @@ proc runFile {path showCode showHir showAst showAot showNative} {
             set hir [hir::readFile $path]
         } elseif {$extension eq ".hirx"} {
             if {[catch {hir::interchange::readFile $path} hir options]} {
-                puts "   error: $hir ([dict get $options -errorcode])"
+                printError stdout "   error: " $hir $options
                 return 1
             }
         } elseif {[catch {surface::readProgramFile $path -warnings $warnings -target $target} hir options]} {
             printError stdout "   error: " $hir $options
             return 1
+        } else {
+            warningHints $hir
         }
         # Core IR is only produced for the branch that consumes it, the
         # interpreter. The Tcl compiler compiles the HIR once (below), for
@@ -185,7 +456,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         } $backend]
     } else {
         if {$backend in $nativeBackends || $showNative ne ""} {
-            puts "   error: $path is core IR text; native compilation starts from HIR (.bot or .hir), never core IR (NATIVE AOT INPUT)"
+            printError stdout "   error: " "$path is core IR text; native compilation starts from HIR (.bot or .hir), never core IR" {-errorcode {NATIVE AOT INPUT}}
             return 1
         }
         set program [core::loadProgramFile $path]
@@ -234,7 +505,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     # A .bot/.hir/.hirx program: the Tcl compiler's one compilation of its HIR.
     set compiled [expr {$extension in {.hir .hirx .bot} && ($backend eq "compile" || $showCode)}]
     if {$compiled && [catch {core::compiler::compileHir $hir} unit options]} {
-        puts "   error: $unit ([dict get $options -errorcode])"
+        printError stdout "   error: " $unit $options
         return 1
     }
     if {$showCode} {
@@ -247,11 +518,11 @@ proc runFile {path showCode showHir showAst showAot showNative} {
             clif { puts [native::clif $shownHir {*}$nativeOptions] }
         }
     } message options]} {
-        puts "   error: $message ([dict get $options -errorcode])"
+        printError stdout "   error: " $message $options
         return 1
     }
     if {[catch {core::process::withArgv $::injectedArgv $run} value options]} {
-        puts "   error: $value ([dict get $options -errorcode])"
+        printError stdout "   error: " $value $options
         return 1
     }
     puts "   value: [core::value::show $value 1]"
@@ -278,10 +549,14 @@ proc runFile {path showCode showHir showAst showAot showNative} {
 # Writes the analyzed HIR of the .bot or .hir file PATH in the HIR
 # interchange format, as PATH without its extension plus .hirx.
 proc emitInterchange {path} {
-    global warnings target
+    global warnings target hintsShown
+    set hintsShown {}
     if {[catch {
         switch -- [file extension $path] {
-            .bot { set hir [surface::readProgramFile $path -warnings $warnings -target $target] }
+            .bot {
+                set hir [surface::readProgramFile $path -warnings $warnings -target $target]
+                warningHints $hir
+            }
             .hir { set hir [hir::readFile $path] }
             default { throw {HIR INTERCHANGE INPUT} "expected a .bot or .hir input file: $path" }
         }
@@ -295,10 +570,14 @@ proc emitInterchange {path} {
 }
 
 proc emitExecutable {path} {
-    global warnings target
+    global warnings target hintsShown
+    set hintsShown {}
     if {[catch {
         switch -- [file extension $path] {
-            .bot { set hir [surface::readProgramFile $path -warnings $warnings -target $target] }
+            .bot {
+                set hir [surface::readProgramFile $path -warnings $warnings -target $target]
+                warningHints $hir
+            }
             .hir { set hir [hir::readFile $path] }
             .hirx { set hir [hir::interchange::readFile $path] }
             default { throw {NATIVE AOT INPUT} "expected a .bot, .hir or .hirx input file (native executables are built from HIR, never from core IR text): $path" }
@@ -314,7 +593,7 @@ proc emitExecutable {path} {
 
 set nativeBackends {cranelift cranelift-generic}
 set backend [core::useBackend]
-set files {}
+set files [dict get $commandLine files]
 set warnings [hir::warnings::defaultMode]
 set target ""
 set showCode 0
@@ -327,33 +606,30 @@ set showAot ""
 set showNative ""
 set injectedArgv [core::process::defaultArgv]
 set injectedArgvGiven 0
-for {set i 0} {$i < [llength $argv]} {incr i} {
-    set arg [lindex $argv $i]
+foreach option [dict get $commandLine options] {
+    lassign $option arg value
     switch -- $arg {
         -backend {
-            set backend [lindex $argv [incr i]]
+            set backend $value
             if {$backend in $nativeBackends} {
                 # Native backends are not core::registerBackend backends:
                 # they compile HIR (native::evalHir), never core IR.
             } elseif {$backend in [core::backends]} {
                 core::useBackend $backend
             } else {
-                puts stderr "unknown backend \"$backend\" (known: [core::backends] $nativeBackends)"
-                exit 2
+                usageError "unknown backend \"$backend\" (known: [core::backends] $nativeBackends)"
             }
         }
         -target {
-            set target [lindex $argv [incr i]]
+            set target $value
             if {![core::cabi::isTarget $target]} {
-                puts stderr "unknown C ABI target \"$target\" (known: [join [core::cabi::targetNames] {, }])"
-                exit 2
+                usageError "unknown C ABI target \"$target\" (known: [join [core::cabi::targetNames] {, }])"
             }
         }
         -warnings {
-            set warnings [lindex $argv [incr i]]
+            set warnings $value
             if {$warnings ni {default off error}} {
-                puts stderr "unknown warnings mode \"$warnings\" (known: default off error)"
-                exit 2
+                usageError "unknown warnings mode \"$warnings\" (known: default off error)"
             }
         }
         -code    { set showCode 1 }
@@ -371,36 +647,20 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
         -emit-hir-interchange { set showNative interchange }
         -argv - -argv-hex {
             if {!$injectedArgvGiven} { set injectedArgv {}; set injectedArgvGiven 1 }
-            set value [lindex $argv [incr i]]
             if {$arg eq "-argv"} {
                 lappend injectedArgv [core::process::bytesOfText $value]
             } else {
+                if {![regexp {^([0-9A-Fa-f]{2})*$} $value]} {
+                    usageError "-argv-hex needs an even number of hexadecimal digits (found \"$value\")"
+                }
                 lappend injectedArgv [binary decode hex $value]
             }
         }
         -argv-none { set injectedArgv {}; set injectedArgvGiven 1 }
         -L {
-            if {$i + 1 >= [llength $argv]} {
-                puts stderr "-L needs a directory"
-                exit 2
-            }
-            lappend native::linkDirs [file normalize [lindex $argv [incr i]]]
-        }
-        default  {
-            if {[string match -* $arg]} {
-                puts stderr "unknown option \"$arg\""
-                exit 2
-            }
-            lappend files $arg
+            lappend native::linkDirs [file normalize $value]
         }
     }
-}
-if {$files eq ""} {
-    if {$showNative in {executable interchange}} {
-        puts stderr "usage: tclsh9.0 main.tcl -emit-[expr {$showNative eq "executable" ? "native-executable" : "hir-interchange"}] FILE.bot"
-        exit 1
-    }
-    set files [lsort [glob -directory [file join $root examples] *.ir]]
 }
 set failures 0
 foreach path $files {

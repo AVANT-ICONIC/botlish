@@ -1,0 +1,2186 @@
+# errors-control.topic -- diagnostics of control placement, declared errors,
+# contexts, direct modules, C calls, layouts, lockstep, flags, static forms.
+
+@topic error.unhandled-error
+title: UNHANDLED-ERROR: a call may fail and nothing handles or admits it
+summary: A call that may complete with a declared error must handle it with `on NAME:`, admit it in the enclosing function's `errors` clause, or be proven unable to raise it; this one does none of those.
+index: errors
+alias: neither handled here nor admitted; may produce the declared error; unhandled declared error; error not handled
+keywords: on, errors clause, handler, admit, propagate, fail, declared error, IndexNotFound, LowerUnderrun, UpperOverrun, Fn contract, top level, grouped
+related: rule.unhandled-errors concept.errors proof.completions proof.list-bounds proof.slices proof.callable-contracts error.known-error error.undeclared-error concept.function-types rule.one-handler-per-error principle.errors-over-sentinels stdlib.list::get
+docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md DIAGNOSTIC-RECOVERY.md VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md
+code: CORE SEMANTIC UNHANDLED-ERROR
+
+== MEANING
+Every call carries an obligation for each declared error it may complete
+with. The call must do one of three things with each one:
+
+  * handle it where the call is, with an `on NAME:` handler written
+    under the call;
+  * admit it: the enclosing function lists it in its `errors` clause
+    (`fn f(x) -> int errors NAME:`), and the error passes on to f's
+    callers, who carry the same obligation;
+  * be proven unable to raise it: the completion analysis shows, from
+    the facts known at this call, that the error cannot occur
+    (proof.completions).
+
+UNHANDLED-ERROR reports a call for which at least one possible error is
+none of the three. The message names the whole unhandled set of the call,
+sorted, in one diagnostic:
+
+    this call may produce the declared error "Bad", which is neither
+    handled here nor admitted by the enclosing function's own "errors"
+    declaration
+    this call may produce the declared errors "A", "B" and "C", which are
+    neither handled here nor admitted ...
+
+Handling one member of a group leaves exactly the rest. The same code is
+reported, with its own wording, for `fail NAME` in a function that does not
+declare NAME:
+
+    "fail Bad" is not admitted here: the enclosing function does not
+    declare "errors Bad"
+
+The language's reason: a failure is a declared, typed completion, never an
+exception that escapes unseen. A program says, at every call, what happens
+when the call fails -- or the compiler has proven it cannot.
+
+== LIKELY CAUSES
+  * A call of your own fallible function from a function that neither
+    handles nor declares its errors.
+  * An intrinsic with declared errors whose precondition is not proven
+    here. The usual ones:
+        list::at, mutable_array::at, str::char_at   IndexNotFound
+        str::substring                    LowerUnderrun, UpperOverrun
+        argv()                            InvalidArgumentEncoding
+        binary::parse                     LayoutLengthMismatch
+    `xs.at(i)` is free of the obligation only in the forms proof.list-bounds
+    lists, and str::substring only in those of proof.slices. A guard on a
+    computed local, a descending loop or a field path is not related to
+    the length today:
+        this call of "list::at" may produce the declared error
+        "IndexNotFound", which is neither handled here nor admitted ...
+  * A function body is checked once, for every argument: facts about the
+    arguments of one call (`twice(4)`) are not carried into the callee's
+    body, where the parameter is any int.
+  * A call through a function value. A parameter typed with a structural
+    function type is bounded by its contract,
+    `Fn{args: [int], return: int, errors: [Bad]}`, so a call through it
+    may produce exactly Bad (the message says "this call through a
+    callable of function type ..."); a value the analysis cannot identify
+    and no contract bounds is charged every error a callable passed
+    through an untyped parameter may raise (proof.callable-contracts).
+  * A call at the program's top level. The top level has no `errors`
+    clause, so every possible error of a top-level call must be handled
+    there or proven impossible.
+  * A coroutine resume, or a rejected `static compile:` block, whose
+    error (compiler::CompilerError) is not admitted where it stands.
+
+== HOW TO INVESTIGATE
+Read the error names in the message: they are canonical identities, so a
+module's error appears qualified (`io::WriteFailed`). For an intrinsic,
+`-help list::at` (or the symbol) shows its declared errors and the page of
+the proof that removes them. For your own function, its `errors` clause is
+the contract; the analysis may narrow it per call (an argument proven
+non-negative removes an error raised only for negative input) but never
+widens it.
+
+== WHAT TO DO
+Decide where the failure is meaningful:
+
+  * Handle it where a sensible value exists: write the call, a colon and
+    one `on NAME:` handler per error (one error per handler); the
+    handler's value replaces the call's.
+  * Admit it when the caller is the one who knows what to do: add the
+    error to the enclosing function's `errors` clause.
+  * Restate the code in a form the compiler proves (proof pages list the
+    recognized forms), so that the error is impossible and no handler is
+    needed. For list access, list::get(xs, i, default) is the handler
+    written once.
+
+Do not add a handler for an error the call can never complete normally
+without: a call proven to always fail is KNOWN-ERROR, handler or not.
+
+@example reject
+error Negative
+
+fn checked(x: int) -> int errors Negative:
+    if x < 0:
+        fail Negative
+    x
+
+fn twice(x: int) -> int:
+    checked(x) * 2
+
+twice(4)
+@caption The caller neither handles nor admits Negative
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 9:5
+@end
+
+@example accept
+error Negative
+
+fn checked(x: int) -> int errors Negative:
+    if x < 0:
+        fail Negative
+    x
+
+fn or_zero(x: int) -> int:
+    r = checked(x):
+        on Negative:
+            0
+    r + 1
+
+fn twice(x: int) -> int errors Negative:
+    checked(x) * 2
+
+[or_zero(-5), or_zero(4), checked(3)]
+@caption Handled (or_zero), admitted (twice), proven away (checked(3))
+@value [1, 5, 3]
+@end
+
+@example reject
+error A
+error B
+error C
+
+fn pick(x: int) -> int errors A, B, C:
+    if x == 1:
+        fail A
+    if x == 2:
+        fail B
+    if x == 3:
+        fail C
+    x
+
+fn use(x: int) -> int:
+    pick(x)
+
+0
+@caption One diagnostic names the call's whole unhandled set
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 15:5
+@message *the declared errors "A", "B" and "C", which are neither*
+@end
+
+@topic error.known-error
+title: KNOWN-ERROR: a call proven to always fail, even under a handler
+summary: A call that the compiler proves can never complete normally is rejected, whether or not a handler or an `errors` clause covers its error: a statically known failure is a mistake, not a branch.
+index: errors
+alias: can never complete normally; statically known failure; always fails; known failure
+keywords: handler, on, KnownError, always, constant argument, literal, risky, negative test, static compile, test::rejects, parameter
+related: rule.known-error concept.known-errors concept.negative-tests proof.completions error.unhandled-error concept.static-compile concept.testing stdlib.test::rejects proof.list-bounds
+docs: STATIC-COMPLETION-PROOFS.md STATIC-COMPILE.md GOLDEN-TEST-FRAMEWORK.md
+code: CORE SEMANTIC KNOWN-ERROR
+
+== MEANING
+The completion analysis computes, for each call, whether it may complete
+normally under the facts proven for its arguments at that call. When it
+cannot -- every path through the callee ends in a declared error -- the
+call is KNOWN-ERROR:
+
+    this call can never complete normally under the facts proven for its
+    arguments here -- it always produces the declared error(s) Bad; a
+    handler does not make a statically known failure legal
+
+This is checked before handlers are even consulted. Botlish's completion
+rule has three outcomes, and this is the third:
+
+    provable success      no obligation: no handler is needed
+    uncertain             the error is handled or admitted (UNHANDLED-ERROR)
+    provable failure      a compile-time error: KNOWN-ERROR
+
+Why a handler does not make it legal: a handler is how a program says what
+happens when a call *may* fail at run time. For a call that always fails,
+the call and its handler are an `if` whose condition the compiler has
+already decided; the program would always run the handler, and the call
+is dead weight that hides a mistake (a wrong constant, a stale argument).
+An `errors` clause does not make it legal either: a function that calls
+one that always fails always fails itself.
+
+== LIKELY CAUSES
+  * A literal argument that the callee rejects: `risky(-3)` where risky
+    fails for negative input, `byte::from_int(999)`, `[1, 2].at(5)`.
+  * A function whose only purpose is to fail (its whole body is `fail
+    Bad`): every call of it is KNOWN-ERROR, even from a function that
+    declares `errors Bad`. Write `fail Bad` where the failure is.
+  * A test of an error path written as a literal call with a handler,
+    such as `risky(-3): on Bad: -1` to check the failure path: the
+    compiler rejects it (concept.negative-tests shows how to test it).
+
+== HOW TO INVESTIGATE
+The message names the errors the call always produces. Look at the call's
+arguments where it is written: constants, and bindings whose exact value
+the compiler follows (a binding of a literal, arithmetic on literals). The
+callee's guard (`if n < 0: fail Bad`) decides with those facts. Facts about
+arguments are those of this call site only: inside a function, a parameter
+is unknown, so the same call written there with the parameter is not known
+to fail.
+
+== WHAT TO DO
+If the failure is a mistake, fix the argument. If you are writing a test of
+the failure path (a negative test, concept.negative-tests), use one of the
+two supported forms:
+
+  * Route the failing input through a parameter: a small function that
+    takes the input and handles the error. Inside it the call is uncertain,
+    so the handler is legal; the test calls the function with the bad
+    input.
+  * Put the call in a `static compile:` block inside a function that
+    declares `errors compiler::CompilerError`: the rejected block becomes
+    that error, whose payload carries the code (KnownError), and the
+    golden test framework checks it with test::rejects (concept.testing).
+
+Inside a `static compile:` block, KNOWN-ERROR is the recoverable
+diagnostic code compiler::DiagnosticCode::KnownError.
+
+@example reject
+error Bad
+
+fn risky(n: int) -> int errors Bad:
+    if n < 0:
+        fail Bad
+    n
+
+risky(-3):
+    on Bad:
+        -1
+@caption A handler does not make a known failure legal
+@error CORE SEMANTIC KNOWN-ERROR
+@at 8:1
+@end
+
+@example accept
+error Bad
+
+fn risky(n: int) -> int errors Bad:
+    if n < 0:
+        fail Bad
+    n
+
+fn attempt(n: int) -> int:
+    risky(n):
+        on Bad:
+            -1
+
+attempt(-3)
+@caption The failing input routed through a parameter
+@value -1
+@end
+
+@example accept
+import compiler
+
+error Bad
+
+fn risky(n: int) -> int errors Bad:
+    if n < 0:
+        fail Bad
+    n
+
+fn probe() -> int errors compiler::CompilerError:
+    static compile:
+        risky(-3)
+
+probe():
+    on compiler::CompilerError:
+        -1
+@caption The rejection itself observed through static compile
+@value -1
+@end
+
+@topic error.undeclared-error
+title: UNDECLARED-ERROR: an error name that denotes no declared error
+summary: An error named in `fail`, `on`, an `errors` clause or a function type is not a visible declared error, or an `error` declaration repeats an existing name.
+index: errors
+alias: unknown error; no error declaration is visible; error is already declared
+keywords: error declaration, fail, on, errors clause, qualified, module error, builtin error, redeclare
+related: concept.errors error.unhandled-error error.missing-error-payload concept.modules concept.imports error.duplicate error.missing-import
+docs: EXPLICIT-ERROR-COMPLETIONS.md ERROR-PAYLOADS.md
+code: CORE SEMANTIC UNDECLARED-ERROR
+
+== MEANING
+An error is a nominal identity introduced by `error NAME` (with an
+optional payload). Every place that names one -- `fail NAME`, a handler
+`on NAME:`, an `errors` clause, a `Fn{..., errors: [...]}` type -- is
+resolved once, in the namespace of the code that writes it, to a declared
+error. When the spelling denotes none:
+
+    unknown error "Nope": no "error Nope" declaration is visible
+
+A module's error is named qualified outside that module (`io::WriteFailed`,
+`compiler::CompilerError`); when the short name matches a module's error,
+the message says so:
+
+    unknown error "CompilerError": no "error CompilerError" declaration is
+    visible here (a module's error is named qualified outside its module:
+    compiler::CompilerError)
+
+The same code reports a declaration that repeats an identity, including a
+builtin error of the runtime (InvalidArgumentEncoding, IndexNotFound,
+LowerUnderrun, UpperOverrun, LayoutLengthMismatch):
+
+    error "Bad" is already declared
+    error "IndexNotFound" is already declared (a builtin error of the
+    runtime)
+
+== LIKELY CAUSES
+  * A typo, or a `fail` written before its `error` declaration exists.
+  * A module's error spelled by its short name outside the module. (A
+    qualified name of a module that is not imported, such as
+    `compiler::CompilerError` without `import compiler`, is MISSING-IMPORT
+    instead.)
+  * Declaring an error whose name is a builtin error.
+
+== WHAT TO DO
+Declare the error (`error Nope`, top level), spell a module's error with
+its qualifier, import the module, or rename a declaration that collides.
+There is no wildcard handler and no catch-all error.
+
+@example reject
+fn lookup(key: str) -> int:
+    fail Missing
+
+0
+@caption No `error Missing` declaration exists
+@error CORE SEMANTIC UNDECLARED-ERROR
+@at 2:5
+@end
+
+@topic error.missing-error-payload
+title: MISSING-ERROR-PAYLOAD: fail of an error with fields, without its payload
+summary: An error declared with fields carries a payload, and `fail NAME` must construct it: `fail NAME {field: value, ...}`.
+index: errors
+alias: carries a payload; fail without payload
+keywords: error payload, fields, fail, construct, struct literal
+related: concept.error-payloads error.unexpected-error-payload concept.errors error.undeclared-error
+docs: ERROR-PAYLOADS.md
+code: CORE SEMANTIC MISSING-ERROR-PAYLOAD
+
+== MEANING
+`error NotFound:` followed by `key: str` declares an error whose every
+occurrence carries a value of those fields. The name alone is not that
+value, so `fail NotFound` is rejected:
+
+    error "NotFound" carries a payload, which "fail NotFound" must
+    construct: write "fail NotFound {key: ...}" (the error's name alone is
+    not its payload)
+
+The payload is checked like a struct construction: every declared field
+exactly once (MISSING-FIELD, UNKNOWN-FIELD, TYPE otherwise).
+
+== WHAT TO DO
+Construct the payload at the `fail`: `fail NotFound {key: key}`. If no
+`fail` site has anything to say, the error needs no fields: remove them
+from the declaration (and from handlers that bind them).
+
+@example reject
+error NotFound:
+    key: str
+
+fn lookup(key: str) -> int errors NotFound:
+    fail NotFound
+
+0
+@caption The error declares a field; fail must supply it
+@error CORE SEMANTIC MISSING-ERROR-PAYLOAD
+@at 5:5
+@end
+
+@example accept
+error NotFound:
+    key: str
+
+fn lookup(key: str) -> int errors NotFound:
+    if key == "one":
+        return 1
+    fail NotFound {key: key}
+
+fn missing_key(key: str) -> str:
+    lookup(key):
+        on NotFound {key: missing}:
+            return missing
+    "found"
+
+[missing_key("two"), missing_key("one")]
+@caption The payload constructed at fail, destructured in the handler
+@value ["two", "found"]
+@end
+
+@topic error.unexpected-error-payload
+title: UNEXPECTED-ERROR-PAYLOAD: a payload for an error that declares none
+summary: An error declared without fields has no payload: `fail NAME {...}` cannot construct one and `on NAME details:` or `on NAME {a}:` has nothing to bind.
+index: errors
+alias: declares no payload; nothing to bind
+keywords: error payload, fail, handler, details, destructure, fields
+related: concept.error-payloads error.missing-error-payload concept.errors
+docs: ERROR-PAYLOADS.md
+code: CORE SEMANTIC UNEXPECTED-ERROR-PAYLOAD
+
+== MEANING
+A payload-free error (`error Empty`, no field lines) is one identity and
+nothing else. Two places can try to give it a value:
+
+    fail Empty {reason: "none"}
+        error "Empty" declares no payload: write "fail Empty" (to give it
+        one, declare its fields: "error Empty:" followed by "field: Type"
+        lines)
+    on Empty details:          (or on Empty {reason}:)
+        error "Empty" declares no payload: there is nothing to bind
+        (write "on Empty:")
+
+== WHAT TO DO
+Write `fail Empty` and `on Empty:`; or, if the information is real, declare
+the error's fields and construct them at every `fail`.
+
+@example reject
+error Empty
+
+fn first(n: int) -> int errors Empty:
+    if n == 0:
+        fail Empty {reason: "none"}
+    n
+
+0
+@caption Empty declares no fields
+@error CORE SEMANTIC UNEXPECTED-ERROR-PAYLOAD
+@at 5:9
+@end
+
+@topic error.break-outside-loop
+title: BREAK-OUTSIDE-LOOP: break is not lexically inside a loop
+summary: `break` must be written inside a loop body of the same function; a function boundary (a nested `fn`) between the break and the loop is not crossed.
+index: errors
+alias: break outside lexical loop; break outside loop
+keywords: break, loop, nested function, closure, placement
+related: rule.control-placement concept.loops error.continue-outside-loop error.return-outside-callable
+docs: COLLECTING-LOOPS.md PAYLOAD-FREE-BREAK.md
+code: CORE SEMANTIC BREAK-OUTSIDE-LOOP
+
+== MEANING
+`break` ends the innermost enclosing loop (a bare `loop:`, a collecting
+loop, a lockstep loop). It is resolved lexically: the loop must enclose
+the `break` in the same function. `if` branches and error handlers inside
+the loop body do not count as a boundary; a nested `fn` does, because its
+body runs whenever it is called, possibly after the loop has finished.
+
+    break outside lexical loop
+
+Core IR text reports the same code, at load time or when the call
+boundary is crossed at run time.
+
+== LIKELY CAUSES
+  * `break` in a function body or at the top level, with no loop.
+  * `break` inside a helper function defined in a loop, meant to end the
+    outer loop.
+
+== WHAT TO DO
+Move the `break` into the loop body. To end a loop from a helper, have the
+helper return a value (a Bool, or an enum case) and `break` in the loop on
+it. `break` never takes a value: a collecting loop's value is its List,
+and a bare `break` ends it with the elements collected so far (`break 5`
+is a SURFACE SYNTAX error).
+
+@example reject
+fn stop():
+    break
+
+0
+@caption break in a function body with no loop
+@error CORE SEMANTIC BREAK-OUTSIDE-LOOP
+@at 2:5
+@end
+
+@topic error.continue-outside-loop
+title: CONTINUE-OUTSIDE-LOOP: continue is not lexically inside a loop
+summary: `continue` must be written inside a loop body of the same function; it cannot reach a loop across a nested function.
+index: errors
+alias: continue outside lexical loop; continue outside loop
+keywords: continue, loop, nested function, placement
+related: rule.control-placement concept.loops error.break-outside-loop error.return-outside-callable
+docs: COLLECTING-LOOPS.md
+code: CORE SEMANTIC CONTINUE-OUTSIDE-LOOP
+
+== MEANING
+`continue` starts the next iteration of the innermost enclosing loop (in a
+collecting loop the skipped iteration contributes nothing; in a lockstep
+loop every clause advances). Like `break`, it is resolved lexically, within
+one function:
+
+    continue outside lexical loop
+
+== WHAT TO DO
+Move it into the loop body. A helper function cannot continue its caller's
+loop: return a value and decide in the loop (`if skip?(x): continue`).
+
+@example reject
+fn skip():
+    continue
+
+0
+@caption continue in a function body with no loop
+@error CORE SEMANTIC CONTINUE-OUTSIDE-LOOP
+@at 2:5
+@end
+
+@topic error.return-outside-callable
+title: RETURN-OUTSIDE-CALLABLE: return outside a function
+summary: `return` leaves the enclosing function, so it is legal only inside a function body; the program's top level is not a function.
+index: errors
+alias: return outside callable invocation; return at top level
+keywords: return, top level, function, program value, placement
+related: rule.control-placement concept.functions concept.program-value error.break-outside-loop error.continue-outside-loop
+docs: EXPLICIT-ERROR-COMPLETIONS.md
+code: CORE SEMANTIC RETURN-OUTSIDE-CALLABLE
+
+== MEANING
+`return EXPR` (or a bare `return`) completes the innermost enclosing
+function with a value. Written at the top level of a program -- including
+in a top-level `if` or loop -- it has no function to leave:
+
+    return outside callable invocation
+
+== WHAT TO DO
+A program's value is its last expression (concept.program-value): write
+the value as the last line instead of `return`. To leave early, put the
+code in a function and call it.
+
+@example reject
+return 3
+@caption The top level is not a function
+@error CORE SEMANTIC RETURN-OUTSIDE-CALLABLE
+@at 1:1
+@end
+
+@topic error.listloop-break-value
+title: LISTLOOP-BREAK-VALUE: break with a value in a collecting loop (internal)
+summary: An internal guard: HIR in which a `break` carries a value out of a collecting loop is rejected; Botlish source cannot produce it, because the parser rejects every `break` with a value.
+index: errors
+alias: break with a value is not valid inside a collecting loop
+keywords: break, collecting loop, value, HIR, internal
+related: error.break-outside-loop concept.loops error.surface-syntax
+docs: RETURNING-ITERABLE-LOOPS.md PAYLOAD-FREE-BREAK.md
+code: CORE SEMANTIC LISTLOOP-BREAK-VALUE
+
+== MEANING
+A collecting loop (`loop x in xs:`, `loop i from a to b:`, a lockstep loop)
+has exactly one result type, the List of its body's values; a bare `break`
+ends it with the List collected so far. A `break VALUE` would let one exit
+replace that List with a value of an unrelated type, so the resolver
+rejects it:
+
+    break with a value is not valid inside a collecting loop (loop x in
+    ..., loop i from ...): use a bare break to end the loop with the
+    collected prefix
+
+No Botlish source program reaches this check: the surface parser rejects
+`break` followed by any value, in every kind of loop, as SURFACE SYNTAX
+("\"break\" does not take a value"). The check defends HIR built by other
+means than the source front end. If you see it from a source program,
+report it as a compiler bug.
+
+== WHAT TO DO
+In source: write a bare `break`. To produce a different result when a loop
+stops early, compute it after the loop (or in a function that `return`s
+it).
+
+@topic error.missing-context
+title: MISSING-CONTEXT: a call needs a context that is not installed
+summary: The called function (or one it calls) declares a context parameter, and no `with context` installation of that context precedes this call at the program's top level.
+index: errors
+alias: is required by this call but is not installed here; no installed context implements it; context not installed
+keywords: with context, context parameter, context struct, context trait, io::IO, installation, chain, requirement, order
+related: concept.contexts concept.context-traits proof.contexts rule.context-installation error.not-a-context error.context-function-value error.context-installation-unsupported stdlib.module.io
+docs: CONTEXTS.md CONTEXT-TRAITS.md
+code: CORE SEMANTIC MISSING-CONTEXT
+
+== MEANING
+A function that uses a value of the execution environment declares it in
+its context section, `fn now(context clock: Clock)`, and every function
+that calls it, directly or through others, requires that context too,
+without writing anything. A call at the top level must find every context
+its callee requires installed by an earlier `with context EXPR` line:
+
+    Clock is required by this call but is not installed here (install it
+    with "with context EXPR" before the call):
+        report
+         -> now
+            directly requires Clock
+
+The chain shows why: the shortest call path from the called function to
+one that declares the context. For a context trait (io::IO, ...) the
+message says that no installed context implements it, and lists the
+installed contexts:
+
+    io::IO is required by this call, but no installed context implements
+    it (install one with "with context EXPR" before the call): ...
+
+The reason for the check: a context is never looked up at run time. A
+program that compiles has every context it uses installed before the code
+that uses it runs.
+
+== LIKELY CAUSES
+  * The `with context` line is missing, or it comes after the call:
+    installation takes effect from its line onward, never earlier.
+  * A top-level binding (`start = now()`) evaluated before the
+    installation.
+  * A module's top-level code (a module binding's initializer) calls a
+    context consumer: module code runs before the entry program installs
+    anything.
+  * Printing with io::print_line, which requires io::IO: install an
+    implementation, e.g. `with context linux::io::create()` (native
+    backends on Linux).
+
+== HOW TO INVESTIGATE
+Follow the chain to the function that "directly requires" the context. The
+`-contexts FILE.bot` option of botlish prints, for every function, the
+contexts it uses and requires, and why.
+
+== WHAT TO DO
+Install the context at the entry program's top level, as a statement,
+before the first call that needs it: `with context Clock {ticks: 0}`. Do
+not pass the context as an argument: the context section is not part of
+the call (`now()`, never `now(clock)`).
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn now(context clock: Clock) -> int:
+    clock.ticks
+
+fn report() -> int:
+    now()
+
+report()
+@caption report requires Clock through now; nothing installs it
+@error CORE SEMANTIC MISSING-CONTEXT
+@at 10:1
+@end
+
+@example accept
+context struct Clock:
+    ticks: int
+
+fn now(context clock: Clock) -> int:
+    clock.ticks
+
+fn report() -> int:
+    now() + 1
+
+with context Clock {ticks: 41}
+report()
+@caption Installed before the call
+@value 42
+@end
+
+@topic error.not-a-context
+title: NOT-A-CONTEXT: a context parameter or installation of a non-context type
+summary: Only a value of a type declared `context struct` can be installed with `with context` or received in a context section (or a `context trait` there); this type is neither.
+index: errors
+alias: is not a context; only a value of a type declared context struct
+keywords: context struct, context parameter, with context, struct, trait, context trait
+related: concept.contexts concept.context-traits error.missing-context error.context-type-not-exact error.duplicate-context
+docs: CONTEXTS.md CONTEXT-TRAITS.md
+code: CORE SEMANTIC NOT-A-CONTEXT
+
+== MEANING
+`context` is a struct modifier: `context struct Clock:` declares a type
+whose values may be installed into the execution environment. A context
+section entry (`context clock: Clock`) and a `with context EXPR` statement
+accept only such a type (and, in a context section, a context trait):
+
+    context parameter "clock": Clock is not a context (only a value of a
+    type declared "context struct" can be a context)
+    with context: a value of type int is not a context (only a value of a
+    type declared "context struct" can be installed)
+
+A value trait (an ordinary `trait`) in a context section is reported
+under this code as well: it abstracts over values, not over the
+environment.
+
+== WHAT TO DO
+Declare the struct with the modifier (`context struct Clock:`), or, if the
+value is an ordinary input, make it an ordinary parameter and pass it.
+
+@example reject
+struct Clock:
+    ticks: int
+
+fn now(context clock: Clock) -> int:
+    clock.ticks
+
+0
+@caption Clock is an ordinary struct
+@error CORE SEMANTIC NOT-A-CONTEXT
+@at 4:23
+@end
+
+@topic error.duplicate-context
+title: DUPLICATE-CONTEXT: a context type installed twice
+summary: A context is identified by its type, and at most one value of a type is installed: a second `with context` of the same type is rejected, never a replacement.
+index: errors
+alias: is already installed in this scope; context installed twice
+keywords: with context, installation, replace, shadow, identity
+related: concept.contexts rule.context-installation error.missing-context error.not-a-context
+docs: CONTEXTS.md
+code: CORE SEMANTIC DUPLICATE-CONTEXT
+
+== MEANING
+There is at most one installed value of each context type: no named
+instances, no replacement, no shadowing, no last-one-wins.
+
+    Clock is already installed in this scope
+
+The installation is static: the compiler knows which value every
+requirement reads, and a second installation would make that depend on
+position. (A program run without static checking gets the same failure
+at run time from the Tcl backends.)
+
+== WHAT TO DO
+Install each context type once. To give part of the program a different
+value, pass it as an ordinary argument, or declare a second context struct
+type for the second role.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+with context Clock {ticks: 1}
+with context Clock {ticks: 2}
+0
+@caption The second installation of Clock
+@error CORE SEMANTIC DUPLICATE-CONTEXT
+@at 5:1
+@end
+
+@topic error.context-type-not-exact
+title: CONTEXT-TYPE-NOT-EXACT: the installed value has no one exact context type
+summary: `with context EXPR` installs by the value's static type, which must be exactly one named context struct, not an anonymous struct, `any` or a choice of types.
+index: errors
+alias: must have one exact context-struct type
+keywords: with context, anonymous struct, any, union, inference, type annotation
+related: concept.contexts error.not-a-context error.duplicate-context concept.types
+docs: CONTEXTS.md
+code: CORE SEMANTIC CONTEXT-TYPE-NOT-EXACT
+
+== MEANING
+The installed type is inferred from the expression, and it is the
+context's identity. When inference gives an anonymous struct, `any`, or a
+type that may be one of several structs, there is no single identity to
+install under:
+
+    with context: the installed value must have one exact context-struct
+    type, but its type is struct{ticks: int}
+
+== LIKELY CAUSES
+  * An anonymous struct literal `{ticks: 1}` instead of `Clock {ticks: 1}`.
+  * A constructor function without a result annotation whose branches
+    build different structs, or whose result the compiler infers as any.
+
+== WHAT TO DO
+Construct the named context struct, or give the constructor a declared
+result type (`fn make() -> Clock:`).
+
+@example reject
+context struct Clock:
+    ticks: int
+
+with context {ticks: 1}
+0
+@caption An anonymous struct is not Clock
+@error CORE SEMANTIC CONTEXT-TYPE-NOT-EXACT
+@at 4:1
+@end
+
+@topic error.context-binding-collision
+title: CONTEXT-BINDING-COLLISION: a context parameter named like another parameter
+summary: Context parameters are ordinary locals of the function and share its one namespace, so one may not have the name of an ordinary parameter, a flag or another context parameter.
+index: errors
+alias: context parameter has the name of
+keywords: context parameter, parameter, flag, name, namespace, local
+related: concept.contexts error.duplicate-context-parameter error.duplicate concept.flags
+docs: CONTEXTS.md
+code: CORE SEMANTIC CONTEXT-BINDING-COLLISION
+
+== MEANING
+Inside the function a context parameter is an ordinary immutable local.
+Its name must therefore be distinct from every other parameter of the
+function:
+
+    context parameter "n" has the name of a parameter or flag of the same
+    function: context parameters are ordinary locals of the function and
+    share its one namespace
+
+== WHAT TO DO
+Rename the context parameter. Its name is local only: the context's
+identity is its type, so renaming it changes nothing for callers.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn now(n, context n: Clock) -> int:
+    n.ticks
+
+0
+@caption n is already the ordinary parameter
+@error CORE SEMANTIC CONTEXT-BINDING-COLLISION
+@at 4:19
+@end
+
+@topic error.duplicate-context-parameter
+title: DUPLICATE-CONTEXT-PARAMETER: one context type declared twice in a function
+summary: A function receives at most one value of each context type, so its context section may name a type (or a context trait) only once, whatever the local names.
+index: errors
+alias: context is declared twice
+keywords: context section, context parameter, context trait, identity, type
+related: concept.contexts error.context-binding-collision error.malformed-context-section
+docs: CONTEXTS.md CONTEXT-TRAITS.md
+code: CORE SEMANTIC DUPLICATE-CONTEXT-PARAMETER
+
+== MEANING
+A context is identified by its type and installed once, so two entries of
+one type would be two names for the same value:
+
+    context Clock is declared twice (as "a" and "b"): a function receives
+    at most one value of each context type, whatever the local names
+
+== WHAT TO DO
+Keep one entry; bind a second local name in the body if one is wanted
+(`b = a`). Two genuinely different values need two context types.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn now(context a: Clock, b: Clock) -> int:
+    a.ticks
+
+0
+@caption Clock twice in one context section
+@error CORE SEMANTIC DUPLICATE-CONTEXT-PARAMETER
+@at 4:29
+@end
+
+@topic error.context-function-value
+title: CONTEXT-FUNCTION-VALUE: a context-requiring function used as a value
+summary: A function that requires a context may only be called (or aliased by a statement), never passed, returned or stored: a call through a function value could not prove the context installed.
+index: errors
+alias: requires context so it can only be called
+keywords: function value, higher-order, callback, pass, return, store, closure, context requirement
+related: concept.contexts concept.closures concept.function-types error.missing-context error.direct-callable-value
+docs: CONTEXTS.md
+code: CORE SEMANTIC CONTEXT-FUNCTION-VALUE
+
+== MEANING
+Context requirements are computed over exact call edges: a call of a
+function, an alias of one (`g = f`), a module function. A call through a
+parameter, a field or a list element could reach any function, and context
+requirements are not part of function types, so the analysis could not
+see what it needs. The frontier is closed at the source:
+
+    function now requires context Clock, so it can only be called (or
+    bound to another name as a statement): it cannot be passed, returned
+    or stored as a value, because a call through an unknown function value
+    could not prove that context installed
+
+This includes returning the function as a body's or the program's last
+expression, choosing it in an `if` value, and closures that call a
+context consumer (they require the context too).
+
+== WHAT TO DO
+Pass the data instead of the function, or wrap the work so the
+higher-order code only receives context-free functions: call the consumer
+first and pass its result, or restructure so the consumer is called
+directly where the context is known.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn now(context clock: Clock) -> int:
+    clock.ticks
+
+fn twice(f) -> int:
+    f() + f()
+
+with context Clock {ticks: 1}
+twice(now)
+@caption now passed as an argument
+@error CORE SEMANTIC CONTEXT-FUNCTION-VALUE
+@at 11:7
+@end
+
+@topic error.context-installation-unsupported
+title: CONTEXT-INSTALLATION-UNSUPPORTED: with context outside the top level
+summary: `with context EXPR` is supported only as a statement at the entry program's top level: not in a function, a loop, an `if` branch, a handler, an expression or a module.
+index: errors
+alias: context installation is currently supported only; with context inside a function
+keywords: with context, installation, top level, function, loop, branch, module
+related: rule.context-installation concept.contexts error.missing-context error.duplicate-context concept.modules
+docs: CONTEXTS.md
+code: CORE SEMANTIC CONTEXT-INSTALLATION-UNSUPPORTED
+code: SURFACE MODULE CONTEXT-INSTALLATION-UNSUPPORTED
+
+== MEANING
+Installation is deliberately narrow in this version of the language: the
+application decides its execution environment, once, at the top of the
+entry program. Anywhere else is rejected with where it was found:
+
+    context installation is currently supported only in the entry
+    program's top-level scope, as a statement (this one is inside a
+    function)
+
+The other places named are "inside a loop", "inside an if branch or error
+handler" and "inside an expression". In an imported module the loader
+reports it before anything is compiled, as SURFACE MODULE
+CONTEXT-INSTALLATION-UNSUPPORTED ("this one is inside a module: NAME,
+PATH"): a library never installs contexts for the program that imports
+it.
+
+== WHAT TO DO
+Move the `with context` line to the entry program's top level, before the
+calls that need it. A library offers a constructor (`linux::io::create()`)
+and the program installs its result.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn setup():
+    with context Clock {ticks: 1}
+    0
+
+0
+@caption Installation inside a function
+@error CORE SEMANTIC CONTEXT-INSTALLATION-UNSUPPORTED
+@at 5:5
+@end
+
+@topic error.module-context
+title: MODULE-CONTEXT: a module binding's initializer is not context-free
+summary: A module's top-level value bindings are computed once, before the entry program runs, so their initializers may only use operations classified context-free.
+index: errors
+alias: module binding initializer must be context-free
+keywords: module binding, module, initializer, context-free, native, top-level value
+related: rule.module-bindings concept.modules error.module-immutable error.missing-context
+docs: MODULE-BINDINGS.md
+code: CORE SEMANTIC MODULE-CONTEXT
+
+== MEANING
+A module may bind values at its top level (`table = [1, 2, 3]`). The
+compiler proves two facts about each: its initializer is context-free, and
+the retained value is immutable (MODULE-IMMUTABLE). Context-free means
+that every operation the initializer runs -- directly or through the
+functions it calls -- is a literal, a reference, control flow, a call of
+a function whose body is context-free, or an intrinsic registered as
+context-free. Anything else (an unclassified intrinsic, a call through a
+function value, a context load) is rejected, with the first offending
+operation named:
+
+    module binding initializer must be context-free: native operation
+    "context#load" is not classified context-free
+    module binding initializer must be context-free: call target is not
+    statically known
+
+The check applies to imported modules only (the entry program's top
+level is not a module), so it cannot be shown by a single-file example.
+In a module m2.bot,
+
+    context struct Clock:
+        ticks: int
+    fn now(context clock: Clock) -> int:
+        clock.ticks
+    start = now()
+
+reports MISSING-CONTEXT at the call and MODULE-CONTEXT at the binding.
+
+== WHAT TO DO
+Make the module value a function (`fn start() -> int:` with the body
+`now()`), which runs when it is called, under the program's installed
+contexts; or compute the value from literals and context-free operations.
+
+@topic error.malformed-context-section
+title: MALFORMED-CONTEXT-SECTION: a parameter list's context section is malformed
+summary: The context section comes last in a parameter list, once, as `context NAME: Type, NAME: Type`; a flag after it, a second section or an entry without its type is a syntax error.
+index: errors
+alias: context section cannot follow; needs its context type
+keywords: context section, parameter list, flags, order, type, syntax
+related: concept.contexts concept.flags error.malformed-flag-section error.duplicate-context-parameter error.surface-syntax
+docs: CONTEXTS.md FLAGS.md
+code: MALFORMED-CONTEXT-SECTION
+match: SURFACE SYNTAX | MALFORMED-CONTEXT-SECTION: *
+
+== MEANING
+A parameter list is a sequence of sections in one order: ordinary
+parameters, then flags, then the context section. The context section
+opens with the word `context` and holds `NAME: Type` entries; the type is
+required, because it is the context's identity. The parser reports, at the
+offender (printed as SURFACE SYNTAX, the message starting with the code):
+
+    a "flags" section cannot follow the context section: a parameter list
+    is ordinary parameters, then flags, then context
+    a "context" section cannot follow the context section: ... (list
+    several contexts in one section: "context a: A, b: B")
+    context parameter "clock" needs its context type: write "clock: Type"
+    (a context is identified by its type)
+
+== WHAT TO DO
+Write `fn f(x, flags :quick, context a: A, b: B)`: one context section,
+last, every entry typed.
+
+@example reject
+context struct Clock:
+    ticks: int
+
+fn now(context clock: Clock, flags :fast) -> int:
+    clock.ticks
+
+0
+@caption A flag section after the context section
+@error SURFACE SYNTAX
+@at 4:30
+@end
+
+@topic error.direct
+title: DIRECT: a module uses direct authority without acknowledging it
+summary: A call into a direct module (linux, a raw syscall transport, a retaining C function) is made by a function that requires no context of its own module, and the module is not declared `direct module`.
+index: errors
+alias: uses direct authority; undischarged direct edge
+keywords: direct module, linux, syscall, authority, context, mediate, contextualize, capability, extern c fn, captures
+related: concept.direct-modules concept.contexts error.stale-direct-module error.direct-callable-value error.direct-module-position concept.c-ffi stdlib.module.linux
+docs: DIRECT-MODULES.md CONTEXTS.md C-FFI.md
+code: CORE SEMANTIC DIRECT
+
+== MEANING
+Raw, ambient authority -- a syscall, a raw descriptor, a C call that may
+keep a pointer -- is acknowledged at the module boundary. A module is
+designated direct by `direct module` as its file's first line (or, for
+the raw syscall transports, by the compiler). A call in module U of a
+callable of another direct module is a direct edge of U; it is mediated
+when the function making the call requires a context (a context struct or
+context trait) that U declares itself. An unmediated edge makes U
+inferred direct, and then its declaration must say so:
+
+    the entry program uses direct authority: function "emit" calls
+    linux::write, a callable of the direct module "linux", without a
+    context defined by the entry program; require one of this module's
+    own contexts ("context NAME: T", T a context struct or context trait
+    declared by the entry program) in "emit", the function that makes the
+    direct call, or declare the module direct with `direct module` as its
+    first line
+
+The entry program is a module like any other. Reported once per function,
+at its first undischarged edge.
+
+== LIKELY CAUSES
+  * Calling linux, linux::sys or a transport from an ordinary program or
+    module (for printing, use io or linux::io, which mediate it).
+  * A helper without a context making the call for a function that has
+    one: the context must be on the function that makes the call.
+  * A context of another module in the context section: only the
+    calling module's own contexts mediate.
+  * Calling an `extern c fn` whose contract lets it retain a pointer
+    (`captures`, or an unknown escape).
+
+== HOW TO INVESTIGATE
+`botlish -direct FILE.bot` prints every module's declared and
+inferred directness and every call into a direct module, with the
+module-owned context that mediates it or "undischarged".
+
+== WHAT TO DO
+Either mediate: declare a context struct in this module and require it in
+the function that makes the call (`fn emit(text: str, context io:
+LocalIO)`), installing it at the top level; or declare the whole file
+`direct module` when it is deliberately low-level. There is no per-call or
+per-function exemption.
+
+@example reject
+import abi
+import abi::bytes
+import linux
+import str
+
+fn emit(text: str) -> int:
+    linux::write(abi::i32(1), abi::bytes::from_list(str::encode_utf8(text)))
+
+0
+@caption linux::write called without a context of the entry program
+@error CORE SEMANTIC DIRECT
+@at 7:5
+@end
+
+@topic error.direct-callable-value
+title: DIRECT-CALLABLE-VALUE: a direct module's callable used as a value
+summary: A module that is not declared direct may call a direct module's function but may not pass, return, store or capture it as a value, which would carry the authority past its context boundary unseen.
+index: errors
+alias: is a callable of the direct module
+keywords: direct module, function value, pass, return, store, capture, authority
+related: concept.direct-modules error.direct error.context-function-value
+docs: DIRECT-MODULES.md
+code: CORE SEMANTIC DIRECT-CALLABLE-VALUE
+
+== MEANING
+Direct edges are exact calls. A function value of a direct module could be
+called anywhere, through code the analysis cannot see:
+
+    linux::write is a callable of the direct module "linux": the entry
+    program, which is not declared direct, may only call it (or bind it to
+    another name as a statement), never pass, return, store or capture it
+    as a value -- a call through an unknown function value would carry
+    direct authority past this module's context boundary unseen
+
+== WHAT TO DO
+Call the function directly, in a function that requires one of this
+module's contexts; pass data, not the callable. A module declared `direct
+module` may take a direct callable as a value.
+
+@example reject
+import abi
+import abi::bytes
+import linux
+
+fn pick():
+    linux::write
+
+0
+@caption linux::write returned as a value
+@error CORE SEMANTIC DIRECT-CALLABLE-VALUE
+@at 6:5
+@end
+
+@topic error.stale-direct-module
+title: STALE-DIRECT-MODULE: a direct module declaration nothing needs
+summary: `direct module` must state exactly what the compiler infers: a file that makes no unmediated call into a direct module must not declare it.
+index: errors
+alias: direct module is unnecessary
+keywords: direct module, stale, marker, declaration, inference, mediated
+related: concept.direct-modules error.direct error.direct-module-position
+docs: DIRECT-MODULES.md
+code: CORE SEMANTIC STALE-DIRECT-MODULE
+
+== MEANING
+The marker is an exact declaration, not a permission bit: a module never
+silently becomes direct when a call is added (DIRECT), and a marker never
+outlives the authority it acknowledged:
+
+    `direct module` is unnecessary: the entry program makes no call into a
+    direct module, so it exposes no direct authority; remove the
+    declaration (it must state exactly what the compiler infers)
+
+When the module does call direct modules but every call is mediated by its
+own contexts, the message says that instead. This is a whole-file
+property, reported at the marker; a `static compile:` block can never
+produce it.
+
+== WHAT TO DO
+Remove the `direct module` line (`-direct FILE.bot` shows what the
+compiler infers). If the module is meant to be low-level, the marker
+returns with its first unmediated direct call.
+
+@example reject
+direct module
+
+0
+@caption A program with no direct call declared direct
+@error CORE SEMANTIC STALE-DIRECT-MODULE
+@at 1:1
+@end
+
+@topic error.direct-module-form
+title: DIRECT-MODULE-FORM: direct module followed by something
+summary: `direct module` is exactly two words on a line of its own: a module's identity is its file path, so the declaration takes no name and nothing follows it.
+index: errors
+alias: direct module takes no name
+keywords: direct module, syntax, module name, file path
+related: concept.direct-modules error.direct-module-position error.duplicate-direct-module error.surface-syntax
+docs: DIRECT-MODULES.md
+code: DIRECT-MODULE-FORM
+match: SURFACE SYNTAX | DIRECT-MODULE-FORM: *
+
+== MEANING
+There is no `module NAME` declaration in Botlish: lib/linux.bot is the
+module linux because of where it is. So:
+
+    `direct module` takes no name: a module's identity is its file path
+    (lib/linux.bot is the module linux), so the declaration is the two
+    words alone
+    expected end of line after `direct module`, found ...
+
+== WHAT TO DO
+Write the two words alone on the file's first line.
+
+@example reject
+direct module linux
+0
+@caption A name after direct module
+@error SURFACE SYNTAX
+@at 1:15
+@end
+
+@topic error.direct-module-position
+title: DIRECT-MODULE-POSITION: direct module not at the start of the file
+summary: `direct module` declares the whole file's module direct, so it is written once, as the file's first declaration (only comments and blank lines before it), never inside a function or block.
+index: errors
+alias: direct module must be the file's first declaration
+keywords: direct module, position, first line, import, function, block
+related: concept.direct-modules error.direct-module-form error.duplicate-direct-module error.direct error.surface-syntax
+docs: DIRECT-MODULES.md
+code: DIRECT-MODULE-POSITION
+match: SURFACE SYNTAX | DIRECT-MODULE-POSITION: *
+
+== MEANING
+Directness is a property of the module, visible to a reviewer at the top
+of the file. The parser rejects the marker anywhere else:
+
+    `direct module` must be the file's first declaration, before its
+    imports and every other declaration or statement (only comments and
+    blank lines may precede it), and is written at most once
+
+Inside a function, loop, branch, handler or static block the message adds
+that there is no function-, block- or call-level form.
+
+== WHAT TO DO
+Move the line above the imports. There is no narrower form: mediate the
+calls through a context of the module instead (DIRECT).
+
+@example reject
+import list
+direct module
+0
+@caption direct module after an import
+@error SURFACE SYNTAX
+@at 2:1
+@end
+
+@topic error.duplicate-direct-module
+title: DUPLICATE-DIRECT-MODULE: direct module written twice
+summary: A file declares itself direct once, as its first declaration; a second `direct module` line is a syntax error.
+index: errors
+alias: duplicate direct module
+keywords: direct module, duplicate, twice
+related: concept.direct-modules error.direct-module-position error.direct-module-form error.surface-syntax
+docs: DIRECT-MODULES.md
+code: DUPLICATE-DIRECT-MODULE
+match: SURFACE SYNTAX | DUPLICATE-DIRECT-MODULE: *
+
+== MEANING
+    duplicate `direct module`: the file already declared it (at
+    FILE:1:1); a module is declared direct once, as the file's first
+    declaration
+
+== WHAT TO DO
+Delete the second line.
+
+@example reject
+direct module
+direct module
+0
+@caption The marker twice
+@error SURFACE SYNTAX
+@at 2:1
+@end
+
+@topic error.extern-syntax
+title: EXTERN-SYNTAX: a malformed extern c fn or extern c library declaration
+summary: `extern c fn NAME [named "SYMBOL"](PARAMS) -> TYPE [FACT]` and `extern c library "NAME"` are the only extern forms; anything else is a located syntax error naming the remedy.
+index: errors
+alias: extern declaration names its foreign ABI; the only foreign ABI is c
+keywords: extern, c, fn, library, named, symbol, linker, noescape, captures, read, write, syntax, FFI
+related: concept.c-ffi error.foreign-borrow error.surface-syntax backend.native-only
+docs: C-FFI.md C-ABI-TYPES.md
+code: EXTERN-SYNTAX
+match: SURFACE SYNTAX | EXTERN-SYNTAX: *
+
+== MEANING
+An extern declaration is a truthful C ABI declaration with no body:
+
+    extern c library "crypto"
+    extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar]
+        read noescape, count: ffi::c::ULong) -> ffi::c::ULong
+
+The parser reports each malformed form at the offender, for example:
+
+    an extern declaration names its foreign ABI: write "extern c fn
+    NAME(...) -> T" (the only foreign ABI is c)
+    expected the library's name as a string after "extern c library" ...
+    an extern c fn is a declaration with no body: it has no trailing ":"
+    duplicate "named": an extern c fn has one link symbol
+
+Also reported: a library given as a path or a linker option, a symbol that
+is not a valid link symbol, `fn` or `library` missing after `extern c`,
+varargs, and a fact stated twice.
+
+== WHAT TO DO
+Follow the grammar in concept.c-ffi: `c` is the only ABI, the library is
+the linker's name as a string (`"crypto"` for -lcrypto), every parameter
+and the result are typed (`-> unit` for void), and there is no body and no
+`errors` clause. A program that calls C runs on the native backends only;
+a declaration that is never called compiles anywhere.
+
+@example reject
+extern fn f() -> unit
+0
+@caption The ABI is missing
+@error SURFACE SYNTAX
+@at 1:8
+@end
+
+@topic error.foreign-borrow
+title: FOREIGN-BORROW: bytes passed to a C pointer that does not admit them
+summary: Bytes or MutableBytes reach a C pointer parameter for one call only if its contract says noescape, a known access (read or write) and a byte-sized pointee; this argument fails one.
+index: errors
+alias: byte storage is exposed to C only; temporary byte exposure refused
+keywords: FFI, extern c fn, abi::bytes::Bytes, MutableBytes, noescape, captures, access, read, write, pointer, borrow, exposure, alias, independent
+related: concept.c-ffi error.extern-syntax error.direct error.imprint stdlib.module.ffi::c stdlib.module.abi::bytes
+docs: C-POINTER-BORROWING.md C-FFI.md C-ABI-TYPES.md
+code: CORE SEMANTIC FOREIGN-BORROW
+
+== MEANING
+A foreign call may borrow an existing abi::bytes::Bytes or MutableBytes
+for the duration of the call -- no pointer value of Botlish storage is
+ever made, and no pointer may outlive the call. The contract of the
+parameter decides, and nothing else (not a `const`, a name or a C type):
+
+    escape      noescape or proven noescape; `captures` or unknown is
+                refused (unknown is never "probably synchronous")
+    access      read or write; unknown is refused
+    write       needs a MutableBytes: C writes a private copy, which the
+                call returns (`written.out`); an immutable Bytes is read
+                only
+    pointee     ffi::c::Char, SChar, UChar or Void
+
+A pointer result of a call that exposes storage must say where it comes
+from (`independent`, or `alias PARAM`). The refusal names the argument and
+the reason, e.g.:
+
+    argument 1 of fill: parameter "p" lets C modify the bytes (access
+    write), and an immutable abi::bytes::Bytes is exposed only for
+    reading: expose an abi::bytes::MutableBytes, whose written bytes the
+    call returns
+
+This is a compile-time check: it is reported on every backend, although
+only the native backends can run a C call.
+
+== WHAT TO DO
+Pass the owner the contract admits (a MutableBytes for write access); if
+the contract is wrong, fix the declaration's facts -- they are your
+promise about the C function, so state what its documentation guarantees.
+A parameter C may keep cannot take Botlish storage at all.
+
+@example reject
+import abi
+import abi::bytes
+import ffi::c
+
+extern c fn fill(
+    p: ffi::c::Ptr[ffi::c::UChar] write noescape,
+    n: ffi::c::ULong
+) -> unit
+
+fn give(data: abi::bytes::Bytes):
+    fill(data, 4)
+
+0
+@caption C writes through p; an immutable Bytes is exposed for reading only
+@error CORE SEMANTIC FOREIGN-BORROW
+@at 11:10
+@end
+
+@topic error.imprint
+title: IMPRINT: a call's imprint variables cannot be bound
+summary: A signature with imprint variables (T in `List[T]`) is imprinted at each call: the arguments must establish every variable consistently, or the call supplies them explicitly as `f[TYPE](...)`.
+index: errors
+alias: imprint variable is not established; imprinted callable is not a value; explicit imprints
+keywords: imprint, imprint variable, T, generic, List[T], ffi::c::null, ffi::c::Ptr, explicit, f[int]
+related: concept.c-ffi concept.specialization concept.function-types error.type error.foreign-borrow stdlib.module.ffi::c
+docs: C-ABI-TYPES.md
+code: CORE SEMANTIC IMPRINT
+
+== MEANING
+An imprint variable is a one-letter capital name (T, K, T2) in a
+signature, naming no visible type: whatever type a particular call
+imprints there. It is not a declared generic parameter -- Botlish has no
+`fn f[T]` -- and the body is checked once, for every T. A variable is
+established by an argument whose parameter holds it in an applied type
+(`List[T]`, `MutableArray[T]`, `ffi::c::Ptr[T]`, ...), left to right; a
+variable that occurs only in the result is supplied at the call. IMPRINT
+reports a call that cannot bind them, or a callable used as a value:
+
+    empty: imprint variable T is not established (it occurs only in the
+    result, and no type named T is visible where empty is declared): write
+    empty[T](...) with explicit imprints
+    both: imprint variable T is int by an earlier argument but str by
+    argument 2
+    empty takes 1 imprint(s), [T] (in the order they first occur in its
+    signature), but 2 are given
+    plus has no imprint variables, so it takes no imprint plus[...]
+    first has imprint variables, so it is not a value: an imprinted
+    callable is only called, where each call imprints its variables (wrap
+    the call in a function to pass it on)
+
+A parameter declared with a bare variable (`fn identity(x: T) -> T`)
+establishes nothing; that declaration is a TYPE error, not IMPRINT.
+
+== WHAT TO DO
+Give explicit imprints, all of them, in first-occurrence order:
+`empty[int]()`, `ffi::c::null[ffi::c::Void]()`. Make the arguments agree.
+To pass an imprinted function on, wrap one call of it in an ordinary
+function.
+
+@example reject
+import list
+
+fn empty() -> List[T]:
+    []
+
+xs = empty()
+xs
+@caption T occurs only in the result
+@error CORE SEMANTIC IMPRINT
+@at 6:6
+@end
+
+@example accept
+import list
+
+fn empty() -> List[T]:
+    []
+
+xs = empty[int]()
+xs
+@caption The imprint supplied at the call
+@value []
+@end
+
+@topic error.layout-size
+title: LAYOUT-SIZE: a layout's size is not a valid byte count
+summary: A `layout` declares its size explicitly with `size N`, a byte count from 1 to 2147483647; zero or a larger number is rejected at the size.
+index: errors
+alias: layout has size
+keywords: layout, size, binary, bytes, declaration
+related: concept.binary-layouts error.layout-alignment error.layout-field-bounds stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-SIZE
+
+== MEANING
+A layout describes a fixed number of physical bytes, stated, never
+computed from an ABI:
+
+    layout "Header" has size 0: a layout's size is a byte count from 1 to
+    2147483647
+
+A layout error is a declaration error: it rejects the whole program and is
+never a `static compile:` block's rejection (a layout is top level only).
+
+== WHAT TO DO
+State the real size of the record in bytes; every field must fit inside it
+(LAYOUT-FIELD-BOUNDS).
+
+@example reject
+import binary
+
+layout Header:
+    size 0
+    align 4
+    field magic: binary::U32 at 0
+
+0
+@caption A layout of zero bytes
+@error CORE SEMANTIC LAYOUT-SIZE
+@at 4:10
+@end
+
+@topic error.layout-alignment
+title: LAYOUT-ALIGNMENT: a layout's alignment is not a power of two
+summary: `align N` must be a power of two from 1 to 268435456.
+index: errors
+alias: layout has alignment
+keywords: layout, align, alignment, power of two, binary
+related: concept.binary-layouts error.layout-size stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-ALIGNMENT
+
+== MEANING
+    layout "Header" has alignment 3: an alignment is a power of two from 1
+    to 268435456
+
+The alignment is recorded and reported (binary::layout_alignment); there
+is deliberately no rule that the size be a multiple of it or that field
+offsets be aligned, so packed and vendor layouts are legal as stated.
+
+== WHAT TO DO
+Use the record's real alignment: 1, 2, 4, 8, ...
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 3
+    field magic: binary::U32 at 0
+
+0
+@caption 3 is not a power of two
+@error CORE SEMANTIC LAYOUT-ALIGNMENT
+@at 5:11
+@end
+
+@topic error.layout-field-type
+title: LAYOUT-FIELD-TYPE: a layout field's type has no fixed-width encoding
+summary: A layout field is a scalar whose integer domain is exactly one fixed-width encoding's value set (binary::U8 .. U64, I8 .. I64, or an equal `Int in a..b`), or a nested layout.
+index: errors
+alias: cannot have type; no fixed width
+keywords: layout, field, int, binary::U32, domain, encoding, width, signed, unsigned, nested layout
+related: concept.binary-layouts concept.integer-domains error.layout-cycle stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-FIELD-TYPE
+
+== MEANING
+The encoding of a field follows from its type's interval alone:
+`0..2^(8k)-1` is unsigned and `-2^(8k-1)..2^(8k-1)-1` two's complement, k
+in 1, 2, 4, 8. Because the domain is exactly the encoding's value set,
+every bit pattern parses and every value emits, with no check. Anything
+else is rejected at the type:
+
+    field "magic" of layout "Header" cannot have type int: int has no
+    fixed width: a scalar field is an integer domain whose values are
+    exactly one fixed-width encoding's (e.g. binary::U32, Int in
+    0..4294967295)
+
+Also rejected: a narrower or exact-set domain (`Int in 0..100`), a
+refinement, str, bool, a struct, `LayoutStruct[L]` (write the layout L
+itself) and an unknown name.
+
+== WHAT TO DO
+Use binary::U8 .. binary::U64 or binary::I8 .. binary::I64 (or your own
+domain with exactly that interval). Check a narrower range after parsing,
+in ordinary code.
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: int at 0
+
+0
+@caption int is unbounded
+@error CORE SEMANTIC LAYOUT-FIELD-TYPE
+@at 6:18
+@end
+
+@topic error.layout-field-bounds
+title: LAYOUT-FIELD-BOUNDS: a layout field lies outside the layout
+summary: Every field's bytes (its offset plus its width) must lie inside the layout's declared size, and an offset is a byte count from 0.
+index: errors
+alias: outside the layout's size
+keywords: layout, field, offset, width, size, bounds
+related: concept.binary-layouts error.layout-size error.layout-field-overlap stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-FIELD-BOUNDS
+
+== MEANING
+    field "magic" of layout "Header" occupies bytes 6..9 (offset 6, width
+    4), outside the layout's size 8
+
+The message names the bytes the field would occupy, so the fix is
+visible: move the field or enlarge the layout.
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 6
+
+0
+@caption Four bytes at offset 6 end past byte 7
+@error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
+@at 6:33
+@end
+
+@topic error.layout-field-overlap
+title: LAYOUT-FIELD-OVERLAP: two layout fields share a byte
+summary: The fields of a layout never overlap: layouts have no union or overlay, so two fields covering a common byte are rejected at the later one.
+index: errors
+alias: overlaps field
+keywords: layout, field, overlap, union, overlay, offset
+related: concept.binary-layouts error.layout-field-bounds stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-FIELD-OVERLAP
+
+== MEANING
+    field "count" of layout "Header" (bytes 2..3) overlaps field "magic"
+    (bytes 0..3): the fields of a layout never share a byte (an overlay
+    would be an explicit union construct, which layouts do not have)
+
+== WHAT TO DO
+Fix the offsets. To read the same bytes two ways, declare two layouts and
+parse the data with each.
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+    field count: binary::U16 at 2
+
+0
+@caption count's bytes are inside magic's
+@error CORE SEMANTIC LAYOUT-FIELD-OVERLAP
+@at 7:33
+@end
+
+@topic error.layout-cycle
+title: LAYOUT-CYCLE: a layout contains itself by value
+summary: A nested layout field holds the inner layout's bytes by value, so a layout that contains itself, directly or through others, would have no finite size.
+index: errors
+alias: contains itself by value
+keywords: layout, nested, recursive, cycle, pointer
+related: concept.binary-layouts error.layout-field-type stdlib.module.binary
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-CYCLE
+
+== MEANING
+    layout "Node" contains itself by value through Node -> Node: a fixed
+    layout has a finite size, so it can never contain itself (a reference
+    to one is a pointer field, not a nested layout)
+
+The chain names every layout on the cycle. Layouts have no pointer scalar
+yet, so a linked record cannot be described as a layout today.
+
+@example reject
+layout Node:
+    size 8
+    align 4
+    field next: Node at 0
+
+0
+@caption Node holds a Node by value
+@error CORE SEMANTIC LAYOUT-CYCLE
+@at 4:17
+@end
+
+@topic error.layout-not-a-type
+title: LAYOUT-NOT-A-TYPE: a layout's name used as a type
+summary: A layout describes bytes and is not itself a type: the values imprinted with layout L have the type `LayoutStruct[L]`.
+index: errors
+alias: is a layout, not a type
+keywords: layout, LayoutStruct, type annotation, parameter, binary::parse
+related: concept.binary-layouts error.layout-not-a-value error.layout-struct-parameter stdlib.binary::parse
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-NOT-A-TYPE
+
+== MEANING
+    unknown or invalid type Header for parameter "h": "Header" is a
+    layout, not a type: a layout describes bytes, and the values imprinted
+    with it have the type LayoutStruct[Header]
+
+== WHAT TO DO
+Annotate with `LayoutStruct[Header]`.
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+
+fn f(h: Header) -> int:
+    0
+
+0
+@caption Header as a parameter type
+@error CORE SEMANTIC LAYOUT-NOT-A-TYPE
+@at 8:5
+@end
+
+@topic error.layout-not-a-value
+title: LAYOUT-NOT-A-VALUE: a layout's name used as a value
+summary: No runtime layout object exists: a layout is named only in a type (`LayoutStruct[L]`) or as the static layout operand of a binary operation.
+index: errors
+alias: is a layout, not a value
+keywords: layout, value, binary::parse, layout_length, method syntax, Header.parse
+related: concept.binary-layouts error.layout-not-a-type error.layout-operand stdlib.binary::parse
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-NOT-A-VALUE
+
+== MEANING
+    "Header" is a layout, not a value: a layout is named in a type
+    (LayoutStruct[Header]) or as the layout operand of a binary operation
+    (binary::parse(Header, data), binary::layout_length(Header)), and no
+    runtime layout object exists
+
+`x = Header`, `[Header]`, `Header(...)` and `Header.parse(d)` (method
+syntax would make the layout a receiver value) are all this error.
+
+== WHAT TO DO
+Write the layout at the operation: `binary::parse(Header, data)`. To vary
+the layout, write one call per layout.
+
+@example reject
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+
+x = Header
+0
+@caption A layout bound to a name
+@error CORE SEMANTIC LAYOUT-NOT-A-VALUE
+@at 8:5
+@end
+
+@topic error.layout-operand
+title: LAYOUT-OPERAND: a binary operation's layout operand is not a layout name
+summary: The layout argument of binary::parse, binary::layout_length and binary::layout_alignment is static evidence written at the call: a layout's name, never a variable, string or expression.
+index: errors
+alias: layout operand must be the name of a layout
+keywords: layout, binary::parse, operand, static, parameter, value
+related: concept.binary-layouts error.layout-not-a-value error.unknown-layout stdlib.binary::parse
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-OPERAND
+
+== MEANING
+    the layout operand of binary::parse must be the name of a layout, but
+    "which" is a value here: the layout is static evidence, never a
+    computed value
+
+Every compiled backend reads the layout's descriptor at compile time, so
+the operand cannot be chosen at run time.
+
+@example reject
+import abi::bytes
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+
+fn f(data: abi::bytes::Bytes, which):
+    binary::parse(which, data)
+
+0
+@caption A parameter as the layout
+@error CORE SEMANTIC LAYOUT-OPERAND
+@at 10:19
+@end
+
+@topic error.layout-struct-parameter
+title: LAYOUT-STRUCT-PARAMETER: LayoutStruct applied to something other than a layout
+summary: `LayoutStruct[L]` is a built-in applied type whose one argument must name a `layout` declaration; a type, struct, enum or refinement is rejected at the annotation.
+index: errors
+alias: the argument of LayoutStruct must name a layout declaration
+keywords: LayoutStruct, layout, type argument, struct, generic
+related: concept.binary-layouts error.unknown-layout error.layout-not-a-type
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-STRUCT-PARAMETER
+
+== MEANING
+LayoutStruct is not a generic struct facility: its argument is a layout,
+not a type parameter, and the message says what the argument is instead:
+
+    unknown or invalid type LayoutStruct[int] for parameter "v":
+    LayoutStruct[int]: int is a built-in type, not a layout; the argument
+    of LayoutStruct must name a layout declaration (`layout Name:`), whose
+    fields LayoutStruct[Name] has
+
+An unknown name is UNKNOWN-LAYOUT instead.
+
+@example reject
+import binary
+
+fn f(v: LayoutStruct[int]) -> int:
+    0
+
+0
+@caption int is not a layout
+@error CORE SEMANTIC LAYOUT-STRUCT-PARAMETER
+@at 3:5
+@end
+
+@topic error.unknown-layout
+title: UNKNOWN-LAYOUT: a layout name that denotes no visible layout
+summary: A layout operand of a binary operation, or the argument of `LayoutStruct[...]`, names no visible `layout` declaration.
+index: errors
+alias: unknown layout
+keywords: layout, binary::parse, LayoutStruct, qualified, import, module
+related: concept.binary-layouts error.layout-operand error.layout-struct-parameter concept.imports
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC UNKNOWN-LAYOUT
+
+== MEANING
+    unknown layout "Missing" (the layout operand of binary::parse): no
+    "layout Missing:" declaration is visible
+    unknown layout "Missing" in LayoutStruct[Missing]: ...
+
+A module's layout is named qualified once the module is imported
+(`binary::parse(geo::Box, data)`); `import type` does not reach layouts.
+
+== WHAT TO DO
+Fix the spelling, declare the layout, or import its module and qualify it.
+
+@example reject
+import abi::bytes
+import binary
+
+fn f(data: abi::bytes::Bytes):
+    binary::parse(Missing, data)
+
+0
+@caption No layout named Missing
+@error CORE SEMANTIC UNKNOWN-LAYOUT
+@at 5:19
+@end
+
+@topic error.lockstep-unequal
+title: LOCKSTEP-UNEQUAL: lockstep clauses provably iterate different numbers of times
+summary: A lockstep loop (`loop a in xs and i from 0 to n:`) needs every clause to have the same iteration count; the compiler proved two counts differ.
+index: errors
+alias: clause 1 iterates
+keywords: lockstep, and, loop, iteration count, cardinality, zip, enumerate, length
+related: concept.lockstep proof.lockstep error.lockstep-unproven concept.loops task.iterate-with-index
+docs: COLLECTING-LOOPS.md
+code: CORE SEMANTIC LOCKSTEP-UNEQUAL
+
+== MEANING
+`and` advances every clause together, once per body execution. There is
+no shortest-wins rule, no padding and no run-time length check: a lockstep
+loop is legal exactly when the compiler proves the counts equal. When it
+proves them different (two constants, or forms that differ by a constant):
+
+    lockstep loop requires equal iteration counts; clause 1 iterates 3
+    times but clause 2 iterates 2 times
+
+== WHAT TO DO
+Make the ranges agree, typically `from 0 to xs.length()` beside
+`x in xs`. For a pairwise walk of lists of different lengths, iterate the
+shorter count with an index and read both lists (handling IndexNotFound
+where the proof does not reach).
+
+@example reject
+loop x in [1, 2, 3] and i from 0 to 2:
+    x + i
+@caption Three elements against two indices
+@error CORE SEMANTIC LOCKSTEP-UNEQUAL
+@at 1:1
+@end
+
+@example accept
+import list
+
+fn indexed(xs: List[int]) -> List[int]:
+    loop x in xs and i from 0 to xs.length():
+        x * i
+
+indexed([4, 5, 6])
+@caption An element and its index
+@value [0, 5, 12]
+@end
+
+@topic error.lockstep-unproven
+title: LOCKSTEP-UNPROVEN: lockstep clauses not proven to iterate equally often
+summary: The compiler could not prove the clauses of a lockstep loop have equal iteration counts; equal lengths at run time do not matter, only what is proven.
+index: errors
+alias: could not prove; lockstep equal counts
+keywords: lockstep, and, loop, iteration count, cardinality, length, parameter, proof, zip
+related: concept.lockstep proof.lockstep error.lockstep-unequal concept.loops task.iterate-with-index
+docs: COLLECTING-LOOPS.md
+code: CORE SEMANTIC LOCKSTEP-UNPROVEN
+
+== MEANING
+    lockstep loop requires equal iteration counts; could not prove
+    length(xs) == length(ys) (clause 1 vs clause 2)
+
+Each clause's count is a linear form over atoms: a List's length
+(followed through immutable aliases), an Int binding, constants. Two
+counts are equal only when the forms are identical. Not known today:
+lengths of two different parameters, a struct field's List, a list::
+helper's result, a call (two calls of `f(x)` are two atoms), branch facts
+(`if n >= 0:`). A `ys = loop x in xs:` with no break or continue has
+exactly xs's length; one that may skip does not.
+
+== WHAT TO DO
+Write the clauses over the same List: `loop x in xs and i from 0 to
+xs.length():`. For two lists, iterate one and index the other, handling
+IndexNotFound (or use list::get with a default). There is no run-time
+check to opt into.
+
+@example reject
+import list
+
+fn pairs(xs: List[int], ys: List[int]) -> List[int]:
+    loop x in xs and y in ys:
+        x + y
+
+pairs([1], [2])
+@caption Two parameters' lengths are unrelated
+@error CORE SEMANTIC LOCKSTEP-UNPROVEN
+@at 4:5
+@end
+
+@topic error.malformed-flag
+title: MALFORMED-FLAG: a flag spelled without its name glued to the colon
+summary: A flag is written `:name`, the name directly after the colon: a space after the colon, a number or a keyword as the name is a syntax error at the colon.
+index: errors
+alias: flag is written :name; no space after the colon
+keywords: flag, colon, :name, syntax, keyword, space
+related: concept.flags rule.flags error.malformed-flag-section error.flag-not-a-value error.surface-syntax
+docs: FLAGS.md
+code: MALFORMED-FLAG
+match: SURFACE SYNTAX | MALFORMED-FLAG: *
+
+== MEANING
+In a flag section (`fn f(x, flags :quiet)`) and in a call (`f(1,
+:quiet)`), a flag is one token pair: `:` and a name glued to it.
+
+    a flag is written :a with no space after ":"
+    expected a flag name after ":", found integer 5: a flag is written
+    :name
+
+== WHAT TO DO
+Remove the space, or use a valid name (keywords such as `if` are not
+names).
+
+@example reject
+fn f(x, flags :quiet):
+    x
+
+f(1, : quiet)
+@caption A space after the colon
+@error SURFACE SYNTAX
+@at 4:6
+@end
+
+@topic error.malformed-flag-section
+title: MALFORMED-FLAG-SECTION: flags declared in the wrong place
+summary: A parameter list is ordinary parameters, then one `flags :a, :b` section; a parameter after the flags, a second flags section or a flag outside the section is a syntax error.
+index: errors
+alias: cannot follow the flags section; flag outside a flag section
+keywords: flags, flag section, parameter list, order, syntax
+related: concept.flags rule.flags error.malformed-flag error.malformed-context-section error.surface-syntax
+docs: FLAGS.md
+code: MALFORMED-FLAG-SECTION
+match: SURFACE SYNTAX | MALFORMED-FLAG-SECTION: *
+
+== MEANING
+    parameter "y" cannot follow the flags section: a parameter list is
+    ordinary parameters, then flags
+    a "flags" section cannot follow the flags section: a parameter list
+    has at most one flags section, after the ordinary parameters
+    flag :a is outside a flag section: declare flags after the ordinary
+    parameters as "flags :a"
+
+`flags` is contextual: it opens the section only when spelled `flags
+:NAME` (a space, then a colon glued to the name). `fn f(flags)` and `fn
+f(flags: int)` are ordinary parameters named flags.
+
+== WHAT TO DO
+Move ordinary parameters before the section and list every flag in one
+section: `fn f(x, y, flags :a, :b)`.
+
+@example reject
+fn f(x, flags :a, y):
+    x
+
+0
+@caption An ordinary parameter after the flags
+@error SURFACE SYNTAX
+@at 1:19
+@end
+
+@topic error.argument-after-flag
+title: ARGUMENT-AFTER-FLAG: an ordinary argument after a call flag
+summary: Flags come last in a call: `f(x, :a)`, never `f(:a, x)`.
+index: errors
+alias: ordinary argument cannot follow the flag
+keywords: flag, call, argument order, syntax
+related: concept.flags rule.flags error.flag-not-a-value error.surface-syntax
+docs: FLAGS.md
+code: ARGUMENT-AFTER-FLAG
+match: SURFACE SYNTAX | ARGUMENT-AFTER-FLAG: *
+
+== MEANING
+    an ordinary argument cannot follow the flag :a: flags come last in a
+    call
+
+A call mirrors the declaration's order: ordinary arguments, then flags.
+
+@example reject
+fn f(x, flags :a):
+    x
+
+f(:a, 1)
+@caption The flag first
+@error SURFACE SYNTAX
+@at 4:7
+@end
+
+@topic error.flag-not-a-value
+title: FLAG-NOT-A-VALUE: a flag written where a value is expected
+summary: `:name` exists only as a trailing argument of a call; it is not a value that can be bound, passed in a list or computed with.
+index: errors
+alias: is a call flag, not a value
+keywords: flag, value, symbol, keyword argument, :name
+related: concept.flags rule.flags error.argument-after-flag error.surface-syntax
+docs: FLAGS.md
+code: FLAG-NOT-A-VALUE
+match: SURFACE SYNTAX | FLAG-NOT-A-VALUE: *
+
+== MEANING
+A flag is a callable-interface category with no runtime representation:
+inside the callee it is an immutable Bool local, true when the call wrote
+the flag. There is no symbol or FlagSet value:
+
+    :a is a call flag, not a value: flags can only be written as the last
+    arguments of a call, e.g. f(x, :a)
+
+== WHAT TO DO
+Write the flag in the call. To choose a flag at run time, branch and write
+two calls, or use an ordinary Bool or enum parameter instead.
+
+@example reject
+fn f(x, flags :a):
+    x
+
+y = :a
+0
+@caption A flag bound to a name
+@error SURFACE SYNTAX
+@at 4:5
+@end
+
+@topic error.static-intrinsic-form
+title: STATIC-INTRINSIC-FORM: a malformed static compile block
+summary: A static intrinsic is written `static compile:` followed by an indented block on the next lines: no arguments, and no code on the colon's line.
+index: errors
+alias: static compile takes no arguments; static intrinsic names its operation
+keywords: static, static compile, block, indentation, syntax
+related: concept.static-compile error.static-unknown-operation concept.negative-tests error.surface-syntax
+docs: STATIC-COMPILE.md
+code: STATIC-INTRINSIC-FORM
+match: SURFACE SYNTAX | STATIC-INTRINSIC-FORM: *
+
+== MEANING
+`static compile:` captures the indented block after it; the block is
+compiled with the program and replaced by its body (accepted) or by `fail
+compiler::CompilerError {...}` (rejected). The parser reports:
+
+    "static compile" takes no arguments: it captures the indented block
+    written after "static compile:"
+    a static intrinsic names its operation after "static": write "static
+    compile:" followed by an indented block
+    "static compile:" captures an indented block: start it on a new line
+    after the ":", found integer 1
+
+== WHAT TO DO
+Write
+
+    static compile:
+        CODE UNDER TEST
+
+inside a function that declares `errors compiler::CompilerError` (after
+`import compiler`).
+
+@example reject
+x = static compile(1):
+    1
+x
+@caption An argument list after static compile
+@error SURFACE SYNTAX
+@at 1:19
+@end
+
+@topic error.static-unknown-operation
+title: STATIC-UNKNOWN-OPERATION: an operation after static that does not exist
+summary: The only static operation is `static compile:`; any other word after `static` is rejected, because it is compiler syntax and never a name looked up in scope.
+index: errors
+alias: unknown static operation
+keywords: static, static compile, static parse, static assert, compile-time evaluation
+related: concept.static-compile error.static-intrinsic-form error.surface-syntax
+docs: STATIC-COMPILE.md
+code: STATIC-UNKNOWN-OPERATION
+match: SURFACE SYNTAX | STATIC-UNKNOWN-OPERATION: *
+
+== MEANING
+    unknown static operation "parse": the static operations are "static
+    compile:"; an operation after "static" is compiler syntax, never a
+    name looked up in scope
+
+There is no `static parse:`, `static assert:`, compile-time evaluation or
+user-defined static operation.
+
+== WHAT TO DO
+Use `static compile:` to compile code and observe its acceptance or
+rejection; compute values at run time.
+
+@example reject
+static parse:
+    1
+@caption parse is not a static operation
+@error SURFACE SYNTAX
+@at 1:8
+@end
+
+@topic error.list-destructuring
+title: LIST-DESTRUCTURING: positional List destructuring is not supported
+summary: `[a, b] = value` is rejected by design: a List is a sequence of values, and several results with distinct roles are a struct with named fields, destructured as `{value, error} = result`.
+index: errors
+alias: positional list destructuring; destructure a list
+keywords: destructuring, list, tuple, pattern, multiple return values, struct, named fields, unpack
+related: rule.no-list-destructuring principle.name-the-parts concept.destructuring concept.structs concept.lists warning.fixed-arity-list-return error.surface-syntax
+docs: STRUCT-DESTRUCTURING.md MULTI-VALUE-RESULTS.md
+code: LIST-DESTRUCTURING
+match: SURFACE SYNTAX | LIST-DESTRUCTURING: *
+
+== MEANING
+A bracketed pattern on the left of `=`, at the start of a statement or
+nested as a field's pattern (`{inner: [a, b]} = p`), is rejected by the
+parser:
+
+    LIST-DESTRUCTURING: positional List destructuring is not supported;
+    use a struct value with named fields instead (a List is for a sequence
+    of values; have the function return a struct, e.g. `result =
+    get_result()` then `{value, error} = result`)
+
+This is a language policy, not an unfinished feature: positions carry no
+meaning a reader can check, while field names do (principle.name-the-parts).
+Lists remain the type for sequences: element access (list::at, list::get)
+and iteration are unchanged.
+
+== WHAT TO DO
+Return a struct (named or anonymous) and destructure it by field names;
+or, for genuine sequences, iterate the List or read elements by index.
+
+@example reject
+[a, b] = [1, 2]
+a
+@caption A List pattern
+@error SURFACE SYNTAX
+@at 1:1
+@end
+
+@example accept
+struct Split:
+    first: int
+    second: int
+
+fn split(n: int) -> Split:
+    Split {first: n, second: n * 2}
+
+{first, second} = split(3)
+first + second
+@caption A struct result destructured by field names
+@value 9
+@end

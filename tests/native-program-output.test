@@ -145,7 +145,7 @@ test native-output-raw-bytes {bytes linux::io::write writes reach main.tcl's sta
     removeFile native-output-bytes.bot
 } -result {1 1}
 
-test native-output-failure-keeps-output {a program that fails after printing keeps what it printed, then its error line (a native stack overflow)} -constraints {nativeLinux nativeBuilt} -setup {
+test native-output-failure-keeps-output {a program that fails after printing keeps what it printed, then its error line (a native stack overflow) and the error's help line} -constraints {nativeLinux nativeBuilt} -setup {
     set path [printingProgram native-output-failure.bot {
         ""
         "fn forever(k: int) -> int:"
@@ -163,7 +163,7 @@ test native-output-failure-keeps-output {a program that fails after printing kee
 } -body {
     lmap backend $nativeBackends {
         string equal [mainRun -backend $backend $path] \
-            [list "== native-output-failure.bot ($backend)\nbefore the failure\n   error: native stack exhausted: too many nested calls (NATIVE LIMIT STACK)\n" "" 1]
+            [list "== native-output-failure.bot ($backend)\nbefore the failure\n   error: native stack exhausted: too many nested calls (NATIVE LIMIT STACK)\n   help: [file tail [info nameofexecutable]] main.tcl -help error.native-limit-stack\n" "" 1]
     }
 } -cleanup {
     removeFile native-output-failure.bot

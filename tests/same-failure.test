@@ -560,7 +560,7 @@ fn f(x) errors Invalid:
     y}
 } -result 1
 
-test sf-two-handlers-same-failure {two handlers of one call failing one failure: two exits} -body {
+test sf-two-handlers-same-failure {two handlers of one call failing one failure: the translation of a call's errors into one of the function's own is one exit unit, written once per error because each error has its own handler (COMPILERPEDIA-REPORT.md, "Lint audit"): silent} -body {
     failures {error A
 error B
 error E
@@ -577,7 +577,45 @@ fn f(x) errors E:
         on B:
             fail E
     y}
-} -result {{13:13 E 2 15:13}}
+} -result {}
+
+test sf-two-handlers-and-a-guard {handler alternatives plus a guard failing the same failure span two units: reported, with every site} -body {
+    failures {error A
+error B
+error E
+fn g(x) errors A, B:
+    if x == 1:
+        fail A
+    if x == 2:
+        fail B
+    x
+fn f(x) errors E:
+    if x > 9:
+        fail E
+    y = g(x):
+        on A:
+            fail E
+        on B:
+            fail E
+    y}
+} -result {{12:9 E 3 {15:13 17:13}}}
+
+test sf-handlers-of-two-calls {handlers of two different calls failing one failure are two units: reported} -body {
+    failures {error A
+error E
+fn g(x) errors A:
+    if x == 1:
+        fail A
+    x
+fn f(x) errors E:
+    y = g(x):
+        on A:
+            fail E
+    z = g(y):
+        on A:
+            fail E
+    z}
+} -result {{10:13 E 2 13:13}}
 
 test sf-nested-function-owns-its-fails {target confusion: the enclosing function and its nested function fail E once each -- both silent, never one group of 2} -body {
     silent {error E
