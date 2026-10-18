@@ -58,22 +58,8 @@ set smokeFiles {
 # milestone that makes one pass removes it here; a new test file that fails
 # on macOS for a capability not ported yet is added with its cause.
 set notYet {
-    affine.test                            {4 native coroutines}
-    branch-form-boolean.test               {4 native coroutines}
-    c-abi-types.test                       {4 native coroutines}
     c-bindgen.test                         {7 the fixture's manifest records Ubuntu's clang, not Apple's}
     c-ffi.test                             {7 C calls are refused before the linker runs}
-    compilation-isolation.test             {4 native coroutines, the golden runner's too}
-    coroutines.test                        {4 native coroutines}
-    enums.test                             {4 native coroutines}
-    error-payloads.test                    {4 native coroutines}
-    hir-interchange.test                   {4 native coroutines}
-    mutable-array.test                     {4 native coroutines}
-    mutable-vector.test                    {4 native coroutines}
-    namespaced-errors.test                 {4 native coroutines}
-    native-listloop.test                   {4 native coroutines}
-    static-compile.test                    {4 native coroutines}
-    structural-contract-completions.test   {4 native coroutines}
 }
 
 proc usage {} {
