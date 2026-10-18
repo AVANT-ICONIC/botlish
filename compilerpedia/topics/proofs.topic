@@ -109,7 +109,9 @@ forms:
         if i < 0 or i >= xs.length():        if i >= 0 and i < xs.length():
             return ...                           xs.at(i)
         xs.at(i)
-    The guarded name may be a parameter or a loop variable.
+    The guarded name may be a parameter, a loop variable, or a local bound
+    to a computed index (`t = i + 1`, `t = f(i)`): the guard and the read
+    name the same value through it, or through an alias of it.
   * a length guard and a constant index:  if xs.length() > 0: xs.at(0)
   * a container of statically known size with an index of known range:
     a list literal (or an immutable binding of one) and a constant index.
@@ -152,6 +154,20 @@ fn pick(xs: List[int], t: int) -> int:
 [10, 20, 30].pick(1)
 @caption A guard on a parameter dominates the read
 @value 20
+@end
+
+@example accept
+import list
+
+fn after(xs: List[int], i: int) -> int:
+    t = i + 1
+    if t < 0 or t >= xs.length():
+        return -1
+    xs.at(t)
+
+[10, 20, 30].after(1)
+@caption A guard on a local bound to a computed index
+@value 30
 @end
 
 @example accept
@@ -202,12 +218,11 @@ loop i from 0 to t.slots.capacity():
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
 
-  * an index computed into a local binding, then guarded:
-        t = i + 1                 (or t = f(i), or f(i) written inline)
-        if t < 0 or t >= xs.length(): return -1
-        xs.at(t)
-    The guard is on a binding whose value is computed, not on a parameter
-    or loop variable.
+  * an index computed inline in the guard and again in the access:
+        if i + 1 < 0 or i + 1 >= xs.length(): return -1
+        xs.at(i + 1)
+    Each written `i + 1` is its own expression: bind it to a name once
+    (`t = i + 1`) and guard and read the name.
   * arithmetic on a bounded loop variable: xs.at(i + 1) with i below
     xs.length() - 1, or xs.at(i - 1) with i from 1.
   * a descending loop: `loop i down from xs.length() - 1 through 0:`
@@ -224,15 +239,14 @@ to the length, so the call must handle or admit IndexNotFound:
 import list
 
 fn after(xs: List[int], i: int) -> int:
-    t = i + 1
-    if t < 0 or t >= xs.length():
+    if i + 1 < 0 or i + 1 >= xs.length():
         return -1
-    xs.at(t)
+    xs.at(i + 1)
 
 0
-@caption A guard on a computed local binding is not related to the length
+@caption An index computed twice, in the guard and in the read
 @error CORE SEMANTIC UNHANDLED-ERROR
-@at 7:5
+@at 6:5
 @end
 
 @example reject
@@ -262,11 +276,11 @@ fn masked(a: MutableArray[int], h: int) -> int:
 
 == WHAT TO DO WHEN THE PROOF FAILS
 Restate the access in a recognized form when the code allows it: write
-the container the same way in the guard and the access; pass a computed
-index to a small helper function as a parameter and guard it there;
-iterate ascending (or iterate the elements, `loop x in xs:`, when the index
-is not needed); use lockstep (`loop x in xs and i from 0 to xs.length():`)
-for an element and its index.
+the container the same way in the guard and the access; bind a computed
+index to a name once and guard that name; iterate ascending (or iterate
+the elements, `loop x in xs:`, when the index is not needed); use lockstep
+(`loop x in xs and i from 0 to xs.length():`) for an element and its
+index.
 Otherwise make the outcome explicit: handle IndexNotFound where the read is
 (`xs.at(t): on IndexNotFound: fallback`), or use list::get(xs, i, default),
 which is that handler written once (stdlib.list::get). Admitting the error
@@ -337,8 +351,9 @@ fn prefix(s: str, n: int) -> str:
 @end
 
 == LIMITATIONS (NOT PROVEN TODAY)
-The same as for indexed access (proof.list-bounds): a bound computed into a
-local and then guarded, a bound that depends on a value the analysis cannot
+A bound computed into a local and then guarded (unlike an index: a guard on
+a computed local proves no slice), and, as for indexed access
+(proof.list-bounds), a bound that depends on a value the analysis cannot
 relate to the length. A slice whose start is an unconstrained parameter
 cannot be proven:
 

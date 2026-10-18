@@ -5026,10 +5026,13 @@ tests/proven-bounds.test bounds-field-path-index pass
 tests/proven-bounds.test bounds-field-path-lockstep pass
 tests/proven-bounds.test bounds-field-path-rejected pass
 tests/proven-bounds.test bounds-field-path-write pass
+tests/proven-bounds.test bounds-guarded-local-index pass
+tests/proven-bounds.test bounds-guarded-local-rejected pass
 tests/proven-bounds.test bounds-nir-copy-one-slice-proven-stays-checked pass
 tests/proven-bounds.test bounds-nir-field-path-write pass
 tests/proven-bounds.test bounds-nir-function-stops-being-fallible pass
 tests/proven-bounds.test bounds-nir-get-is-ordinary-botlish pass
+tests/proven-bounds.test bounds-nir-guarded-local pass
 tests/proven-bounds.test bounds-nir-handler-is-not-the-proof pass
 tests/proven-bounds.test bounds-nir-index-ops pass
 tests/proven-bounds.test bounds-nir-opt-off pass
@@ -5045,6 +5048,7 @@ tests/proven-bounds.test bounds-reduced-mask-rejected pass
 tests/proven-bounds.test bounds-reduced-mod-index pass
 tests/proven-bounds.test bounds-reduced-mod-rejected pass
 tests/proven-bounds.test bounds-values-agree-field-path pass
+tests/proven-bounds.test bounds-values-agree-guarded-local pass
 tests/proven-bounds.test bounds-values-agree-known-error-checked pass
 tests/proven-bounds.test bounds-values-agree-proven pass
 tests/proven-bounds.test bounds-values-agree-reduced pass

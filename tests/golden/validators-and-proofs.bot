@@ -1872,6 +1872,32 @@ fn register_bounds_theorem_tests():
             0
     test::rejects_containing("bounds-field-path-lockstep/unequal", compiler::DiagnosticCode::LockstepUnequal, "clause 1 iterates length(t.names) times but clause 2 iterates length(t.names) + 1 times", field_path_lockstep_unequal)
 
+    # bounds-values-agree-guarded-local: reads and writes at computed locals
+    # proven by a guard need no handler and compute the same values on
+    # every backend, in range, just outside it on both sides and far outside.
+    fn guarded_local_read() errors compiler::CompilerError:
+        static compile:
+            fn after(xs: List[int], i: int) -> int:
+                t = i + 1
+                if t < 0 or t >= list::length(xs):
+                    return -1
+                list::at(xs, t)
+            loop i in [-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424]:
+                after([10, 20, 30], i)
+    test::value("bounds-values-agree-guarded-local/after", [-1, -1, 10, 20, 30, -1, -1, -1], guarded_local_read)
+
+    fn guarded_local_write() errors compiler::CompilerError:
+        static compile:
+            fn bump(a: MutableArray[int], i: int) -> MutableArray[int]:
+                j = i * 2
+                if j >= 0 and j < mutable_array::capacity(a):
+                    mutable_array::set(a, j, mutable_array::at(a, j) + 1)
+                a
+            b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)
+            loop k from 0 to mutable_array::capacity(b):
+                mutable_array::at(b, k)
+    test::value("bounds-values-agree-guarded-local/bump", [1, 0, 1, 0, 1], guarded_local_write)
+
 # ---------------------------------------------------------------------------
 
 with context test::suite()

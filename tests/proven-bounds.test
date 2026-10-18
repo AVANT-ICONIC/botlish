@@ -254,6 +254,29 @@ test bounds-field-path-lockstep {the lockstep cardinality proof reads the same k
         [string match "*clause 1 iterates length(b.cells) times but clause 2 iterates length(b.cells) + 1 times*" [dict get $first message]]
 } -result {{} LOCKSTEP-UNEQUAL 1}
 
+# ---------------------------------------------------------------------------
+# Guards on computed locals (hir::completions::RelationKey): a relation on a
+# local bound to a computed value is keyed by its one defining expression
+
+test bounds-guarded-local-index {a guard on a local bound to a computed index proves the access through it, or through an alias of it, in either guard form: an offset, a call result, a product; the guard's lower half may be the local's own Range} -body {
+    set decl "fn g(n: int) -> int:\n    n - 1\nfn f(a: MutableArray\[int\], xs: List\[int\], s: str, i: int, h: int):\n    %s\nf(mutable_array::create(3, 0), \[1, 2\], \"abc\", 1, 5)"
+    list \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "t = g(i)\n    if t >= 0 and t < list::length(xs):\n        list::at(xs, t)\n    else:\n        0"] list::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    k = j\n    mutable_array::set(a, k, 1)"] mutable_array::set] \
+        [verdictOf [format $decl "j = h.mod(7)\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "j = i * 2\n    if j < 0 or j >= str::length(s):\n        return 0\n    str::char_at(s, j)"] str::char_at]
+} -result [lrepeat 5 {{{}} 1}]
+
+test bounds-guarded-local-rejected {a guard on a computed local proves nothing with only its upper half when the local may be negative, against another container's size, written inline (each written `i + 1` is its own expression), or once its scope ended (a guard in a loop body, the read after the loop)} -body {
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], i: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(5, 0), 1)"
+    list \
+        [verdictOf [format $decl "j = i + 1\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(b):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "if i + 1 < 0 or i + 1 >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, i + 1)"] mutable_array::at] \
+        [verdictOf [format $decl "j = i + 1\n    loop k from 0 to 1:\n        if j < 0 or j >= mutable_array::capacity(a):\n            return k\n    mutable_array::at(a, j)"] mutable_array::at]
+} -result [lrepeat 4 {IndexNotFound 0}]
+
 test bounds-declared-signature-unchanged {proving a check never changes the native's declared signature: list::at is still errors IndexNotFound, and the call's effective errors are the proof's} -body {
     set hir [boundsHir "xs = \[1, 2, 3\]\nlist::at(xs, 1)"]
     set e [nativeCall $hir list::at]
@@ -285,6 +308,14 @@ test bounds-nir-field-path-write {a write through a field place reduced by the f
     list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] [opCount $proven mvshare] \
         [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget]
 } -result {{0 1} {0 1} 0 {1 0} {1 0}}
+
+test bounds-nir-guarded-local {a read and a write at a computed local guarded against the container's size lower to the check-free opcodes; guarded on one side only they keep the checked ones} -body {
+    set source "fn f(a: MutableArray\[int\], i: int) -> int%s:\n    j = i + 1\n    if %sj >= mutable_array::capacity(a):\n        return 0\n    mutable_array::set(a, j, i)\n    mutable_array::at(a, j)\nf(mutable_array::create(3, 0), 1)"
+    set proven [boundsNir [format $source "" "j < 0 or "]]
+    set unknown [boundsNir [format $source " errors IndexNotFound" ""]]
+    list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] \
+        [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget]
+} -result {{0 1} {0 1} {1 0} {1 0}}
 
 test bounds-nir-slice-ops {proven substring / freeze / copy lower to the check-free opcodes, unproven ones keep the checked opcode} -body {
     set text [boundsNir "s = \"abcd\"\na = mutable_array::allocate(3)\nb = mutable_array::allocate(5)\nmutable_array::copy(a, 0, b, 2, 3)\n\[str::substring(s, 1, 3), mutable_array::freeze(a, 3)\]"]
@@ -418,6 +449,13 @@ test bounds-values-agree-field-path {accesses through field paths proven by the 
         [agreedValue "${table}loop h in \[0, -1, 4, 1180591620717411303424\]:\n    name(t, h)"] \
         [agreedValue "${table}widths(t)"]
 } -result {{[-1, 0, 11, -3, 0, 1180591620717411303424, -1]} {["a", "ccc", "bb", "bb"]} {[1, 3, 5]}}
+
+test bounds-values-agree-guarded-local {reads and writes at computed locals proven by a guard compute the same values on every backend, for indices in range, just outside it on both sides and far outside it} -body {
+    set fns "fn after(xs: List\[int\], i: int) -> int:\n    t = i + 1\n    if t < 0 or t >= list::length(xs):\n        return -1\n    list::at(xs, t)\nfn bump(a: MutableArray\[int\], i: int) -> MutableArray\[int\]:\n    j = i * 2\n    if j >= 0 and j < mutable_array::capacity(a):\n        mutable_array::set(a, j, mutable_array::at(a, j) + 1)\n    a\n"
+    list \
+        [agreedValue "${fns}loop i in \[-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424\]:\n    after(\[10, 20, 30\], i)"] \
+        [agreedValue "${fns}b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)\nloop k from 0 to mutable_array::capacity(b):\n    mutable_array::at(b, k)"]
+} -result {{[-1, -1, 10, 20, 30, -1, -1, -1]} {[1, 0, 1, 0, 1]}}
 
 test bounds-values-agree-known-error-checked {a certain failure (KNOWN-ERROR, accepted only without -strict) is never proven: it stays a checked operation and still fails identically everywhere} -body {
     list \

@@ -1363,10 +1363,13 @@ proc hir::completions::SeedParam {} {
 #                                        linear form -- e.g. the length of
 #                                        the List the loop counts over:
 #                                        IndexBounds' relational case)
-#   upperBounds bindingId -> {FORM ...} (an Int binding proven < each FORM
+#   upperBounds KEY -> {FORM ...}       (an Int value proven < each FORM
 #                                        in the current branch, from an
 #                                        enclosing `if` condition comparing
-#                                        it with a size: BranchRelations)
+#                                        it with a size: BranchRelations;
+#                                        KEY a binding or {e EXPR}, a
+#                                        computed local's defining
+#                                        expression: RelationKey)
 #   sizes     FORM -> N                 (a List length / MutableArray
 #                                        capacity form proven equal to the
 #                                        Int N in the current branch, from
@@ -1636,9 +1639,11 @@ proc hir::completions::BranchOutcome {hir ctx condition outcome} {
 
 # The relational facts the `if` condition CONDITION establishes on its
 # OUTCOME branch, for IndexBounds alone, added to ctx: a comparison of an
-# Int binding with a size (`i < list::length(xs)` true, `i >= list::length
-# (xs)` false, ... in either operand order) records the binding's
-# exclusive upper bound as a hir/cardinality.tcl form (ctx.upperBounds); an
+# Int value with a size (`i < list::length(xs)` true, `i >= list::length
+# (xs)` false, ... in either operand order) records the value's exclusive
+# upper bound as a hir/cardinality.tcl form (ctx.upperBounds, under the
+# value's RelationKey: a binding, or a computed local's defining
+# expression); an
 # equality of a List length or MutableArray capacity with an exact Int
 # (`list::length(bytes) == 1`) records that size (ctx.sizes). Only an Int
 # comparison native (`< <= > >= ==`) is read; anything else adds nothing.
@@ -1712,15 +1717,35 @@ proc hir::completions::BranchRelation {hir ctxVar condition outcome} {
     if {$lowInt ne {} && $sizeForm ne {}} {
         NoteMinSize ctx $sizeForm [expr {$lowInt - $k + 1}]
     }
-    lassign [hir::cardinality::Chase $hir $low steps] kind binding
-    if {$kind ne {binding}} {
-        return
-    }
+    set key [RelationKey $hir $low]
     set form [hir::cardinality::FormAdd [hir::cardinality::IntForm $hir $high steps] \
         [hir::cardinality::FormConst $k]]
     set bounds [dict get $ctx upperBounds]
-    dict lappend bounds $binding $form
+    dict lappend bounds $key $form
     dict set ctx upperBounds $bounds
+}
+
+# The key under which a relation on the Int expression E is recorded
+# (ctx.upperBounds) and looked up (IndexBounds): one convention, Chase's
+# (PROOF-FACT-CENSUS.md, G12). The binding an alias chain ends at with no
+# defining expression (a parameter, a loop variable), else {e D}, the
+# expression D the chain ends at: a computed local `j = i + 1` guarded by
+# `if j < 0 or j >= list::length(xs): return ...` is keyed by its one
+# defining expression, which every reference to j (and to any alias of j)
+# chases to. The relation is then about the value that one evaluation of D
+# bound -- the value every such reference reads, the binding being
+# single-assignment -- and lives only in the scope that proved it, like
+# every relation (Relations): a loop body or handler restores the facts it
+# started with, so another evaluation of D (the next iteration) never sees
+# it. An expression no alias names (a guard on `i + 1` written inline) keys
+# a relation nothing reads: each written `i + 1` is its own expression.
+proc hir::completions::RelationKey {hir e} {
+    set steps 0
+    lassign [hir::cardinality::Chase $hir $e steps] kind id
+    if {$kind eq {binding}} {
+        return $id
+    }
+    return [list e $id]
 }
 
 # The form of E when it is exactly one container size -- a List length, a
@@ -3146,10 +3171,12 @@ proc hir::completions::SliceFacts {hir ctx slices} {
 #     the same immutable List, or the capacity of the same MutableArray --
 #     `loop i from 0 to list::length(xs): list::at(xs, i)`).
 #
-#   * branch relations (BranchRelations): INDEX reads a binding an
-#     enclosing `if` proved below the container's size form, and INDEX's
-#     own Range is provably >= 0 (`if i < 0 or i >= list::length(xs): ...
-#     else: list::at(xs, i)`, or the `and` form's then branch); or the
+#   * branch relations (BranchRelations): INDEX reads a value an
+#     enclosing `if` proved below the container's size form -- a binding,
+#     or a computed local keyed by its defining expression (RelationKey) --
+#     and INDEX's own Range is provably >= 0 (`if i < 0 or i >=
+#     list::length(xs): ... else: list::at(xs, i)`, or the `and` form's then
+#     branch; `j = i + 1` guarded the same way, then `list::at(xs, j)`); or the
 #     container's size form was proven equal to an exact N (`if
 #     list::length(bytes) == 1: list::at(bytes, 0)`), which the range check
 #     above then uses.
@@ -3208,16 +3235,16 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     # range facts below say otherwise, the facts contradict each other, so
     # the path is unreachable and the read is vacuously in range.
     lassign [hir::cardinality::Chase $hir $index steps] kind binding
-    if {$kind eq "binding"} {
-        if {[dict exists $ctx indexBounds $binding] && [dict get $ctx indexBounds $binding] in $sizes} {
-            return in
-        }
-        if {$indexRange ne {never} && [dict exists $ctx upperBounds $binding]
-                && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
-            foreach form [dict get $ctx upperBounds $binding] {
-                if {$form in $sizes} {
-                    return in
-                }
+    if {$kind eq "binding" && [dict exists $ctx indexBounds $binding]
+            && [dict get $ctx indexBounds $binding] in $sizes} {
+        return in
+    }
+    set key [RelationKey $hir $index]
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]
+            && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
+        foreach form [dict get $ctx upperBounds $key] {
+            if {$form in $sizes} {
+                return in
             }
         }
     }
