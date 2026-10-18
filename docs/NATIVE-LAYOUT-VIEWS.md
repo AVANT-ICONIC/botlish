@@ -563,7 +563,31 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 * **The neighbouring fuzzers**: binary-layout seeds 1, 17, 41 (× 40) and 5
   (× 20, GC stress), c-abi-types seeds 1, 17, 41, direct-modules seeds 1, 17,
   41: 0 disagreements.
-* **The neighbouring audits**: REGRESSION-AUDITS-PENDING
+* **Isolation, interchange, cache** (their default suites):
+  `audit/compilation-isolation/tools/interleave.tcl`, 80 artifacts and
+  outcomes, 0 differ; `audit/hir-interchange/tools/roundtrip.tcl -via
+  interchange`, 90 compared, 0 differ; `-via cache`, 100, 0 differ.
+  native-view.test's own `nv-isolation`, `nv-interchange`, `nv-cache` and
+  `nv-hir-text-roundtrip` cover programs that make views.
+* **The neighbouring mutation harnesses**, every mutant killed:
+  compilation isolation 14/14, HIR interchange 27/27, direct modules 18/18,
+  binary layout 39/39, C ABI types 26/26, affine values 29/29, coroutines
+  REGRESSION-COROUTINES-PENDING; native views 29/29 on the final tree (the
+  Tcl suite kills all 29, the fuzzer 19, the Rust tests the 7 native ones).
+  The affine fuzzer, seeds 1, 17, 41: 0 disagreements.
+* **Mutants this milestone moved.** Five mutants of other areas no longer
+  applied, because the code they mutate had moved:
+  - binary-layout `width-rust`: binload's decoding is now `bin_decode`,
+    shared with nativeload;
+  - binary-layout `arbitrary-layout-struct-argument`: ResolveNativeView
+    repeats the argument check;
+  - c-abi-types `implicit-ptr-conversion` and enums `cross-enum-parameter`:
+    the identity-only admission list gained `IsNativeView`;
+  - traits `witness-leaks-into-applicability`: subtype's native-view case.
+
+  Each text was updated to keep the same rule, and each mutant is killed
+  again, by its harness's tests and its fuzzer. A static check of every
+  audit's `mutants.txt` now applies all 715 mutants to the tree.
 * **CI, first push** (`4f73faf`, before the inventory update): every failure
   was one of the six tests above. The Linux `tests (compile)` job (8,010
   tests, 6 failed), the stub-linked executables (1 failed), golden shard 3
