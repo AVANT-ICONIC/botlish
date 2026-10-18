@@ -156,12 +156,16 @@ reads every workflow's text). The evidence:
   executables, the native Rust unit tests, the cranelift and
   cranelift-generic coverage and the Tcl suite on compile; GC stress
   skipped (it runs on pushes to main only). The Tcl suite on interp failed
-  one test, in c-bindgen.test, with the same counts (7917 run,
-  7903 passed, 13 skipped, 1 failed) as main's own run at 952c7df, the
-  main commit the branch had merged
-  ([39101372634](https://github.com/mwagner-webdev/botlish/actions/runs/39101372634)):
-  main's failure, not the branch's, which main has since fixed (green at
-  0548757) and the second merge brought in.
+  one test, c-bindgen.test's `cb-boringssl-current`, which generated the
+  linux-aarch64 BoringSSL binding on the x86-64 runner and stopped because
+  no arm64 cross C library is installed there ("linux-aarch64 is not this
+  host's target"). Main's own run at 952c7df, the main commit the branch
+  had merged, failed identically, with the same counts (7917 run, 7903
+  passed, 13 skipped, 1 failed;
+  [39101372634](https://github.com/mwagner-webdev/botlish/actions/runs/39101372634)):
+  main's failure, not the branch's. Main fixed it in 3dbf9d5 (the other
+  target's binding is checked where its C library is installed; green at
+  0548757), which the second merge brought in.
 - **tests.yml, dispatched again** at 2f174d4, after the second merge
   ([39109833044](https://github.com/mwagner-webdev/botlish/actions/runs/39109833044)):
   pending.
