@@ -27,7 +27,9 @@
 #            runs and is rejected exactly as documented (examples).
 # examples   only the examples: each accepted example compiles through the
 #            public front end (surface::readProgramFile, in its own scratch
-#            directory, strict, warnings default) with exactly the stated
+#            directory, strict, warnings default; one importing another
+#            operating system's platform namespace, for that system's
+#            target, on the Tcl backends) with exactly the stated
 #            warnings and runs on each stated backend to the stated value
 #            (and, with @output, prints the stated lines through main.tcl);
 #            each rejected one is rejected with the stated primary
@@ -656,7 +658,15 @@ proc cpt::CheckExample {topic example backends scratch} {
     file mkdir $dir
     set path [file join $dir example.bot]
     WriteFile $path "[join [dict get $example lines] \n]\n"
-    set failed [catch {surface::readProgramFile $path -warnings default -warning-channel ""} hir options]
+    # An example importing a namespace of another operating system's
+    # platform (linux::io on a Mac) documents that system: it compiles for
+    # its target, as the golden runner's suites do, and runs where a program
+    # of that target runs here, on the Tcl backends.
+    set target [surface::modules::PlatformTarget [core::ReadFile $path]]
+    if {$target ne ""} {
+        set backends [lmap b $backends {expr {$b in {interp compile} ? $b : [continue]}}]
+    }
+    set failed [catch {surface::readProgramFile $path -warnings default -warning-channel "" -target $target} hir options]
     if {[dict get $example kind] eq "reject"} {
         if {!$failed} {
             return [list "$id: compiled, but the example states it is rejected with [dict get $example error]"]
@@ -734,7 +744,8 @@ proc cpt::CheckExample {topic example backends scratch} {
         }
         if {[dict get $example output] ne ""} {
             # Printed output: through main.tcl, as a user runs it.
-            set status [catch {exec [info nameofexecutable] [file join $::cpt::root main.tcl] -backend $backend -warnings off $path 2>@1} out]
+            set targetArgs [expr {$target eq "" ? {} : [list -target $target]}]
+            set status [catch {exec [info nameofexecutable] [file join $::cpt::root main.tcl] -backend $backend -warnings off {*}$targetArgs $path 2>@1} out]
             set lines [lrange [split $out \n] 1 end]
             set printed [lrange $lines 0 [expr {[llength [dict get $example output]] - 1}]]
             if {$printed ne [dict get $example output]} {

@@ -920,10 +920,10 @@ a target. Keep it so:
   or a stack placement: Cranelift owns them.
 * A test that compiles a Linux program (one importing `linux::*`) compiles
   it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
-  it on `backendsFor` its HIR's target; the golden runner and the warning
-  gate do the same for a program that imports one
-  (`surface::modules::PlatformTarget`). Never skip such a test by operating
-  system instead.
+  it on `backendsFor` its HIR's target; the golden runner, the warning
+  gate and Compilerpedia's example check (tools/compilerpedia.tcl) do the
+  same for a program that imports one (`surface::modules::PlatformTarget`).
+  Never skip such a test by operating system instead.
 
 If you change the target table, `hostTarget`, the platform rule, what makes
 a HIR record its target, interchange's or the cache's target check, NIR's
@@ -933,7 +933,10 @@ a HIR record its target, interchange's or the cache's target check, NIR's
 --manifest-path native/Cargo.toml --bin botlish-native target::` and
 `audit/target-model/tools/mutate.tcl` (every mutant in its `mutants.txt`
 must still apply and be killed: update a mutant's text when you change the
-code it mutates, keeping it a mutant of the same rule). Apple clang checks
+code it mutates, keeping it a mutant of the same rule), and keep the
+Compilerpedia topics that state these rules true (`backend.targets`,
+`error.unsupported-platform`, `error.hir-interchange-target`,
+`error.native-target`; `tools/compilerpedia.tcl check`). Apple clang checks
 the macOS row in every macOS smoke job (`tests/platform/cabi-facts.tcl`),
 and `tests/platform/native-status.tcl` the native target boundary.
 

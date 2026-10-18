@@ -107,7 +107,8 @@ AArch64 target (NATIVE UNSUPPORTED value)`. Now the same program
 | C FFI oracles | tests/c-ffi.test, audit/c-ffi/tools/fuzz.tcl | plain char unsigned on Linux AArch64 only (OS and architecture) |
 | Mutation | audit/target-model/tools/mutate.tcl, mutants.txt (new); audit/hir-interchange/tools/mutants.txt, audit/diagnostic-recovery/tools/mutants.txt | 17 mutants; two existing mutants' texts follow the code they mutate |
 | Golden manifest | audit/golden/migration/census/target-model.tsv (new), census/{c-abi-types,linux-syscall-transports}.tsv, tcl-names.txt, tests/golden/manifest.tsv | 24 KEEP-INTERNAL rows; four descriptions refreshed; regenerated with merge.tcl |
-| Docs | AGENTS.md ("Compilation targets"), C-ABI-TYPES.md, C-FFI.md, HIR-INTERCHANGE.md, IMPORTS.md, LINUX-SYSCALL-TRANSPORTS.md, tests/golden/README.md, MACOS-AARCH64-PORT-AUDIT.md, INDEX.md, this file | |
+| Compilerpedia (main's built-in reference, merged in during the milestone) | compilerpedia/topics/errors-resolution.topic, errors-runtime.topic, backends.topic; tools/compilerpedia.tcl | topics `error.unsupported-platform`, `error.hir-interchange-target`, `error.native-target` (the catalogue's inventory requires one per code); `error.unknown-target` gains the platform message; `backend.targets`, `backend.platforms` and `cli.options` state the target as an operating system and an architecture; the example check compiles a Linux-importing example for `PlatformTarget` and runs it on the Tcl backends on another host |
+| Docs | AGENTS.md ("Compilation targets"), C-ABI-TYPES.md, C-FFI.md, HIR-INTERCHANGE.md, IMPORTS.md, LINUX-SYSCALL-TRANSPORTS.md, COMPILERPEDIA.md, tests/golden/README.md, MACOS-AARCH64-PORT-AUDIT.md, INDEX.md, this file | |
 
 ## 3. The canonical macOS target
 
@@ -512,6 +513,14 @@ c-bindgen.test (22 run, 18 skipped without pinned sources); a seed of the
 C FFI fuzzer (4 programs, 48 functions, 0 disagreements). The full suite was
 left to CI, which the milestone asks to use for the broad regression.
 
+After merging main (section 13): `tools/compilerpedia.tcl check` (663
+topics, 511 examples, 0 problems; the same under the simulated macOS host),
+tests/compilerpedia.test (34) and main-cli.test (32), also simulated, and
+target-model, linux-syscall-transports, c-abi-types, hir-cache,
+hir-interchange, native-program-output, direct-modules, static-compile,
+warnings, method-eligible, same-failure and proves-naming: every test
+passes. The warning gate passes.
+
 On GitHub Actions (every workflow dispatched on the branch):
 
 | Workflow | Run | Commit | Result |
@@ -521,7 +530,7 @@ On GitHub Actions (every workflow dispatched on the branch):
 | static-decisions.yml | [39128822453](https://github.com/mwagner-webdev/botlish/actions/runs/39128822453) | 20957e9 | **success**: every golden suite's static decisions agree between the batched and the sequential scheduler (the mutable-array job and four shards); 28356fc changes no front-end file |
 | c-bindgen.yml | [39128824120](https://github.com/mwagner-webdev/botlish/actions/runs/39128824120) | 20957e9 | **success** |
 | tests.yml | [39132607153](https://github.com/mwagner-webdev/botlish/actions/runs/39132607153) | 28356fc | **success**, every job |
-| tests-arm64.yml | [39132604977](https://github.com/mwagner-webdev/botlish/actions/runs/39132604977) | 28356fc | PENDING |
+| tests-arm64.yml | [39132604977](https://github.com/mwagner-webdev/botlish/actions/runs/39132604977) | 28356fc | **success**, every job (interp, compile, both coverage jobs, GC stress, the Rust unit tests, four golden shards) |
 
 ## 13. Test and oracle discrepancies
 
@@ -569,6 +578,21 @@ On GitHub Actions (every workflow dispatched on the branch):
   that reason alone (NATIVE TARGET, with the Tcl backends agreeing). A child
   process does not inherit the override either. Run 9 showed what it hid
   (section 11); only the macOS runner is evidence.
+- **Compilerpedia, merged from main during the milestone.** main gained the
+  compiler's built-in reference (COMPILERPEDIA.md) while the branch was out.
+  Its check found what the milestone had to add:
+  - four undocumented codes: `HIR INTERCHANGE TARGET`, `NATIVE TARGET`
+    and `SURFACE MODULE UNSUPPORTED-PLATFORM`, as a code and as a kind;
+  - `backend.targets` stating the old model: "the program still runs on
+    the host, and an operation of another architecture's system-call
+    transport is NATIVE UNSUPPORTED there".
+
+  The three new topics and the corrected ones say what the compiler now
+  does, and main.tcl's help lines name them. Eight catalogue examples
+  import a Linux namespace and are checked on macOS too, where the
+  acceptance tier runs tests/compilerpedia.test. The example check now
+  compiles them for the Linux target and runs them on the Tcl backends:
+  511 examples, 0 problems on Linux and under the simulated macOS host.
 - **One equivalent mutant left out.** Removing the explicit `sig.call_conv =
   c_call_conv(...)` line changes no behaviour on any host Cranelift
   supports, because the ISA default equals the triple's C convention. The

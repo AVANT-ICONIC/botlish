@@ -3038,6 +3038,12 @@ aarch64), the compiler cannot choose:
     namespace "ffi::c" needs a C ABI target, and this host (...) is none
     of the known ones; compile with -target (...)
 
+A platform namespace (`linux` and everything under it:
+error.unsupported-platform) needs a target too, for its operating system:
+
+    namespace "linux::io" belongs to the Linux platform, and this host
+    (...) is none of the known targets; compile with -target (...)
+
 It depends on the host, so there is no example program for it.
 
 == LIKELY CAUSES
@@ -3049,6 +3055,55 @@ The message prints the host's operating system and machine.
 
 == WHAT TO DO
 Pass the target explicitly: `botlish -target linux-x86_64 PROGRAM.bot`.
+
+@topic error.unsupported-platform
+title: UNSUPPORTED-PLATFORM: a Linux namespace imported for another operating system
+summary: A namespace of the Linux platform (linux and everything under it) is imported for a target of another operating system; compile for a Linux target or drop the import.
+index: errors
+alias: Linux platform; linux namespace on macOS
+keywords: platform, linux, linux::io, linux::sys, linux::path, macOS, Windows, target, -target, operating system
+related: error.unknown-target error.unsupported-architecture backend.platforms backend.targets cli.options concept.modules
+docs: MACOS-AARCH64-MILESTONE-2.md LINUX-SYSCALL-TRANSPORTS.md C-ABI-TYPES.md
+code: SURFACE MODULE UNSUPPORTED-PLATFORM
+
+== MEANING
+A compilation target is an operating system and an architecture
+(backend.targets). The standard namespace `linux` and every namespace
+under it (`linux::io`, `linux::path`, `linux::sys`, the system-call
+transports) belong to the Linux platform: they make Linux system calls or
+model Linux, so they exist for Linux targets only. Imported for a target
+of another operating system, they are refused at the import:
+
+    namespace "linux::io" belongs to the Linux platform (the standard
+    namespace linux and every namespace under it), which is unavailable
+    for target macos-aarch64 (macOS on aarch64): a Linux module is never
+    chosen for, mapped to or substituted on another operating system,
+    whatever the architecture; compile for a Linux target (-target
+    linux-aarch64) or import no Linux namespace
+
+A matching architecture is not enough: linux-aarch64 and macos-aarch64
+share an instruction set, not an operating system, and no macOS module
+stands in for a Linux one. Namespaces that are no platform's stay
+available on every target, the architecture-specific ones included
+(`abi::aarch64` on macOS). The target defaults to the host's, so the
+same program compiles on Linux and is refused on a Mac; there is no
+example program for it.
+
+== LIKELY CAUSES
+  * Compiling a program that prints through `linux::io` (or calls
+    `linux` directly) on macOS or Windows, or with -target naming one.
+
+== HOW TO INVESTIGATE
+The message names the namespace and the target, with its operating
+system and architecture. `-target` on the command line overrides the
+host's default.
+
+== WHAT TO DO
+Compile for a Linux target (`botlish -target linux-aarch64
+PROGRAM.bot`): the Tcl backends run the result on any host, while native
+code runs only on its own target's host (NATIVE TARGET). Or remove the
+Linux import; the portable standard library (io, io::path) has no
+platform.
 
 @topic error.unsupported-architecture
 title: UNSUPPORTED-ARCHITECTURE: no module file for the target's architecture

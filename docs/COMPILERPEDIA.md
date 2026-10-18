@@ -145,6 +145,10 @@ describe something Botlish does not have as if it existed.
 
 An example is a whole program, compiled on its own through the public front
 end (strict, warnings default) with nothing imported but what it imports.
+One that imports a Linux namespace documents Linux: on a host of another
+operating system the check compiles it for that host architecture's Linux
+target (`surface::modules::PlatformTarget`, as the golden runner does) and
+runs it on the Tcl backends.
 Directives:
 
 | directive | for | meaning |
