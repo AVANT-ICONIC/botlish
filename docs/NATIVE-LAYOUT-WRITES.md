@@ -718,7 +718,37 @@ The read milestone's fuzzer, rerun because views now share their types and
 descriptors with edits (seeds 1, 17, 41 at 40, seed 5 at 20 under GC
 stress): no disagreement.
 
-**Mutants** (`audit/native-edit/tools/mutate.tcl`). MUTANT-RESULTS
+**Mutants** (`audit/native-edit/tools/mutate.tcl`). `mutants.txt` holds 40
+deliberate bugs, each applied alone to a private copy of the tree (the 8
+native ones rebuilding its native backend), with three detectors: the Tcl
+suite (`tests/native-edit.test`, the C oracle included), the fuzzer (20
+programs, seed 7, on all four backends) and, for native mutants, the Rust
+unit tests (`--lib nview`). **All 40 are killed** (2026-10-18):
+
+| defect | mutants | killed by |
+|---|---|---|
+| field offset ignored / written at offset zero | `offset-ignored-lowering`, `-interp`, `offset-zero-runtime` | tests, fuzzer (18-20/20), Rust |
+| width widened / narrowed (padding or a neighbour written) | `width-narrowed-lowering`, `width-widened-runtime`, `width-widened-byte-write`, `padding-overwritten-runtime` | tests, fuzzer (10-17/20), Rust |
+| signedness lost | `signed-as-unsigned-lowering`, `-interp` | tests, fuzzer (12/20) |
+| a value outside the field's type accepted | `value-unchecked-static` (static), `range-unchecked-runtime` (the encoder truncates) | tests (the static one; the encoder's by the `-strict 0` replay), Rust |
+| nested base offset lost | `nested-base-dropped-store` (a subrecord's), `-path` (a designator's) | tests, fuzzer (8-11/20) |
+| unrelated bytes lost by a byte write | `unrelated-bytes-lost-interp`, `-byte-write` (the copy starts from zeros) | tests, fuzzer (18-20/20), Rust |
+| pointer width or type wrong | `pointer-width-wrong` (always four bytes), `pointer-retyped` (any pointee admitted) | tests (and the fuzzer for the width) |
+| null encoded wrong | `null-encoded-nonzero-interp`, `null-stored-nonzero` | tests, fuzzer (3/20), Rust |
+| read authority writes / authorities confused | `view-writable`, `edit-is-a-view`, `view-upgrades-to-edit`, `edit-nested-is-a-view` | tests (and the fuzzer for the nested edit) |
+| an edit needs no authority | `edit-not-direct` | tests, fuzzer (its programs' marker turns stale) |
+| bytes conjure or ordinary serialization encodes a pointer | `foreign-write-takes-an-int`, `ordinary-write-of-pointer`, `foreign-write-of-scalar`, `written-pointer-bytes-parse` | tests |
+| a stored or encoded pointer moved | `store-moves-pointer`, `foreign-write-moves-pointer` | tests |
+| MutableBytes written in place (value semantics lost) | `byte-write-in-place` | tests, fuzzer (20/20), Rust |
+| length not checked / a prefix written | `length-check-missing-native`, `length-prefix-interp` | tests |
+| a store copies the record (copy-modify-copy) | `copy-per-store` | tests (NIR, allocations) |
+| the null edit unchecked or undeclared | `edit-null-check-inverted`, `edit-null-not-declared-tcl` | tests (and the fuzzer for the native one) |
+| specialization, HIR text, designators | `edit-field-shape-lost`, `hir-text-edit-read-as-view`, `designator-through-scalar`, `designator-of-another-layout` | tests (and the fuzzer for the shape) |
+
+Per detector: the Tcl suite kills all 40, the fuzzer 21 (it generates valid
+programs only and always writes storage of the layout's size, so the
+static-check, ownership, length and allocation mutants are invisible to it),
+the Rust tests all 8 native mutants. None survived the first run.
 
 ## 20. Regression and CI
 
