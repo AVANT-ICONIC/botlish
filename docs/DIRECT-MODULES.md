@@ -135,7 +135,9 @@ A module is **designated direct** when
   `linux::abi::x86_64` and `linux::abi::aarch64` (core/linuxabi.tcl declares
   each entry of its transport table), and `binary::native`, whose
   `binary::native::view` reads live native memory (core/binary.tcl,
-  NATIVE-LAYOUT-VIEWS.md section 8).
+  NATIVE-LAYOUT-VIEWS.md section 8) and whose `binary::native::edit` makes
+  write authority over it (NATIVE-LAYOUT-WRITES.md section 5); storing
+  through an edit someone made (`binary::store`) is not direct.
 
 Nothing else designates one: no module name (`raw`, `syscall`, `ffi`,
 `linux...`), path, library or naming convention is ever read

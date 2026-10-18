@@ -670,6 +670,10 @@ proc hir::read::ParseType {text number} {
         # show's own notation.
         return [hir::layouts::viewType $layout]
     }
+    if {[regexp {^NativeEdit\[(\S+)\]$} $text -> layout] && [hir::layouts::declared $layout]} {
+        # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
+        return [hir::layouts::editType $layout]
+    }
     if {[regexp {^ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
         # A C data pointer (C-ABI-TYPES.md): its pointee identity, as
         # hir::cabi::ShowPointee wrote it.

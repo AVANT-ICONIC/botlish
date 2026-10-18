@@ -212,6 +212,14 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
             # back as the fields).
             return [LayoutParseResult $hir $e $structOpts]
         }
+        if {[hir::layouts::RoleOf [hir::layouts::Role $name] op] in {write write_foreign}} {
+            # A layout write into byte storage (NATIVE-LAYOUT-WRITES.md)
+            # builds its abi::bytes::MutableBytes from the one fresh storage
+            # its op makes: a local construction of that one-field shape, as
+            # the address bridge's Register64 is (native/lower.tcl's
+            # LayoutWrite hands back the storage register as the field).
+            return [SyscallResult $hir $e [core::bytestore::mutableBytesType] $structOpts]
+        }
         if {$name ne "list"} {
             return ""
         }
@@ -852,6 +860,13 @@ proc hir::escape::RegionInfo {hir spec id} {
                     set role [hir::layouts::Role [dict get [hir::symbol $view $target] name]]
                     if {[hir::layouts::RoleOf $role op] eq "emit" && [llength $args] == 2} {
                         dict set leafUse [lindex $args 0] 1
+                    }
+                    set output [hir::layouts::RoleOf $role output]
+                    if {$output ne "" && $output < [llength $args]} {
+                        # A layout write's abi::bytes::MutableBytes is read
+                        # only for its storage field (NATIVE-LAYOUT-WRITES.md;
+                        # native/lower.tcl's LayoutWrite uses StorageOf).
+                        dict set wordUse [lindex $args $output] 1
                     }
                 }
                 if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $view $target] name]]

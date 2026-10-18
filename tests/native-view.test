@@ -418,13 +418,13 @@ test nv-load-operand {binary::load(v) reads L from v's static type, which must b
         [nvKinds "fn f(v) -> int:\n    s = binary::load(v)\n    0\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    binary::load(v)\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    v.load()\n0\n"]
-} -result {{{BINARY-OPERAND 90:18 {binary::load needs a value whose static type is NativeView[L] for a layout L (a native view, binary::native::view, whose layout it reads every field of); this value's type here is LayoutStruct[Inner]}}} BINARY-OPERAND accepted accepted}
+} -result {{{BINARY-OPERAND 90:18 {binary::load needs a value whose static type is NativeView[L] or NativeEdit[L] for a layout L (a native view or edit, binary::native::view or binary::native::edit, whose layout it reads every field of); this value's type here is LayoutStruct[Inner]}}} BINARY-OPERAND accepted accepted}
 
 test nv-untyped-receiver {a field is read through a native view at its layout's constant offset, so the receiver must be statically NativeView[L]: an untyped function whose call passes a view and reads its field is invalid for that call (BINARY-OPERAND inside its instance, reported at the call), while a typed one is accepted} -body {
     list \
         [nvDiagnostics "fn g(v):\n    v.inner.x\n\nfn f(v: NativeView\[Outer\]) -> int:\n    g(v)\n0\n"] \
         [nvKinds "fn g(v: NativeView\[Outer\]) -> int:\n    v.inner.x\n\nfn f(v: NativeView\[Outer\]) -> int:\n    g(v)\n0\n"]
-} -result {{{TYPE 93:5 {call to g with v : NativeView[Outer] is invalid: the field "x" is read through a native view (NativeView[Inner]) whose type is not static here: a native view's field is read at its layout's constant offset, so the receiver must be statically a NativeView[L] (declare the parameter or result that carries it NativeView[Inner]) (in the body of g, at 90:5)}}} accepted}
+} -result {{{TYPE 93:5 {call to g with v : NativeView[Outer] is invalid: the field "x" is read through a native view (NativeView[Inner]) whose type is not static here: a native view's field is read at its layout's constant offset, so the receiver must be statically a NativeView[L] or NativeEdit[L] (declare the parameter or result that carries it NativeView[Inner]) (in the body of g, at 90:5)}}} accepted}
 
 test nv-null-is-declared {a view of the null pointer is the builtin declared error NativeViewNull -- an ordinary declared error: UNHANDLED-ERROR unless handled or admitted by an errors clause, through which it propagates; its view, when there is one, is never null, so no field read checks again} -body {
     list \
@@ -624,14 +624,15 @@ test nv-direct-modules {across modules: a direct module may make views and hand 
     }
 } -cleanup {unset -nocomplain dir channel hir result unit u} -result {nvdemo::raw direct nvdemo::reader ordinary {} contextualized}
 
-test nv-read-only {native views are read-only: binary::native's one operation makes a view, a view's only operations read (a field, binary::load), and no NIR op or runtime helper of the native view writes native memory or makes native records (the source of runtime/nview.rs has no store but the test fixture's private copy)} -body {
+test nv-read-only {native views are read-only: binary::native's operations make a view or, separately, a native edit (NATIVE-LAYOUT-WRITES.md: write authority is never made from a view), a view's only operations read (a field, binary::load), and the one native-memory store a program can reach is binary::store's -- one place in native lowering emits it, and its receiver role is an edit, never a view (no runtime helper writes through a raw reference: runtime/nview.rs has no ptr::write, and copies the fixture's data once)} -body {
     set source [core::ReadFile [file join $::projectRoot native src runtime nview.rs]]
-    set nir [core::ReadFile [file join $::projectRoot native src nir.rs]]
-    list [core::native::qualifiedMembers binary::native] \
+    set lower [core::ReadFile [file join $::projectRoot native lower.tcl]]
+    list [lsort [core::native::qualifiedMembers binary::native]] \
         [lsort [lmap name [core::native::names] {expr {[string match binary* $name] ? $name : [continue]}}]] \
         [regexp -all {ptr::write|write_unaligned} $source] [regexp -all {copy_nonoverlapping\(data} $source] \
-        [regexp -all {"native[a-z]*store"|"cptrstore"} $nir]
-} -cleanup {unset -nocomplain source nir} -result {view {binary#emit binary#load binary#view_field binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::view binary::parse} 0 1 0}
+        [regexp -all {"op nativestore} $lower] [dict get [core::native::metadata binary::store] layout] \
+        [lmap name {binary::native::view binary::load binary#view_field binary#load} {hir::layouts::RoleOf [hir::layouts::Role $name] edited}]
+} -cleanup {unset -nocomplain source lower} -result {{edit view} {binary#emit binary#load binary#view_field binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::edit binary::native::view binary::parse binary::store binary::write binary::write_foreign} 0 1 1 {edited 0 path 1 value 2 op store} {{} {} {} {}}}
 
 test nv-no-new-dependency {native views need nothing a program did not need before: a program that reads native memory through a view links no library and calls no C (it runs in the JIT), and a program that does not use views lowers to exactly the NIR ops it always did} -constraints nativeBuilt -body {
     set view [native::nir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 2, 3, 4\])\n    v = binary::native::view(Inner, p)\n    v.y\nr = f():\n    on NativeViewNull:\n        0\nr\n"] view.bot -warnings off]]

@@ -635,6 +635,10 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         # NativeView[L] (NATIVE-LAYOUT-VIEWS.md): likewise.
         return [hir::layouts::ResolveNativeView $arg $ns]
     }
+    if {$name eq "NativeEdit"} {
+        # NativeEdit[L] (NATIVE-LAYOUT-WRITES.md): likewise.
+        return [hir::layouts::ResolveNativeEdit $arg $ns]
+    }
     if {$name eq [hir::cabi::PtrName]} {
         # ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
         # (ffi::c::Void among them), never a value type.
@@ -1078,15 +1082,21 @@ proc hir::resolve::Expr {hirVar node ctx} {
             } else {
                 SetField hir $e callee [Expr hir $written $ctx]
                 set operand [hir::layouts::RoleOf $layoutRole operand]
-                if {$operand ne ""} {
+                set path [hir::layouts::RoleOf $layoutRole path]
+                if {$operand ne "" || $path ne ""} {
                     # The static layout operand of a binary operation
                     # (BINARY-LAYOUT.md): a layout name, resolved to the
                     # layout's descriptor constant -- never an expression.
+                    # A write's field designator (NATIVE-LAYOUT-WRITES.md)
+                    # likewise: LAYOUT.FIELD..., resolved to the field's
+                    # designator constant.
                     set args {}
                     set index 0
                     foreach arg [dict get $node args] {
-                        if {$index == $operand} {
+                        if {$index eq $operand} {
                             lappend args [LayoutOperand hir $arg $layoutNative $ctx]
+                        } elseif {$index eq $path} {
+                            lappend args [FieldPathOperand hir $arg $layoutNative $ctx]
                         } else {
                             lappend args [Expr hir $arg $ctx]
                         }
@@ -1981,7 +1991,7 @@ proc hir::resolve::LayoutAsValue {hirVar e node ctx} {
 # The layout identity the operand syntax ARG of binary operation NATIVE
 # names in code of namespace NS, or "" after diagnosing (as E, with HIR) why
 # it names none.
-proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
+proc hir::resolve::LayoutOperandId {hirVar e arg native ctx {operand "the layout operand"}} {
     upvar 1 $hirVar hir
     set ns [CtxNamespace $ctx]
     set kind [dict get $arg kind]
@@ -1995,7 +2005,7 @@ proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
     }
     if {$name eq ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "the layout operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
+            "$operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
         return ""
     }
     set id [hir::layouts::lookup $name $ns]
@@ -2004,11 +2014,11 @@ proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
     }
     if {![dict exists $arg qualified] && [Lookup hir [dict get $ctx scope] $name] ne ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "the layout operand of $native must be the name of a layout, but \"$name\" is a value here: the layout is static evidence, never a computed value" $e $origin
+            "$operand of $native must be the name of a layout, but \"$name\" is a value here: the layout is static evidence, never a computed value" $e $origin
         return ""
     }
     hir::DiagnoseAt hir UNKNOWN-LAYOUT \
-        "unknown layout \"$name\" (the layout operand of $native): no \"layout [lindex [split [string map {:: \x01} $name] \x01] end]:\" declaration is visible" $e $origin
+        "unknown layout \"$name\" ($operand of $native): no \"layout [lindex [split [string map {:: \x01} $name] \x01] end]:\" declaration is visible" $e $origin
     return ""
 }
 
@@ -2028,6 +2038,56 @@ proc hir::resolve::LayoutOperand {hirVar arg native ctx} {
         SetField hir $placeholder literal [list str $descriptor]
         SetField hir $placeholder value [core::value::str $descriptor]
     }
+    return $placeholder
+}
+
+# Resolves the field designator syntax ARG of a call of the layout write
+# NATIVE (NATIVE-LAYOUT-WRITES.md): the ExprId of the constant holding the
+# field's designator (hir::layouts::FieldPath). The designator is written
+# LAYOUT.FIELD or LAYOUT.FIELD.FIELD... -- a projection chain whose root is a
+# layout name -- and is static evidence like a layout operand: the layout is
+# never a value, the projections never run. Core IR spells it as the
+# constant already. Diagnoses (the constant then holds nothing):
+#
+#   LAYOUT-OPERAND   not a LAYOUT.FIELD chain; or the path ends at a nested
+#                    layout (a write names a scalar or pointer field)
+#   UNKNOWN-LAYOUT   its root names no visible layout (LayoutOperandId)
+#   UNKNOWN-FIELD    a name that is no field of its layout, or a name after
+#                    a scalar or pointer field
+proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
+    upvar 1 $hirVar hir
+    if {[dict get $arg kind] eq "const" && [lindex [dict get $arg origin] 0] eq "ir"} {
+        return [Expr hir $arg $ctx]
+    }
+    set placeholder [Expr hir [hir::syntax::constNode [dict get $arg origin] str ""] $ctx]
+    set names {}
+    set origins {}
+    set root $arg
+    while {[dict get $root kind] eq "project"} {
+        set names [linsert $names 0 [dict get $root name]]
+        set origins [linsert $origins 0 [dict get $root nameOrigin]]
+        set root [dict get $root receiver]
+    }
+    if {$names eq ""} {
+        hir::DiagnoseAt hir LAYOUT-OPERAND \
+            "the field operand of $native must name one field of a layout, written LAYOUT.FIELD (binary::write(data, Header.count, 7)): the field is static evidence, never a computed value" \
+            $placeholder [dict get $arg origin]
+        return $placeholder
+    }
+    set id [LayoutOperandId hir $placeholder $root $native $ctx \
+        "the layout of the field operand (LAYOUT.FIELD)"]
+    if {$id eq ""} {
+        return $placeholder
+    }
+    set result [hir::layouts::FieldPath $id $names]
+    if {[lindex $result 0] eq "problem"} {
+        lassign $result - kind message index
+        hir::DiagnoseAt hir $kind $message $placeholder [lindex $origins $index]
+        return $placeholder
+    }
+    set constant [lindex $result 1]
+    SetField hir $placeholder literal [list str $constant]
+    SetField hir $placeholder value [core::value::str $constant]
     return $placeholder
 }
 

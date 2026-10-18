@@ -307,13 +307,13 @@ test ns-mutable-array-set-is-index-not-found {mutable_array::set at an index tha
     agree "import mutable_array\nfn put(a, i, v) errors IndexNotFound:\n    mutable_array::set(a, i, v)\n    a\nfn safe(a, i, v):\n    r = put(a, i, v):\n        on IndexNotFound:\n            return \"missing\"\n    mutable_array::freeze(r, mutable_array::capacity(r))\na = mutable_array::from_list(\[5, 6\])\n\[safe(a, 1, 9), safe(a, 2, 9), safe(a, -1, 9), safe(a, 100000000000000000000, 9), safe(mutable_array::allocate(0), 0, 1), mutable_array::freeze(a, 2)\]"
 } -result {[[5, 9], "missing", "missing", "missing", "missing", [5, 6]]}
 
-test ns-error-signatures {the indexed natives declare exactly IndexNotFound, the slicing natives exactly LowerUnderrun and UpperOverrun: builtin errors every program sees, with fixed native ids (binary::parse's LayoutLengthMismatch, BINARY-LAYOUT.md, is the fifth builtin error, binary::native::view's NativeViewNull, NATIVE-LAYOUT-VIEWS.md, the sixth)} -body {
+test ns-error-signatures {the indexed natives declare exactly IndexNotFound, the slicing natives exactly LowerUnderrun and UpperOverrun: builtin errors every program sees, with fixed native ids (binary::parse's LayoutLengthMismatch, BINARY-LAYOUT.md, is the fifth builtin error, binary::native::view's NativeViewNull, NATIVE-LAYOUT-VIEWS.md, the sixth, binary::native::edit's NativeEditNull, NATIVE-LAYOUT-WRITES.md, the seventh)} -body {
     list [lmap n {list::at mutable_array::at mutable_array::set str::substring mutable_array::freeze mutable_array::copy} {
             list $n [dict get [core::native::metadata $n] errors]
         }] \
         [core::native::builtinErrorNames] \
         [lmap e {IndexNotFound LowerUnderrun UpperOverrun} {native::lower::ErrorId $e}]
-} -result {{{list::at IndexNotFound} {mutable_array::at IndexNotFound} {mutable_array::set IndexNotFound} {str::substring {LowerUnderrun UpperOverrun}} {mutable_array::freeze {LowerUnderrun UpperOverrun}} {mutable_array::copy {LowerUnderrun UpperOverrun}}} {InvalidArgumentEncoding IndexNotFound LowerUnderrun UpperOverrun LayoutLengthMismatch NativeViewNull} {1073741825 1073741826 1073741827}}
+} -result {{{list::at IndexNotFound} {mutable_array::at IndexNotFound} {mutable_array::set IndexNotFound} {str::substring {LowerUnderrun UpperOverrun}} {mutable_array::freeze {LowerUnderrun UpperOverrun}} {mutable_array::copy {LowerUnderrun UpperOverrun}}} {InvalidArgumentEncoding IndexNotFound LowerUnderrun UpperOverrun LayoutLengthMismatch NativeViewNull NativeEditNull} {1073741825 1073741826 1073741827}}
 
 test ns-bounds-are-registered {the bounds checks behind the argument-dependent errors are registered with each native (-bounds), validated against its -errors and arity} -body {
     set bad {}

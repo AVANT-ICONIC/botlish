@@ -650,6 +650,13 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 
 ## 16. Pressure on the write milestone
 
+> **Answered by NATIVE-LAYOUT-WRITES.md** (section 21 there takes each item
+> in turn): writes are `NativeEdit[L]` (a separate, unrestricted, directly
+> constructed capability; no upgrade from a view) and `binary::store`;
+> pointers are encoded into bytes only by `binary::write_foreign`, never
+> decoded; native records, bitfields, unions, `Bool` fields and volatile
+> memory stay out.
+
 What the read-only implementation exposed that native writes, native
 records and `MutableBytes` foreign writes will have to decide:
 
@@ -701,7 +708,8 @@ records and `MutableBytes` foreign writes will have to decide:
 
 ## 17. Not here
 
-No native-memory write, setter, assignment through a field, writable or
+(Native writes are the next milestone's: NATIVE-LAYOUT-WRITES.md. A view
+itself stays read-only.) No native-memory write, setter, assignment through a field, writable or
 mutable view, `NativeEdit`, native allocation or native record
 construction; no `extern c struct`, C layout rule, bitfield, union, array,
 dynamic extent, floating point or `Bool` field; no aggregate C ABI (passing

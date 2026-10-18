@@ -272,6 +272,13 @@ core::native::register ffi::c::retype -arity 1 -impl core::cabi::sameImpl \
 #                                       Tcl backends have no native memory:
 #                                       there it is a fresh non-null address
 #                                       that nothing can read.
+#   ffi_fixture::memory_bytes(p, n)     the N bytes of native memory at the
+#                                       data pointer P (observed), as a List
+#                                       of Ints: the oracle a native edit's
+#                                       stores are checked with
+#                                       (NATIVE-LAYOUT-WRITES.md), a copy
+#                                       made with no layout and no view. The
+#                                       Tcl backends refuse (NATIVE-ONLY).
 #
 # Nothing in the compiler, the libraries or main.tcl calls it, so no Botlish
 # program outside a test process can name any of them: there is no public
@@ -293,6 +300,15 @@ proc core::cabi::installTestFixture {} {
     core::native::register ffi_fixture::memory -arity 1 -impl core::cabi::fixtureMemoryImpl \
         -param-types {struct} -result-type cptr -errors {} -ownership {observe} \
         -imprint [list vars {T} params [list [list nstruct [core::bytestore::bytesType]]] result {cptr {imprint T}}]
+    core::native::register ffi_fixture::memory_bytes -arity 2 -impl core::cabi::fixtureMemoryBytesImpl \
+        -param-types {cptr int} -result-type list -ownership {observe observe}
+}
+
+# The Tcl backends' ffi_fixture::memory_bytes: no native memory to copy.
+proc core::cabi::fixtureMemoryBytesImpl {p n} {
+    addressOf $p
+    core::semanticError NATIVE-ONLY \
+        "ffi_fixture::memory_bytes copies live native memory, which only the native backends have"
 }
 
 # The Tcl backends' ffi_fixture::memory: a fresh non-null address (beyond

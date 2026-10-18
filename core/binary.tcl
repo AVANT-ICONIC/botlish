@@ -125,21 +125,35 @@ proc core::binary::Encode {descriptor value bytes base} {
         }
         lassign $field name offset sign width endian
         set n [core::value::intOf $fieldValue]
-        set bits [expr {8 * $width}]
-        if {$sign eq "u"} {
-            set lo 0
-            set hi [expr {2 ** $bits - 1}]
-        } else {
-            set lo [expr {-(2 ** ($bits - 1))}]
-            set hi [expr {2 ** ($bits - 1) - 1}]
-        }
-        if {$n < $lo || $n > $hi} {
+        set piece [ScalarPiece $n $sign $width $endian]
+        if {$piece eq ""} {
+            lassign [EncodingRange $sign $width] lo hi
             core::semanticError RANGE "binary::emit: field \"$name\" of $structId holds $n, outside its $width-byte encoding $lo..$hi"
         }
-        set piece [binary format [Letter $width $sign $endian 0] $n]
         set bytes [string replace $bytes $at [expr {$at + $width - 1}] $piece]
     }
     return $bytes
+}
+
+# {LO HI}, the values of the WIDTH-byte encoding SIGN u|i.
+proc core::binary::EncodingRange {sign width} {
+    set bits [expr {8 * $width}]
+    if {$sign eq "u"} {
+        return [list 0 [expr {2 ** $bits - 1}]]
+    }
+    return [list [expr {-(2 ** ($bits - 1))}] [expr {2 ** ($bits - 1) - 1}]]
+}
+
+# The WIDTH bytes (a Tcl byte string) encoding the Int N as SIGN u|i,
+# ENDIAN; "" when N lies outside the encoding (a value no checked program
+# builds: a field's type is its encoding's exact range). Emission and the
+# layout writes (NATIVE-LAYOUT-WRITES.md) share it.
+proc core::binary::ScalarPiece {n sign width endian} {
+    lassign [EncodingRange $sign $width] lo hi
+    if {$n < $lo || $n > $hi} {
+        return ""
+    }
+    return [binary format [Letter $width $sign $endian 0] $n]
 }
 
 # The path of the first pointer field of DESCRIPTOR ("link.next"), or "":
@@ -228,9 +242,9 @@ proc core::binary::Unelaborated {name args} {
 # imitates a memory read. The native backend lowers each operation to
 # straight-line loads (native/lower.tcl's LayoutCall; runtime/nview.rs).
 
-proc core::binary::NativeOnly {operation} {
+proc core::binary::NativeOnly {operation {access reads}} {
     core::semanticError NATIVE-ONLY \
-        "$operation reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one"
+        "$operation $access live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one"
 }
 
 proc core::binary::nativeView {descriptor p} {
@@ -250,8 +264,130 @@ proc core::binary::load {view descriptor} {
     NativeOnly binary::load
 }
 
+# ---------------------------------------------------------------------------
+# Layout writes (NATIVE-LAYOUT-WRITES.md)
+#
+#   binary::native::edit(L, p)      NativeEdit[L]: the live native memory the
+#                                   data pointer P addresses, read and WRITTEN
+#                                   through layout L (NativeEditNull for a
+#                                   null P). P is observed; the edit is P's
+#                                   address word. Direct authority, like a
+#                                   view; reading an edit is a view's read
+#   binary::store(e, L.f, v)        writes V into field f of the memory the
+#                                   NativeEdit[L] E addresses: one store of
+#                                   the field's width at its offset, nothing
+#                                   else touched. A pointer field takes a
+#                                   pointer the program already has (V
+#                                   observed: its address bits are copied)
+#   binary::write(d, L.f, v)        the abi::bytes::MutableBytes D with field
+#                                   f of layout L written to V: a new value
+#                                   (D is unchanged), every other byte D's.
+#                                   D must have exactly L's size
+#                                   (LayoutLengthMismatch). Never a pointer
+#                                   field (LAYOUT-NATIVE-ONLY)
+#   binary::write_foreign(d, L.f, p)  the same for a C pointer field f: the
+#                                   address bits of the pointer P (an
+#                                   existing ffi::c::Ptr or FnPtr, observed)
+#                                   encoded into it -- the explicit foreign
+#                                   encoding, which bytes never decode back
+#                                   (binary::parse stays LAYOUT-NATIVE-ONLY)
+#
+# L.f is a static field designator, resolved to the constant {STRUCTID SIZE
+# PATH FIELD} (hir/layouts.tcl's "Field designators"), FIELD the leaf's
+# descriptor entry at its absolute offset: the whole of what these
+# implementations know.
+#
+# The Tcl backends have no native memory: an edit of the null pointer is
+# NativeEditNull, any other edit is refused (NATIVE-ONLY), and so is a
+# store. Byte storage is theirs, so binary::write and binary::write_foreign
+# run on every backend; a C pointer's address bits are its value there too.
+
+# The bytes (a Tcl byte string) of the abi::bytes::MutableBytes DATA.
+proc core::binary::MutableBytesOf {data context} {
+    core::value::expect struct $data $context
+    set mutableType [core::bytestore::mutableBytesType]
+    if {[core::value::structId $data] ne $mutableType} {
+        core::semanticError TYPE "$context: expected $mutableType, got [core::value::show $data]"
+    }
+    return [binary decode hex [core::value::mutbytesHex [core::value::structGet $data [core::bytestore::storageField]]]]
+}
+
+# The abi::bytes::MutableBytes holding the byte string BYTES.
+proc core::binary::MutableBytesValue {bytes} {
+    return [core::value::structOf [list [core::bytestore::mutableBytesType] [core::bytestore::storageField]] \
+        [list [core::value::mutbytes [binary encode hex $bytes]]]]
+}
+
+# The bytes of the MutableBytes DATA given to OPERATION, once they are
+# exactly the size of the designator PATH's layout (LayoutLengthMismatch).
+proc core::binary::RecordBytes {operation data path} {
+    lassign $path structId size
+    set bytes [MutableBytesOf $data $operation]
+    set length [string length $bytes]
+    if {$length != $size} {
+        core::native::failDeclared LayoutLengthMismatch \
+            "$operation: $length bytes given, but the layout [string range $structId 13 end-1] has size $size"
+    }
+    return $bytes
+}
+
+# The designator PATH as written ("RECORD.origin.x").
+proc core::binary::PathText {path} {
+    return "[string range [lindex $path 0] 13 end-1].[lindex $path 2]"
+}
+
+proc core::binary::write {data path value} {
+    set path [core::value::strOf $path]
+    lassign [lindex $path 3] name offset sign width endian
+    if {$sign eq "ptr"} {
+        # Statically LAYOUT-NATIVE-ONLY (hir/layouts.tcl).
+        core::semanticError LAYOUT-NATIVE-ONLY \
+            "binary::write: field [PathText $path] is a C pointer, which an ordinary byte write never encodes (binary::write_foreign encodes a pointer the program already has)"
+    }
+    set bytes [RecordBytes binary::write $data $path]
+    set n [core::value::intOf $value]
+    set piece [ScalarPiece $n $sign $width $endian]
+    if {$piece eq ""} {
+        lassign [EncodingRange $sign $width] lo hi
+        core::semanticError RANGE "binary::write: field [PathText $path] cannot hold $n, outside its $width-byte encoding $lo..$hi"
+    }
+    return [MutableBytesValue [string replace $bytes $offset [expr {$offset + $width - 1}] $piece]]
+}
+
+proc core::binary::writeForeign {data path pointer} {
+    set path [core::value::strOf $path]
+    lassign [lindex $path 3] name offset kind width endian
+    if {$kind ne "ptr"} {
+        # Statically LAYOUT-FOREIGN-WRITE (hir/layouts.tcl).
+        core::semanticError LAYOUT-FOREIGN-WRITE \
+            "binary::write_foreign: field [PathText $path] is no C pointer field (an ordinary field is written by binary::write)"
+    }
+    # The pointer's own address bits, never an Int made into one: a C
+    # address value, or the type error a checked program never reaches.
+    set address [core::cabi::addressOf $pointer]
+    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bits [expr {$address & ((1 << (8 * $width)) - 1)}]
+    set piece [binary format [Letter $width u $endian 0] $bits]
+    return [MutableBytesValue [string replace $bytes $offset [expr {$offset + $width - 1}] $piece]]
+}
+
+proc core::binary::nativeEdit {descriptor p} {
+    set descriptor [core::value::strOf $descriptor]
+    set address [core::cabi::addressOf $p]
+    if {$address == 0} {
+        core::native::failDeclared NativeEditNull \
+            "binary::native::edit: the pointer is null, so there is no [string range [lindex $descriptor 0] 13 end-1] to edit"
+    }
+    NativeOnly binary::native::edit "reads and writes"
+}
+
+proc core::binary::store {edit path value} {
+    NativeOnly binary::store writes
+}
+
 core::native::declareError LayoutLengthMismatch
 core::native::declareError NativeViewNull
+core::native::declareError NativeEditNull
 
 core::native::register binary::parse -arity 2 -impl core::binary::parse \
     -param-types {str struct} -result-type struct -result-shape {layout-struct 0} \
@@ -278,6 +414,23 @@ core::native::register binary#load -arity 2 -impl core::binary::load \
 core::native::register binary#view_field -arity 2 -impl core::binary::viewField \
     -param-types {any str} -result-type any -result-shape {view-field 0 1} -ownership {observe observe} \
     -layout {field 1 op field} -nomethod 1
+core::native::register binary::native::edit -arity 2 -impl core::binary::nativeEdit \
+    -param-types {str any} -result-type any -result-shape {native-edit 0} -ownership {observe observe} \
+    -errors {NativeEditNull} -layout {operand 0 pointer 1 op edit} -nomethod 1
+core::native::register binary::store -arity 3 -impl core::binary::store \
+    -param-types {any str any} -result-type unit -ownership {observe observe observe} \
+    -layout {edited 0 path 1 value 2 op store} -nomethod 1
+core::native::register binary::write -arity 3 -impl core::binary::write \
+    -param-types {struct str any} -result-type struct -result-shape [list named-struct [core::bytestore::mutableBytesType]] \
+    -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutLengthMismatch} \
+    -layout {output 0 path 1 value 2 op write} -nomethod 1
+core::native::register binary::write_foreign -arity 3 -impl core::binary::writeForeign \
+    -param-types {struct str any} -result-type struct -result-shape [list named-struct [core::bytestore::mutableBytesType]] \
+    -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutLengthMismatch} \
+    -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
 # Reading live process memory is raw authority (DIRECT-MODULES.md): every
-# call of binary::native::view is a direct edge of the module making it.
+# call of binary::native::view is a direct edge of the module making it --
+# and so is every call of binary::native::edit, write authority over it
+# (NATIVE-LAYOUT-WRITES.md). Using an edit someone made (binary::store, its
+# reads) is not: the edit is the authority, already granted.
 core::native::declareDirectNamespace binary::native

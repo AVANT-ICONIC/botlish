@@ -576,13 +576,25 @@ proc core::native::register {name args} {
 #                    appended (binary::load)
 #   field K          argument K is one field's descriptor entry (the
 #                    internal binary#view_field a view's projection becomes)
+#   edited K         argument K is the native edit a store writes through
+#                    (a NativeEdit[L]; NATIVE-LAYOUT-WRITES.md)
+#   output K         argument K is the abi::bytes::MutableBytes a layout
+#                    write writes into
+#   path K           argument K is the static field designator
+#                    (LAYOUT.FIELD..., resolved to its designator constant)
+#   value K          argument K is the value written into that field
+#
+# OP edit (a native edit of the pointer argument), store (one field
+# written through an edit), write (one ordinary field written into byte
+# storage) and write_foreign (an existing C pointer encoded into a pointer
+# field of byte storage) are NATIVE-LAYOUT-WRITES.md's.
 proc core::native::ValidLayoutRole {role arity} {
     if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
         return 0
     }
     foreach {key value} $role {
         switch -- $key {
-            operand - input - pointer - field {
+            operand - input - pointer - field - edited - output - path - value {
                 if {![string is digit -strict $value] || $value >= $arity} {
                     return 0
                 }
@@ -599,7 +611,7 @@ proc core::native::ValidLayoutRole {role arity} {
                 }
             }
             op {
-                if {$value ni {parse emit view load field}} {
+                if {$value ni {parse emit view load field edit store write write_foreign}} {
                     return 0
                 }
             }
@@ -718,12 +730,14 @@ proc core::native::ValidShape {shape count} {
             && [string is digit -strict [lindex $shape 2]]
             && ($count eq "" || ([lindex $shape 1] < $count && [lindex $shape 2] < $count))}]
     }
-    if {[lindex $shape 0] in {native-view view-struct}} {
+    if {[lindex $shape 0] in {native-view native-edit view-struct}} {
         # {native-view I}: the result is a NativeView[L] whose layout L is
         # described by argument I's descriptor constant
         # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the
-        # layout of argument I's static NativeView[L] type (binary::load).
-        # Both resolved by hir::types::ShapeResult (NATIVE-LAYOUT-VIEWS.md).
+        # layout of argument I's static NativeView[L] type (binary::load);
+        # {native-edit I}: a NativeEdit[L] likewise (binary::native::edit,
+        # NATIVE-LAYOUT-WRITES.md). All resolved by hir::types::ShapeResult
+        # (NATIVE-LAYOUT-VIEWS.md).
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
             && ($count eq "" || [lindex $shape 1] < $count)}]
     }

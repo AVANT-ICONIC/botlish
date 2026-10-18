@@ -2363,7 +2363,8 @@ Method syntax: receiver.load(...) is the same call.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-v must statically be a NativeView[L] (anything else is BINARY-OPERAND).
+v must statically be a NativeView[L] or a NativeEdit[L] (anything else
+is BINARY-OPERAND).
 The result is the same immutable LayoutStruct[L] binary::parse would
 give for the same bytes, nested layouts included, so a record read many
 times can be loaded once and read as ordinary fields; padding is never
@@ -2434,9 +2435,141 @@ fn second(data: abi::bytes::Bytes) -> int:
 @value [66, -1]
 @end
 
+@topic stdlib.binary::store
+title: binary::store -- intrinsic of namespace binary
+summary: One field written into live native memory through a NativeEdit[L], written binary::store(e, L.field, value): one store of the field's width at its offset, nothing else touched.
+index: stdlib
+symbol: binary::store
+keywords: write field; store field; set native field; poke; assign struct field; write pointer field
+related: stdlib.module.binary stdlib.binary::native::edit stdlib.binary::write concept.binary-layouts
+
+== SIGNATURE
+    binary::store(any, str, any) -> unit
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::store.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::store(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+e must statically be a NativeEdit[L] (a NativeView is read-only:
+BINARY-OPERAND), and the field is written L.FIELD, or a path through
+nested layouts (L.origin.x), naming a field of e's own layout
+(LAYOUT-OPERAND otherwise). The value is held to the field's type the way
+a construction's field values are: a scalar proven in its integer domain
+(no conversion, truncation or run-time guard), a pointer field exactly its
+declared ffi::c::Ptr or FnPtr type. A pointer stored is observed, never
+moved: its address bits are copied, the memory does not own the pointee,
+and nothing keeps it alive. Padding and every other field are untouched.
+It declares no error and returns unit. A store is an ordinary native
+store: not volatile, atomic or ordered; another thread's synchronization
+is the program's protocol. Declared nomethod. NATIVE-LAYOUT-WRITES.md.
+
+@topic stdlib.binary::write
+title: binary::write -- intrinsic of namespace binary
+summary: A new abi::bytes::MutableBytes with one ordinary field of layout L written, binary::write(data, L.field, value); data must be exactly L's size (LayoutLengthMismatch).
+index: stdlib
+symbol: binary::write
+keywords: write field into bytes; build record; fill struct in bytes; set field; serialize field; pack field
+related: stdlib.module.binary stdlib.binary::write_foreign stdlib.binary::store stdlib.binary::emit stdlib.module.abi::bytes concept.binary-layouts
+
+== SIGNATURE
+    binary::write(struct, str, any) -> struct
+
+== ERRORS
+    LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::write.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::write(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+data must statically be an abi::bytes::MutableBytes; the field is written
+L.FIELD or a path through nested layouts, and its value is held to the
+field's integer domain like a construction's. The result is a fresh
+MutableBytes (MutableBytes is a value: data and every copy of it are
+unchanged), so a record is built a write at a time from
+abi::bytes::zeroed(abi::usize(binary::layout_length(L))). A pointer field
+is never written this way (LAYOUT-NATIVE-ONLY): binary::write_foreign
+encodes an existing pointer. Runs on every backend. Declared nomethod.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+layout Pair:
+    size 4
+    align 2
+    field a: binary::U16 at 0
+    field b: binary::I8 at 3
+
+fn build() -> abi::bytes::Bytes errors LayoutLengthMismatch:
+    d = abi::bytes::zeroed(abi::usize(binary::layout_length(Pair)))
+    e = binary::write(d, Pair.a, 258)
+    abi::bytes::freeze(binary::write(e, Pair.b, -1))
+
+r = build():
+    on LayoutLengthMismatch:
+        abi::bytes::from_list([])
+binary::parse(Pair, r):
+    on LayoutLengthMismatch:
+        LayoutStruct[Pair] {a: 0, b: 0}
+@value LayoutStruct[Pair] {a: 258, b: -1}
+@end
+
+@topic stdlib.binary::write_foreign
+title: binary::write_foreign -- intrinsic of namespace binary
+summary: A new abi::bytes::MutableBytes with an existing C pointer's address bits encoded into a pointer field of layout L, binary::write_foreign(data, L.field, p).
+index: stdlib
+symbol: binary::write_foreign
+keywords: write pointer into bytes; encode pointer; build C struct; pointer field; callback field; userdata field
+related: stdlib.module.binary stdlib.binary::write stdlib.binary::store concept.c-ffi concept.binary-layouts
+
+== SIGNATURE
+    binary::write_foreign(struct, str, any) -> struct
+
+== ERRORS
+    LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::write_foreign. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::write_foreign(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+The explicit foreign encoding: the field must be a C pointer field
+(LAYOUT-FOREIGN-WRITE otherwise) and p exactly its declared ffi::c::Ptr or
+FnPtr type (an Int is TYPE). p is observed, never moved: the bytes do not
+own it, keep it alive, or know whether C keeps it after a call -- a
+wrapper models that protocol. The record built this way is exposed to C
+by the existing borrowing contract (a read noescape pointer parameter).
+The law is one-way: binary::parse of a layout with a pointer field stays
+LAYOUT-NATIVE-ONLY whatever the bytes hold, and a pointer is read back
+only from native memory, through a view or an edit. Runs on every backend
+(a C pointer's address is its value there too). Declared nomethod.
+NATIVE-LAYOUT-WRITES.md.
+
 @topic stdlib.module.binary
 title: binary -- standard namespace
-summary: Fixed binary layouts: parse bytes into a LayoutStruct (binary::parse), emit one back (binary::emit), read a native view of one (binary::load), and the layout's size and alignment.
+summary: Fixed binary layouts: parse, emit and field writes of byte records (binary::parse, emit, write, write_foreign), native views and edits (load, store), and layout queries.
 index: stdlib
 symbol: binary
 keywords: binary format; struct packing; serialize; deserialize; byte layout; parse bytes
@@ -2510,11 +2643,14 @@ lib/binary.bot (import binary).
     binary::layout_length          intrinsic -- The size in bytes of layout...
     binary::load                   intrinsic -- Every field of a native vie...
     binary::parse                  intrinsic -- The LayoutStruct[L] imprint...
+    binary::store                  intrinsic -- One field written into live...
+    binary::write                  intrinsic -- A new abi::bytes::MutableBy...
+    binary::write_foreign          intrinsic -- A new abi::bytes::MutableBy...
 
 Each member is a topic: -help NAME (e.g. -help binary::I16).
 
 == NOTES
-`import binary` for the five intrinsics and the scalar field types
+`import binary` for the nine intrinsics and the scalar field types
 binary::U8 ... binary::I64. A `layout` declaration names a fixed number of
 bytes with explicit size, alignment and field offsets; every multi-byte
 field is little-endian (the target's order), and padding is never a
@@ -2527,6 +2663,86 @@ target's pointer width). Such a layout is native-only: bytes never become
 a pointer, so binary::parse and binary::emit of it are LAYOUT-NATIVE-ONLY,
 and it is read from live native memory through a NativeView[L]
 (binary::native::view, then its fields or binary::load).
+
+Writes name their field statically, LAYOUT.FIELD or a path through nested
+layouts (Header.origin.x). A record in byte storage the program owns is
+filled a field at a time: binary::write(data, L.f, v) is a new
+abi::bytes::MutableBytes with that field written (data unchanged), and a
+pointer field takes an existing pointer only through the explicit
+binary::write_foreign. Live native memory foreign code handed out is
+written through a NativeEdit[L] (binary::native::edit, then
+binary::store). NATIVE-LAYOUT-WRITES.md.
+
+@topic stdlib.binary::native::edit
+title: binary::native::edit -- intrinsic of namespace binary::native
+summary: The NativeEdit[L] of the native memory a data pointer addresses -- read and written through layout L -- written binary::native::edit(L, p); a null p fails with NativeEditNull.
+index: stdlib
+symbol: binary::native::edit
+keywords: native edit; write native memory; write C struct; poke; fill struct; out parameter; modify record
+related: stdlib.module.binary::native concept.binary-layouts stdlib.binary::store stdlib.binary::native::view stdlib.binary::load concept.c-ffi rule.unhandled-errors
+
+== SIGNATURE
+    binary::native::edit(str, any) -> any
+
+== ERRORS
+    NativeEditNull
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary::native: import binary::native, then
+write binary::native::edit. Declared nomethod: method syntax does not
+apply (NOMETHOD-CALL); call it as binary::native::edit(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+L is a layout name written at the call; p must statically be an
+ffi::c::Ptr[T] (a data pointer), observed, never moved. Nothing is read or
+written when the edit is made. An edit reads exactly as a NativeView does
+(v.field, destructuring, binary::load) except that a nested layout's field
+is a NativeEdit of the inner layout, and binary::store writes through it.
+It is write authority, never ownership: no lifetime, no exclusive access
+(copies, other edits and views of the same address, and foreign code all
+alias the memory). A NativeView never becomes an edit and an edit is not
+a view: neither is the other's subtype. Making one is raw authority like
+a view: binary::native is a direct namespace, so the calling module must
+be a `direct module` (or mediate the call through a context of its own);
+writing through an edit someone else made is not. It touches memory only
+on the native backends: interp and compile refuse an edit of a non-null
+pointer with NATIVE-ONLY. A null pointer is the builtin declared error
+NativeEditNull on every backend. The memory must be live, writable and at
+least binary::layout_length(L) bytes for as long as the edit is used;
+nothing checks it. Declared nomethod. NATIVE-LAYOUT-WRITES.md.
+
+== EXAMPLES
+@example accept
+direct module
+
+import binary
+import binary::native
+import ffi::c
+
+layout Point:
+    size 4
+    align 2
+    field x: binary::I16 at 0
+    field y: binary::I16 at 2
+
+fn reset(p: ffi::c::Ptr[ffi::c::Void]) -> int errors NativeEditNull:
+    e = binary::native::edit(Point, p)
+    binary::store(e, Point.x, 0)
+    e.y
+
+r = reset(ffi::c::null[ffi::c::Void]()):
+    on NativeEditNull:
+        -1
+r
+@caption An edit of the null pointer fails before anything is written
+@value -1
+@end
 
 @topic stdlib.binary::native::view
 title: binary::native::view -- intrinsic of namespace binary::native
@@ -2606,9 +2822,10 @@ symbol: binary::native
 Compiler intrinsics only, no module file (import binary::native).
 
 == MEMBERS
+    binary::native::edit           intrinsic -- The NativeEdit[L] of the na...
     binary::native::view           intrinsic -- The read-only NativeView[L]...
 
-Each member is a topic: -help NAME (e.g. -help binary::native::view).
+Each member is a topic: -help NAME (e.g. -help binary::native::edit).
 
 @topic stdlib.byte::BelowRange
 title: byte::BelowRange -- Error of module byte

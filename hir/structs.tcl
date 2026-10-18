@@ -558,14 +558,16 @@ proc hir::structs::ProjectionProblem {hir e} {
         return ""
     }
     set kind [hir::types::kindOf $type]
-    set view [hir::layouts::OfViewType $type]
+    set view [hir::layouts::OfNativeType $type]
     if {$view ne ""} {
-        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
-        # layout's fields, nothing else.
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) or a
+        # native edit (NATIVE-LAYOUT-WRITES.md): the layout's fields,
+        # nothing else.
         if {[hir::layouts::ViewFieldType $view $name] ne ""} {
             return ""
         }
-        return [list UNKNOWN-FIELD [format {native view type %s has no field "%s" (layout %s has fields: %s)} \
+        return [list UNKNOWN-FIELD [format {native %s type %s has no field "%s" (layout %s has fields: %s)} \
+            [expr {[hir::types::IsNativeEdit $type] ? "edit" : "view"}] \
             [hir::types::show $type] $name $view [join [hir::layouts::StructNames $view] {, }]]]
     }
     if {[projectionDenied $type $node]} {
