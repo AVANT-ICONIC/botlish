@@ -624,7 +624,7 @@ MEASUREMENTS-TABLE
 
 ## 19. Tests, the oracles, fuzzing, mutants
 
-**`tests/native-edit.test`** (54 tests, the authoritative suite; about a
+**`tests/native-edit.test`** (55 tests, the authoritative suite; about a
 minute): the NativeEdit type, its argument diagnostics, distinctness from
 views (both directions, joins), not a pointer, the edit's operands and its
 declared null error, the field types read through an edit; field
@@ -690,7 +690,33 @@ non-address operands refused, pointer stores (bits, null, read back), a
 4-byte pointer field refusing a wider address, an Int refused as a pointer,
 a byte write's fresh storage (the operand unchanged), the fixture copy.
 
-**Fuzzing** (`audit/native-edit/tools/fuzz.tcl`). FUZZ-RESULTS
+**Fuzzing** (`audit/native-edit/tools/fuzz.tcl`). Each program is a chain
+of random layouts (one to six scalars of every width and signedness at
+random gapped offsets, random alignment, sometimes a layout nested by value
+two or three levels deep, and in the outermost zero to three pointer fields
+-- data and function pointers, aligned or not), a random initial record
+(every byte random: padding, fields, pointer words) and one to eight writes
+to random leaves, scalar or pointer, some through a nested edit
+(`binary::store(e.f2, INNER.f0, v)`), the others by a path from the root,
+fields sometimes written twice; values biased to each encoding's extremes
+and zero, a pointer null, the run-time address of a fixture record, or a
+function's address. The fuzzer applies the writes to the initial bytes
+itself (little-endian, two's complement, a pointer's address bits: its own
+model, never a descriptor or generated code), and each program performs
+them twice: through `binary::native::edit` into fixture memory, returning
+the memory's bytes (`ffi_fixture::memory_bytes`), every written field read
+back and every written pointer's address; and into a `MutableBytes` of the
+same initial bytes (`binary::write`, `binary::write_foreign`), returning the
+result's bytes and the operand's (unchanged). Both byte lists must equal the
+model's exactly. Seeds 17, 41 and 99 at 40 programs each, seed 3 at 20 on
+all four backends (interp and compile run the byte half and must refuse the
+edit with `NATIVE-ONLY`), seed 5 at 20 under `BOTLISH_NATIVE_GC_STRESS=1`:
+**160 programs, no disagreement**. Running it found no defect in the write
+code; every fix it needed while it was written was its own (making a null
+function pointer, the imprint syntax, the `direct module` marker, quoting).
+The read milestone's fuzzer, rerun because views now share their types and
+descriptors with edits (seeds 1, 17, 41 at 40, seed 5 at 20 under GC
+stress): no disagreement.
 
 **Mutants** (`audit/native-edit/tools/mutate.tcl`). MUTANT-RESULTS
 
