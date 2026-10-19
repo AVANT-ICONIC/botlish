@@ -506,6 +506,55 @@ test ma-cow-counters {item 50: a copy is O(1) -- one share whatever the length -
     }
 } -cleanup {unset -nocomplain n text} -result {{{shares 1 detaches 1 detachElements 10} {created 1 shares 1}} {{shares 1 detaches 1 detachElements 1000} {created 1 shares 1}}}
 
+# hir/mutvec.tcl's last uses per path (NoLaterUse, ReadsPath): a table of
+# parallel arrays and an Int count, updated the natural ways -- rebuilt from
+# its own fields after mutating them, handed whole to a mutating helper
+# together with its new count, or returned in a result struct whose table
+# field is passed on before the Int field is read -- copies no array: each
+# read-out is the last use of its own path.
+test ma-path-last-use-copies {a struct of 1000-slot arrays with an Int field, updated 100 times by a rebuild from its own fields, by a mutating helper given the whole struct and its count, and through a result struct read field by field, makes no logical copy (Tcl counters) and no share or detach (native counters); the values agree on every backend} -constraints nativeLinux -body {
+    set decls "import mutable_array\nstruct T:\n    keys: MutableArray\[int\]\n    vals: MutableArray\[int\]\n    count: int\nstruct Put:\n    old: int\n    table: T\nfn table() -> T:\n    T {keys: mutable_array::create(1000, 0), vals: mutable_array::create(1000, 0), count: 0}\n"
+    lmap fns {
+        {fn put(t: T, i: int) -> T errors IndexNotFound:
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    T {keys: t.keys, vals: t.vals, count: t.count + 1}
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    fill(put(t, i), i + 1, n)
+}
+        {fn store(t: T, i: int, count: int) -> T errors IndexNotFound:
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    T {keys: t.keys, vals: t.vals, count: count}
+fn put(t: T, i: int) -> T errors IndexNotFound:
+    store(t, i, t.count + 1)
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    fill(put(t, i), i + 1, n)
+}
+        {fn put_old(t: T, i: int) -> Put errors IndexNotFound:
+    old = t.vals.at(i)
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    Put {old: old, table: T {keys: t.keys, vals: t.vals, count: t.count + 1}}
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    r = put_old(t, i)
+    fill(r.table, i + 1 + r.old, n)
+}
+    } {
+        set text "${decls}${fns}fn f() -> int errors IndexNotFound:\n    t = fill(table(), 0, 100)\n    t.count * 1000000 + t.keys.at(7) * 1000 + t.vals.at(99)\nr = f():\n    on IndexNotFound:\n        -1\nr\n"
+        core::mutarray::resetCounters
+        outcomeUnderHir compile [surface::compile $text -warnings off]
+        set tcl [core::mutarray::counters]
+        list [maAgree $text] $tcl [lindex [maNative $text] 1]
+    }
+} -cleanup {unset -nocomplain decls fns text tcl} -result {{{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}} {{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}} {{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}}}
+
 set maEvidence "${maDecls}fn affine() -> int errors IndexNotFound:
     a = mutable_array::generate(2, make)
     old = a.swap(0, make(5))

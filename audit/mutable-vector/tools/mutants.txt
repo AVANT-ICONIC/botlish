@@ -204,6 +204,223 @@ proc hir::mutvec::ShareDescriptor {type} {
 >>>>
 
 # ---------------------------------------------------------------------------
+# By-reference arguments (hir/mutvec.tcl's ByReference, PlaceArgument,
+# WrittenLater): an argument handed over uncopied is read when its call
+# runs, after the call's later arguments (tests/mutable-vector.test's
+# mv-cow-by-reference-arguments).
+
+@@ byref-earlier-ignored a later argument of the same call may move the header of an earlier argument handed over by reference: `obs2(v, grow1(v, 5))` lets grow1 mutate what obs2 then reads
+## hir/mutvec.tcl
+<<<<
+                        if {[ByReference $hir $p $a] && [ReadsPath $a $b $fields]} {
+====
+                        if {0 && [ByReference $hir $p $a] && [ReadsPath $a $b $fields]} {
+>>>>
+
+@@ byref-later-write-ignored an argument handed over by reference stays uncopied while a later argument of the same call mutates the same place: `obs2(v, v.pop())` reads the popped vector
+## hir/mutvec.tcl
+<<<<
+    lassign [Path $hir $a] b fields
+    set n [llength $fields]
+    set context [IsContextParam $hir $b]
+====
+    return 0
+    lassign [Path $hir $a] b fields
+    set n [llength $fields]
+    set context [IsContextParam $hir $b]
+>>>>
+
+@@ byref-context-call-ignored a context member handed over by reference stays uncopied while a later argument calls a function that mutates the member: `at(c.values, bump())` reads the bumped member
+## hir/mutvec.tcl
+<<<<
+            if {$context && [MayRunCode $hir $x]} {
+====
+            if {0 && $context && [MayRunCode $hir $x]} {
+>>>>
+
+@@ byref-place-copied a mutating receiver is copied like a read when a later argument mutates the same place: `v.push(v.pop() + 10)` pushes onto a copy, and the update is lost
+## hir/mutvec.tcl
+<<<<
+                    && ([PlaceArgument $hir $p $e] || ![WrittenLater $hir $p $e])} {
+====
+                    && ![WrittenLater $hir $p $e]} {
+>>>>
+
+# ---------------------------------------------------------------------------
+# Last uses per path (hir/mutvec.tcl's NoLaterUse, LaterIn, ReadsPath,
+# UseMap): a read-out moves its header only when no later use may read a
+# header at its path. The first nine are unsound (a later use observes the
+# moved header: tests/mutable-vector.test's mv-path-last-use-semantics, the
+# fuzzer's struct family); the last two only copy more than they must (the
+# copy counts of mv-path-last-use-copies pin the moves).
+
+@@ path-prefix-use-ignored a later use of a prefix of the moved path (the binding itself, an enclosing struct field) does not count: `T {keys: t.keys, ...}` moves t.keys while `t` is still read whole afterwards
+## hir/mutvec.tcl
+<<<<
+        if {$m <= $n} {
+            if {[lrange $fields 0 [expr {$m - 1}]] eq $q} {
+                return 1
+            }
+====
+        if {$m <= $n} {
+            if {$m == $n && $q eq $fields} {
+                return 1
+            }
+>>>>
+
+@@ path-same-use-ignored a later use of the same path does not count (only a strict prefix or extension does): `pair(t.keys, t.keys)` hands one header to both parameters
+## hir/mutvec.tcl
+<<<<
+        if {$m <= $n} {
+            if {[lrange $fields 0 [expr {$m - 1}]] eq $q} {
+                return 1
+            }
+        } elseif {$holds && [lrange $q 0 [expr {$n - 1}]] eq $fields} {
+====
+        if {$m < $n} {
+            if {[lrange $fields 0 [expr {$m - 1}]] eq $q} {
+                return 1
+            }
+        } elseif {$m > $n && $holds && [lrange $q 0 [expr {$n - 1}]] eq $fields} {
+>>>>
+
+@@ path-extension-use-ignored a later use of an extension of the moved path that holds a header does not count: `u = n.inner` moves while `n.inner.keys` is read afterwards
+## hir/mutvec.tcl
+<<<<
+        } elseif {$holds && [lrange $q 0 [expr {$n - 1}]] eq $fields} {
+            return 1
+        }
+====
+        }
+>>>>
+
+@@ path-later-statements-ignored the statements after the read-out are not looked at: a path read again in a later statement still moves
+## hir/mutvec.tcl
+<<<<
+    foreach s [lrange $sequence [expr {$at + 1}] end] {
+        if {[ReadsPath $s $b $fields]} {
+            return 0
+        }
+====
+    foreach s [lrange $sequence [expr {$at + 1}] end] {
+        if {0} {
+            return 0
+        }
+>>>>
+
+@@ path-later-operands-ignored the operands after the read-out (later arguments, later struct literal fields) are not looked at: `Two {a: t.keys, t: t}` moves t.keys into both fields
+## hir/mutvec.tcl
+<<<<
+                foreach c [lrange $children [expr {$at + 1}] end] {
+                    if {[ReadsPath $c $b $fields]} {
+                        return 0
+                    }
+                }
+====
+                foreach c {} {
+                }
+>>>>
+
+@@ path-branch-uses-ignored the branches after a condition are not looked at: a path a condition hands to a mutating call is read by a branch through the same header
+## hir/mutvec.tcl
+<<<<
+            if {
+                foreach s [concat [dict get $node thenBody] [dict get $node elseBody]] {
+                    if {[ReadsPath $s $b $fields]} {
+                        return 0
+                    }
+                }
+            }
+====
+            if {
+            }
+>>>>
+
+@@ path-handler-uses-ignored the handlers after a handled call are not looked at: a path the call mutated before failing is read by the handler through the same header
+## hir/mutvec.tcl
+<<<<
+            handle {
+                foreach body [dict get $node handlerBodies] {
+                    foreach s $body {
+                        if {[ReadsPath $s $b $fields]} {
+                            return 0
+                        }
+                    }
+                }
+            }
+====
+            handle {
+            }
+>>>>
+
+@@ path-loop-iteration-ignored the next iteration of a loop the binding is not bound inside is not looked at: each iteration hands the same header to a mutating call
+## hir/mutvec.tcl
+<<<<
+                    return [BoundInside $hir $parent $b $p]
+====
+                    return 1
+>>>>
+
+@@ path-context-moved a context parameter's path moves at its last use in a function like any held path: a local taking a context member's header mutates the installed context
+## hir/mutvec.tcl
+<<<<
+    if {[IsContextParam $hir $b] || ![dict exists $convention held $b]} {
+        return 0
+    }
+    return [NoLaterUse $hir $parent $e $b]
+====
+    if {![dict exists $convention held $b]} {
+        return 0
+    }
+    return [NoLaterUse $hir $parent $e $b]
+>>>>
+
+@@ path-blind-last-use (economic) every later use of the binding counts, whatever its path (the per-binding rule): a rebuild from a struct's own fields copies every field but the last
+## hir/mutvec.tcl
+<<<<
+    set n [llength $fields]
+    dict for {q holds} [dict get $convention uses $b $s] {
+====
+    return 1
+    set n [llength $fields]
+    dict for {q holds} [dict get $convention uses $b $s] {
+>>>>
+
+@@ path-headerless-extension-counts (economic) a later read of an extension holding no header (an Int field) counts: the whole struct handed to a mutating helper with its new count is copied
+## hir/mutvec.tcl
+<<<<
+        set holds 1
+        if {$fields ne {}} {
+====
+        set holds 1
+        if {0} {
+>>>>
+
+# ---------------------------------------------------------------------------
+# Demand through struct literals (hir/mutvec.tcl's ExclusivePositions, and
+# FreshFunctions once the read-outs are written): both only remove copies
+# (tests/mutable-vector.test's mv-literal-demand-copies pins them; the
+# convention they extend is sound by construction: a consumed parameter's
+# caller, a demanded local's entry still copy what is not exclusive).
+
+@@ literal-fields-not-exclusive (economic) a struct literal in an exclusive position does not make its collection fields exclusive positions: a function returning a literal of its parameter (or of a plain local) is not fresh, and every caller copies its result
+## hir/mutvec.tcl
+<<<<
+        if {[dict get $hir exprs $v kind] ne "struct"} continue
+====
+        continue
+>>>>
+
+@@ literal-fresh-before-readouts (economic) the fresh functions are not computed again once the read-outs are written: a literal whose field became a copy is not fresh, and its caller copies the whole struct again
+## hir/mutvec.tcl
+<<<<
+    # With the read-outs written, a result whose collection fields are now
+    # copies (a held binding's path read before its last use) is fresh too.
+    set freshFunctions [FreshFunctions $hir $parent $blocks $rootSet]
+====
+>>>>
+
+# ---------------------------------------------------------------------------
 # Moves in and out
 
 @@ push-no-invalidate push of an affine element does not invalidate its source: a later use of the binding is accepted
