@@ -15,8 +15,7 @@ proc ht::traceOf {seed kind profile {policy none} {drops drop}} {
 # tools/model.py takes it: read from the implementation's own header line
 # "# policy: NUM/DEN" (or "none").
 proc ht::policyOf {impl} {
-    variable base
-    set path [expr {[file exists $impl] ? $impl : [file join $base impl $impl.bot]}]
+    set path [ht::implPath $impl]
     if {[regexp -line {^# policy: (\S+)$} [ht::readFile $path] -> policy]} {
         return $policy
     }
@@ -26,8 +25,7 @@ proc ht::policyOf {impl} {
 # "nodrop" when implementation IMPL's header says "# drop: no" (it does not
 # remove keys), else "drop".
 proc ht::dropsOf {impl} {
-    variable base
-    set path [expr {[file exists $impl] ? $impl : [file join $base impl $impl.bot]}]
+    set path [ht::implPath $impl]
     if {[regexp -line {^# drop: no$} [ht::readFile $path]]} {
         return nodrop
     }
@@ -46,7 +44,7 @@ proc ht::fuzz {options} {
         foreach kind [dict get $options -keys] {
             # A typed implementation (header line "# key-type: T") takes one
             # key kind only.
-            set implPath [expr {[file exists $impl] ? $impl : [file join $ht::base impl $impl.bot]}]
+            set implPath [ht::implPath $impl]
             if {[regexp -line {^# key-type: (\S+)$} [ht::readFile $implPath] -> keyType]
                 && [dict get {int int str str point keys::Point} $kind] ne $keyType} continue
             set path [ht::app $impl-$kind trace.bot $impl $kind [dict get $options -edits]]

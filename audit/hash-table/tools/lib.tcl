@@ -92,20 +92,28 @@ proc ht::typedDriver {text type} {
     return [join $out \n]
 }
 
+# The source file of implementation IMPL: impl/IMPL.bot for a bare module
+# name, IMPL itself for a path (one with a directory part or a .bot
+# extension). A bare name is never looked up in the working directory,
+# whose files and directories may share an implementation's name.
+proc ht::implPath {impl} {
+    variable base
+    if {[string match *.bot $impl] || [file tail $impl] ne $impl} {
+        return $impl
+    }
+    return [file join $base impl $impl.bot]
+}
+
 # A private application directory NAME: DRIVER (a drivers/ file name, as
 # main.bot), IMPL (an impl/ module name, or a path, as table.bot, with EDITS
-# applied), KEYS (int, str or point: drivers/keys_KEYS.bot as keys.bot) and
-# EXTRA (more {FILE-NAME TEXT} pairs). Returns main.bot's path.
+# applied: ht::implPath), KEYS (int, str or point: drivers/keys_KEYS.bot as
+# keys.bot) and EXTRA (more {FILE-NAME TEXT} pairs). Returns main.bot's path.
 proc ht::app {name driver impl keys {edits {}} {extra {}}} {
     variable base
     set dir [file join [workDir] $name]
     file delete -force $dir
     file mkdir $dir
-    if {[file exists $impl]} {
-        set implPath $impl
-    } else {
-        set implPath [file join $base impl $impl.bot]
-    }
+    set implPath [implPath $impl]
     set driverText [readFile [file join $base drivers $driver]]
     if {[regexp -line {^# key-type: (\S+)$} [readFile $implPath] -> keyType]} {
         set driverText [typedDriver $driverText $keyType]
