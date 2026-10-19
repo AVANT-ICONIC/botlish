@@ -71,6 +71,7 @@ mutable contents, or a whole-program analysis.
 | [CO-8](#co-8-a-long-equality-chain-exceeds-the-front-ends-nesting-limit) | a long `or` chain exceeds the front end's nesting limit | compile limit | cheap | no | 1,024 terms: "too many nested evaluations" |
 | [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (branch `exp-probe-primitive`) | measurement in progress |
 | [RT-2](#rt-2-a-runtime-owned-table) | a runtime-owned table | runtime | -- | no (the Rust reference stands in) | |
+| [RT-3](#rt-3-a-keyed-hash) | a keyed hash: no table can defend itself against chosen keys | runtime | -- | no (a semantic decision) | colliding keys: 2.8-6.9 µs per hit at 1,024 keys |
 
 The rest of this document gives the entries in full, in the order of the
 table.
@@ -1003,6 +1004,51 @@ is the Rust reference's `std` (SipHash) and `stdb` (`std::HashMap` driven
 by Botlish's hash) columns. HASH-TABLE-EXPERIMENT.md, "Recommended
 division of labor", weighs it against the measured gap that remains after
 CG-1, CG-2, RO-1 and the proofs.
+
+### RT-3. A keyed hash
+
+* **Operation needed.** A hash that someone choosing the keys cannot
+  predict. It has the same contract as `hash` (equal values hash equal
+  under one key), with a key a table draws when it is made.
+* **Why ordinary Botlish cannot express it.**
+  * `hash` is a fixed, public function of the value: FNV-1a over a kind
+    tag and a canonical text (core/hashing.tcl), the same in every
+    process. Every table written in Botlish is built on it.
+  * A table can mix a secret salt into `hash(x)` afterwards. That
+    permutes the slots of keys whose hashes differ, but keys with equal
+    64-bit hashes stay together under every salt, and FNV-1a collisions
+    are cheap to construct offline.
+  * Only a keyed function of the canonical bytes resists that, and those
+    bytes (an Int's decimal text, a struct's field encoding) are the
+    runtime's. No Botlish source can reach them.
+  * Botlish also has no wrapping 64-bit arithmetic to write such a
+    function in. The same gap keeps `hash` itself a native
+    (core/hashing.tcl's header).
+* **Measured consequence.**
+  * `int-collide` (SPEC.md section 5) uses keys found by black-box search
+    whose hashes are 0 mod 1,024. Every open-addressed table degrades to
+    a scan of one cluster: 2.8-6.9 µs per hit at 1,024 keys against
+    70-90 ns, and builds become quadratic (HASH-TABLE-EXPERIMENT.md, "Key
+    types").
+  * Chaining degrades least (1.05 µs). Rust's `std::HashMap`, with
+    SipHash and a per-process random key, takes 10.9 ns on the same keys.
+* **Smallest plausible primitive.** `hash_keyed(x, k)`: SipHash-1-3, or a
+  comparable keyed function, over the same canonical bytes `hash` walks.
+  A table would draw `k` at `fresh` from a process-wide random source.
+* **Runtime and GC implications.** None beyond `hash`'s: the same walk,
+  allocation-free since RO-1. The cost is semantic:
+  * hash values, and the iteration order of any table built on them,
+    would differ from run to run;
+  * the backends would agree only for equal keys;
+  * an API that exposes slot order would have to stop doing so, or sort.
+* **Other users.** Every hash-based structure that takes untrusted keys,
+  such as parsers of request parameters (lib/web.bot).
+* **Prototype.** None. Whether `hash` is seeded, and whether iteration
+  order is part of the semantics, are decisions for the hash
+  specification that core/hashing.tcl defers ("seeding/collision-
+  hardening policy") and for a Set/Map API. The measurement is what they
+  should weigh. A compact dict (`cd`) iterates in insertion order whatever
+  the hash, so choosing it would decouple the two decisions.
 
 ---------------------------------------------------------------------------
 
