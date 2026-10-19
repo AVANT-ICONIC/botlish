@@ -460,9 +460,9 @@ record is blocked by its element alone, and recovered with it.
 * **audit/c-bindgen/tools/layout-fuzz.tcl** now draws arrays of C integers,
   stdint types, pointers, earlier records, struct lf_inner and two
   dimensions as layout fields, and arrays of floats, Bools, unions and
-  earlier blocked records as blocked by their element; a second compiler (GCC) checks every array's
-  sizeof and last element's offset; the runtime oracle reads and writes the
-  elements. Results: section 14.
+  earlier blocked records as blocked by their element; a second compiler
+  (GCC) checks every array's sizeof and last element's offset; the runtime
+  oracle reads and writes the elements. Results: section 14.
 * Rust: `array_native_rows_load_every_encoding`,
   `array_native_row_store_writes_only_the_row`,
   `array_byte_rows_load_store_and_check_bounds`,
