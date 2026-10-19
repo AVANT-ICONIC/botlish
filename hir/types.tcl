@@ -300,6 +300,11 @@ proc hir::types::resolveNamed {name {ns ""}} {
         # ABI name.
         return bool
     }
+    if {$name eq [hir::cabi::DoubleName]} {
+        # C double (hir/cabi.tcl, FLOAT64-MILESTONE-1.md): Botlish's
+        # Float64, under its C ABI name.
+        return Float64
+    }
     if {$name eq [hir::cabi::VoidName]} {
         # The C void (C-ABI-TYPES.md): a pointee identity, never the type of
         # a value.
@@ -1842,7 +1847,7 @@ proc hir::types::narrow {current fact} {
 # recursive list case would make it so -- sound but incomplete, never
 # unsound, and not needed by this milestone's own motivating call site.
 proc hir::types::IsEqualityTotal {type} {
-    return [expr {[kindOf $type] in {int str bool unit UnicodeChar enum}}]
+    return [expr {[kindOf $type] in [core::type::scalarKinds]}]
 }
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
@@ -2069,6 +2074,21 @@ proc hir::types::intern {hirVar type} {
 # constants, ambient bindings are unknown.
 
 proc hir::types::infer {hirVar} {
+    upvar 1 $hirVar hir
+    # The operators' meanings (hir/operators.tcl): a walk's types select the
+    # floating-point operation of every operator call with a floating-point
+    # operand, which is rewritten; the program is typed again while a
+    # rewrite changed it.
+    while 1 {
+        Walk hir
+        if {![hir::operators::resolve hir]} {
+            return
+        }
+    }
+}
+
+# One typing walk of the whole of HIR (infer).
+proc hir::types::Walk {hirVar} {
     upvar 1 $hirVar hir
     # Poison is a fact of one walk (a later round of the signature fixpoint
     # may type a receiver differently): every walk starts without any.
@@ -3350,6 +3370,13 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # Botlish == is structural value equality, never identity
                 # (EXACT-VALUE-FACTS.md, hir/exactvalue.tcl).
                 set known [hir::exact::DecideCompare $name $hir [lindex $argExprs 0] [lindex $argExprs 1]]
+            }
+            if {!$dead && [dict exists $node resolvedOperator] && [MakesPoison $hir $ctx] && [dict get $ctx reachable]
+                    && [hir::operators::Mismatched $argTypes [lindex [dict get $node resolvedOperator] 1]]} {
+                # An operand of another kind than the floating-point type its
+                # operator selected (hir/operators.tcl's verify reports it):
+                # the operation has no value -- poison.
+                set dead 1
             }
             if {$spec && !$dead} {
                 foreach argType $argTypes paramType [dict get $meta paramTypes] {

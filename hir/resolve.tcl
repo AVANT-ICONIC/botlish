@@ -1054,6 +1054,13 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # compilation mode and read by no analysis.
                 SetField hir $e written [dict create form [dict get $node written] ns [CtxNamespace $ctx]]
             }
+            if {[dict exists $node operator]} {
+                # An operator its operands' static types resolve
+                # (hir/operators.tcl), read during typing; operatorCalls
+                # lists every such call, in resolution order.
+                SetField hir $e operator [dict get $node operator]
+                dict lappend hir operatorCalls $e
+            }
             if {$candidates ne ""} {
                 # Method-call sugar (METHOD-SUGAR.md): `receiver.name(args)`
                 # is the ordinary call of the function `name` denotes when

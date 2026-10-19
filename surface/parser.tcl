@@ -236,7 +236,9 @@
 # be the callee of method syntax), decided by its author; it is not a
 # directive to the compiler about a particular call.
 #
-# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression
+# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression --
+# or an arithmetic operator expression `a OP b` (OP one of + - * /), which is
+# a call of the operation its operands select (FLOAT64-MILESTONE-1.md) --
 # immediately followed by ":" and an indented block of "on NAME:" handlers,
 # in exactly the same "statement value" position an if/loop value is (the
 # right side of "=", or the value of "return"; not "break", which is never
@@ -280,14 +282,18 @@
 #   inversion    = "not" inversion | comparison
 #   comparison   = additive [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) additive ]
 #   additive     = multiplicative { ( "+" | "-" ) multiplicative }
-#   multiplicative = unary { "*" unary }
+#   multiplicative = unary { ( "*" | "/" ) unary }
+#                  -- "/" divides floating-point values only (FLOAT64-
+#                  MILESTONE-1.md): Botlish has no integer division
 #   unary        = "-" unary | postfix
 #   postfix      = primary { "(" [ callArgs ] ")" | "." IDENT [ "(" [ callArgs ] ")" ] }
 #   callArgs     = [ expression { "," expression } ] [ "," flag { "," flag } ] [ "," ]
 #                  -- a flag (":" IDENT, glued) is only valid in this position
 #                  and only after every ordinary argument (FLAGS.md)
 #   arguments    = expression { "," expression } [ "," ]       -- list literals
-#   primary      = INT | STRING | CHAR | "true" | "false" | "unit"
+#   primary      = INT | DECIMAL | STRING | CHAR | "true" | "false" | "unit"
+#                  -- DECIMAL: DIGITS "." DIGITS [ ("e"|"E") ["+"|"-"]
+#                  DIGITS ], a decimal number (FLOAT64-MILESTONE-1.md)
 #                | IDENT { "::" IDENT } [ fieldInits ]
 #                  -- "a::b::c": member c of namespace a::b (every segment
 #                     but the last is the namespace path)
@@ -523,6 +529,7 @@ proc surface::parser::Describe {token} {
         EOF     { return "end of file" }
         IDENT   { return "name \"[dict get $token text]\"" }
         INT     { return "integer [dict get $token text]" }
+        DECIMAL { return "decimal number [dict get $token text]" }
         STRING  { return "string [dict get $token text]" }
         CHAR    { return "character [dict get $token text]" }
         default { return "\"[dict get $token text]\"" }
@@ -1865,7 +1872,10 @@ proc surface::parser::ValueOrHandled {pVar} {
         StaticWithoutOperationError p
     }
     set expr [Expression p]
-    if {[Kind p] eq ":" && [dict get $expr kind] in {call methodcall}} {
+    if {[Kind p] eq ":" && ([dict get $expr kind] in {call methodcall}
+            || ([dict get $expr kind] eq "binary" && [dict get $expr op] in {+ - * /}))} {
+        # (An arithmetic operator is a call too: a floating-point one may
+        # complete with NonFiniteFloat, FLOAT64-MILESTONE-1.md.)
         return [HandledCall p $expr]
     }
     return $expr
@@ -3094,7 +3104,7 @@ proc surface::parser::Additive {pVar} {
 proc surface::parser::Multiplicative {pVar} {
     upvar 1 $pVar p
     set left [Unary p]
-    while {[Kind p] eq "*"} {
+    while {[Kind p] in {* /}} {
         set op [Advance p]
         set left [Binary $op $left [Unary p]]
     }
@@ -3258,6 +3268,17 @@ proc surface::parser::Primary {pVar} {
         INT {
             Advance p
             return [surface::ast::node int $span text [dict get $token value]]
+        }
+        DECIMAL {
+            # A decimal literal (FLOAT64-MILESTONE-1.md): the decimal
+            # number it spells, exactly; its type is decided by lowering
+            # (surface::lower::DecimalConstant), which also says when it
+            # denotes no value -- an error where it is written.
+            if {[catch {surface::lower::DecimalConstant [dict get $token value]} message]} {
+                Fail $token $message
+            }
+            Advance p
+            return [surface::ast::node decimal $span text [dict get $token value]]
         }
         STRING {
             Advance p

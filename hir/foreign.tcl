@@ -80,14 +80,18 @@ proc hir::foreign::Location {span} {
 # The ABI transport class of the C value type TYPE (a resolved type): i8 ..
 # u64 for a C integer scalar by its registry metadata's width and
 # signedness (never its name), bool for C _Bool (ffi::c::Bool, Botlish's
-# bool: one byte, 0 or 1), ptr for a data or function pointer, void for
-# unit (a result only).
+# bool: one byte, 0 or 1), f64 for C double (ffi::c::Double, Botlish's
+# Float64: an IEEE 754 binary64), ptr for a data or function pointer, void
+# for unit (a result only).
 proc hir::foreign::AbiClass {type} {
     if {$type eq "unit"} {
         return void
     }
     if {$type eq "bool"} {
         return bool
+    }
+    if {$type eq "Float64"} {
+        return f64
     }
     if {[hir::types::IsCPtr $type] || [hir::types::IsCFnPtr $type]} {
         return ptr
@@ -184,12 +188,15 @@ proc hir::foreign::apply {decls linkDecls} {
         set abi [dict create params $abiParams result [AbiClass $result]]
         set kinds [lmap p $params {
             set t [dict get $p type]
-            expr {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t] ? "any" : ($t eq "bool" ? "bool" : "int")}
+            expr {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t] ? "any" : ($t in {bool Float64} ? $t : "int")}
         }]
         set extern [dict create key $key namespace $ns name $name symbol $symbol abi $abi]
+        # A double C returns is a Float64 only when it is finite: the call
+        # completes with NonFiniteFloat otherwise (FLOAT64-MILESTONE-1.md).
+        set errors [expr {$result eq "Float64" ? "NonFiniteFloat" : ""}]
         core::native::register $native -arity [llength $params] \
             -impl [list core::cabi::ExternImpl $key] \
-            -param-types $kinds -result-type any \
+            -param-types $kinds -result-type any -errors $errors \
             -ownership [lrepeat [llength $params] observe] \
             -foreign $contract -extern $extern
         dict set registry $key [dict create key $key namespace $ns name $name symbol $symbol \

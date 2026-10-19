@@ -89,7 +89,7 @@ namespace eval surface::lexer {
     # and, in expression position, a struct initializer (STRUCTS.md) -- a
     # context-sensitive meaning decided by the parser, not the lexer; the
     # lexer just hands back a token.
-    variable operators [list == != <= >= :: -> ( ) \[ \] \{ \} , : = < > + - *]
+    variable operators [list == != <= >= :: -> ( ) \[ \] \{ \} , : = < > + - * /]
 }
 
 proc surface::lex {source {filename <input>}} {
@@ -251,6 +251,15 @@ proc surface::lexer::tokenize {source file} {
                     incr j
                 }
                 set digits [string range $source $i $j-1]
+                if {[string index $source $j] eq "." && [string is digit -strict [string index $source $j+1]]} {
+                    # A decimal literal (FLOAT64-MILESTONE-1.md): DIGITS "."
+                    # DIGITS, then an optional exponent. A "." followed by
+                    # anything but a digit stays a projection or a range
+                    # ("1.f()", "0..9").
+                    lappend tokens [Decimal $source $i $j $file $line $lineStart diagnostics]
+                    set i [dict get [lindex $tokens end] span end]
+                    continue
+                }
                 set end $j
                 while {$end < $n && [regexp {[A-Za-z0-9_]} [string index $source $end]]} {
                     incr end
@@ -439,6 +448,56 @@ proc surface::lexer::Report {diagnosticsVar file start line lineStart length mes
     upvar 1 $diagnosticsVar diagnostics
     lappend diagnostics [surface::diagnostic \
         [Span $file $start [expr {$start + $length}] $line $lineStart] $message]
+}
+
+# The DECIMAL token starting at offset START, whose integer digits end at
+# offset POINT (a "." followed by a digit): DIGITS "." DIGITS [ ("e" | "E")
+# [ "+" | "-" ] DIGITS ]. Its value is its exact decimal text as written,
+# lowercase `e`: a decimal literal denotes the decimal number it spells,
+# and which type's value it becomes (rounded how) is decided later, by
+# surface/lower.tcl (FLOAT64-MILESTONE-1.md, "The literal-typing rule"), never here.
+# The integer part follows the integer literal's rule (no leading zeros);
+# an identifier character straight after the literal is an error, as after
+# an integer.
+proc surface::lexer::Decimal {source start point file line lineStart diagnosticsVar} {
+    upvar 1 $diagnosticsVar diagnostics
+    set n [string length $source]
+    set j [expr {$point + 1}]
+    while {$j < $n && [string is digit -strict [string index $source $j]]} {
+        incr j
+    }
+    set exponent 1
+    if {[string index $source $j] in {e E}} {
+        set k [expr {$j + 1}]
+        if {[string index $source $k] in {+ -}} {
+            incr k
+        }
+        if {[string is digit -strict [string index $source $k]]} {
+            while {$k < $n && [string is digit -strict [string index $source $k]]} {
+                incr k
+            }
+            set j $k
+        } else {
+            set exponent 0
+        }
+    }
+    set end $j
+    while {$end < $n && [regexp {[A-Za-z0-9_]} [string index $source $end]]} {
+        incr end
+    }
+    set text [string range $source $start $end-1]
+    set whole [string range $source $start $point-1]
+    if {!$exponent} {
+        Report diagnostics $file $start $line $lineStart [expr {$end - $start}] \
+            "invalid decimal literal \"$text\": an exponent needs digits (as in 1.5e10 or 1.5e-3)"
+    } elseif {$end > $j} {
+        Report diagnostics $file $start $line $lineStart [expr {$end - $start}] "invalid decimal literal \"$text\""
+    } elseif {[string length $whole] > 1 && [string index $whole 0] eq "0"} {
+        Report diagnostics $file $start $line $lineStart [string length $whole] \
+            "invalid decimal literal \"$text\": leading zeros are not allowed"
+    }
+    return [Token DECIMAL $text [string tolower [string range $source $start $j-1]] \
+        [Span $file $start $end $line $lineStart]]
 }
 
 # The STRING token starting at the quote at offset START.

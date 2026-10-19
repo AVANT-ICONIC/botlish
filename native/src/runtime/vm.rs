@@ -798,6 +798,13 @@ impl Vm {
         Some(self.fail(RtError::Semantic { kind: "RANGE", message }))
     }
 
+    /// The floating-point value of type TY whose bits (FloatObj::bits) are
+    /// BITS: a number FloatType::admit accepted.
+    pub fn new_float(&mut self, ty: FloatType, bits: u64) -> Value {
+        let _ = ty;
+        self.alloc(FloatObj { hdr: Header::new(KIND_FLOAT, false), bits }, 0)
+    }
+
     pub fn new_result(&mut self, ok: bool, payload: Value) -> Value {
         self.alloc(ResultObj { hdr: Header::new(KIND_RESULT, false), ok, payload }, 0)
     }

@@ -19,6 +19,17 @@
 # promotion, no wrapping); an Int becomes one only where its range proves it
 # fits. ffi::c::Int and ffi::c::Long stay two types where their ranges agree.
 #
+# C double (an intrinsic type of this namespace, FLOAT64-MILESTONE-1.md):
+#
+#   ffi::c::Double            Botlish's Float64 under its C ABI name: the
+#                             same values, carried as the target's IEEE 754
+#                             binary64 in its floating-point register class.
+#                             Every Float64 is a double; a double C returns
+#                             is a Float64 only when it is finite -- a NaN or
+#                             an infinity is the call's NonFiniteFloat (an
+#                             extern c fn returning one declares it), and
+#                             negative zero is zero.
+#
 # Pointers (intrinsic types and operations of this namespace):
 #
 #   ffi::c::Void              the C void: an incomplete pointee, no values

@@ -58,6 +58,11 @@ pub const ERR_INDEX_NOT_FOUND: u32 = BUILTIN_ERROR_ID_BASE + 1;
 pub const ERR_LOWER_UNDERRUN: u32 = BUILTIN_ERROR_ID_BASE + 2;
 /// `UpperOverrun` (builtin error 3): a slice bound above its interval.
 pub const ERR_UPPER_OVERRUN: u32 = BUILTIN_ERROR_ID_BASE + 3;
+/// `NonFiniteFloat` (builtin error 4): a floating-point operation whose
+/// result is not a finite number (runtime::ops's float operations,
+/// FLOAT64-MILESTONE-1.md), or a C double that is not one entering Botlish
+/// (codegen::clif's foreign-call results).
+pub const ERR_NON_FINITE_FLOAT: u32 = BUILTIN_ERROR_ID_BASE + 4;
 
 /// Semantic error kinds of core/errors.tcl that NIR may raise.
 pub const SEMANTIC_KINDS: &[&str] = &[

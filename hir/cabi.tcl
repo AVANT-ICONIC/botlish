@@ -9,6 +9,17 @@
 #   ffi::c::Bool                         C _Bool: Botlish's own bool (the
 #                                        same type, the C ABI's spelling of
 #                                        it), carried as the one byte 0 or 1
+#   ffi::c::Double                       C double: Botlish's own Float64 (the
+#                                        same type, the C ABI's spelling of
+#                                        it), carried as the target's IEEE
+#                                        754 binary64 in its floating-point
+#                                        register class. The two differ at
+#                                        the boundary only: every Float64 is
+#                                        a double, but a double C returns is
+#                                        a Float64 only when it is finite
+#                                        (NaN and the infinities are the
+#                                        call's NonFiniteFloat, negative
+#                                        zero is zero: FLOAT64-MILESTONE-1.md)
 #   ffi::c::Void                         the C void: a permanently
 #                                        incomplete pointee, never a type of
 #                                        a value
@@ -54,7 +65,7 @@
 namespace eval hir::cabi {
     # The intrinsic type names of namespace ffi::c besides its scalars: the
     # incomplete pointee and the two pointer constructors.
-    variable intrinsicTypes {Void Ptr FnPtr Bool}
+    variable intrinsicTypes {Void Ptr FnPtr Bool Double}
 }
 
 # The C target a compilation uses: TARGET when given, else the host's. An
@@ -139,6 +150,7 @@ proc hir::cabi::CompilationTarget {} {
 # The spellings of the intrinsic types, as a type expression writes them.
 proc hir::cabi::VoidName {} { return "$::core::cabi::namespace\::Void" }
 proc hir::cabi::BoolName {} { return "$::core::cabi::namespace\::Bool" }
+proc hir::cabi::DoubleName {} { return "$::core::cabi::namespace\::Double" }
 proc hir::cabi::PtrName {} { return "$::core::cabi::namespace\::Ptr" }
 proc hir::cabi::FnPtrName {} { return "$::core::cabi::namespace\::FnPtr" }
 
@@ -211,10 +223,11 @@ proc hir::cabi::SignatureProblem {fn} {
     return ""
 }
 
-# 1 if TYPE is a C ABI value type: a C integer scalar, C _Bool (bool), a C
-# data or function pointer, or an imprint variable (bound at each call).
+# 1 if TYPE is a C ABI value type: a C integer scalar, C _Bool (bool), C
+# double (Float64), a C data or function pointer, or an imprint variable
+# (bound at each call).
 proc hir::cabi::IsValueType {type} {
-    return [expr {[core::type::cabiScalar $type] ne "" || $type eq "bool" || [hir::types::IsCPtr $type]
+    return [expr {[core::type::cabiScalar $type] ne "" || $type in {bool Float64} || [hir::types::IsCPtr $type]
         || [hir::types::IsCFnPtr $type] || [hir::types::IsImprint $type]}]
 }
 
@@ -223,7 +236,7 @@ proc hir::cabi::ValueTypeProblem {type} {
     if {[IsValueType $type]} {
         return ""
     }
-    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [PtrName]\[...\] or [FnPtrName]\[...\])"
+    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [DoubleName], [PtrName]\[...\] or [FnPtrName]\[...\])"
 }
 
 proc hir::cabi::ScalarExample {} {

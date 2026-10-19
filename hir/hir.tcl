@@ -1325,6 +1325,7 @@ proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     hir::imprint::verify hir
     hir::cabi::verify hir
     hir::range::verifyDeclaredParams hir
+    hir::operators::verify hir
     hir::callables::verify hir
     hir::lockstep::verify hir
     hir::structs::verify hir
@@ -1652,7 +1653,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery methodfilter declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types operators exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery methodfilter declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

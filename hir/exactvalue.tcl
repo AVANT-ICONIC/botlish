@@ -28,7 +28,8 @@
 # -----
 #   {int N}        the expression is exactly the Int N
 #   {val V}        exactly the scalar core value V (str, bool, unit, UnicodeChar,
-#                  an enum case: ENUMS.md)
+#                  an enum case: ENUMS.md, a floating-point number:
+#                  FLOAT64-MILESTONE-1.md)
 #   {list LEVEL SRC...}
 #                  exactly an immutable List with these elements, in order.
 #                  LEVEL is how deep this List sits inside the outermost
@@ -49,7 +50,8 @@
 # analysis) or to a scalar root constant (true/false/unit); a call of
 # `list` (a List literal), `list::append` of an exactly known List, `list::at`
 # of an exactly known List at an exactly known index (nested projection),
-# `list::length` of an exactly known List, and `+ - *` of two exact Ints.
+# `list::length` of an exactly known List, `+ - *` of two exact Ints, and a
+# native with a fold (-fold: a floating-point operation) of exact arguments.
 # A `if` is exact when its condition is statically decided, or when both
 # branches provably produce the same exact value (never a per-position
 # join: "same value" or nothing).
@@ -87,7 +89,9 @@ namespace eval hir::exact {
     variable maxDepth 3
     variable maxSteps 64
     variable maxMagnitude [expr {1 << 63}]
-    variable scalarKinds {str bool unit UnicodeChar enum}
+    # The scalar kinds a {val V} fact holds (core::type::scalarKinds: Int's
+    # fact is {int N}).
+    variable scalarKinds [lsearch -all -inline -not -exact [core::type::scalarKinds] int]
 }
 
 # The exact-value fact of expression E (one of the forms above), or "".
@@ -295,6 +299,26 @@ proc hir::exact::CallFact {hir e node level stepsVar} {
             return ""
         }
         return [FoldInt $name [lindex $x 1] [lindex $y 1]]
+    }
+    set fold [dict get [core::native::metadata $name] fold]
+    if {$fold ne "" && $args ne ""} {
+        # A native with a fold (core/native.tcl's -fold: the floating-point
+        # operations) of exactly known scalar arguments is the value its
+        # fold computes -- the run's own computation. A call that always
+        # fails has no value (hir/completions.tcl reports it).
+        set values {}
+        foreach a $args {
+            set fact [Eval $hir $a 0 steps]
+            switch -- [lindex $fact 0] {
+                int { lappend values [core::value::int [lindex $fact 1]] }
+                val { lappend values [lindex $fact 1] }
+                default { return "" }
+            }
+        }
+        set decided [{*}$fold {*}$values]
+        if {[lindex $decided 0] eq "value"} {
+            return [ValueFact [lindex $decided 1] $level]
+        }
     }
     return ""
 }

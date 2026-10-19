@@ -1401,7 +1401,7 @@ proc hir::completions::NewCtx {} {
         indexBounds [dict create] upperBounds [dict create] sizes [dict create] minSizes [dict create] \
         exprs [dict create] errors [dict create] analyses 0 returned 0 returnRange never \
         record 0 visited [dict create] bounds [dict create] callables [dict create] closures [dict create] \
-        incomplete 0 intended 0]
+        incomplete 0 intended 0 folded [dict create]]
 }
 
 # Seeds CTX for a walk of BLOCK's own body by its own check (checkBlock,
@@ -1464,6 +1464,15 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
             if {$r ne {never} && ![dict get $node duplicate]
                     && [dict get [hir::binding $hir $b] kind] eq {local}} {
                 dict set ctx bindings $b $r
+                set v [ExactValueOf $hir $ctx [dict get $node value]]
+                if {$v ne {} && [core::type::isFloat [core::value::kind $v]]} {
+                    # A local bound to an exactly known floating-point value
+                    # is that value (single assignment): a float has no
+                    # Range to carry it, an Int's Range does.
+                    dict set ctx exact $b $v
+                } else {
+                    dict unset ctx exact $b
+                }
                 if {[ErasedErrors $hir] ne {}} {
                     # A local is the value it is bound to (an alias of a
                     # clean parameter stays clean, header).
@@ -2191,7 +2200,43 @@ proc hir::completions::ExactValueOf {hir ctx e} {
             return [dict get $exact $b]
         }
     }
+    if {[hir::kind $hir $e] eq {call} && [dict exists $ctx folded $e]} {
+        # A native call this walk decided (FoldCall): its value.
+        return [dict get $ctx folded $e]
+    }
     return {}
+}
+
+# The decision of call E of the root native NAME (argument expressions
+# ARGEXPRS) this walk can make: a native with a fold (core/native.tcl's
+# -fold: the floating-point operations, core/float.tcl) whose every argument
+# this walk knows exactly is decided by computing it -- {value V}, or {error
+# NAME} -- the very computation a run of it makes. "" when nothing is
+# decided.
+proc hir::completions::FoldCall {hir ctx name argExprs} {
+    set fold [dict get [core::native::metadata $name] fold]
+    if {$fold eq {}} {
+        return {}
+    }
+    set values {}
+    foreach a $argExprs {
+        set v [ExactValueOf $hir $ctx $a]
+        if {$v eq {} && [dict exists $ctx exprs $a]} {
+            # An Int this walk knows exactly is its Range's one value.
+            set exact [hir::range::ExactOf [dict get $ctx exprs $a]]
+            if {[llength $exact] == 1} {
+                set v [core::value::int $exact]
+            }
+        }
+        if {$v eq {}} {
+            return {}
+        }
+        lappend values $v
+    }
+    if {$values eq {}} {
+        return {}
+    }
+    return [{*}$fold {*}$values]
 }
 
 proc hir::completions::EvalCall {hirVar ctxVar diagnose enclosing guard e node} {
@@ -2211,12 +2256,24 @@ proc hir::completions::EvalCall {hirVar ctxVar diagnose enclosing guard e node} 
     lassign [dict get $node target] targetKind target
     if {$targetKind eq {native}} {
         set name [dict get [hir::symbol $hir $target] name]
+        set decided [FoldCall $hir $ctx $name $argExprs]
+        if {[lindex $decided 0] eq "value"} {
+            # A floating-point value has no Range: its exact value is the
+            # fact a later fold reads (ExactValueOf).
+            dict set ctx folded $e [lindex $decided 1]
+        } else {
+            # (Nothing an earlier walk of E decided, under other facts.)
+            dict unset ctx folded $e
+        }
         # A native that declares errors (-errors, core/native.tcl: `argv`,
         # `list::at`) is held to the same legality rule as any other
         # fallible call, under its own call-specific facts
         # (NativeEffectiveFacts). So is one that calls a callable argument
         # while the program erases an error-bearing callable (IndirectFacts).
-        if {[NativeDeclaredErrors $hir $e $name] ne {} || [CallsCallable $hir $name]} {
+        if {([NativeDeclaredErrors $hir $e $name] ne {} || [CallsCallable $hir $name])
+                && ![hir::types::Poisoned $hir $e]} {
+            # (A poisoned call -- an operand an earlier check rejected,
+            # hir/types.tcl -- never runs the operation: it owes nothing.)
             lassign [NativeCallFacts hir ctx $guard $e $name $argExprs $argRanges] normal errors verdicts
             if {$diagnose} {
                 CheckNativeCallLegality hir $e $name $normal $errors {} $enclosing
@@ -2713,18 +2770,35 @@ proc hir::completions::CheckNativeCallLegality {hirVar e name normal errors hand
     upvar 1 $hirVar hir
     dict set hir exprs $e effectiveErrors [lsort -unique $errors]
     dict set hir exprs $e mayReturnNormally $normal
+    # A coroutine segment is named as the operation it is written as, a
+    # floating-point operator as the operator of its type
+    # (hir/operators.tcl), an extern c fn by its Botlish name (C-FFI.md).
+    set extern [dict get [core::native::metadata $name] extern]
+    set call $e
+    if {[hir::kind $hir $e] eq "handle"} {
+        set call [dict get $hir exprs $e call]
+    }
+    if {[dict exists $hir exprs $call resolvedOperator]} {
+        lassign [dict get $hir exprs $call resolvedOperator] op type
+        set what [format {%s "%s"} $type [expr {$op eq "neg" ? "-" : $op}]]
+        set known $what
+    } elseif {$extern ne ""} {
+        set what [format {call of "%s"} [dict get $extern key]]
+        set known $what
+    } else {
+        set what [switch -- $name {
+            coroutine#start { expr {"coroutine construction"} }
+            coroutine#resume { expr {"coroutine resume"} }
+            default { format {call of "%s"} $name }
+        }]
+        set known [format {call of "%s"} $name]
+    }
     if {!$normal} {
         hir::Diagnose hir KNOWN-ERROR [format \
-            {this call of "%s" can never complete normally under the facts proven for its arguments here -- it always produces %s; a handler does not make a statically known failure legal} \
-            $name [ErrorsPhrase $errors]] $e
+            {this %s can never complete normally under the facts proven for its arguments here -- it always produces %s; a handler does not make a statically known failure legal} \
+            $known [ErrorsPhrase $errors]] $e
         return
     }
-    # A coroutine segment is named as the operation it is written as.
-    set what [switch -- $name {
-        coroutine#start { expr {"coroutine construction"} }
-        coroutine#resume { expr {"coroutine resume"} }
-        default { format {call of "%s"} $name }
-    }]
     set unhandled [Unhandled $errors $handled $enclosing]
     if {$unhandled ne ""} {
         hir::Diagnose hir UNHANDLED-ERROR [format \
@@ -2820,6 +2894,20 @@ proc hir::completions::NativeEffectiveFacts {hir ctx name argExprs argRanges} {
     set errors [dict get $meta errors]
     set bounds [dict get $meta bounds]
     set verdicts {}
+    if {[dict get $meta fold] ne {}} {
+        # A native whose errors are functions of its argument values alone,
+        # decided by its fold when every argument is exactly known (FoldCall):
+        # it cannot fail (no obligation), or it always fails (KNOWN-ERROR) --
+        # the three-way rule, for an operation such as Float64 division
+        # (FLOAT64-MILESTONE-1.md). One check: its verdict is what may still
+        # fail.
+        set decided [FoldCall $hir $ctx $name $argExprs]
+        switch -- [lindex $decided 0] {
+            value { return [list 1 {} {{}}] }
+            error { return [list 0 [list [lindex $decided 1]] [list [list [lindex $decided 1]]]] }
+        }
+        return [list 1 $errors [list $errors]]
+    }
     switch -- [lindex $bounds 0] {
         index {
             lassign $bounds _ family c i

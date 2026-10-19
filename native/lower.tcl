@@ -84,6 +84,32 @@
 # Unsupported constructs raise {NATIVE UNSUPPORTED} with the source location
 # and HIR node (see Unsupported).
 
+namespace eval native::lower {}
+
+# Native name -> NIR operation of every floating-point operation
+# (core/float.tcl's natives) of the float types the native backend
+# represents: the type's prefix (`f64`: runtime::value::FloatType's
+# `prefix`) followed by the operation. A float type with no prefix here has
+# no native representation: its natives are unsupported.
+proc native::lower::FloatNatives {} {
+    set prefixes {Float64 f64}
+    set ops {+ add - sub * mul / div neg neg < lt <= le > gt >= ge}
+    set result [dict create]
+    foreach type [core::type::floatTypes] {
+        if {![dict exists $prefixes $type]} {
+            continue
+        }
+        set prefix [dict get $prefixes $type]
+        foreach {operator op} $ops {
+            dict set result [core::float::operatorNative $type $operator] $prefix$op
+        }
+        set ns [dict get [core::type::floatInfo $type] namespace]
+        dict set result ${ns}::from_int ${prefix}fromint
+        dict set result ${ns}::truncate ${prefix}trunc
+    }
+    return $result
+}
+
 namespace eval native::lower {
     # Native name -> how native code performs it: {op OP} (after the
     # parameter kind checks the registry declares), or a special form. The
@@ -185,6 +211,12 @@ namespace eval native::lower {
         mutable_vector#take_front {op mvtakefront} \
         mutable_vector#clear_drop {op mvcleardrop} \
         mutable_vector#swap_drop  {op mvswapdrop}]
+    # The floating-point operations (core/float.tcl; FLOAT64-MILESTONE-1.md):
+    # every type of the float family the native backend represents, its
+    # operation prefix (FloatNatives) followed by the operation.
+    dict for {name op} [FloatNatives] {
+        dict set natives $name [list op $op]
+    }
     # The borrow test fixture's synthetic foreign operations (core/cabi.tcl's
     # installBorrowFixture; runtime/ffifixture.rs), one op per behavior.
     foreach {name behavior} [core::cabi::borrowFixture] {
@@ -5572,6 +5604,12 @@ proc native::lower::ProjectChain {fnVar e node} {
     return ""
 }
 
+# The NIR constant instruction text of the floating-point value V
+# (`float Float64 0x3ff8000000000000`: its type and bits).
+proc native::lower::FloatConstText {v} {
+    return [format {float %s 0x%016llx} [core::value::kind $v] [core::float::bits64 $v]]
+}
+
 proc native::lower::Const {fnVar e node} {
     upvar 1 $fnVar fn
     set value [dict get $node value]
@@ -5584,6 +5622,7 @@ proc native::lower::Const {fnVar e node} {
         }
         UnicodeChar { return [Assign fn "char [core::value::charOf $value]" $e] }
         enum { return [EnumConst fn $value $e] }
+        Float64 { return [Assign fn [FloatConstText $value] $e] }
         list {
             # (const list {...}): a list of literal elements.
             set items [lmap item [core::value::items $value] {
@@ -8244,6 +8283,11 @@ proc native::lower::NativeCallOp {e node} {
                 # same-spelled case of another enum is another word), and it
                 # cannot fail.
                 set op enumeq
+            } elseif {$ka eq $kb && $ka eq "Float64"} {
+                # Two Float64 values (FLOAT64-MILESTONE-1.md): a number has
+                # one representation, so equality is bit equality, and it
+                # cannot fail.
+                set op f64eq
             }
             return [list $name $op]
         }

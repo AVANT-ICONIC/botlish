@@ -341,10 +341,10 @@ test mat-cr-3 {capacity 0 still establishes T from the default} -body {
     list [maLast "import mutable_array\nmutable_array::create(0, \"x\")"] [maLast "import mutable_array\nmutable_array::create(0, \[1\])"]
 } -result {{MutableArray[str]} {MutableArray[List[int]]}}
 
-test mat-cr-4 {create's capacity parameter is an Int: a non-Int is the TYPE error of every intrinsic, at run time (create is a registered native since MUTABLE-ARRAY.md)} -body {
-    list [maErrors "import mutable_array\nmutable_array::create(\"a\", 1)"] [lindex [maRejects "mutable_array::create(1.5, 1)" *] 0] \
+test mat-cr-4 {create's capacity parameter is an Int: a non-Int (a String, a Float64) is the TYPE error of every intrinsic, at run time (create is a registered native since MUTABLE-ARRAY.md)} -body {
+    list [maErrors "import mutable_array\nmutable_array::create(\"a\", 1)"] [maErrors "import mutable_array\nmutable_array::create(1.5, 1)"] \
         [lindex [maRejects "import mutable_array\nfn f(n):\n    mutable_array::create(n, 1)\nf(2)" "*"] 0]
-} -result {{{CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE}} {SURFACE SYNTAX} accepted}
+} -result {{{CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE}} {{CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE}} accepted}
 
 test mat-cr-5 {positive control: create, capacity, get and a legal set} -body {
     set src "import mutable_array\nm = mutable_array::create(3, \"x\")\nmutable_array::set(m, 1, \"y\")\n\[mutable_array::capacity(m), mutable_array::at(m, 0), mutable_array::at(m, 1), mutable_array::at(m, 2)\]"

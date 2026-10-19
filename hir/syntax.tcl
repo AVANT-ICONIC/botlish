@@ -262,6 +262,18 @@ proc hir::syntax::withWritten {call form} {
     return $call
 }
 
+# CALL (a `call` node) written as the arithmetic or comparison operator OP
+# (`+ - * / < <= > >=`, or `neg` for unary minus, whose call is `- 0 X`):
+# its callee is the root native of that spelling, and its operands' static
+# types select the operation (hir/operators.tcl, FLOAT64-MILESTONE-1.md).
+proc hir::syntax::withOperator {call op} {
+    if {$op ni {+ - * / < <= > >= neg}} {
+        core::malformed "not an operator a call's operands select: \"$op\"" [list call $op]
+    }
+    dict set call operator $op
+    return $call
+}
+
 # BLOCK (a `block` node) declared `nomethod` by its author.
 proc hir::syntax::withNoMethod {block} {
     dict set block nomethod 1

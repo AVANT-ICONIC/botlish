@@ -202,8 +202,9 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
     switch -- [dict get $node kind] {
         const {
             set kind [core::value::kind [dict get $node value]]
-            if {$kind in {int str bool unit UnicodeChar enum}} {
-                # (An enum case, ENUMS.md, is an immutable scalar value.)
+            if {$kind in [core::type::scalarKinds]} {
+                # (An enum case, ENUMS.md, and a floating-point number are
+                # immutable scalar values.)
                 return [list ok [list scalar $kind]]
             }
             return [list bad unknown "literal value kind $kind"]
@@ -456,7 +457,7 @@ proc hir::modulebinding::ImmutableNative {hir symbol proofs} {
         }
     }
     set kind [core::type::base [dict get $meta resultType]]
-    if {$kind in {int str bool unit}} {
+    if {$kind in {int str bool unit} || [core::type::isFloat $kind]} {
         return [list ok [list scalar $kind]]
     }
     if {$kind eq "mutarray"} {

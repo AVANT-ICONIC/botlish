@@ -3834,6 +3834,17 @@ target's plain char is). Arithmetic on them is Botlish arithmetic (no C
 promotion, no wrapping); an Int becomes one only where its range proves it
 fits. ffi::c::Int and ffi::c::Long stay two types where their ranges agree.
 
+C double (an intrinsic type of this namespace, FLOAT64-MILESTONE-1.md):
+
+  ffi::c::Double            Botlish's Float64 under its C ABI name: the
+                            same values, carried as the target's IEEE 754
+                            binary64 in its floating-point register class.
+                            Every Float64 is a double; a double C returns
+                            is a Float64 only when it is finite -- a NaN or
+                            an infinity is the call's NonFiniteFloat (an
+                            extern c fn returning one declares it), and
+                            negative zero is zero.
+
 Pointers (intrinsic types and operations of this namespace):
 
   ffi::c::Void              the C void: an incomplete pointee, no values
@@ -3900,6 +3911,102 @@ pointer is affine (binding, passing or storing it moves it), owns
 nothing, is never dereferenced, and has no arithmetic, ordering,
 equality or conversion to or from an Int. Calling C itself is
 `extern c fn` (concept.c-ffi), which runs only on the native backends.
+
+@topic stdlib.float64::from_int
+title: float64::from_int -- intrinsic of namespace float64
+summary: The Float64 nearest the Int N (ties to even), after `import float64`; an Int beyond the largest Float64 fails with NonFiniteFloat.
+index: stdlib
+symbol: float64::from_int
+keywords: int to float; convert int; float from int; to float
+related: stdlib.module.float64 concept.floats stdlib.float64::truncate
+
+== SIGNATURE
+    float64::from_int(int) -> Float64
+
+== ERRORS
+    NonFiniteFloat
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace float64: import float64, then write
+float64::from_int. Method syntax: receiver.from_int(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Rounds to the nearest Float64, ties to even, from the exact Int however
+large: 2^53 + 1 becomes 9007199254740992.0. An Int whose magnitude is
+beyond the largest finite Float64 (about 1.8e308) has no finite nearest
+value and fails with NonFiniteFloat, decided at compile time when the Int
+is known.
+
+== EXAMPLES
+@example accept
+import float64
+
+[float64::from_int(3), float64::from_int(-12), float64::from_int(9007199254740993)]
+@value [3.0, -12.0, 9007199254740992.0]
+@end
+
+@topic stdlib.float64::truncate
+title: float64::truncate -- intrinsic of namespace float64
+summary: The Int part of the Float64 X, rounding toward zero, after `import float64`: exact at any magnitude, and it never fails.
+index: stdlib
+symbol: float64::truncate
+keywords: float to int; convert float; truncate; integer part; round toward zero
+related: stdlib.module.float64 concept.floats stdlib.float64::from_int
+
+== SIGNATURE
+    float64::truncate(Float64) -> int
+
+== USE
+An intrinsic of namespace float64: import float64, then write
+float64::truncate. Method syntax: receiver.truncate(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Drops the fraction: 2.75 becomes 2 and -2.75 becomes -2. Every Float64 is
+finite, so every one has an integer part, and the Int holds it exactly
+however large it is (1.0e20 becomes 100000000000000000000).
+
+== EXAMPLES
+@example accept
+import float64
+
+big = 1.0e20
+[float64::truncate(2.75), float64::truncate(-2.75), big.truncate()]
+@value [2, -2, 100000000000000000000]
+@end
+
+@topic stdlib.module.float64
+title: float64 -- standard namespace
+summary: The explicit conversions between Int and Float64: float64::from_int and float64::truncate.
+index: stdlib
+symbol: float64
+keywords: float functions; float conversion; int to float; float to int
+related: concept.floats stdlib./
+
+== SOURCE
+Compiler intrinsics only, no module file (import float64).
+
+== MEMBERS
+    float64::from_int              intrinsic -- The Float64 nearest the Int...
+    float64::truncate              intrinsic -- The Int part of the Float64...
+
+Each member is a topic: -help NAME (e.g. -help float64::from_int).
+
+== NOTES
+`float64` has no module file: its members are intrinsics, reached with
+`import float64`. They are the only conversions between the two number
+types: Botlish never converts implicitly, so an expression mixing an Int
+and a Float64 is rejected until one side is converted. There is no
+rounding mode, no Float64-to-String conversion beyond a program's printed
+result, and no bit-level access to a Float64.
 
 @topic stdlib.immutable_set::contains
 title: immutable_set::contains -- intrinsic of namespace immutable_set
@@ -6785,11 +6892,11 @@ admits it. There is no equality or hash for vectors.
 
 @topic stdlib.*
 title: * -- language primitive
-summary: The Int product of A and B, written a * b: exact at any size (no overflow).
+summary: The Int product of A and B, written a * b: exact at any size (no overflow). On two Float64 operands, a * b is Float64 multiplication.
 index: stdlib
 symbol: *
 keywords: multiply; multiplication; times; product
-related: stdlib.module.root concept.integers stdlib.+ stdlib.shift_left capability.integer-division
+related: stdlib.module.root concept.integers concept.floats stdlib.+ stdlib./ stdlib.shift_left capability.integer-division
 
 == SIGNATURE
     *(int, int) -> int
@@ -6802,8 +6909,10 @@ every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
 Written as an operator, a * b, on two Ints; the product is exact however
-many digits it has. There is no power operator (`**` is a syntax error)
-and no division (capability.integer-division); a multiplication by a
+many digits it has. On two Float64 operands it is Float64 multiplication
+(concept.floats), failing with NonFiniteFloat when the product is not
+finite. There is no power operator (`**` is a syntax error) and no
+integer division (capability.integer-division); a multiplication by a
 power of two can also be written x.shift_left(k).
 
 == EXAMPLES
@@ -6814,11 +6923,11 @@ power of two can also be written x.shift_left(k).
 
 @topic stdlib.+
 title: + -- language primitive
-summary: The Int sum of A and B, written a + b: exact at any size, so it never overflows or wraps.
+summary: The Int sum of A and B, written a + b: exact at any size, so it never overflows or wraps. On two Float64 operands, a + b is Float64 addition.
 index: stdlib
 symbol: +
 keywords: add; addition; plus; sum; arithmetic
-related: stdlib.module.root concept.integers stdlib.- stdlib.* stdlib.str::concat capability.integer-division
+related: stdlib.module.root concept.integers concept.floats stdlib.- stdlib.* stdlib./ stdlib.str::concat capability.integer-division
 
 == SIGNATURE
     +(int, int) -> int
@@ -6835,11 +6944,16 @@ source syntax. Both operands must be Ints, and the result is the exact sum
 however large it is: Botlish has one Int type, of arbitrary precision, with
 no 64-bit overflow, wrapping or saturation.
 
-+ is not overloaded. "ab" + "cd" fails when it runs with the TYPE error
-`+: expected int, got "ab"`: join Strings with str::concat (or add one
-character with str::append_char), and add one element to a List with
-list::append. There is no floating-point number and no division operator
-(capability.integer-division).
+On two Float64 operands the operator is Float64 addition instead
+(concept.floats): the compiler chooses by the operands' static types, an
+Int and a Float64 together are rejected (TYPE), and nothing is converted
+implicitly. A sum that is not finite fails with NonFiniteFloat.
+
++ is not overloaded for any other kind. "ab" + "cd" fails when it runs
+with the TYPE error `+: expected int, got "ab"`: join Strings with
+str::concat (or add one character with str::append_char), and add one
+element to a List with list::append. There is no integer division
+(capability.integer-division); / divides Float64 values (stdlib./).
 
 == EXAMPLES
 @example accept
@@ -6851,11 +6965,11 @@ x = 9223372036854775807
 
 @topic stdlib.-
 title: - -- language primitive
-summary: The Int difference A minus B, written a - b, and -x negates: exact at any size, never wrapping.
+summary: The Int difference A minus B, written a - b, and -x negates: exact at any size, never wrapping. On Float64 operands both are Float64 operations.
 index: stdlib
 symbol: -
 keywords: subtract; subtraction; minus; difference; negate; negative number
-related: stdlib.module.root concept.integers stdlib.+ stdlib.mod
+related: stdlib.module.root concept.integers concept.floats stdlib.+ stdlib.mod
 
 == SIGNATURE
     -(int, int) -> int
@@ -6869,7 +6983,9 @@ every backend (interp, compile, cranelift-generic, cranelift)
 == NOTES
 Written as an operator: a - b, and a leading minus negates (-x). Both
 operands must be Ints (another kind fails with the TYPE error when the
-operation runs), and the result is exact at any magnitude.
+operation runs), and the result is exact at any magnitude. On two Float64
+operands a - b is Float64 subtraction, and -x of a Float64 negates it
+(concept.floats); an Int and a Float64 together are rejected (TYPE).
 
 A leading minus binds less tightly than a method call: -7.mod(2) is
 -(7.mod(2)), which is -1. To reduce a negative number, bind it first
@@ -6882,13 +6998,66 @@ x = 5
 @value [-3, -5, -5]
 @end
 
+@topic stdlib./
+title: / -- language primitive
+summary: The Float64 quotient of A and B, written a / b: Float64s only (there is no integer division); a quotient that is not finite, as after division by zero, fails with NonFiniteFloat.
+index: stdlib
+symbol: /
+keywords: divide; division; quotient; slash; float division; divide by zero
+related: stdlib.module.root concept.floats stdlib.* stdlib.float64::from_int stdlib.float64::truncate capability.integer-division error.known-error
+
+== SIGNATURE
+    /(any, any) -> any
+
+== USE
+A language primitive: visible everywhere, no import.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Written as an operator, a / b, on two Float64 operands, giving the
+correctly rounded Float64 quotient. It is the one division of the
+language: on two Ints it is rejected at compile time (TYPE: "Botlish has
+no integer division"), and an Int and a Float64 together are rejected
+too, since nothing converts implicitly; convert with float64::from_int.
+
+A quotient that is not a finite number -- any division by zero, and an
+overflow past the largest Float64 -- fails with the declared error
+NonFiniteFloat, which a handler catches like any declared error. When the
+compiler knows both operands (literals, or bindings of them) it divides
+while compiling: a decided failure is the KNOWN-ERROR diagnostic, not a
+run-time failure.
+
+== EXAMPLES
+@example accept
+fn inverse(x: Float64) -> Float64:
+    1.0 / x:
+        on NonFiniteFloat:
+            0.0
+
+four = 4.0
+zero = 0.0
+[7.0 / 2.0, 1.0 / 3.0, four.inverse(), zero.inverse()]
+@caption Division, and a handled division by zero
+@value [3.5, 0.3333333333333333, 0.25, 0.0]
+@end
+
+@example reject
+x = 7 / 2
+x
+@caption No integer division
+@error CORE SEMANTIC TYPE
+@at 1:5
+@end
+
 @topic stdlib.<
 title: < -- language primitive
-summary: Whether the Int A is less than the Int B, written a < b: Ints only, and comparisons do not chain.
+summary: Whether the Int A is less than the Int B, written a < b: Ints, or two Float64s; comparisons do not chain.
 index: stdlib
 symbol: <
 keywords: less than; compare numbers; comparison; ordering
-related: stdlib.module.root concept.integers stdlib.<= stdlib.> stdlib.>= stdlib.== proof.ranges proof.list-bounds
+related: stdlib.module.root concept.integers concept.floats stdlib.<= stdlib.> stdlib.>= stdlib.== proof.ranges proof.list-bounds
 
 == SIGNATURE
     <(int, int) -> bool
@@ -6900,9 +7069,11 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a < b, giving a Bool. Both operands must be Ints:
-Strings, characters, Lists and Bools have no ordering operator, and an
-operand of another kind fails with the TYPE error when the comparison runs
+Written as an operator, a < b, giving a Bool. Both operands must be Ints,
+or both Float64s (concept.floats: the compiler chooses by the operands'
+static types, and an Int and a Float64 together are rejected). Strings,
+characters, Lists and Bools have no ordering operator, and an operand of
+another kind fails with the TYPE error when the comparison runs
 (`<: expected int, got "a"`). To order characters, compare their
 char::scalar_value.
 
@@ -6922,7 +7093,7 @@ x = 3
 
 @topic stdlib.<=
 title: <= -- language primitive
-summary: Whether the Int A is at most the Int B, written a <= b: Ints only, no chaining.
+summary: Whether the Int A is at most the Int B, written a <= b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: <=
 keywords: less than or equal; at most; compare numbers; comparison
@@ -6938,9 +7109,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a <= b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a <= b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -6971,15 +7142,15 @@ Written as an operator, a == b; `a != b` means not (a == b). It is the
 one equality of the language, for Strings as for everything else (the
 old `eq` is gone).
 
-It compares structure: Ints numerically, Strings by their characters
-(exact Unicode scalar values: no case folding, no normalization), Lists
-element by element, structs by shape (the same declaration, or the same
-anonymous field set) and then field by field, enum cases by identity,
-ImmutableSets as sets (order and duplicates do not matter), Bytes by their
-bytes. Values of different kinds are never equal and nothing is converted:
-"10" == 10 is false, a UnicodeChar never equals a String ('a' == "a" is
-false), and a named struct never equals an anonymous one with the same
-fields.
+It compares structure: Ints and Float64s numerically, Strings by their
+characters (exact Unicode scalar values: no case folding, no
+normalization), Lists element by element, structs by shape (the same
+declaration, or the same anonymous field set) and then field by field,
+enum cases by identity, ImmutableSets as sets (order and duplicates do not
+matter), Bytes by their bytes. Values of different kinds are never equal
+and nothing is converted: "10" == 10 is false, 1.0 == 1 is false, a
+UnicodeChar never equals a String ('a' == "a" is false), and a named
+struct never equals an anonymous one with the same fields.
 
 Some values have no equality. Functions (closures and natives),
 MutableArray and MutableVector values fail with the EQUALITY error when
@@ -7004,7 +7175,7 @@ struct P:
 
 @topic stdlib.>
 title: > -- language primitive
-summary: Whether the Int A is greater than the Int B, written a > b: Ints only, no chaining.
+summary: Whether the Int A is greater than the Int B, written a > b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: >
 keywords: greater than; more than; compare numbers; comparison
@@ -7020,9 +7191,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a > b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a > b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -7033,7 +7204,7 @@ x = 3
 
 @topic stdlib.>=
 title: >= -- language primitive
-summary: Whether the Int A is at least the Int B, written a >= b: Ints only, no chaining.
+summary: Whether the Int A is at least the Int B, written a >= b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: >=
 keywords: greater than or equal; at least; compare numbers; comparison
@@ -7049,9 +7220,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a >= b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a >= b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -7585,6 +7756,7 @@ import.
     *                              intrinsic -- The Int product of A and B,...
     +                              intrinsic -- The Int sum of A and B, wri...
     -                              intrinsic -- The Int difference A minus ...
+    /                              intrinsic -- The Float64 quotient of A a...
     <                              intrinsic -- Whether the Int A is less t...
     <=                             intrinsic -- Whether the Int A is at mos...
     ==                             intrinsic -- Whether A and B are the sam...

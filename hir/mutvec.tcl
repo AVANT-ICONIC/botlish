@@ -1253,7 +1253,8 @@ proc hir::mutvec::MayHoldVector {type {seen {}}} {
     if {[Kind $type] ne ""} {
         return 1
     }
-    return [expr {[lindex $type 0] ni {int str bool unit UnicodeChar never list immutableSet block native fn coroutine result}}]
+    return [expr {[lindex $type 0] ni {int str bool unit UnicodeChar never list immutableSet block native fn coroutine result}
+        && ![core::type::isFloat [lindex $type 0]]}]
 }
 
 # The function blocks of BLOCKS whose every result (Results) cannot hold a

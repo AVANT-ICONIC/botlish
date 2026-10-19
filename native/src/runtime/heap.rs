@@ -276,6 +276,7 @@ pub unsafe fn object_size(object: *mut Header) -> usize {
             KIND_LISTPLAN => size_of::<ListPlanObj>() + super::construct::listplan_of(v).items.capacity() * 8,
             KIND_COROUTINE => size_of::<super::coroutine::CoroutineObj>(),
             KIND_MUTVEC => super::mutvec::object_size(v),
+            KIND_FLOAT => size_of::<FloatObj>(),
             kind => panic!("bad heap object kind {kind}"),
         }
     }
@@ -320,6 +321,7 @@ pub unsafe fn free_object(object: *mut Header) {
             // The header's share of its backing goes back (the backing is
             // freed with its last header).
             KIND_MUTVEC => drop(Box::from_raw(object as *mut super::mutvec::MutVecObj)),
+            KIND_FLOAT => drop(Box::from_raw(object as *mut FloatObj)),
             kind => panic!("bad heap object kind {kind}"),
         }
     }

@@ -550,7 +550,7 @@ func 5 "build" params=1 ... pnames="q" results=1
     %10 = op ieq %8 %9
     br %10 L0 L1
   label L1
-    faildeclared 1073741828 "LayoutLengthMismatch"
+    faildeclared 1073741829 "LayoutLengthMismatch"
   label L0
     %13 = op mbyteswrite %5 %11 %12 %6    ; a fresh storage; %5 never written
     ...                                   ; (the second write's length check)

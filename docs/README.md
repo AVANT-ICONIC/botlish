@@ -141,6 +141,7 @@ Values are immutable. Every value has exactly one kind:
 | Kind     | Display          | Notes                                              |
 |----------|------------------|----------------------------------------------------|
 | `int`    | `42`             | arbitrary precision; no fixed-width overflow       |
+| `Float64` | `1.5`, `1.0e100` | a finite IEEE 754 binary64 number (FLOAT64-MILESTONE-1.md): never NaN, an infinity or negative zero; shown as the shortest decimal that reads back to it, always with a point |
 | `str`    | `"hello"`        | a string                                           |
 | `UnicodeChar` | `'A'`       | exactly one Unicode scalar value (UNICODE-CHAR-LITERALS.md) |
 | `bool`   | `true` / `false` | the only valid condition values                    |
@@ -153,8 +154,29 @@ Values are immutable. Every value has exactly one kind:
 | `native` | `<native +>`     | a primitive callable, possibly with refinement metadata |
 | `coroutine` | `<coroutine>` | the affine handle of one started coroutine (COROUTINES.md): resumed by calling it, observed with `coroutine::done?`, never compared, hashed, copied or stored |
 
-Kinds never blur: the integer `10`, the string `"10"`, and the string
-`"true"` are all different values, and none of the strings is a Boolean.
+Kinds never blur: the integer `10`, the Float64 `10.0`, the string `"10"`,
+and the string `"true"` are all different values, and none of the strings is
+a Boolean.
+
+**Float64.** A literal with a decimal point (`0.0`, `1.5`, `-3.25`, `10.0`,
+`6.02e23`) is a Float64, the binary64 number nearest its decimal value; a
+literal without one is an Int, and nothing else decides a literal's type
+(the binding or parameter it reaches does not). `+ - * /`, unary `-` and the
+comparisons on two Float64 operands are the Float64 operations, chosen by the
+operands' static types (`hir/operators.tcl`); an Int and a Float64 together
+are a TYPE error (nothing converts implicitly: `float64::from_int` and
+`float64::truncate` convert), and `/` exists only for Float64 (there is no
+integer division). A result that is not a finite number -- an overflow, any
+division by zero, NaN -- fails with the declared builtin error
+`NonFiniteFloat`, which a handler catches and an `errors` clause admits like
+any declared error; with exactly known operands the compiler computes the
+operation while compiling and a non-finite result is `KNOWN-ERROR`. Negative
+zero is zero. Float64 is the first of a family of primitive floating-point
+types (`core/type.tcl`'s `floats`; other widths are expected later), and
+representation-sensitive IEEE behavior -- bit patterns, NaN payloads, signed
+zero, rounding modes -- is not part of the programming model.
+Precision-guaranteed decimal numbers are separate future work, not Float64.
+See FLOAT64-MILESTONE-1.md.
 
 **Strings and characters.** A String (`str`) is a sequence of characters; a
 character is a `UnicodeChar`, exactly one Unicode scalar value. **A single
@@ -186,7 +208,8 @@ as `str::is_tcl_alnum` -- is listed, with its reason, in the warning manifest
 (§23).
 
 **Equality (`==`)** compares structure. Values of different kinds are never
-equal. Integers compare numerically, strings compare exact characters, lists
+equal (`1.0 == 1` is false). Integers and Float64s compare numerically
+(Float64 has no NaN, so `==` stays an equivalence), strings compare exact characters, lists
 compare element by element, structs compare by shape (an anonymous struct's
 field set, or one declaration) and then field by field, and Results compare tag and payload. Equality on
 callables is not defined, because it would need identity semantics, which are
@@ -289,6 +312,10 @@ Evaluates to a literal value.
   zeros, no `+` and no `-0`) is an `int`. Anything else is a `str`. So
   `(const 010)` is the string `"010"`.
 * `(const int 42)` and `(const str 42)` force the type.
+* `(const Float64 TEXT)` is a Float64 (FLOAT64-MILESTONE-1.md); TEXT must be
+  the canonical text of a finite number (`core::float::text`: `1.5`, `0.0`,
+  `1.0e100`), or the IR is malformed. Untyped text with a point is a String:
+  `(const 1.5)` is `"1.5"`.
 * `(const list {1 2 abc})` builds a list. Each element follows the untyped
   rule.
 * `(const enum {ID CASE})` is the case CASE of the enum declared as ID
@@ -473,8 +500,9 @@ Language primitives (root):
 
 | Name | Signature | Refinement |
 |------|-----------|------------|
-| `+` `-` `*` | int, int → int | |
-| `<` `<=` `>` `>=` | int, int → bool | |
+| `+` `-` `*` | int, int → int (on two Float64 operands, source `+ - *` resolve to the Float64 operations below) | |
+| `/` | the name source `/` lowers to; no Int meaning: a `/` whose operands are not Float64 is a compile-time TYPE error ("Botlish has no integer division"), and the native refuses at run time (core IR) | |
+| `<` `<=` `>` `>=` | int, int → bool (source comparisons of two Float64s resolve to the Float64 ones) | |
 | `mod` | int, int → int (Euclidean: `0 <= r < abs(b)`; `ARITHMETIC` for 0) | |
 | `bit_and` `bit_or` `bit_xor` `shift_left` `shift_right` | int, int → int (BYTE-NIBBLE-BIT-ARITHMETIC.md) | |
 | `==` | any, any → bool (value equality; the one equality operator, Strings included) | |
@@ -489,6 +517,16 @@ Language primitives (root):
 | `result-error` | error Result → its payload (core IR only) | |
 | `hash` | any → int, the structural hash `==` agrees with (core/hashing.tcl) | |
 | `argv` | → `List[String]`, errors `InvalidArgumentEncoding`: the process argument vector including argument zero, each argument validated as UTF-8 by the call (ARGV.md) | |
+
+The Float64 operations (FLOAT64-MILESTONE-1.md) are internal root natives
+that source cannot spell: `Float64#+` `Float64#-` `Float64#*` `Float64#/`
+(Float64, Float64 → Float64, errors `NonFiniteFloat`), `Float64#neg`
+(Float64 → Float64) and `Float64#<` `Float64#<=` `Float64#>` `Float64#>=`
+(Float64, Float64 → bool). An operator a Float64 operand selects is
+rewritten to a call of one of them (`hir::operators::resolve`); each is
+registered from the float family's table (`core/type.tcl`'s `floats`) with a
+`-fold` command, so the completion analysis computes a call of exactly known
+operands while compiling. `==` and `hash` are the generic ones.
 
 Standard intrinsics (qualified root natives):
 
@@ -506,6 +544,8 @@ Standard intrinsics (qualified root natives):
 | `str::char_at` | str, int → UnicodeChar, errors `IndexNotFound`: the scalar at character index `0 <= i < length` (the index space of `length`/`substring`); any other Int index fails with `IndexNotFound`; never allocates. With char literals (`c == '%'`) and `char::scalar_value` it classifies a String's characters without a one-character String or an `encode_utf8` List (ENCODE-UTF8-ALLOCATION-RESEARCH.md) |
 | `str::is_tcl_alpha` `str::is_tcl_alnum` | one-scalar str → bool (temporary Tcl-compatibility classes, core/tclcompat.tcl) |
 | `char::scalar_value` | UnicodeChar → int (the Unicode scalar value: `0..0x10FFFF` without the surrogates, never a byte or a code unit of an encoding) |
+| `float64::from_int` | int → Float64, errors `NonFiniteFloat`: the nearest Float64 (ties to even), from the exact Int at any size; an Int beyond the largest finite Float64 fails (FLOAT64-MILESTONE-1.md) |
+| `float64::truncate` | Float64 → int: the integer part, rounding toward zero, exact at any magnitude; never fails |
 | `mutable_array::allocate` | int → mutarray (every slot `unit`) |
 | `mutable_array::capacity` | mutarray → int |
 | `mutable_array::at` | mutarray, int → any, errors `IndexNotFound` (as `list::at`) |
@@ -1857,11 +1897,15 @@ add10(32)          # 42 (add captures x)
   is decided at compile time by the ordinary compiler, and is never an
   assertion. `static` and `compile` are contextual words; `static NAME:` with
   any other operation is `STATIC-UNKNOWN-OPERATION`.
-* Integers (decimal, arbitrary precision, no leading zeros), strings
+* Integers (decimal, arbitrary precision, no leading zeros), decimal
+  Float64 literals (`DIGITS.DIGITS`, an optional exponent `e`/`E`, `+`/`-`,
+  `DIGITS`: `1.5`, `10.0`, `2.5e-3`; no leading zeros, a point needs a digit
+  on both sides, one beyond the largest finite Float64 is a syntax error;
+  FLOAT64-MILESTONE-1.md), strings
   (`"..."`, escapes `\\ \" \n \r \t`), `true`, `false`, `unit`, lists
   `[a, b]`, calls `f(x)(y)`.
 * Operators, from highest precedence: the postfix forms (call, `.field`,
-  `.method(...)`, which chain left to right), unary `-`, `*`, `+ -`,
+  `.method(...)`, which chain left to right), unary `-`, `* /`, `+ -`,
   `== != < <= > >=`, `not`, `and`, `or`. Arithmetic, `and` and `or` are
   left-associative. Comparisons don't chain (`a < b < c` is a syntax error).
 * Blocks are delimited by indentation (spaces only; tabs are an error).
@@ -2431,7 +2475,7 @@ A `Value` is one 64-bit word (`runtime/value.rs`):
 | `0010`, `0110`, `1010` | `false`, `true`, `unit` |
 | `…10010` | an enum case: `(enum << 32) \| (case << 5) \| 0b10010`, both numbers private to the program (ENUMS.md) |
 | `1110` | an unbound cell (never a program value) |
-| `…000` | pointer to a heap object, whose header byte is its kind: big Int, Str, List, Result, Block (closure), native, cell |
+| `…000` | pointer to a heap object, whose header byte is its kind: big Int, Float64, Str, List, Result, Block (closure), native, cell |
 | `0` | no value: an error is pending |
 
 Kind knowledge and machine representation stay separate. A guard proves a
@@ -2447,6 +2491,17 @@ a big operand, they call `rt_int_add` / `rt_int_sub` / `rt_int_mul`, which
 use `num-bigint` and normalize the result. Comparisons are inline for small
 Ints and use `rt_int_cmp` otherwise. `num-bigint` is an implementation
 detail: nothing about it is visible to programs.
+
+**Float64s** are heap objects holding the binary64 bits (`FloatObj`, kind
+`KIND_FLOAT`, with a float-type code so the family can grow;
+FLOAT64-MILESTONE-1.md); a constant is a static object in the constant table
+(`float Float64 0xBITS` in NIR). `f64add` ... `f64ge` load the numbers,
+compute with the target's floating-point instructions, add `0.0` (so negative
+zero is zero), check finiteness (`|r| <= f64::MAX`, failing with
+`NonFiniteFloat` through `rt_float_nonfinite`) and box the result
+(`rt_float_new`, the allocation and safepoint); `f64eq` compares the bits,
+`hash` hashes them. A C `double` (`ffi::c::Double`) is passed in the
+target's floating-point registers and checked the same way when it returns.
 
 **Strings** are UTF-8 with a cached character count and an ASCII flag.
 `str::length` and `str::substring` count Unicode scalar values, including

@@ -1096,7 +1096,7 @@ proc compilerpedia::validate {} {
         lappend problems "duplicate topic ID $id ($first, $second)"
     }
     dict for {id topic} [dict get $catalogue topics] {
-        if {![regexp {^[a-z][a-z0-9]*(\.[a-zA-Z0-9_:?+*<>=!-]+)+$} $id]} {
+        if {![regexp {^[a-z][a-z0-9]*(\.[a-zA-Z0-9_:?+*/<>=!-]+)+$} $id]} {
             lappend problems "$id: a topic ID is a lowercase category, a dot and a name (e.g. concept.method-sugar)"
         }
         foreach name [dict get $topic index] {

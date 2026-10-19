@@ -21,6 +21,18 @@
 #                             but a different tag, so a UnicodeChar can never
 #                             be mistaken for an Int by kind (see
 #                             UNICODE-CHAR-LITERALS.md). Immutable.
+#   {Float64 X}               a finite floating-point number of the
+#                             primitive float type the tag names
+#                             (FLOAT64-MILESTONE-1.md; core/type.tcl's
+#                             float family, each width a kind of its own),
+#                             X a Tcl double already rounded to that type.
+#                             Never NaN, never an infinity, never negative
+#                             zero: a value is a finite real number with one
+#                             representation, so == and hash are exact
+#                             comparisons of X. Only core::value::float
+#                             makes one, from a double core/float.tcl has
+#                             checked. Distinct from Int: no float is ever
+#                             an Int by kind, nor the reverse. Immutable.
 #   {list ITEMS}              ITEMS is a Tcl list of runtime values
 #   {immutableSet ITEMS}      an immutable set of unique Botlish values
 #                             (core::value::equal): ITEMS is a Tcl list of
@@ -153,7 +165,9 @@
 # procedures.
 
 namespace eval core::value {
-    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum cptr}
+    # Every row of core/type.tcl's float family is a kind of its own here;
+    # type.tcl checks that the two lists agree when it loads.
+    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum cptr Float64}
 }
 
 proc core::value::isCanonicalInt {text} {
@@ -210,6 +224,17 @@ proc core::value::char {codepoint} {
         error "core::value::char: not a Unicode scalar value: \"$codepoint\""
     }
     return [list UnicodeChar $codepoint]
+}
+
+# The value of the floating-point type TYPE (a kind of core/type.tcl's float
+# family) whose number is X, a Tcl double that core/float.tcl has rounded to
+# TYPE and found finite (core::float::Make, the one caller). Zero is always
+# the positive zero: a value has one representation (header).
+proc core::value::float {type x} {
+    if {$x == 0} {
+        set x 0.0
+    }
+    return [list $type $x]
 }
 
 # The single point where a host (Tcl) truth value becomes a language Boolean.
@@ -357,6 +382,14 @@ proc core::value::intOf {v}  { Require int $v;  return [lindex $v 1] }
 proc core::value::strOf {v}  { Require str $v;  return [lindex $v 1] }
 proc core::value::items {v}  { Require list $v; return [lindex $v 1] }
 proc core::value::charOf {v} { Require UnicodeChar $v; return [lindex $v 1] }
+
+# The number (a Tcl double) of V, a value of any floating-point type.
+proc core::value::floatOf {v} {
+    if {![core::type::isFloat [kind $v]]} {
+        error "core::value: expected a floating-point value, got \"$v\""
+    }
+    return [lindex $v 1]
+}
 proc core::value::immutableSetItems {v} { Require immutableSet $v; return [lindex $v 1] }
 proc core::value::bytestoreHex {v} { Require bytestore $v; return [lindex $v 1] }
 proc core::value::bytestoreLength {v} { Require bytestore $v; return [expr {[string length [lindex $v 1]] / 2}] }
@@ -545,6 +578,16 @@ proc core::value::equal {a b} {
             }
             return 1
         }
+        default {
+            # A floating-point type (core/type.tcl's float family): a finite
+            # number with one representation (no NaN, no negative zero:
+            # header), so numeric equality is exact identity of the value.
+            # Two floats of different widths are different kinds (rejected
+            # above).
+            if {[core::type::isFloat $ka]} {
+                return [expr {[lindex $a 1] == [lindex $b 1]}]
+            }
+        }
     }
 }
 
@@ -677,6 +720,14 @@ proc core::value::show {v {debug 0} {reveal 0}} {
                 lappend parts [show $item $debug $reveal]
             }
             return "<mutable-vector \[[join $parts {, }]\]>"
+        }
+        default {
+            # A floating-point type: its canonical decimal text
+            # (core::float::text), the shortest digits that read back as
+            # this number, written as a decimal literal.
+            if {[core::type::isFloat [kind $v]]} {
+                return [core::float::text $v]
+            }
         }
     }
 }

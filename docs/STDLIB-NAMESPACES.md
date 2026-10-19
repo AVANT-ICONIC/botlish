@@ -88,6 +88,9 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
 | (added later, S16 of 2048-ENGINE-WORKLOAD.md) `str::append_char` | standard type op (String): a String followed by one UnicodeChar, the append of a character to text REFACTOR-WARNINGS-CLEAN.md's design finding 1 asks for | `str::append_char` |
 | (added later, BINARY-LAYOUT.md) `binary::parse`, `binary::emit`, `binary::layout_length`, `binary::layout_alignment`, and the internal `binary#emit` | the binary operations of fixed layouts, members of `lib/binary.bot`'s namespace (static layout operands, so never function values) | `binary::*` |
+| (added later, FLOAT64-MILESTONE-1.md) `/` | language primitive (the operator spelling; it has no Int meaning, so a `/` no Float64 operand selects is a compile-time TYPE error) | root |
+| (added later, FLOAT64-MILESTONE-1.md) `Float64#+ #- #* #/ #neg #< #<= #> #>=` | the Float64 operations source operators resolve to (internal: `#` cannot be spelled), registered from the float family's table | root, internal |
+| (added later, FLOAT64-MILESTONE-1.md) `float64::from_int`, `float64::truncate` | standard type ops (Float64): the explicit conversions between Int and Float64 | `float64::*` |
 
 Source-declared types register no natives at all: a type declaration
 registers a type, never a callable (their constructor natives went with
@@ -116,6 +119,7 @@ hierarchy (`ns-no-nested-stdlib`):
 | `mutable_array` | `allocate capacity at set copy freeze` | `from_list create` (moved from the old `mutarray` module), `get` (new) |
 | `immutable_set` | `from_list contains` | none |
 | `char` | `scalar_value` | none (no module file since §11) |
+| `float64` (FLOAT64-MILESTONE-1.md) | `from_int truncate` | none (no module file) |
 | `linux::abi::x86_64` (was `linux::abi`), `linux::abi::aarch64` (LINUX-SYSCALL-TRANSPORTS.md) | `syscall` | (unchanged) |
 | `binary::native` (NATIVE-LAYOUT-VIEWS.md) | `view` | none (lib/binary.bot's comment) |
 | `coroutine` | `done?` (COROUTINES.md; its other operations are internal `coroutine#...` root natives no source spells) | none (no module file) |

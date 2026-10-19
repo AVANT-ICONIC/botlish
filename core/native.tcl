@@ -76,6 +76,16 @@
 #                   element type is affine). AT is the argument whose static
 #                   type holds the element type (a collection), or `result`
 #                   (the call's own type, a constructor's).
+#   fold            "" or a command prefix deciding a call whose every
+#                   argument is exactly known: `{*}FOLD ARG...` returns
+#                   {value V} (the call returns V), {error NAME} (it completes
+#                   with the declared error NAME, one of its -errors), or ""
+#                   (nothing is decided: the arguments are not the
+#                   operation's). It must be the very computation the
+#                   implementation performs (core/float.tcl's apply), so a
+#                   decided call and a run of it never differ. Static
+#                   analyses (hir/completions.tcl, hir/exactvalue.tcl) read
+#                   it by registration, never by name.
 #   bounds          "" or the bounds checks behind a native's argument-
 #                   dependent errors (STDLIB-NAMESPACES.md), stated once here
 #                   so static analyses (hir/completions.tcl) read them by
@@ -296,13 +306,16 @@ namespace eval core::native {
     #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
     #   mutvec-mutate        mutates a MutableVector header in place (push,
     #                        pop, take, swap, clear)
+    #   float-alloc          makes a floating-point value, which the native
+    #                        runtime keeps in a heap object of its own
+    #                        (core/float.tcl; FLOAT64-MILESTONE-1.md)
     #   raw-syscall          executes a raw Linux kernel transition (x86-64's
     #                        `syscall`, AArch64's `svc #0`) with unknown
     #                        effects (core/linuxabi.tcl;
     #                        LINUX-X86-64-SYSCALL.md)
     variable runtimeTags {bigint string-alloc list-alloc result-alloc char-index
         range-check structural-equality mutarray-alloc mutarray-mutate hash set-alloc
-        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate}
+        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate float-alloc}
     # The -ownership roles (OWNERSHIP ROLES above).
     variable ownershipRoles {observe place move element repeat factory copy-out equality resume message release erase}
     # NAME -> 1: the errors the runtime itself declares, visible in every
@@ -381,7 +394,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
+        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {} -fold {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -548,7 +561,8 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern]]
+        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern] \
+        fold [dict get $options -fold]]
     return [core::value::native $name]
 }
 
@@ -1048,7 +1062,12 @@ proc core::native::invoke {nativeValue argValues} {
 #                            STDLIB-NAMESPACES.md)
 #   LowerUnderrun            a slice bound below its interval (checkSlice)
 #   UpperOverrun             a slice bound above its interval (checkSlice)
+#   NonFiniteFloat           a floating-point operation whose result is not a
+#                            finite number: an overflow, a division by zero
+#                            (core/float.tcl; FLOAT64-MILESTONE-1.md), or a
+#                            non-finite C double entering Botlish (C-FFI.md)
 core::native::declareError InvalidArgumentEncoding
 core::native::declareError IndexNotFound
 core::native::declareError LowerUnderrun
 core::native::declareError UpperOverrun
+core::native::declareError NonFiniteFloat

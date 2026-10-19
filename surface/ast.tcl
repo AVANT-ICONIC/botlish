@@ -29,6 +29,9 @@
 #              exactly one short type name
 #   suite      body (statements)                 an indented block
 #   int        text (canonical decimal digits)
+#   decimal    text (the decimal number a decimal literal spells, exactly as
+#              written but with a lowercase exponent marker: `1.50`, `2.5e-3`;
+#              its type is decided by lowering, FLOAT64-MILESTONE-1.md)
 #   string     value (the decoded text)
 #   char       text (canonical decimal codepoint of the one Unicode scalar
 #              value the literal decoded to -- UnicodeChar, never String;
@@ -224,7 +227,8 @@
 #              HIR's COROUTINE-RHS-NOT-YIELDING). Only the parser and the
 #              printer know it by this name: lowering turns it into the
 #              construction and the eager start (surface/lower.tcl)
-#   handledcall  call (a `call` or `methodcall` node), handlers (a list of {name nameSpan
+#   handledcall  call (a `call` or `methodcall` node, or a `binary` node of an
+#              arithmetic operator + - * /), handlers (a list of {name nameSpan
 #              body binding bindingSpan pattern} dicts, one per "on NAME:"
 #              clause in written order; body a suite; binding the name the
 #              whole payload is bound to in "on NAME details:", else "";
@@ -664,6 +668,7 @@ proc surface::ast::Expr {node show} {
     set at [At $node $show]
     switch -- [dict get $node kind] {
         int     { return "(int [dict get $node text])$at" }
+        decimal { return "(decimal [dict get $node text])$at" }
         char    { return "(char [dict get $node text])$at" }
         string  { return "(str [Quote [dict get $node value]])$at" }
         bool    { return "(bool [dict get $node value])$at" }

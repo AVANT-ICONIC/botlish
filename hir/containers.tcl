@@ -90,7 +90,7 @@ proc hir::containers::NonRetaining {name} {
         return 0
     }
     return [expr {[dict get $meta resultType] in {int str bool unit UnicodeChar}
-        || [dict get $meta testsType] ne ""}]
+        || [core::type::isFloat [dict get $meta resultType]] || [dict get $meta testsType] ne ""}]
 }
 
 # The element type of the collection type T (a MutableArray's or a

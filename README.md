@@ -87,7 +87,9 @@ built for rich debugging.
 ## Why Botlish
 
 * **High-level.** Values, not references; `Int` is arbitrary precision
-  (nothing overflows), a String is a sequence of Unicode scalar values, and
+  (nothing overflows), `Float64` is finite (an operation that would make NaN
+  or an infinity fails with a declared error instead), a String is a
+  sequence of Unicode scalar values, and
   memory is managed for you. Closures, structs and destructuring, enums,
   traits, coroutines and modules, with a small standard library written in
   Botlish itself.

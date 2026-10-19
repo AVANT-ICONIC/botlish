@@ -31,7 +31,7 @@ use super::aot::ProgramEntry;
 use super::constants::{self, Const};
 use super::framemap::{FunctionMap, ProgramMap};
 use super::metrics::AllocMode;
-use super::value::Kind;
+use super::value::{FloatType, Kind};
 use super::vm::{EnumInfo, FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm};
 use crate::nir::OpCode;
 use std::io::{Read, Seek, SeekFrom};
@@ -121,6 +121,7 @@ pub fn abi_fingerprint() -> u64 {
         strobj::STR_ASCII_OFFSET as u64,
         bytesobj::BYTES_PAYLOAD_OFFSET as u64,
         bytesobj::BYTES_LEN_OFFSET as u64,
+        value::FLOAT_BITS_OFFSET as u64,
     ];
     for (name, params, _) in super::ops::helpers() {
         words.extend(name.bytes().map(u64::from));
@@ -300,6 +301,11 @@ impl Image {
                     w.u32(4);
                     w.u32(*func);
                 }
+                Const::Float(ty, bits) => {
+                    w.u32(5);
+                    w.str(ty.prefix());
+                    w.u64(*bits);
+                }
             }
         }
         w.u32(self.statics);
@@ -390,6 +396,11 @@ impl Image {
                 2 => Const::BigInt(r.str()?),
                 3 => Const::Native(r.u32()?),
                 4 => Const::FnValue(r.u32()?),
+                5 => {
+                    let prefix = r.str()?;
+                    let ty = FloatType::of_prefix(&prefix).ok_or_else(|| format!("unknown float type {prefix}"))?;
+                    Const::Float(ty, r.u64()?)
+                }
                 tag => return Err(format!("unknown constant tag {tag}")),
             });
         }
@@ -633,6 +644,7 @@ mod tests {
                 Const::Str("h\u{e9}llo \u{1f600}".into()),
                 Const::Bytes(vec![0, 255, 10]),
                 Const::BigInt("-123456789012345678901234567890".into()),
+                Const::Float(FloatType::Float64, 1.5f64.to_bits()),
                 Const::Native(1),
                 Const::FnValue(1),
             ],

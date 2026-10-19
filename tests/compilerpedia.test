@@ -269,7 +269,7 @@ test cp-diagnostic-specific-rule {a matcher points a broad code at its specific 
             {t.bot:4:5: this call of "list::at" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
         [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
             {t.bot:4:5: this call may produce the declared error "E", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
-        [compilerpedia::topicForDiagnostic {SURFACE SYNTAX} {t.bot:1:7: unexpected character "/"}] \
+        [compilerpedia::topicForDiagnostic {CORE SEMANTIC TYPE} {t.bot:1:5: "/" divides floating-point numbers, and neither operand here is one (the operands are int and int): Botlish has no integer division}] \
         [compilerpedia::topicForDiagnostic {NO SUCH CODE} {whatever}]
 } -result {proof.list-bounds error.unhandled-error capability.integer-division {}}
 

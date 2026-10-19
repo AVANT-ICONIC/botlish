@@ -117,6 +117,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
         op,
+        // A floating-point result is a heap object (KIND_FLOAT); truncation
+        // may make a BigInt. The comparisons allocate nothing.
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64FromInt | F64Trunc |
         IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat | StrAppendChar
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
@@ -178,7 +181,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
 /// Whether OP can report a Botlish semantic error by returning NO_VALUE.
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
-    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr
+        // The declared NonFiniteFloat (FLOAT64-MILESTONE-1.md).
+        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
         // The C pointer test fixture's out-of-range address (RANGE).
         | CPtrFixture
         // The borrow test fixture: an operand that is no address or count
@@ -547,6 +552,9 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         // equality is exactly nominal equality -- another enum's
         // same-spelled case is another word.
         Kind::Enum => a == b,
+        // A finite number with one representation (no NaN, no negative
+        // zero: FloatType::admit), so equal numbers have equal bits.
+        Kind::Float64 => float_bits(a) == float_bits(b),
         // Exact byte-sequence equality (core::value::equal's bytestore
         // case): length and every byte, never the storage's identity or
         // address -- a static constant, a heap buffer and a copy of either
@@ -688,6 +696,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::ByteStore => 9,
         Kind::MutByteStore => 10,
         Kind::Enum => 11,
+        Kind::Float64 => 12,
         Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
@@ -723,6 +732,9 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         // Canonical decimal codepoint text, matching how Int's own text is
         // hashed above (core/hashing.tcl's identical choice).
         Kind::UnicodeChar => fnv1a(h, char_of(v).to_string().as_bytes()),
+        // The bits, 8 bytes little-endian (core/hashing.tcl's Float64 case):
+        // consistent with the bit equality above.
+        Kind::Float64 => fnv1a(h, &float_bits(v).to_le_bytes()),
         // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
         // declaration identity text, a 0xFF separator, the case's declared
         // name -- never the numbers the word carries.
@@ -2421,6 +2433,90 @@ pub extern "C" fn rt_char_codepoint(_p: *mut Vm, v: Value) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// Floating-point values (FLOAT64-MILESTONE-1.md; core/float.tcl states the
+// semantics, which these follow operation for operation). Generated code
+// computes the arithmetic and comparisons itself (codegen::clif's
+// float_op) and calls only rt_float_new and rt_float_nonfinite; the rest
+// serve the operations it leaves to the runtime (from_int, truncate) and a
+// native called as a value (apply_op).
+
+/// The floating-point value of type TY (FloatType: its numbering in
+/// FloatType::code) whose bits BITS FloatType::admit accepted.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_float_new(p: *mut Vm, ty: u64, bits: u64) -> Value {
+    vm(p).new_float(FloatType::from_code(ty), bits)
+}
+
+/// Fails with the declared builtin error NonFiniteFloat: an operation's
+/// result is no finite number. Returns NO_VALUE.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_float_nonfinite(p: *mut Vm) -> Value {
+    fail_builtin(p, super::error::ERR_NON_FINITE_FLOAT, "NonFiniteFloat")
+}
+
+/// The value of number X of type TY, or the NonFiniteFloat failure.
+pub(crate) fn float_value(p: *mut Vm, ty: FloatType, x: f64) -> Value {
+    match ty.admit(x) {
+        Some(bits) => vm(p).new_float(ty, bits),
+        None => rt_float_nonfinite(p),
+    }
+}
+
+/// The nearest Float64 of the Int N (ties to even), or NonFiniteFloat.
+/// num-bigint's conversion rounds to odd at 64 bits and then to nearest, the
+/// correctly rounded result (core/float.tcl's Tcl `double()`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_f64_from_int(p: *mut Vm, n: Value) -> Value {
+    use num_traits::ToPrimitive;
+    let x = match int_small(n) {
+        Some(i) => i as f64,
+        None => int_to_big(n).to_f64().unwrap_or(f64::INFINITY),
+    };
+    float_value(p, FloatType::Float64, x)
+}
+
+/// The Int of the Float64 V toward zero: exact (every finite float is an
+/// Int and a fraction), never failing.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_f64_trunc(p: *mut Vm, v: Value) -> Value {
+    use num_traits::FromPrimitive;
+    let t = float64_of(v).trunc();
+    if t.abs() < 4611686018427387904.0 {
+        return make_small(t as i64);
+    }
+    vm(p).new_big(BigInt::from_f64(t).expect("a finite float is an integer once truncated"))
+}
+
+/// The floating-point operation OP of type TY on A (and B): what a native
+/// called as a value performs, and the reference every generated sequence
+/// computes the same as (codegen::clif's float_op).
+pub(crate) fn float_apply(p: *mut Vm, ty: FloatType, op: crate::nir::FloatOp, a: Value, b: Value) -> Value {
+    use crate::nir::FloatOp::*;
+    match ty {
+        FloatType::Float64 => match op {
+            FromInt => rt_f64_from_int(p, a),
+            Trunc => rt_f64_trunc(p, a),
+            Neg => float_value(p, ty, 0.0 - float64_of(a)),
+            _ => {
+                let (x, y) = (float64_of(a), float64_of(b));
+                match op {
+                    Add => float_value(p, ty, x + y),
+                    Sub => float_value(p, ty, x - y),
+                    Mul => float_value(p, ty, x * y),
+                    Div => float_value(p, ty, x / y),
+                    Lt => bool_value(x < y),
+                    Le => bool_value(x <= y),
+                    Gt => bool_value(x > y),
+                    Ge => bool_value(x >= y),
+                    Eq => bool_value(float_bits(a) == float_bits(b)),
+                    FromInt | Trunc | Neg => unreachable!(),
+                }
+            }
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Kinds and Results
 
 #[unsafe(no_mangle)]
@@ -2612,6 +2708,10 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         ResultValue => rt_result_payload(p, a[0], 1),
         ResultError => rt_result_payload(p, a[0], 0),
         CharCodepoint => rt_char_codepoint(p, a[0]),
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc => {
+            let (ty, fop) = op.float().expect("a floating-point operation");
+            float_apply(p, ty, fop, a[0], a.get(1).copied().unwrap_or(NO_VALUE))
+        }
         MkOk => rt_result_new(p, 1, a[0]),
         MkError => rt_result_new(p, 0, a[0]),
         Hash => rt_hash(p, a[0]),
@@ -2681,6 +2781,10 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     }
     vec![
         h!(rt_type_error, 4),
+        h!(rt_float_new, 3),
+        h!(rt_float_nonfinite, 1),
+        h!(rt_f64_from_int, 2),
+        h!(rt_f64_trunc, 2),
         h!(rt_cptr_fixture, 2),
         h!(rt_cptr_fixture_address, 2),
         h!(rt_ffi_fixture_read, 3),

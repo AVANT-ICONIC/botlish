@@ -36,15 +36,15 @@
 
 use super::show::tcl_list;
 use super::value::{
-    KIND_BIGINT, KIND_BYTES, KIND_CLOSURE, KIND_COROUTINE, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_MUTBYTES, KIND_MUTVEC, KIND_NATIVE,
-    KIND_RESULT, KIND_SET, KIND_STR, KIND_STRPLAN, KIND_STRUCT,
+    KIND_BIGINT, KIND_BYTES, KIND_CLOSURE, KIND_COROUTINE, KIND_FLOAT, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_MUTBYTES, KIND_MUTVEC,
+    KIND_NATIVE, KIND_RESULT, KIND_SET, KIND_STR, KIND_STRPLAN, KIND_STRUCT,
 };
 use std::collections::HashMap;
 use std::time::Duration;
 
 /// One more than the largest `Header::kind` value: `by_kind`/`static_by_kind`
 /// are indexed directly by kind byte (index 0 unused).
-pub const KIND_COUNT: usize = 17;
+pub const KIND_COUNT: usize = 18;
 
 pub fn kind_name(kind: u8) -> &'static str {
     match kind {
@@ -63,6 +63,7 @@ pub fn kind_name(kind: u8) -> &'static str {
         KIND_LISTPLAN => "ListPlan",
         KIND_COROUTINE => "Coroutine",
         KIND_MUTVEC => "MutableVector",
+        KIND_FLOAT => "Float",
         _ => "?",
     }
 }
@@ -514,6 +515,10 @@ impl Metrics {
         }
         if self.by_kind[KIND_MUTVEC as usize].allocations > 0 {
             kinds.push(KIND_MUTVEC);
+        }
+        // Likewise floating-point values (FLOAT64-MILESTONE-1.md).
+        if self.by_kind[KIND_FLOAT as usize].allocations > 0 {
+            kinds.push(KIND_FLOAT);
         }
         let by_kind = dict(&kinds.iter().map(|&k| (kind_name(k), kind_dict(&self.by_kind[k as usize], &n))).collect::<Vec<_>>());
         let static_by_kind =
