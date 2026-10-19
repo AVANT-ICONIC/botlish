@@ -2,8 +2,9 @@
 # plan3.sh -- the measurements added after plan2.sh: the prototype ladders
 # again with builds timed as passes too (bench.tcl -build-passes), and the
 # constant-membership domains the baseline run could not reach (String
-# tries, the enum domain), and the load-policy matrix timed as passes on
-# the baseline and the merged tree. Arguments as plan.sh's.
+# tries, the enum domain), every table's builds and the load-policy matrix
+# timed as passes on the baseline and the merged tree. Arguments as
+# plan.sh's.
 #
 #   sh audit/hash-table/tools/plan3.sh RESULTS-DIR BASE HASH INLINE MOD BOUNDS VS COMBO PROBE COMBOPROBE
 set -u
@@ -28,6 +29,20 @@ stamp "ladder C2: the probe primitive, builds as passes"
 $tclsh "$here/ladder.tcl" -trees "probe $probe comboprobe $comboprobe" -rounds 3 -out "$out/ladder-c2.tsv" \
     -impls "lpa lpp lpmask" -keys "int-dense str-short point" -sizes "1024 16384" \
     -modes "build presized hit miss replace drop" -runs 5 -passes 4 -build-passes 3 || stamp "FAILED: ladder C2"
+stamp "builds as passes: every table, the baseline and the merged tree interleaved"
+mkdir -p "$out/builds"
+for impl in lpa lpmono lpfact lpmask rh chain cd ht0; do
+    modes="build presized bulk drop"
+    [ $impl = cd ] && modes="build presized bulk"
+    for tree in base combo; do
+        eval root=\$$tree
+        tag=$([ $tree = base ] && echo baseline || echo combo)
+        BOTLISH_HT_ROOT=$root $tclsh "$here/bench.tcl" -runs 5 -tag $tag -out "$out/builds/sizes-$tag.tsv" \
+            -build-passes 3 -impls $impl -keys "int-dense str-short" \
+            -sizes "1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384" -modes "$modes" \
+            > /dev/null || stamp "FAILED: builds $impl $tree"
+    done
+done
 for tree in base combo; do
     eval root=\$$tree
     tag=$([ $tree = base ] && echo baseline || echo combo)
