@@ -868,10 +868,16 @@ a host's stack discovery, publication or the switch, the stack probes or
 faulting check in a child process: never fault in a test's own process),
 the Rust tests (also under `BOTLISH_NATIVE_GC_STRESS=1`),
 `tests/native-stack-overflow.test`, `tests/coroutines.test`,
-`tests/platform/native-status.tcl`, and the macOS smoke job and
-`CI-Tests: native-stack-overflow.test rust` on a branch (macOS facts are
-CI's: the shared Mac is not used). `bench/native-stack-guard.tcl` compares
-a driver against a baseline build.
+`tests/platform/native-status.tcl`,
+`audit/native-stack/tools/mutate.tcl` (every mutant in its `mutants.txt`
+that applies to the host must still apply and be killed: update a mutant's
+text when you change the code it mutates, keeping it a mutant of the same
+rule; a mutant of `platform/macos.rs` runs on macOS only), and the macOS
+smoke job and `CI-Tests: native-stack-overflow.test rust
+native-stack-mutants` on a branch (macOS facts are CI's: the shared Mac is
+not used). `bench/native-stack-guard.tcl` compares a driver against a
+baseline build (`-baseline-rev main`; the tier item `native-stack-bench`
+on a macOS runner).
 
 ## Linux AArch64
 
