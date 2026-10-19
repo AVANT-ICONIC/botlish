@@ -199,6 +199,17 @@
         if {$target ni $loops} {
 >>>>
 
+@@ payload-no-entry a handler's payload binding gets no entry copy: a handler writing `details.items` writes the array the raiser put in the payload, which its caller still owns
+## hir/mutvec.tcl
+<<<<
+        handle {
+            # The handler whose branch scope binds B.
+====
+        handle {
+            return
+            # The handler whose branch scope binds B.
+>>>>
+
 @@ array-always-affine MutableArray is always affine: a copy of an array of Ints moves it
 ## hir/types.tcl
 <<<<

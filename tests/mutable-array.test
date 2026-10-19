@@ -258,6 +258,10 @@ test ma-break-continue-copies {a copy taken just before `break` or `continue` st
         [maRoute "" "    acc = mutable_vector::from_list(\[mutable_array::create(1, 7)\])\n    loop i from 0 to 5:\n        a.set(1, i)\n        if i == 1:\n            acc.push(a)\n            break\n    a.set(0, 99)\n    snap = acc.at(1)\n    \[snap.at(0), snap.at(1), a.at(0), a.at(1)\]\n"]
 } -result {{value {[0, 5, 1]}} {value {[0, 0, 0]}} {value {[0, 1, 99, 1]}}}
 
+test ma-payload-entry-copy {a handler that writes the array in its payload binding (`on Full details:`) writes its own copy: the array the raiser put in the payload, still its caller's, never changes -- on every backend} -body {
+    maRoute "error Full:\n    items: MutableArray\[int\]\nfn g(v: MutableArray\[int\], n: int) -> int errors Full:\n    if n > 0:\n        fail Full {items: v}\n    0\n" "    r = g(a, a.capacity()):\n        on Full details:\n            details.items.set(0, 9)\n            details.items.at(0)\n    \[r, a.at(0)\]\n"
+} -result {value {[9, 0]}}
+
 test ma-cow-repeated-copy {item 30: create(3, x) of an unrestricted MutableVector places three logical copies: mutating one slot's vector after extracting it changes neither the others nor x} -body {
     maRoute "" "    x = mutable_vector::from_list(\[1\])\n    arr = mutable_array::create(3, x)\n    v = arr.at(1)\n    v.push(2)\n    arr.set(1, v)\n    \[arr.at(0).length(), arr.at(1).length(), arr.at(2).length(), x.length(), a.at(0)\]\n"
 } -result {value {[1, 2, 1, 1, 0]}}

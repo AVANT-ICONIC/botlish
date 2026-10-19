@@ -52,7 +52,8 @@
 #               a call of a function whose every result is fresh -- one of
 #               these, or a place root of its own: FreshFunctions): a local
 #               binding's value, a parameter on entry, a loop variable per
-#               iteration, a context installation's value.
+#               iteration, a handler's payload binding, a context
+#               installation's value.
 #
 # A share descriptor ("h" a collection header; "s"N"."(SLOT"."D)*N a struct
 # whose listed slots are shared) is type-directed through struct fields only:
@@ -1710,10 +1711,11 @@ proc hir::mutvec::ReplaceChild {hirVar p old new} {
     error "hir::mutvec::ReplaceChild: $old is not a child of $p"
 }
 
-# The entry of place root B, a parameter (of a function, or a loop's
-# per-iteration variable): B becomes a local bound, as the body's first
-# statement, to a logical copy (share descriptor D) of a new parameter that
-# takes B's place -- so the place owns the header it mutates.
+# The entry of place root B, a parameter (of a function, a loop's
+# per-iteration variable, or a handler's payload binding): B becomes a
+# local bound, as the body's first statement, to a logical copy (share
+# descriptor D) of a new parameter that takes B's place -- so the place owns
+# the header it mutates.
 proc hir::mutvec::EntryRename {hirVar b d} {
     upvar 1 $hirVar hir
     set binding [dict get $hir bindings $b]
@@ -1723,6 +1725,25 @@ proc hir::mutvec::EntryRename {hirVar b d} {
         return
     }
     set node [dict get $hir exprs $e]
+    set kind [dict get $node kind]
+    switch -- $kind {
+        block - listloop - lockloop {
+            set body [dict get $node body]
+            set reachable 1
+        }
+        handle {
+            # The handler whose branch scope binds B.
+            set k [lsearch -exact [dict get $node handlerScopes] $s]
+            if {$k < 0 || [lindex [dict get $node handlerPayloads] $k] ne $b} {
+                error "hir::mutvec::EntryRename: $b is no payload binding of $e"
+            }
+            set body [lindex [dict get $node handlerBodies] $k]
+            set reachable [expr {$body eq {} || [dict get $hir exprs [lindex $body 0] reachable]}]
+        }
+        default {
+            error "hir::mutvec::EntryRename: no entry for a parameter of a $kind"
+        }
+    }
     set name [dict get $binding name]
     # The parameter's static type (declared, or inferred), recorded on both
     # bindings: the new parameter receives it, the local keeps it.
@@ -1741,7 +1762,7 @@ proc hir::mutvec::EntryRename {hirVar b d} {
     set bindings [dict get $hir scopes $s bindings]
     set i [lsearch -exact $bindings $b]
     dict set hir scopes $s bindings [linsert $bindings $i $p]
-    switch -- [dict get $node kind] {
+    switch -- $kind {
         block {
             dict set hir exprs $e params [lmap x [dict get $node params] {expr {$x eq $b ? $p : $x}}]
         }
@@ -1756,25 +1777,30 @@ proc hir::mutvec::EntryRename {hirVar b d} {
                 set dom
             }]
         }
-        default {
-            return
+        handle {
+            dict set hir exprs $e handlerPayloads [lreplace [dict get $node handlerPayloads] $k $k $p]
         }
     }
     # The body's first statement: `NAME = share(NAME#entry)`.
-    set body [dict get $node body]
     set at [expr {$body ne {} ? [lindex $body 0] : $e}]
     set atNode [dict get $hir exprs $at]
     set r [hir::NewId hir expr]
     dict set hir exprs $r [dict create id $r kind ref origin [dict get $atNode origin] scope $s \
-        type [hir::types::intern hir $type] reachable 1 name $pname binding $p init yes]
+        type [hir::types::intern hir $type] reachable $reachable name $pname binding $p init yes]
     set c [NewCall hir [ShareNative] [list $r] $type $r]
     dict set hir exprs $c args [list $r [NewConst hir $d $r]]
     set n [hir::NewId hir expr]
     dict set hir exprs $n [dict create id $n kind bind origin [dict get $atNode origin] scope $s \
-        type [hir::types::intern hir $type] reachable 1 name $name binding $b value $c duplicate 0]
+        type [hir::types::intern hir $type] reachable $reachable name $name binding $b value $c duplicate 0]
     dict set hir bindings $b kind local
     dict set hir bindings $b declaredBy $n
-    dict set hir exprs $e body [linsert $body 0 $n]
+    if {$kind eq "handle"} {
+        set bodies [dict get $hir exprs $e handlerBodies]
+        lset bodies $k [linsert $body 0 $n]
+        dict set hir exprs $e handlerBodies $bodies
+    } else {
+        dict set hir exprs $e body [linsert $body 0 $n]
+    }
 }
 
 # 1 if projection P (in parent map PARENT) is a step of a collection

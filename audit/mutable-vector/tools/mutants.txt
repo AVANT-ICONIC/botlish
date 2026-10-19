@@ -133,6 +133,17 @@
             # (no entry copy)
 >>>>
 
+@@ payload-no-entry a handler's payload binding gets no entry copy: a handler mutating `details.items` mutates the vector the raiser put in the payload, which its caller still owns
+## hir/mutvec.tcl
+<<<<
+        handle {
+            # The handler whose branch scope binds B.
+====
+        handle {
+            return
+            # The handler whose branch scope binds B.
+>>>>
+
 @@ fresh-result-unowned a function returning any place path counts as fresh: a call returning its unmutated parameter enters the caller's place without a copy (the caller's mutations change the argument)
 ## hir/mutvec.tcl
 <<<<

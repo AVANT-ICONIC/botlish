@@ -329,7 +329,9 @@ never on HIR rebuilt from Core IR) writes out:
 * **entries** -- a place root's initial value is shared unless it is fresh:
   a local's bound value, a parameter on entry (renamed: `v#entry`, and `v`
   becomes a local bound by its share), a loop variable per iteration, a
-  context installation's value. *Fresh* is a `from_list` result, a share, a
+  handler's payload binding (`on Full details:`, the same renaming in the
+  handler's body: the payload may hold a header the raiser's caller still
+  owns, `mv-payload-entry-copy`), a context installation's value. *Fresh* is a `from_list` result, a share, a
   struct literal of fresh fields (a field whose type may hold a vector --
   `any`, a generic position -- must be fresh too), or a call of a function
   whose every result is fresh;

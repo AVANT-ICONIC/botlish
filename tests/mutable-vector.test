@@ -832,6 +832,63 @@ r = step(Msg {i: 0})
     }
 } -cleanup {unset -nocomplain case text} -result {{{value {[1, 5, 5]}} 2} {{value {[1, 5, 5]}} 2} {{value {[1, 5]}} 0}}
 
+# A handler's payload binding (`on E details:`) is a parameter of the
+# handler's branch: a place root among them is entered by a logical copy
+# of the payload (hir/mutvec.tcl's EntryRename), like a function's
+# parameter -- the payload may hold a header its raiser's caller still owns.
+set mvPayloadDecls {import mutable_vector
+
+error Full:
+    items: MutableVector[int]
+
+fn g(v: MutableVector[int], n: int) -> int errors Full:
+    if n > 0:
+        fail Full {items: v}
+    0
+
+}
+
+test mv-payload-entry-copy {a handler that mutates its payload binding's vector mutates its own copy: the vector the raiser put in the payload, still its caller's, never changes -- named (`on Full details:`) as destructured (`on Full {items}:`), also when the caller's vector is a place itself; a handler that only reads its payload copies nothing; the HIR text with the entry reads back -- on every backend} -body {
+    set cases {
+        {fn f():
+    p = mutable_vector::from_list([1])
+    r = g(p, p.length()):
+        on Full details:
+            details.items.push(9)
+            details.items.length()
+    q = mutable_vector::from_list([1])
+    s = g(q, q.length()):
+        on Full {items}:
+            items.push(9)
+            items.length()
+    [r, p.length(), s, q.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    p.push(5)
+    r = g(p, p.length()):
+        on Full details:
+            details.items.push(9)
+            details.items.push(10)
+            details.items.length()
+    [r, p.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    r = g(p, p.length()):
+        on Full details:
+            details.items.length()
+    [r, p.length()]
+}
+    }
+    set results [lmap case $cases {
+        set text "${::mvPayloadDecls}${case}f()\n"
+        list [mvAgree $text] [mvShares $text]
+    }]
+    set formatted [hir::format [surface::compile "${mvPayloadDecls}[lindex $cases 0]f()\n" -warnings off]]
+    lappend results [expr {[hir::format [hir::parse $formatted]] eq $formatted}]
+} -cleanup {unset -nocomplain cases case text results formatted} -result {{{value {[2, 1, 2, 1]}} 2} {{value {[4, 2]}} 2} {{value {[1, 1]}} 0} 1}
+
 # Last uses per path (hir/mutvec.tcl's NoLaterUse and ReadsPath): a read-out
 # of a place path moves its header on when no later use may read a header
 # at that path -- the path itself, a prefix of it (the binding, an
