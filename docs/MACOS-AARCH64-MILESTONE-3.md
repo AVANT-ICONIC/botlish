@@ -409,8 +409,16 @@ second defect:
   then revised (the second test above): `full (Tier C, macOS arm64, shard
   1/3)`, the Rust tests under `BOTLISH_NATIVE_GC_STRESS=1`, **success**, where
   the same step failed before; the smoke job (the same tests without stress,
-  and native-status) and the Linux control job: success. The final revision's
-  runs are in the table of section 17.
+  and native-status) and the Linux control job: success.
+- macOS Apple Silicon, the final revision, run
+  [39201377743](https://github.com/mwagner-webdev/botlish/actions/runs/39201377743)
+  (head 4cd1b47, `CI-Tests: rust`, `CI-GC-Stress: 1`, the two tests above):
+  **all seven jobs completed with success**: `full (Tier C, shard 1/3)`, the
+  Rust tests under `BOTLISH_NATIVE_GC_STRESS=1` (shards 2/3 and 3/3 had no
+  items and were skipped by design); smoke (Rust tests without stress,
+  native-status, smoke tier); Tier B acceptance 1/2 and 2/2 (every golden
+  suite on all four backends, the native golden runner on its coroutine); the
+  Linux control job.
 
 What the stress run covers for suspended roots: `co-gc-stress`,
 `co-gc-nested-suspended-roots-stress`, `ep-gc-stress-coroutine`,
@@ -432,9 +440,15 @@ new tests), `tests/golden-framework.test` (42 of 42), `tests/affine.test`
 0 disagreements). In CI: `tests.yml` run
 [39157572693](https://github.com/mwagner-webdev/botlish/actions/runs/39157572693):
 success (dispatched on 4dafa4e, the last commit that changed runtime code or
-test gating), and again on the final head f2e2059, run
+test gating), and again on f2e2059, run
 [39173139465](https://github.com/mwagner-webdev/botlish/actions/runs/39173139465):
-success.
+success. After the GC-stress follow-up (a test-only change) on 4cd1b47, run
+[39201389766](https://github.com/mwagner-webdev/botlish/actions/runs/39201389766):
+11 of 12 jobs success (the Rust unit tests, four golden shards, interp,
+compile, cranelift and cranelift-generic coverage, stub-linked executables,
+warning gate); the twelfth, `native GC-stress`, is skipped by the workflow's
+own condition (it runs on pushes to `main` only), so the Linux x86-64 stress
+coverage of the follow-up is the local run above.
 
 ## 16. Linux AArch64 regression results
 
@@ -443,9 +457,13 @@ coroutine tests built for `aarch64-unknown-linux-gnu` and run under
 qemu-user (14 tests, including the register, FPCR, alignment and chain tests)
 all pass. In CI: `tests-arm64.yml` run
 [39157574996](https://github.com/mwagner-webdev/botlish/actions/runs/39157574996):
-success (native AArch64 runner, same commit as above), and again on the final head f2e2059, run
+success (native AArch64 runner, same commit as above), and again on f2e2059, run
 [39173141444](https://github.com/mwagner-webdev/botlish/actions/runs/39173141444):
-success.
+success. After the GC-stress follow-up on 4cd1b47, run
+[39201392293](https://github.com/mwagner-webdev/botlish/actions/runs/39201392293):
+**all 10 jobs success**, including `native GC-stress` (the whole suite under
+`BOTLISH_NATIVE_GC_STRESS=1`, about 70 minutes) and the Rust unit tests under
+GC stress, which run the new test on a native AArch64 Linux host.
 
 ## 17. macOS GitHub Actions runs
 
@@ -456,6 +474,8 @@ success.
 | [39161417599](https://github.com/mwagner-webdev/botlish/actions/runs/39161417599) | d1bca21 | the census, `CI-Tests: all` | smoke, acceptance 1/2 and 2/2, linux control, shard 3: success; shards 1 and 2: failed only on `c-bindgen.test` and `c-ffi.test` |
 | [39166998920](https://github.com/mwagner-webdev/botlish/actions/runs/39166998920) | 3fec593 | acceptance (native golden) + Rust tests, `CI-GC-Stress: 1` | shards 2, 3, smoke, acceptance, linux control: success; shard 1: everything passed except one unrelated Rust test (section 14) |
 | [39171832146](https://github.com/mwagner-webdev/botlish/actions/runs/39171832146) | a179572 | `workflow_dispatch`: `tests=rust`, `gc_stress=true` | the same one Rust test fails; 240 others pass |
+| [39199704894](https://github.com/mwagner-webdev/botlish/actions/runs/39199704894) | 9295d6c | the first fix, `CI-Tests: rust`, `CI-GC-Stress: 1` | Tier C Rust under stress: success (the test change was then revised) |
+| [39201377743](https://github.com/mwagner-webdev/botlish/actions/runs/39201377743) | 4cd1b47 | the final fix, `CI-Tests: rust`, `CI-GC-Stress: 1` | all 7 jobs success (Tier C Rust under stress, smoke, Tier B 1/2 and 2/2, Linux control; Tier C shards 2 and 3 empty) |
 
 The `CI-Tests:` trailers were verified with `git interpret-trailers --parse`
 before each push (milestone 2's mistake: a trailer outside the last
