@@ -477,7 +477,10 @@ extern "C" fn publication_a(p: *mut Vm, _: Value, _: *const Value) -> Value {
 ///                         `survived`
 ///   guard:THREAD:MODE     installs the guard on THREAD (`driver`,
 ///                         `executable`, `result-file`; `wide`: driver, with
-///                         64 KiB frames) and exhausts the stack; prints
+///                         64 KiB frames; `dropped`: installs and drops one
+///                         first, then exhausts with none; `reinstalled`:
+///                         installs a second after dropping one) and
+///                         exhausts the stack; prints
 ///                         `refused: ...` when the stack has no confirmed
 ///                         guard, `returned` if the recursion ever returns
 ///   co:SHAPE              a coroutine's stack exhausted: `fresh`, `after-
@@ -522,6 +525,19 @@ fn child(scenario: &str) -> ! {
                     let file = std::fs::File::create(path).expect("the result file");
                     platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
                     std::mem::forget(file);
+                }
+                if mode == "unguarded" {
+                    println!("returned {}", exhaust(0));
+                    return;
+                }
+                if mode == "dropped" || mode == "reinstalled" {
+                    // A guard installed and dropped: the process is as before
+                    // (`dropped`), and a second guard installs (`reinstalled`).
+                    drop(OverflowGuard::install(&stack).expect("the first guard installs"));
+                    if mode == "dropped" {
+                        println!("returned {}", exhaust(0));
+                        return;
+                    }
                 }
                 let installed = if mode == "executable" { OverflowGuard::install_executable(&stack) } else { OverflowGuard::install(&stack) };
                 match installed {
@@ -853,6 +869,15 @@ fn guard_checks(report: &mut Report, guarded: &[(&'static str, bool)]) {
         format!("{} result file {:?}", outcome.brief(), written.trim()));
     let outcome = run_child("guard:std-1MiB:wide");
     report.check("guard std-1MiB 64 KiB frames", outcome.is_overflow_line(), outcome.brief());
+    // A dropped guard leaves the process as it was: the exhaustion is the
+    // thread library's and Rust's (SIGABRT, or the signal), never the line;
+    // and a second guard installs and reports.
+    let dropped = run_child("guard:std-1MiB:dropped");
+    let unguarded = run_child("guard:std-1MiB:unguarded");
+    report.check("guard std-1MiB dropped", !dropped.stdout.contains("NATIVE LIMIT STACK") && dropped.signal().is_some()
+        && dropped.signal() == unguarded.signal(), format!("{}; never installed: {}", dropped.brief(), unguarded.brief()));
+    let outcome = run_child("guard:std-1MiB:reinstalled");
+    report.check("guard std-1MiB reinstalled", outcome.is_overflow_line(), outcome.brief());
 }
 
 /// A coroutine's own stack exhausted: at its start, after yields, and at the

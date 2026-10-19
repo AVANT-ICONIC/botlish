@@ -1040,21 +1040,23 @@ standard output goes.
 
 @topic error.native-limit-stack
 title: NATIVE LIMIT STACK: recursion too deep for the native stack
-summary: NATIVE LIMIT STACK stops a native run whose nested calls exhaust the native stack (1 GiB by default), and TCL LIMIT STACK a Tcl backend's: resource limits, not semantics.
+summary: NATIVE LIMIT STACK stops a native run whose nested calls exhaust a native stack (a thread's or a coroutine's), and TCL LIMIT STACK a Tcl backend's: resource limits, not semantics.
 index: errors backends
 alias: stack overflow; recursion too deep; deep recursion; native stack exhausted
-keywords: recursion, stack, depth, BOTLISH_NATIVE_STACK_BYTES, too many nested evaluations, limit, tail call
+keywords: recursion, stack, depth, BOTLISH_NATIVE_STACK_BYTES, BOTLISH_NATIVE_COROUTINE_STACK_BYTES, coroutine, too many nested evaluations, limit, tail call
 related: backend.cranelift backend.interp backend.compile backend.performance concept.loops
-docs: NATIVE-STACK-OVERFLOW.md README.md
+docs: NATIVE-STACK-OVERFLOW.md MACOS-AARCH64-MILESTONE-4.md COROUTINES.md README.md
 code: NATIVE LIMIT STACK
 code: TCL LIMIT STACK
 
 == MEANING
 Run time. Recursion depth is a resource limit, not semantics, so the
 backends stop at different depths:
-  * native backends and executables: native code runs on a 1 GiB stack;
-    overflowing it stops the run with "native stack exhausted: too many
-    nested calls" (NATIVE LIMIT STACK), never a crash. A standalone
+  * native backends and executables: native code runs on a 1 GiB stack,
+    and a coroutine's body on an 8 MiB stack of its own; overflowing either
+    stops the run with "native stack exhausted: too many nested calls"
+    (NATIVE LIMIT STACK), never a crash, on every host the native backend
+    runs on (Linux x86-64 and AArch64, macOS AArch64). A standalone
     executable prints it on stderr as `error {NATIVE LIMIT STACK}
     {native stack exhausted: ...}` and exits 1.
   * interp and compile: Tcl's evaluation limit, raised by the compiler to
@@ -1080,7 +1082,9 @@ Make sure the recursion ends (a missing or unreachable base case is the
 usual cause). For a deep but finite computation, iterate instead
 (concept.loops), or recurse on halves rather than on n - 1. On the native
 backends and in executables, BOTLISH_NATIVE_STACK_BYTES=N (at least 1 MiB)
-sets the stack size: the example above runs with 4294967296.
+sets the stack size: the example above runs with 4294967296;
+BOTLISH_NATIVE_COROUTINE_STACK_BYTES=N (at least 64 KiB) sets a coroutine
+stack's.
 
 @topic error.native-link
 title: NATIVE LINK and NATIVE AOT: linking a native executable failed

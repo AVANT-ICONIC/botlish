@@ -253,7 +253,8 @@ docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
 and builds the single executable on Linux x86-64. A separate workflow runs
-the native JIT and native coroutines on Apple Silicon macOS. Nothing here is
+the native JIT, native coroutines and the native stack guard on Apple
+Silicon macOS. Nothing here is
 a promise about other platforms.
 
 == PER COMPONENT
@@ -266,6 +267,10 @@ a promise about other platforms.
                              (hand-written stack switching); elsewhere
                              NATIVE UNSUPPORTED; the Tcl backends run
                              coroutines everywhere
+    native stack overflow    NATIVE LIMIT STACK, for the thread's stack
+                             and a coroutine's, on Linux x86-64 and
+                             AArch64 and macOS AArch64
+                             (error.native-limit-stack)
     Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
                              AArch64 through linux::abi::aarch64 (one
                              portable surface: linux, linux::io, io);

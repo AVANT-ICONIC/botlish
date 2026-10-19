@@ -1,5 +1,13 @@
 # Phase B: native stack overflow protection
 
+> Since then (MACOS-AARCH64-MILESTONE-4.md) the guard is shared by every
+> host that has one -- Linux x86-64 and AArch64 and macOS AArch64 --
+> in `runtime/platform/guard.rs`, with each host's stack discovery in
+> `platform/linux.rs` and `platform/macos.rs`; an unrelated fault goes to
+> the disposition the process had before the guard, and coroutine
+> switches publish the stack they arrive on. The text below is Phase B's
+> account of the Linux x86-64 original; those three points supersede it.
+
 The x86-64/Linux JIT runs on the existing Rust worker pthread. `main.rs`
 requests a 1 GiB stack with `thread::Builder::stack_size`; the optional
 `BOTLISH_NATIVE_STACK_BYTES` override is used by overflow tests. The JIT,

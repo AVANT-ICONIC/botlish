@@ -1,0 +1,282 @@
+# Mutants of the native stack guard (audit/native-stack/tools/mutate.tcl;
+# MACOS-AARCH64-MILESTONE-4.md, "Mutation testing"): the host's stack
+# discovery (native/src/runtime/platform/linux.rs, macos.rs), the shared
+# guard (platform/guard.rs), the publication of the running stack on
+# coroutine switches (runtime/coroutine.rs) and the bounds the collector's
+# frame walk reads (runtime/vm.rs).
+#
+#   @@ NAME DESCRIPTION
+#   %% HOST ...        (optional) the host targets the mutant applies to
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant with no %% line applies on every host with the guard. One whose
+# code a host never compiles (platform/macos.rs on Linux) is skipped there,
+# never counted as killed. Lines starting with # outside an edit are
+# comments.
+
+# ---------------------------------------------------------------------------
+# A host's stack discovery
+
+@@ linux-bounds-reversed the thread stack's top and bottom swapped (Linux)
+%% linux-x86_64 linux-aarch64
+## native/src/runtime/platform/linux.rs
+<<<<
+        Ok(NativeStack { low_bound, high_bound, guard_low, saved_sp: None, state: StackState::Active })
+====
+        Ok(NativeStack { low_bound: high_bound, high_bound: low_bound, guard_low, saved_sp: None, state: StackState::Active })
+>>>>
+
+@@ linux-size-halved the stack size read as half of what glibc reports (Linux)
+%% linux-x86_64 linux-aarch64
+## native/src/runtime/platform/linux.rs
+<<<<
+        let high_bound = low_bound.checked_add(size).ok_or(io::Error::from(io::ErrorKind::InvalidData))?;
+====
+        let high_bound = low_bound.checked_add(size / 2).ok_or(io::Error::from(io::ErrorKind::InvalidData))?;
+>>>>
+
+@@ linux-constant-bound the stack's low bound a constant 8 MiB below its top (Linux)
+%% linux-x86_64 linux-aarch64
+## native/src/runtime/platform/linux.rs
+<<<<
+        let low_bound = base as usize;
+        let high_bound = low_bound.checked_add(size).ok_or(io::Error::from(io::ErrorKind::InvalidData))?;
+====
+        let high_bound = (base as usize).checked_add(size).ok_or(io::Error::from(io::ErrorKind::InvalidData))?;
+        let low_bound = high_bound - (8 << 20);
+>>>>
+
+@@ macos-bounds-reversed the thread stack's top and bottom swapped (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    Ok(NativeStack { low_bound, high_bound, guard_low, saved_sp: None, state: StackState::Active })
+====
+    Ok(NativeStack { low_bound: high_bound, high_bound: low_bound, guard_low, saved_sp: None, state: StackState::Active })
+>>>>
+
+@@ macos-address-is-the-bottom pthread_get_stackaddr_np taken for the stack's lowest address (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    let reported_low = high_bound.checked_sub(size).filter(|&low| size > 0 && low > 0)
+        .ok_or(io::Error::from(io::ErrorKind::InvalidData))?;
+====
+    let reported_low = high_bound;
+    let high_bound = high_bound + size;
+>>>>
+
+@@ macos-size-halved the stack size read as half of what libpthread reports (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    let reported_low = high_bound.checked_sub(size).filter(|&low| size > 0 && low > 0)
+====
+    let reported_low = high_bound.checked_sub(size / 2).filter(|&low| size > 0 && low > 0)
+>>>>
+
+@@ macos-constant-bound the stack's low bound a constant 8 MiB below its top (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    let low_bound = usable_low(reported_low, high_bound);
+====
+    let low_bound = usable_low(high_bound - (8 << 20), high_bound);
+>>>>
+
+@@ macos-reported-bottom-trusted the reported bottom taken as usable without looking (the main thread's is inaccessible) (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    let low_bound = usable_low(reported_low, high_bound);
+====
+    let low_bound = reported_low;
+>>>>
+
+@@ macos-guard-assumed one 16 KiB page below the stack taken for its guard, unconfirmed (macOS)
+%% macos-aarch64
+## native/src/runtime/platform/macos.rs
+<<<<
+    let guard_low = confirmed_guard_low(low_bound);
+====
+    let guard_low = low_bound - 16384;
+>>>>
+
+# ---------------------------------------------------------------------------
+# Page size
+
+@@ page-size-4096 coroutine stacks rounded to a 4 KiB page, whatever the host's (16 KiB on Apple Silicon)
+# Equivalent where the page is 4 KiB (Linux x86-64): macOS only.
+%% macos-aarch64
+## native/src/runtime/coroutine.rs
+<<<<
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+====
+    let page: libc::c_long = 4096;
+>>>>
+
+# ---------------------------------------------------------------------------
+# Publication of the running stack (runtime/coroutine.rs)
+
+@@ publish-before-switch the stack about to run published before the switch, not on arrival
+## native/src/runtime/coroutine.rs
+<<<<
+        (*co).state = CO_RUNNING;
+        bl_co_switch(&mut (*co).resumer_sp, (*co).saved_sp, 0);
+====
+        (*co).state = CO_RUNNING;
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
+        bl_co_switch(&mut (*co).resumer_sp, (*co).saved_sp, 0);
+>>>>
+## native/src/runtime/coroutine.rs
+<<<<
+        // Arrived on this fresh stack (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
+====
+>>>>
+## native/src/runtime/coroutine.rs
+<<<<
+        // Resumed: arrived on this coroutine's stack again (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
+====
+>>>>
+
+@@ start-publishes-thread-stack a coroutine's first segment publishes the thread's stack, not its own
+## native/src/runtime/coroutine.rs
+<<<<
+        // Arrived on this fresh stack (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
+====
+        (*p).publish_active_stack(None);
+>>>>
+
+@@ resume-not-published a resumed coroutine does not publish its stack
+## native/src/runtime/coroutine.rs
+<<<<
+        // Resumed: arrived on this coroutine's stack again (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
+====
+>>>>
+
+@@ yield-not-restored the resumer does not publish its stack when a segment returns to it
+## native/src/runtime/coroutine.rs
+<<<<
+        let outer_stack = if outer.is_null() { None } else { (*outer).stack.as_ref().map(|s| s.bounds()) };
+        (*p).publish_active_stack(outer_stack);
+====
+        let _ = outer;
+>>>>
+
+# ---------------------------------------------------------------------------
+# The guard (platform/guard.rs)
+
+@@ guard-range-swapped the published guard and low bound swapped: no address is in the guard
+## native/src/runtime/platform/guard.rs
+<<<<
+    SLOTS[next][0].store(stack.guard_low, Ordering::Relaxed);
+    SLOTS[next][1].store(stack.low_bound, Ordering::Relaxed);
+====
+    SLOTS[next][0].store(stack.low_bound, Ordering::Relaxed);
+    SLOTS[next][1].store(stack.guard_low, Ordering::Relaxed);
+>>>>
+
+@@ guard-includes-stack the guard range runs up into the usable stack: a fault there is an overflow too
+## native/src/runtime/platform/guard.rs
+<<<<
+    address >= guard_low && address < low_bound
+====
+    address >= guard_low && address < low_bound + (64 << 20)
+>>>>
+
+@@ every-fault-overflows every fault on the guarded thread is reported as an overflow
+## native/src/runtime/platform/guard.rs
+<<<<
+    address >= guard_low && address < low_bound
+}
+====
+    let _ = (address, guard_low, low_bound);
+    true
+}
+>>>>
+
+@@ any-thread-overflows the faulting thread is not checked: another thread's fault in the guard is an overflow
+## native/src/runtime/platform/guard.rs
+<<<<
+    if guarded == UNGUARDED || guarded == BUSY || guarded != super::thread_token() {
+====
+    if guarded == UNGUARDED || guarded == BUSY {
+>>>>
+
+@@ no-alternate-stack the handler is installed without SA_ONSTACK: it runs on the stack that overflowed
+## native/src/runtime/platform/guard.rs
+<<<<
+            action.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
+====
+            action.sa_flags = libc::SA_SIGINFO;
+>>>>
+
+@@ report-without-line the overflow ends the process without its result line
+## native/src/runtime/platform/guard.rs
+<<<<
+    let mut rest = OVERFLOW_LINE;
+====
+    let mut rest: &[u8] = b"";
+>>>>
+
+@@ report-ignores-result-fd the overflow line goes to standard output, not the --result descriptor
+## native/src/runtime/platform/guard.rs
+<<<<
+    let fd = if executable { libc::STDERR_FILENO } else { RESULT_FD.load(Ordering::Relaxed) };
+====
+    let fd = if executable { libc::STDERR_FILENO } else { libc::STDOUT_FILENO };
+>>>>
+
+@@ defer-exits-quietly an unrelated fault ends the process with exit status 0, not under the disposition it had before
+## native/src/runtime/platform/guard.rs
+<<<<
+        libc::sigaction(signal, &action, std::ptr::null_mut());
+        if !faulted {
+====
+        libc::sigaction(signal, &action, std::ptr::null_mut());
+        if faulted {
+            libc::_exit(0);
+        }
+        if !faulted {
+>>>>
+
+@@ drop-leaves-guard-busy a dropped guard never returns to UNGUARDED: no second guard installs
+## native/src/runtime/platform/guard.rs
+<<<<
+            libc::sigaltstack(&self.old_stack, std::ptr::null_mut());
+        }
+        GUARDED.store(UNGUARDED, Ordering::Release);
+====
+            libc::sigaltstack(&self.old_stack, std::ptr::null_mut());
+        }
+>>>>
+
+# ---------------------------------------------------------------------------
+# The collector's walk of the thread's stack (runtime/vm.rs)
+
+@@ gc-walk-half-stack the frame walk of the thread's stack bounded at its middle
+## native/src/runtime/vm.rs
+<<<<
+        let current = stack_of(self.co_current, self.native_stack);
+====
+        let current = stack_of(self.co_current, self.native_stack.map(|s| NativeStack { high_bound: s.low_bound + (s.high_bound - s.low_bound) / 2, ..s }));
+>>>>

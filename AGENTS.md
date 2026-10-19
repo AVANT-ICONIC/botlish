@@ -831,13 +831,55 @@ never touch x18. A Tcl test that needs coroutines, the collector around
 them or native counters carries `nativeCoroutines` (tests/helpers.tcl), a
 capability of the host target, not `nativeLinux`.
 
+## The native stack guard
+
+A native run that exhausts a stack -- the worker thread's or a coroutine's
+-- ends in `NATIVE LIMIT STACK` on every host the native backend runs on
+(MACOS-AARCH64-MILESTONE-4.md, NATIVE-STACK-OVERFLOW.md): Linux x86-64 and
+AArch64 and macOS AArch64, `native_stack_overflow_supported()`. One guard
+serves them all, `runtime/platform/guard.rs`; a host adds only how the
+current thread's stack and guard are found and how a thread is named
+(`platform/linux.rs`: glibc's report; `platform/macos.rs`: libpthread's
+bounds, the usable low bound and the guard confirmed with `mach_vm_region`).
+Keep it so:
+
+* The handler only classifies and reports: an address in the guard of the
+  stack *published* as running, on the guarded thread, writes the result
+  line and `_exit`s. It never resumes, unwinds, allocates or touches the
+  runtime, and it uses nothing but lock-free atomics stored before the
+  fault and async-signal-safe calls. Any other fault goes to the
+  disposition the process had before the guard; never relabel one.
+* A guard is confirmed, never assumed from a reported stack end: a host
+  that cannot confirm one reports none (`guard_low == low_bound`) and
+  install refuses it. The macOS main thread's lowest reported page is
+  itself inaccessible: its usable bound is above the reported one.
+* Every coroutine switch publishes the stack it *arrives* on, after the
+  switch (runtime/coroutine.rs's `segment`, `co_body`, `rt_co_yield`), never
+  the one it is about to switch to: bl_co_switch's pushes land on the stack
+  it leaves. Publication stays inlined atomic stores (no frame of its own).
+* NATIVE LIMIT STACK is terminal: no in-process recovery, no Botlish
+  handler, no new error. Its line is RtError::StackOverflow's.
+
+A Tcl test of an overflow carries `nativeStackGuard` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`. If you change the guard,
+a host's stack discovery, publication or the switch, the stack probes or
+`native_stack_overflow_supported()`, run `cargo test --release
+--manifest-path native/Cargo.toml --test native_stack` (it runs every
+faulting check in a child process: never fault in a test's own process),
+the Rust tests (also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`tests/native-stack-overflow.test`, `tests/coroutines.test`,
+`tests/platform/native-status.tcl`, and the macOS smoke job and
+`CI-Tests: native-stack-overflow.test rust` on a branch (macOS facts are
+CI's: the shared Mac is not used). `bench/native-stack-guard.tcl` compares
+a driver against a baseline build.
+
 ## Linux AArch64
 
 The native backend runs on Linux AArch64 (the `tests-arm64.yml` CI jobs) with
 the x86-64 feature set except what is tied to the x86-64 instruction set:
 the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
 map entry is a root's distance below its own frame's FP, codegen::clif's
-`define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
+`define`), the stack-overflow guard (runtime/platform/), coroutines
 and rustc-linked executables, and Linux syscalls through the AArch64
 transport (next section). The `stub` linker remains x86-64 only: the Tcl
 tests that need it carry `stubLinker`. A Tcl test that needs the native
