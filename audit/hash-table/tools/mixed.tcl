@@ -14,7 +14,7 @@
 source [file join [file dirname [file normalize [info script]]] lib.tcl]
 
 set options [dict create -impls {listmap chain0 ht0 chain lpa lpmono rh cd} -runs 5 -tag "" -out "" \
-    -bfs {64 256} -memo {10000 100000} -freq {16384 262144}]
+    -bfs {64 256} -memo {1000 10000} -memo2 {10000 100000} -freq {16384 262144}]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -24,7 +24,10 @@ set channel [expr {[dict get $options -out] ne "" ? [open [dict get $options -ou
 try {
     foreach impl [dict get $options -impls] {
         foreach {work keys} {bfs point memo int memo2 int freq str} {
-            set sizes [dict get $options -[string trimright $work 2]]
+            # memo.bot copies its whole table per call on a compiler without
+            # VS-2 (quadratic: N = 100000 runs for most of an hour), so its
+            # sizes are smaller than memo2.bot's.
+            set sizes [dict get $options -$work]
             # listmap is quadratic: only the smaller size.
             if {$impl eq "listmap"} { set sizes [lrange $sizes 0 0] }
             set hir [ht::compile [ht::app mixed-$impl-$work $work.bot $impl $keys]]
