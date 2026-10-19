@@ -44,6 +44,11 @@ proc ht::fuzz {options} {
     set stop [expr {[dict exists $options -stop] && [dict get $options -stop]}]
     foreach impl [dict get $options -impls] {
         foreach kind [dict get $options -keys] {
+            # A typed implementation (header line "# key-type: T") takes one
+            # key kind only.
+            set implPath [expr {[file exists $impl] ? $impl : [file join $ht::base impl $impl.bot]}]
+            if {[regexp -line {^# key-type: (\S+)$} [ht::readFile $implPath] -> keyType]
+                && [dict get {int int str str point keys::Point} $kind] ne $keyType} continue
             set path [ht::app $impl-$kind trace.bot $impl $kind [dict get $options -edits]]
             if {[catch {ht::compile $path} hir copts]} {
                 incr failures
