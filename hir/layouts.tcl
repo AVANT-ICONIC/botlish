@@ -45,6 +45,7 @@
 #   {name F offset O kind scalar width W signed 0|1 endian little type T}
 #   {name F offset O kind layout layout INNER width W type T}
 #   {name F offset O kind pointer width W endian little type T}
+#   {name F offset O kind array extent N stride S width W element E type T}
 #
 # where T is the field's consumer type -- the declared integer domain
 # (`{refined int {binary::U16}}`), `{nstruct LayoutStruct[INNER]}`, or the
@@ -54,6 +55,19 @@
 # the byte order: the target's, little-endian on every supported target; it
 # is recorded per field so an explicit big-endian encoding is one more value
 # here, never a new representation.
+#
+# Representations. Everything after a field's name and offset is its
+# *representation*: a scalar, a pointer, a nested layout -- or a fixed array
+# (FIXED-LAYOUT-ARRAYS.md), N consecutive elements of one representation E
+# (itself any of the four: `array 2 of array 3 of binary::U32` is two rows
+# of three), the element at offset i * S, S the stride: E's own width (a
+# scalar's encoding, the target's pointer width, a nested layout's size --
+# tail padding included -- or a nested array's whole width), never a C
+# alignment rule. The array's width is N * S, and its consumer type is the
+# copied value, List[T_E] (exactly N elements whenever the layout machinery
+# makes it; the extent is the layout's, not the List type's). An array is
+# repetition, not a new object model: no ordinary Botlish value gains an
+# array representation, and an array of characters is not text.
 #
 # Pointer fields (NATIVE-LAYOUT-VIEWS.md). A field may hold a C data or
 # function pointer: its width and placement are representation facts like a
@@ -239,18 +253,219 @@ proc hir::layouts::descriptor {id} {
     set entry [entry $id]
     set fields {}
     foreach field [dict get $entry fields] {
-        if {[dict get $field kind] eq "layout"} {
-            lappend fields [list [dict get $field name] [dict get $field offset] layout \
-                [descriptor [dict get $field layout]]]
-        } elseif {[dict get $field kind] eq "pointer"} {
-            lappend fields [list [dict get $field name] [dict get $field offset] ptr \
-                [dict get $field width] [dict get $field endian]]
-        } else {
-            lappend fields [list [dict get $field name] [dict get $field offset] \
-                [expr {[dict get $field signed] ? "i" : "u"}] [dict get $field width] [dict get $field endian]]
-        }
+        lappend fields [list [dict get $field name] [dict get $field offset] {*}[ReprDescriptor $field]]
     }
     return [list [structId $id] [dict get $entry size] [dict get $entry align] $fields]
+}
+
+# The descriptor words of the representation REPR (a registry field, or an
+# array's element): {u|i WIDTH ENDIAN} a scalar, {ptr WIDTH ENDIAN} a
+# pointer, {layout DESCRIPTOR} a nested layout, {array N STRIDE ELEMENT} a
+# fixed array of N elements STRIDE bytes apart, ELEMENT its element's words
+# (FIXED-LAYOUT-ARRAYS.md). A field's descriptor entry is its name and
+# offset followed by these.
+proc hir::layouts::ReprDescriptor {repr} {
+    switch -- [dict get $repr kind] {
+        layout {
+            return [list layout [descriptor [dict get $repr layout]]]
+        }
+        pointer {
+            return [list ptr [dict get $repr width] [dict get $repr endian]]
+        }
+        array {
+            return [list array [dict get $repr extent] [dict get $repr stride] \
+                [ReprDescriptor [dict get $repr element]]]
+        }
+    }
+    return [list [expr {[dict get $repr signed] ? "i" : "u"}] [dict get $repr width] [dict get $repr endian]]
+}
+
+# ---------------------------------------------------------------------------
+# Fixed arrays (FIXED-LAYOUT-ARRAYS.md)
+#
+# An array field's representation is {kind array extent N stride S width W
+# element E type T} (the file header), E itself a representation. Through a
+# native view or edit an array field is not read: it is the live array, the
+# type NativeView[array N of E] ({nview TERM}; NativeEdit's {nedit TERM}),
+# TERM the representation as a type-level term:
+#
+#   T                   a scalar element: its integer domain type
+#   {cptr P}, {cfnptr F} a pointer element: its pointer type
+#   {layout ID}         a nested layout element
+#   {array N TERM}      a nested array element
+#
+# A term is structural -- two arrays of four POINTs are one type, whichever
+# layout holds them -- and carries everything an element access needs: the
+# element's type, its width (the stride) and its encoding, derived here from
+# the registries (ReprOfTerm), never from a C rule.
+
+# 1 if the surface type expression TYPEEXPR is a fixed array representation
+# {array N ELEMENT} (surface::parser::ArrayTypeExpr).
+proc hir::layouts::IsArrayTypeExpr {typeExpr} {
+    return [expr {[llength $typeExpr] == 3 && [lindex $typeExpr 0] eq "array"}]
+}
+
+# The consumer (copied value) type of the array whose element has the
+# consumer type ELEMENT: List[ELEMENT].
+proc hir::layouts::ArrayConsumerType {element} {
+    return [hir::types::MakeList $element {} 0 0]
+}
+
+# The type-level term of the representation REPR (above).
+proc hir::layouts::ReprTerm {repr} {
+    switch -- [dict get $repr kind] {
+        layout { return [list layout [dict get $repr layout]] }
+        array  { return [list array [dict get $repr extent] [ReprTerm [dict get $repr element]]] }
+    }
+    return [dict get $repr type]
+}
+
+# 1 if TERM is an array term {array N TERM}.
+proc hir::layouts::IsArrayTerm {term} {
+    return [expr {[llength $term] == 3 && [lindex $term 0] eq "array"}]
+}
+
+# The representation (a dict as the registry's, without name and offset) the
+# type-level term TERM denotes, from the registries of the active
+# compilation; "" if TERM is no representation (an unknown layout, a type
+# with no fixed-width encoding).
+proc hir::layouts::ReprOfTerm {term} {
+    if {[IsArrayTerm $term]} {
+        lassign $term - extent inner
+        set element [ReprOfTerm $inner]
+        if {$element eq "" || ![string is entier -strict $extent] || $extent < 1} {
+            return ""
+        }
+        set stride [dict get $element width]
+        return [dict create kind array extent $extent stride $stride width [expr {$extent * $stride}] \
+            element $element type [ArrayConsumerType [dict get $element type]]]
+    }
+    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+        set id [lindex $term 1]
+        if {![declared $id]} {
+            return ""
+        }
+        return [dict create kind layout layout $id width [size $id] type [structType $id]]
+    }
+    if {[hir::types::IsCPtr $term] || [hir::types::IsCFnPtr $term]} {
+        set width [PointerWidth]
+        if {$width eq ""} {
+            return ""
+        }
+        return [dict create kind pointer width $width endian little type $term]
+    }
+    set encoding [Encoding $term]
+    if {$encoding eq ""} {
+        return ""
+    }
+    lassign $encoding width signed
+    return [dict create kind scalar width $width signed $signed endian little type $term]
+}
+
+# The array term of the native memory type TYPE when TYPE is a live array
+# (NativeView[array N of E] or NativeEdit[array N of E]), else "".
+proc hir::layouts::OfArrayType {type} {
+    if {![hir::types::IsNativeMemory $type] || ![IsArrayTerm [lindex $type 1]]} {
+        return ""
+    }
+    return [lindex $type 1]
+}
+
+# The native memory type (a view's, or an edit's when EDIT) of the
+# representation term TERM read in place: a scalar's or pointer's own type
+# for a leaf (read, not a window), NativeView[ID] / NativeEdit[ID] for a
+# nested layout, NativeView[array ...] / NativeEdit[array ...] for an array.
+proc hir::layouts::NativeTermType {term edit} {
+    set head [expr {$edit ? "nedit" : "nview"}]
+    if {[IsArrayTerm $term]} {
+        return [list $head $term]
+    }
+    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+        return [list $head [lindex $term 1]]
+    }
+    return $term
+}
+
+# The static type of one element of the live array type TYPE (a
+# NativeView[array N of E] or NativeEdit[array N of E]), read through it:
+# NativeTermType of E, write authority kept for an edit.
+proc hir::layouts::ElementType {type} {
+    set term [OfArrayType $type]
+    if {$term eq ""} {
+        return ""
+    }
+    return [NativeTermType [lindex $term 2] [hir::types::IsNativeEdit $type]]
+}
+
+# The consumer (copied) type of the representation term TERM: what
+# binary::load makes of it.
+proc hir::layouts::TermConsumerType {term} {
+    set repr [ReprOfTerm $term]
+    return [expr {$repr eq "" ? "any" : [dict get $repr type]}]
+}
+
+# TERM as source text, the way hir::types::show prints a type: "array 16 of
+# int[binary::U16]", "array 4 of POINT".
+proc hir::layouts::ShowTerm {term} {
+    if {[IsArrayTerm $term]} {
+        return "array [lindex $term 1] of [ShowTerm [lindex $term 2]]"
+    }
+    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+        return [lindex $term 1]
+    }
+    return [hir::types::show $term]
+}
+
+# What a NativeView[...] or NativeEdit[...] type shows between its brackets:
+# a layout's identity, or a live array's representation (ShowTerm).
+proc hir::layouts::ShowNative {payload} {
+    return [expr {[IsArrayTerm $payload] ? [ShowTerm $payload] : $payload}]
+}
+
+# The array descriptor (ReprDescriptor's {array N STRIDE ELEMENT}) of the
+# array term TERM: the constant an element access or a whole-array load
+# carries once elaborated.
+proc hir::layouts::TermDescriptor {term} {
+    set repr [ReprOfTerm $term]
+    if {$repr eq ""} {
+        error "internal compiler error: no representation for [ShowTerm $term]"
+    }
+    return [ReprDescriptor $repr]
+}
+
+# The representation REPR as HIR text's layout line spells a field type (the
+# canonical identity of a scalar's domain, a nested layout's identity, a
+# pointer's type, `array N of ...`): read back by hir::read::TypeDeclLine.
+proc hir::layouts::ReprText {repr} {
+    switch -- [dict get $repr kind] {
+        array {
+            return "array [dict get $repr extent] of [ReprText [dict get $repr element]]"
+        }
+        layout {
+            return [dict get $repr layout]
+        }
+    }
+    return [FieldTypeText [dict get $repr type]]
+}
+
+# The path of a pointer within the representation REPR ("" for the
+# representation itself, "[]" for an array's element, "[].next" for a field
+# of a nested layout element), or "none" when REPR holds no pointer.
+proc hir::layouts::ReprPointerPath {repr} {
+    switch -- [dict get $repr kind] {
+        pointer {
+            return ""
+        }
+        layout {
+            set inner [PointerField [dict get $repr layout]]
+            return [expr {$inner eq "" ? "none" : ".$inner"}]
+        }
+        array {
+            set inner [ReprPointerPath [dict get $repr element]]
+            return [expr {$inner eq "none" ? "none" : "\[\]$inner"}]
+        }
+    }
+    return none
 }
 
 # The layout identity a descriptor text DESCRIPTOR describes (the inner ID of
@@ -279,20 +494,14 @@ proc hir::layouts::NativeOnly {id} {
     return [expr {[PointerField $id] ne ""}]
 }
 
-# The path ("next", "inner.handle") of the first pointer field of layout ID in
-# declared order, nested layouts included, or "".
+# The path ("next", "inner.handle", "handles[]", "pts[].next") of the first
+# pointer field of layout ID in declared order, nested layouts and array
+# elements included, or "".
 proc hir::layouts::PointerField {id} {
     foreach field [dict get [entry $id] fields] {
-        switch -- [dict get $field kind] {
-            pointer {
-                return [dict get $field name]
-            }
-            layout {
-                set inner [PointerField [dict get $field layout]]
-                if {$inner ne ""} {
-                    return "[dict get $field name].$inner"
-                }
-            }
+        set inner [ReprPointerPath $field]
+        if {$inner ne "none"} {
+            return "[dict get $field name]$inner"
         }
     }
     return ""
@@ -346,6 +555,12 @@ proc hir::layouts::OfNativeType {type} {
 proc hir::layouts::ViewFieldType {id name {edit 0}} {
     foreach field [dict get [entry $id] fields] {
         if {[dict get $field name] ne $name} continue
+        if {[dict get $field kind] eq "array"} {
+            # A fixed array (FIXED-LAYOUT-ARRAYS.md): the live array, read
+            # one element at a time (binary::element) or copied whole
+            # (binary::load); nothing is read by the projection.
+            return [NativeTermType [ReprTerm $field] $edit]
+        }
         if {[dict get $field kind] eq "layout"} {
             if {$edit} {
                 return [editType [dict get $field layout]]
@@ -420,7 +635,7 @@ proc hir::layouts::FieldPath {id names} {
             continue
         }
         if {!$last} {
-            set what [expr {[dict get $field kind] eq "pointer" ? "a C pointer" : "a scalar"}]
+            set what [dict get {pointer {a C pointer} scalar {a scalar} array {a fixed array}} [dict get $field kind]]
             return [list problem UNKNOWN-FIELD [format {%s.%s is %s, which has no field "%s"}                 $written $name $what [lindex $names [expr {$index + 1}]]] [expr {$index + 1}]]
         }
         set entry [FieldDescriptor $layout $name]
@@ -633,11 +848,23 @@ proc hir::layouts::apply {decls {structDecls {}}} {
         set entry [dict get $registry $id]
         lappend entries [dict create kind layout id $id name [dict get $entry name] \
             namespace [dict get $entry namespace] size [dict get $entry size] align [dict get $entry align] \
-            fields [lmap f [dict get $entry fields] {
-                dict create name [dict get $f name] offset [dict get $f offset] type [dict get $f type]
-            }]]
+            fields [SourceFields $id]]
     }
     return $entries
+}
+
+# The `sourceTypes` fields of registered layout ID: {name F offset O type T}
+# each, and an array field's representation as `repr` (FIXED-LAYOUT-ARRAYS.md:
+# its consumer type, a List, does not say the extent HIR text prints).
+proc hir::layouts::SourceFields {id} {
+    variable registry
+    return [lmap f [dict get $registry $id fields] {
+        set source [dict create name [dict get $f name] offset [dict get $f offset] type [dict get $f type]]
+        if {[dict get $f kind] eq "array"} {
+            dict set source repr [dict remove $f name offset]
+        }
+        set source
+    }]
 }
 
 # Resolves and validates layout ID of BYID (DONE: the identities already
@@ -679,49 +906,10 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         if {![string is entier -strict $offset] || $offset < 0} {
             Fail $offsetSpan "field \"$fieldName\" of layout \"$name\" has offset $offset: an offset is a byte count from 0" LAYOUT-FIELD-BOUNDS
         }
-        set typeExpr [dict get $field type]
-        set nested [NestedLayout $typeExpr $ns $byId]
-        if {$nested ne ""} {
-            if {$nested in [concat $stack [list $id]]} {
-                set chain [concat [lrange $stack [lsearch -exact $stack $nested] end] [list $id $nested]]
-                if {$nested eq $id} {
-                    set chain [list $id $id]
-                }
-                Fail $typeSpan "layout \"$name\" contains itself by value through [join $chain { -> }]: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)" LAYOUT-CYCLE
-            }
-            if {[dict exists $byId $nested]} {
-                Resolve $nested $byId done [concat $stack [list $id]]
-            }
-            set width [dict get $registry $nested size]
-            lappend fields [dict create name $fieldName offset $offset kind layout layout $nested \
-                width $width type [structType $nested] span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]
-        } elseif {[dict exists $field pointerText] || [PointerTypeExpr $typeExpr]} {
-            # A C pointer (the file header's "Pointer fields"): the target's
-            # width now, the type itself once the structs a pointee may name
-            # are registered (ResolvePointers).
-            set width [PointerWidth]
-            if {$width eq ""} {
-                Fail $typeSpan "field \"$fieldName\" of layout \"$name\" is a C pointer, whose width is the compilation's C target's: no file of this compilation imports ffi::c, so there is none" LAYOUT-FIELD-TYPE
-            }
-            variable pendingPointers
-            lappend pendingPointers [dict create id $id field $fieldName name $name ns $ns typeExpr $typeExpr \
-                typeSpan $typeSpan typeText [expr {[dict exists $field pointerText] ? $typeExpr : ""}]]
-            # The bare pointer kind until then: affine, like every pointer.
-            lappend fields [dict create name $fieldName offset $offset kind pointer width $width \
-                endian little type cptr span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]
-        } else {
-            set spelled [ShowTypeExpr $typeExpr]
-            if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved]} {
-                Fail $typeSpan [UnresolvedFieldType $typeExpr $ns $spelled $fieldName $name $resolved] LAYOUT-FIELD-TYPE
-            }
-            set encoding [Encoding $resolved]
-            if {$encoding eq ""} {
-                Fail $typeSpan "field \"$fieldName\" of layout \"$name\" cannot have type $spelled: [NotScalarReason $resolved $spelled]" LAYOUT-FIELD-TYPE
-            }
-            lassign $encoding width signed
-            lappend fields [dict create name $fieldName offset $offset kind scalar width $width \
-                signed $signed endian little type $resolved span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]
-        }
+        set repr [ResolveRepr [dict get $field type] [dict exists $field pointerText] $ns $byId done $stack \
+            $id $name $fieldName $typeSpan 0]
+        lappend fields [dict merge [dict create name $fieldName offset $offset] $repr \
+            [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
     }
     foreach field $fields {
         set end [expr {[dict get $field offset] + [dict get $field width]}]
@@ -753,6 +941,100 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         dict remove $f span typeSpan offsetSpan
     }]
     dict set done $id 1
+}
+
+# The representation (a registry field without its name and offset) of the
+# field type TYPEEXPR of field FIELDNAME of layout ID (NAME, module NS),
+# located at TYPESPAN, validated -- a scalar, a pointer, a nested layout
+# (resolved first, BYID/DONE/STACK as Resolve's), or a fixed array of any of
+# these (FIXED-LAYOUT-ARRAYS.md), DEPTH arrays deep. POINTERTEXT 1: a leaf
+# pointer is HIR text's canonical type text (hir/read.tcl). Every size is
+# computed exactly (Tcl's integers have no width), so no extent can wrap:
+#
+#   LAYOUT-ARRAY-EXTENT  an extent that is not a positive integer, or an
+#                        array wider than the largest layout size
+#   LAYOUT-FIELD-TYPE    an element (or a field) of no representation
+#   LAYOUT-CYCLE         a layout containing itself, through arrays too
+proc hir::layouts::ResolveRepr {typeExpr pointerText ns byId doneVar stack id name fieldName typeSpan depth} {
+    upvar 1 $doneVar done
+    variable registry
+    variable maxSize
+    if {$depth == 0} {
+        set what "field \"$fieldName\" of layout \"$name\""
+        set anArray "is an array"
+        set aPointer "is a C pointer"
+    } else {
+        set what "the elements of [string repeat {the elements of } [expr {$depth - 1}]]field \"$fieldName\" of layout \"$name\""
+        set anArray "are arrays"
+        set aPointer "are C pointers"
+    }
+    if {[IsArrayTypeExpr $typeExpr]} {
+        lassign $typeExpr - extent elementExpr
+        if {![string is entier -strict $extent] || $extent < 1} {
+            Fail $typeSpan "$what $anArray of $extent elements: a fixed array's extent is a positive integer (a C zero-length or flexible array is not a fixed array)" LAYOUT-ARRAY-EXTENT
+        }
+        set element [ResolveRepr $elementExpr $pointerText $ns $byId done $stack $id $name $fieldName $typeSpan \
+            [expr {$depth + 1}]]
+        set stride [dict get $element width]
+        set width [expr {$extent * $stride}]
+        if {$width > $maxSize} {
+            Fail $typeSpan "$what $anArray of $extent elements of $stride bytes, $width bytes in all: more than the largest layout size, $maxSize bytes" LAYOUT-ARRAY-EXTENT
+        }
+        return [dict create kind array extent [expr {$extent + 0}] stride $stride width $width \
+            element $element type [ArrayConsumerType [dict get $element type]]]
+    }
+    set nested [NestedLayout $typeExpr $ns $byId]
+    if {$nested ne ""} {
+        if {$nested in [concat $stack [list $id]]} {
+            set chain [concat [lrange $stack [lsearch -exact $stack $nested] end] [list $id $nested]]
+            if {$nested eq $id} {
+                set chain [list $id $id]
+            }
+            Fail $typeSpan "layout \"$name\" contains itself by value through [join $chain { -> }]: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)" LAYOUT-CYCLE
+        }
+        if {[dict exists $byId $nested]} {
+            Resolve $nested $byId done [concat $stack [list $id]]
+        }
+        set width [dict get $registry $nested size]
+        return [dict create kind layout layout $nested width $width type [structType $nested]]
+    }
+    if {$pointerText || [PointerTypeExpr $typeExpr]} {
+        # A C pointer (the file header's "Pointer fields"): the target's
+        # width now, the type itself once the structs a pointee may name
+        # are registered (ResolvePointers).
+        set width [PointerWidth]
+        if {$width eq ""} {
+            Fail $typeSpan "$what $aPointer, whose width is the compilation's C target's: no file of this compilation imports ffi::c, so there is none" LAYOUT-FIELD-TYPE
+        }
+        variable pendingPointers
+        lappend pendingPointers [dict create id $id field $fieldName name $name ns $ns typeExpr $typeExpr \
+            typeSpan $typeSpan typeText [expr {$pointerText ? $typeExpr : ""}] depth $depth]
+        # The bare pointer kind until then: affine, like every pointer.
+        return [dict create kind pointer width $width endian little type cptr]
+    }
+    set spelled [ShowTypeExpr $typeExpr]
+    if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved]} {
+        Fail $typeSpan [UnresolvedFieldType $typeExpr $ns $spelled $fieldName $name $resolved] LAYOUT-FIELD-TYPE
+    }
+    set encoding [Encoding $resolved]
+    if {$encoding eq ""} {
+        Fail $typeSpan "$what cannot have type $spelled: [NotScalarReason $resolved $spelled]" LAYOUT-FIELD-TYPE
+    }
+    lassign $encoding width signed
+    return [dict create kind scalar width $width signed $signed endian little type $resolved]
+}
+
+# REPR (a representation) with the type of the leaf DEPTH arrays down set to
+# TYPE, and every enclosing array's consumer type rebuilt from it.
+proc hir::layouts::WithLeafType {repr depth type} {
+    if {$depth == 0} {
+        dict set repr type $type
+        return $repr
+    }
+    set element [WithLeafType [dict get $repr element] [expr {$depth - 1}] $type]
+    dict set repr element $element
+    dict set repr type [ArrayConsumerType [dict get $element type]]
+    return $repr
 }
 
 # Resolves the type of every pointer field apply registered (the file
@@ -792,10 +1074,12 @@ proc hir::layouts::ResolvePointers {orderVar} {
         } elseif {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} type]} {
             Fail $typeSpan "invalid type $spelled for field \"$field\" of layout \"$name\": $type" LAYOUT-FIELD-TYPE
         }
-        dict set resolvedTypes [list $id $field] $type
+        dict set resolvedTypes $id 1
         set fields [lmap f [dict get $registry $id fields] {
             if {[dict get $f name] eq $field} {
-                dict set f type $type
+                # (An array's pointer element, `depth` arrays down: its
+                # arrays' List types follow, FIXED-LAYOUT-ARRAYS.md.)
+                set f [WithLeafType $f $depth $type]
             }
             set f
         }]
@@ -803,14 +1087,9 @@ proc hir::layouts::ResolvePointers {orderVar} {
     }
     set pendingPointers {}
     set order [lmap entry $order {
-        if {[dict exists $entry kind] && [dict get $entry kind] eq "layout"} {
-            set id [dict get $entry id]
-            dict set entry fields [lmap f [dict get $entry fields] {
-                if {[dict exists $resolvedTypes [list $id [dict get $f name]]]} {
-                    dict set f type [dict get $resolvedTypes [list $id [dict get $f name]]]
-                }
-                set f
-            }]
+        if {[dict exists $entry kind] && [dict get $entry kind] eq "layout"
+                && [dict exists $resolvedTypes [dict get $entry id]]} {
+            dict set entry fields [SourceFields [dict get $entry id]]
         }
         set entry
     }]
@@ -913,6 +1192,11 @@ proc hir::layouts::ResolveLayoutStruct {arg ns} {
 # (NATIVE-LAYOUT-VIEWS.md): the same argument rules, and the same
 # diagnostics, as LayoutStruct[ARG]'s.
 proc hir::layouts::ResolveNativeView {arg ns} {
+    if {[IsArrayTypeExpr $arg]} {
+        # A live fixed array (FIXED-LAYOUT-ARRAYS.md): NativeView[array N of
+        # E], read one element at a time.
+        return [list nview [ResolveArrayTerm $arg $ns NativeView]]
+    }
     if {[llength $arg] == 1} {
         set id [lookup $arg $ns]
         if {$id ne ""} {
@@ -933,6 +1217,10 @@ proc hir::layouts::ResolveNativeView {arg ns} {
 # (NATIVE-LAYOUT-WRITES.md): the same argument rules, and the same
 # diagnostics, as NativeView[ARG]'s.
 proc hir::layouts::ResolveNativeEdit {arg ns} {
+    if {[IsArrayTypeExpr $arg]} {
+        # A live fixed array written through (FIXED-LAYOUT-ARRAYS.md).
+        return [list nedit [ResolveArrayTerm $arg $ns NativeEdit]]
+    }
     if {[llength $arg] == 1} {
         set id [lookup $arg $ns]
         if {$id ne ""} {
@@ -949,10 +1237,65 @@ proc hir::layouts::ResolveNativeEdit {arg ns} {
         "NativeEdit\[$spelled\]: $spelled is $what, not a layout; the argument of NativeEdit must name a layout declaration (`layout Name:`), the layout through which the edit reads and writes native memory"
 }
 
+# The representation term (the "Fixed arrays" section) of the array type
+# expression ARG -- {array N ELEMENT}, the argument of CTOR (NativeView or
+# NativeEdit) written in code of namespace NS -- or a located-by-caller error:
+#
+#   LAYOUT-ARRAY-EXTENT      an extent that is not a positive integer, or an
+#                            array wider than the largest layout size
+#   LAYOUT-STRUCT-PARAMETER  an element that is no representation (not a
+#                            fixed-width integer domain, a C pointer, a
+#                            layout or an array)
+proc hir::layouts::ResolveArrayTerm {arg ns ctor} {
+    variable maxSize
+    lassign $arg - extent elementExpr
+    set spelled [ShowTypeExpr $arg]
+    if {![string is entier -strict $extent] || $extent < 1} {
+        return -code error -errorcode {BOTLISH LAYOUT-ARRAY-EXTENT} \
+            "$ctor\[$spelled\]: a fixed array's extent is a positive integer, not $extent"
+    }
+    if {[IsArrayTypeExpr $elementExpr]} {
+        set element [ResolveArrayTerm $elementExpr $ns $ctor]
+    } elseif {[llength $elementExpr] == 1 && [lookup $elementExpr $ns] ne ""} {
+        set element [list layout [lookup $elementExpr $ns]]
+    } else {
+        set elementText [ShowTypeExpr $elementExpr]
+        if {[catch {hir::resolve::ResolveTypeExpr $elementExpr $ns} element]} {
+            return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
+                "$ctor\[$spelled\]: unknown element type $elementText: $element"
+        }
+        if {!([hir::types::IsCPtr $element] || [hir::types::IsCFnPtr $element]) && [Encoding $element] eq ""} {
+            return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
+                "$ctor\[$spelled\]: the element $elementText is not a layout representation: [NotScalarReason $element $elementText] (an element is a fixed-width integer domain, a C pointer, a layout or an array)"
+        }
+    }
+    set term [list array [expr {$extent + 0}] $element]
+    set repr [ReprOfTerm $term]
+    if {$repr eq ""} {
+        return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
+            "$ctor\[$spelled\]: its element has no width in this compilation (a C pointer's width is the C target's: import ffi::c)"
+    }
+    if {[dict get $repr width] > $maxSize} {
+        return -code error -errorcode {BOTLISH LAYOUT-ARRAY-EXTENT} \
+            "$ctor\[$spelled\]: [dict get $repr width] bytes, more than the largest layout size, $maxSize bytes"
+    }
+    return $term
+}
+
+# The message of a fixed array representation written where a type of
+# values is (FIXED-LAYOUT-ARRAYS.md): LAYOUT-NOT-A-TYPE.
+proc hir::layouts::ArrayNotATypeMessage {typeExpr} {
+    set spelled [ShowTypeExpr $typeExpr]
+    return "$spelled is a layout representation, not a type: a fixed array is a layout field's type (field NAME: $spelled at OFFSET) or the live array NativeView\[$spelled\], and a copied fixed array is a List"
+}
+
 # What the type expression ARG (written in NS) is when it is not a layout:
 # "a type", "a struct", "an enum", "a refinement", "a trait", "a built-in
 # type", "an applied type", or "" when it names nothing.
 proc hir::layouts::ArgumentKind {arg ns} {
+    if {[IsArrayTypeExpr $arg]} {
+        return "a fixed array representation (a copied fixed array is a List, a live one NativeView\[[ShowTypeExpr $arg]\])"
+    }
     if {[llength $arg] != 1} {
         return "an applied or structural type"
     }
@@ -1123,13 +1466,40 @@ proc hir::layouts::Problems {hir e name role} {
                 "$name needs a value whose static type is LayoutStruct\[L\] for a layout L (the layout it emits with); this value's type here is [hir::types::show $type]" $arg]
         }
     }
-    set at [RoleOf $role viewed]
-    if {$at ne ""} {
-        set arg [lindex $args [lindex $at 0]]
+    set viewed [RoleOf $role viewed]
+    set arrayed [RoleOf $role arrayed]
+    if {$viewed ne "" || $arrayed ne ""} {
+        set arg [lindex $args [lindex [expr {$viewed ne "" ? $viewed : $arrayed}] 0]]
         set type [hir::typeOf $hir $arg]
-        if {$type ne "never" && [OfNativeType $type] eq ""} {
+        if {$type ne "never" && !(($viewed ne "" && [OfNativeType $type] ne "")
+                || ($arrayed ne "" && [OfArrayType $type] ne ""))} {
+            if {$viewed eq ""} {
+                # (FIXED-LAYOUT-ARRAYS.md.)
+                lappend problems [list BINARY-OPERAND \
+                    "$name needs a live fixed array: a value whose static type is NativeView\[array N of E\] or NativeEdit\[array N of E\] (an array field read through a native view or edit, v.items, or an element of such an array); this value's type here is [hir::types::show $type]" $arg]
+            } else {
+                lappend problems [list BINARY-OPERAND \
+                    "$name needs a value whose static type is NativeView\[L\] or NativeEdit\[L\] for a layout L (a native view or edit, binary::native::view or binary::native::edit, whose layout it reads every field of) or a live fixed array NativeView\[array N of E\] (v.items); this value's type here is [hir::types::show $type]" $arg]
+            }
+        }
+    }
+    if {[RoleOf $role op] eq "store_element"} {
+        # One element written through a live array (FIXED-LAYOUT-ARRAYS.md):
+        # the array must be write authority, and its element a scalar or a
+        # pointer (a nested layout or array is written through its own
+        # elements or fields, binary::element(a, i)).
+        set arg [lindex $args 0]
+        set type [hir::typeOf $hir $arg]
+        set term [OfArrayType $type]
+        if {$term ne "" && ![hir::types::IsNativeEdit $type]} {
             lappend problems [list BINARY-OPERAND \
-                "$name needs a value whose static type is NativeView\[L\] or NativeEdit\[L\] for a layout L (a native view or edit, binary::native::view or binary::native::edit, whose layout it reads every field of); this value's type here is [hir::types::show $type]" $arg]
+                "$name writes live native memory through a native edit; this array is [hir::types::show $type], read through a native view, which is read-only: write authority over native memory is a NativeEdit, made from a pointer by binary::native::edit (a view never becomes one)" $arg]
+        } elseif {$term ne "" && ([IsArrayTerm [lindex $term 2]]
+                || ([llength [lindex $term 2]] == 2 && [lindex $term 2 0] eq "layout"))} {
+            set element [lindex $term 2]
+            set what [expr {[IsArrayTerm $element] ? "an array" : "the nested layout [lindex $element 1]"}]
+            lappend problems [list LAYOUT-OPERAND \
+                "$name writes one scalar or pointer element, but an element of [hir::types::show $type] is $what: write its [expr {[IsArrayTerm $element] ? "elements" : "fields"}] through binary::element(a, i), the element's own live [expr {[IsArrayTerm $element] ? "array" : "edit"}]" $arg]
         }
     }
     set at [RoleOf $role edited]
@@ -1178,12 +1548,23 @@ proc hir::layouts::Problems {hir e name role} {
                     if {$pointer} {
                         lappend problems [list LAYOUT-NATIVE-ONLY \
                             "$name cannot write the field $text: it is a C pointer, and an ordinary byte write never encodes one; encoding a pointer the program already has into a pointer field is the explicit foreign write binary::write_foreign(data, $text, p)" $where]
+                    } elseif {[ReprPointerPath $field] ne "none"} {
+                        # A fixed array holding C pointers (FIXED-LAYOUT-
+                        # ARRAYS.md), directly or in its nested elements.
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+                            "$name cannot write the field $text: it holds C pointers ($text[ReprPointerPath $field]), and an ordinary byte write never encodes one; an array of pointers is encoded only by the explicit foreign write binary::write_foreign(data, $text, pointers)" $where]
                     }
                 }
                 write_foreign {
-                    if {!$pointer} {
-                        lappend problems [list LAYOUT-FOREIGN-WRITE \
-                            "$name encodes an existing foreign value (an ffi::c::Ptr or ffi::c::FnPtr) into a C pointer field; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by binary::write" $where]
+                    if {!$pointer && ![PointerArray $field]} {
+                        if {[dict get $field kind] eq "array"} {
+                            # (FIXED-LAYOUT-ARRAYS.md: an array of C
+                            # pointers takes a List of them.)
+                            set message "$name encodes existing foreign values (ffi::c::Ptr or ffi::c::FnPtr values, a List of them for an array of C pointers) into a C pointer field or an array of C pointers; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by binary::write"
+                        } else {
+                            set message "$name encodes an existing foreign value (an ffi::c::Ptr or ffi::c::FnPtr) into a C pointer field; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by binary::write"
+                        }
+                        lappend problems [list LAYOUT-FOREIGN-WRITE $message $where]
                     }
                 }
             }
@@ -1248,6 +1629,39 @@ proc hir::layouts::Problems {hir e name role} {
     return $problems
 }
 
+# 1 if the representation REPR is a fixed array whose leaf element, under
+# every nested array, is a C pointer (FIXED-LAYOUT-ARRAYS.md: what
+# binary::write_foreign may encode, a List of existing pointers).
+proc hir::layouts::PointerArray {repr} {
+    if {[dict get $repr kind] ne "array"} {
+        return 0
+    }
+    while {[dict get $repr kind] eq "array"} {
+        set repr [dict get $repr element]
+    }
+    return [expr {[dict get $repr kind] eq "pointer"}]
+}
+
+# 1 if the representation REPR holds a fixed array, itself or in a nested
+# layout (a write of it checks extents: LayoutExtentMismatch).
+proc hir::layouts::ReprHasArrays {repr} {
+    switch -- [dict get $repr kind] {
+        array  { return 1 }
+        layout { return [HasArrays [dict get $repr layout]] }
+    }
+    return 0
+}
+
+# 1 if layout ID holds a fixed array, directly or in a nested layout.
+proc hir::layouts::HasArrays {id} {
+    foreach field [dict get [entry $id] fields] {
+        if {[ReprHasArrays $field]} {
+            return 1
+        }
+    }
+    return 0
+}
+
 # The constant text expression E of HIR holds (a resolved operand's
 # descriptor or field designator), or "" when E is no constant.
 proc hir::layouts::ConstText {hir e} {
@@ -1274,14 +1688,38 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
         return
     }
     set args [dict get $node args]
+    if {[RoleOf $role op] eq "store_element"} {
+        # One element of a live array (FIXED-LAYOUT-ARRAYS.md), held to the
+        # element's type exactly as a field's value is.
+        set arrayType [hir::typeOf $hir [lindex $args 0]]
+        set term [OfArrayType $arrayType]
+        if {$term eq "" || ![hir::types::IsNativeEdit $arrayType] || [ReprOfTerm [lindex $term 2]] eq ""
+                || [dict get [ReprOfTerm [lindex $term 2]] kind] ni {scalar pointer}} {
+            return
+        }
+        set declared [lindex $term 2]
+        set arg [lindex $args $at]
+        set valueType [hir::typeOf $hir $arg]
+        if {$valueType eq "never" || ![hir::get $hir $arg reachable]} {
+            return
+        }
+        set range [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [hir::range::unknown]}]
+        if {[hir::range::ProvesValueAcceptedBy $valueType $range $declared]} {
+            return
+        }
+        hir::Diagnose hir TYPE [format {the value %s writes into an element of %s cannot be proven to satisfy the element's type %s (value type: %s%s)} \
+            $name [hir::types::show $arrayType] [hir::types::show $declared] [hir::semantic::ShowType $hir $valueType] \
+            [hir::range::FactsClause $valueType $declared $range]] $arg
+        return
+    }
     set path [ConstText $hir [lindex $args [RoleOf $role path]]]
     set field [PathField $path]
     if {$field eq ""} {
         return
     }
-    set pointer [expr {[dict get $field kind] eq "pointer"}]
+    set pointer [expr {[dict get $field kind] eq "pointer" || [PointerArray $field]}]
     set op [RoleOf $role op]
-    if {($op eq "write" && $pointer) || ($op eq "write_foreign" && !$pointer)} {
+    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)} {
         # The operation does not write this kind of field (verify).
         return
     }
@@ -1338,20 +1776,41 @@ proc hir::layouts::Elaborate {hirVar} {
         set name [CalledNative $hir $e]
         if {$name eq ""} continue
         set role [Role $name]
+        set constant ""
         set typed [RoleOf $role typed]
         if {$typed ne ""} {
             lassign $typed at form
             set id [OfType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+            if {$id ne ""} {
+                set constant [descriptor $id]
+            }
         } else {
-            set typed [RoleOf $role viewed]
-            if {$typed eq ""} continue
-            lassign $typed at form
-            set id [OfNativeType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+            set type ""
+            set viewed [RoleOf $role viewed]
+            if {$viewed ne ""} {
+                lassign $viewed at form
+                set type [hir::typeOf $hir [lindex [dict get $node args] $at]]
+                set id [OfNativeType $type]
+                if {$id ne ""} {
+                    set constant [descriptor $id]
+                }
+            }
+            set arrayed [RoleOf $role arrayed]
+            if {$constant eq "" && $arrayed ne ""} {
+                # A live fixed array's element access or copy
+                # (FIXED-LAYOUT-ARRAYS.md): its descriptor words {array N
+                # STRIDE ELEMENT}, from its static type.
+                lassign $arrayed at form
+                set term [OfArrayType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+                if {$term ne ""} {
+                    set constant [TermDescriptor $term]
+                }
+            }
         }
-        if {$id eq ""} continue
+        if {$constant eq ""} continue
         hir::mutvec::Retarget hir $e $form
         dict set hir exprs $e args [concat [dict get $hir exprs $e args] \
-            [list [hir::mutvec::NewConst hir [descriptor $id] $e]]]
+            [list [hir::mutvec::NewConst hir $constant $e]]]
     }
 }
 

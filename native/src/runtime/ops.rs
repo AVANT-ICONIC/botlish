@@ -91,6 +91,7 @@ use super::ffifixture::{
 use super::ffi::{rt_ffi_bad_address, rt_ffi_bad_bool, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
 use super::nview::{
     rt_cptr_fixture_bytes, rt_cptr_fixture_memory, rt_cptr_offset, rt_mbytes_write, rt_mbytes_write_ptr, rt_native_load,
+    rt_bin_load_array, rt_native_load_array, rt_bin_store_array, rt_native_store_array, rt_bin_store_ptr,
     rt_native_load_ptr, rt_native_store, rt_native_store_ptr,
 };
 use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
@@ -137,6 +138,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // (NATIVE-LAYOUT-WRITES.md); a store through a native edit
             // allocates nothing.
             | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+            // A fixed array's row read makes its List (FIXED-LAYOUT-
+            // ARRAYS.md); the row writes allocate nothing.
+            | BinLoadArray | NativeLoadArray
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -214,6 +218,10 @@ pub fn op_may_error(op: OpCode) -> bool {
         // encoding (checked before anything is written), no C address word,
         // a storage of another kind -- or a pointer no field width holds.
         | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+        // Fixed arrays' rows (runtime/nview.rs), likewise: an operand of the
+        // wrong kind, a row outside its storage, an element outside its
+        // encoding (encoded before anything is written).
+        | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here. (On
@@ -933,11 +941,18 @@ pub(super) fn bin_encoding(code: Value) -> Option<(usize, bool, bool)> {
 /// (offset, width, signed, big-endian).
 fn bin_operands(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &str) -> Result<(usize, usize, bool, bool), Value> {
     bytes_operand(p, storage, context)?;
+    bin_extent(p, storage, offset, code, context)
+}
+
+/// bin_operands' offset and encoding checks, for a storage of either byte
+/// kind (its length is at the same place in both).
+fn bin_extent(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &str) -> Result<(usize, usize, bool, bool), Value> {
     let Some((width, signed, big)) = bin_encoding(code) else {
         let message = format!("{context}: malformed scalar encoding {}", super::show::int_text(code));
         return Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }));
     };
-    let len = bytes_of(storage).len();
+    // (Either byte kind: the payload is at the same place in both.)
+    let len = unsafe { super::bytesobj::BytesObj::payload(storage) }.len();
     match int_small(offset) {
         Some(o) if o >= 0 && (o as usize).checked_add(width).is_some_and(|end| end <= len) => Ok((o as usize, width, signed, big)),
         _ => {
@@ -993,7 +1008,15 @@ pub(super) fn bin_decode(p: *mut Vm, bytes: &[u8], signed: bool, big: bool) -> V
 /// in encoding C. RANGE (never a truncation) if V is outside the encoding.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: Value, value: Value) -> Value {
-    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::emit") {
+    // The fresh storage of an emission (`byteszeroed`, KIND_BYTES) or of a
+    // whole-array layout write into byte storage (`mbytesclone`,
+    // KIND_MUTBYTES: FIXED-LAYOUT-ARRAYS.md), private to that operation.
+    if heap_kind(storage) != KIND_MUTBYTES {
+        if let Err(failed) = bytes_operand(p, storage, "binary::emit") {
+            return failed;
+        }
+    }
+    let (at, width, signed, big) = match bin_extent(p, storage, offset, code, "binary::emit") {
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
@@ -2661,7 +2684,9 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // A native edit's stores and the layout writes into byte storage
         // likewise (NATIVE-LAYOUT-WRITES.md); the byte fixture is an
         // ordinary-looking native of the test fixture, never a value.
-        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes => {
+        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+        // A fixed array's rows likewise (FIXED-LAYOUT-ARRAYS.md).
+        | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -2760,6 +2785,11 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_native_store_ptr, 5),
         h!(rt_mbytes_write, 5),
         h!(rt_mbytes_write_ptr, 5),
+        h!(rt_bin_load_array, 5),
+        h!(rt_native_load_array, 5),
+        h!(rt_bin_store_array, 5),
+        h!(rt_native_store_array, 5),
+        h!(rt_bin_store_ptr, 5),
         h!(rt_cptr_fixture_bytes, 3),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),

@@ -332,6 +332,11 @@ proc hir::sourcetypes::TypeExprNames {typeExpr} {
     if {[llength $typeExpr] == 1} {
         return [list $typeExpr]
     }
+    if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
+        # A fixed array representation (FIXED-LAYOUT-ARRAYS.md): its
+        # element's names (the extent is a number).
+        return [TypeExprNames [lindex $typeExpr 2]]
+    }
     lassign $typeExpr head arg
     if {$head eq "fn"} {
         set names {}

@@ -83,12 +83,21 @@
 #                     index FAMILY C I  IndexNotFound unless the Int
 #                                     argument I designates an element of
 #                                     sequence argument C (0 <= I < N)
+#                     extents V       LayoutExtentMismatch unless every
+#                                     fixed array of a layout the value
+#                                     argument V is written into gets a List
+#                                     of exactly its extent (FIXED-LAYOUT-
+#                                     ARRAYS.md); the arrays are the layout
+#                                     role's (the emitted LayoutStruct's
+#                                     layout, a write's designated field)
 #                     slices SLICE...  each SLICE {FAMILY C START END},
 #                                     checked in order by checkSlice:
 #                                     LowerUnderrun/UpperOverrun unless 0 <=
 #                                     START <= END <= N
 #                   FAMILY is the kind of sequence argument C (list,
-#                   mutarray or str; N its length or capacity); START and
+#                   mutarray or str; N its length or capacity; narray a live
+#                   fixed array, N the extent its static type states,
+#                   FIXED-LAYOUT-ARRAYS.md); START and
 #                   END are each an argument index, {const K} or {sum A B}
 #                   (the sum of arguments A and B). A native with bounds
 #                   declares exactly the errors they produce.
@@ -583,18 +592,28 @@ proc core::native::register {name args} {
 #   path K           argument K is the static field designator
 #                    (LAYOUT.FIELD..., resolved to its designator constant)
 #   value K          argument K is the value written into that field
+#   arrayed {AT FORM} argument AT's static type is a live fixed array
+#                    (NativeView[array N of E] or NativeEdit[array N of
+#                    E]); the call is elaborated to a call of FORM with the
+#                    array's descriptor words appended (FIXED-LAYOUT-
+#                    ARRAYS.md)
+#   array K          argument K is a live array's descriptor words {array N
+#                    STRIDE ELEMENT} (the elaborated forms)
+#   index K          argument K is the Int index of the element accessed
 #
 # OP edit (a native edit of the pointer argument), store (one field
 # written through an edit), write (one ordinary field written into byte
 # storage) and write_foreign (an existing C pointer encoded into a pointer
-# field of byte storage) are NATIVE-LAYOUT-WRITES.md's.
+# field of byte storage) are NATIVE-LAYOUT-WRITES.md's; element (one
+# element of a live array read), store_element (one written) and
+# load_array (a live array copied into its List) FIXED-LAYOUT-ARRAYS.md's.
 proc core::native::ValidLayoutRole {role arity} {
     if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
         return 0
     }
     foreach {key value} $role {
         switch -- $key {
-            operand - input - pointer - field - edited - output - path - value {
+            operand - input - pointer - field - edited - output - path - value - array - index {
                 if {![string is digit -strict $value] || $value >= $arity} {
                     return 0
                 }
@@ -604,14 +623,14 @@ proc core::native::ValidLayoutRole {role arity} {
                     return 0
                 }
             }
-            typed - viewed {
+            typed - viewed - arrayed {
                 if {[llength $value] != 2 || ![string is digit -strict [lindex $value 0]]
                         || [lindex $value 0] >= $arity} {
                     return 0
                 }
             }
             op {
-                if {$value ni {parse emit view load field edit store write write_foreign}} {
+                if {$value ni {parse emit view load field edit store write write_foreign element store_element load_array}} {
                     return 0
                 }
             }
@@ -639,6 +658,19 @@ proc core::native::ValidResultRange {range} {
     return [list interval [expr {$lo + 0}] [expr {$hi + 0}]]
 }
 
+# The declared errors of a native (METADATA its registry entry) that no
+# registered bounds check of it produces: a proof that every check holds
+# (hir::completions::BoundsProven) rules out only the others.
+proc core::native::unboundedErrors {metadata} {
+    set produced [switch -- [lindex [dict get $metadata bounds] 0] {
+        index   { list IndexNotFound }
+        slices  { list LowerUnderrun UpperOverrun }
+        extents { list LayoutExtentMismatch }
+        default { list }
+    }]
+    return [lmap error [dict get $metadata errors] {expr {$error in $produced ? [continue] : $error}}]
+}
+
 # 1 if BOUNDS is a valid -bounds for a native of ARITY declaring exactly
 # ERRORS (sorted).
 proc core::native::ValidBounds {bounds arity errors} {
@@ -652,7 +684,16 @@ proc core::native::ValidBounds {bounds arity errors} {
                 return 0
             }
             lassign $bounds _ family c i
-            return [expr {$family in {list mutarray str} && [apply $arg $c] && [apply $arg $i]}]
+            return [expr {$family in {list mutarray str narray} && [apply $arg $c] && [apply $arg $i]}]
+        }
+        extents {
+            # {extents V}: LayoutExtentMismatch unless every fixed array the
+            # value argument V writes has its layout's extent (FIXED-LAYOUT-
+            # ARRAYS.md; hir::layouts::ExtentVerdict reads which arrays from
+            # the layout role). The native may declare others too (a byte
+            # write's LayoutLengthMismatch): this check produces only its own.
+            return [expr {[llength $bounds] == 2 && [apply $arg [lindex $bounds 1]]
+                && "LayoutExtentMismatch" in $errors}]
         }
         slices {
             if {[llength $bounds] < 2 || $errors ne {LowerUnderrun UpperOverrun}} {
@@ -730,7 +771,7 @@ proc core::native::ValidShape {shape count} {
             && [string is digit -strict [lindex $shape 2]]
             && ($count eq "" || ([lindex $shape 1] < $count && [lindex $shape 2] < $count))}]
     }
-    if {[lindex $shape 0] in {native-view native-edit view-struct}} {
+    if {[lindex $shape 0] in {native-view native-edit view-struct native-element}} {
         # {native-view I}: the result is a NativeView[L] whose layout L is
         # described by argument I's descriptor constant
         # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the

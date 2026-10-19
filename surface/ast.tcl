@@ -808,6 +808,11 @@ proc surface::ast::showType {type} {
     if {[llength $type] == 1} {
         return $type
     }
+    if {[llength $type] == 3 && [lindex $type 0] eq "array"} {
+        # A fixed array representation (surface::parser::ArrayTypeExpr,
+        # FIXED-LAYOUT-ARRAYS.md).
+        return "array [lindex $type 1] of [showType [lindex $type 2]]"
+    }
     lassign $type name arg
     if {$name eq "fn"} {
         # A structural function type (surface::parser::FnType): its

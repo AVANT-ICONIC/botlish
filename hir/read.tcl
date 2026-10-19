@@ -309,6 +309,13 @@ proc hir::read::TypeDeclLine {content number} {
             if {![regexp {^(\S+): (.+) at ([0-9]+)$} $item -> fname ftype offset]} {
                 Fail $number "expected \"FIELD: TYPE at OFFSET\" in a layout declaration, got \"$item\""
             }
+            # A fixed array (FIXED-LAYOUT-ARRAYS.md): "array N of ELEMENT",
+            # read as the surface form {array N ELEMENT} the declaration
+            # had, down to its element.
+            set dims {}
+            while {[regexp {^array ([0-9]+) of (.+)$} $ftype -> extent ftype]} {
+                lappend dims $extent
+            }
             set field [dict create name $fname nameSpan $span type $ftype typeSpan $span \
                 offset $offset offsetSpan $span]
             if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $ftype]} {
@@ -318,6 +325,9 @@ proc hir::read::TypeDeclLine {content number} {
                 dict set field pointerText 1
             } elseif {![regexp {^\S+$} $ftype]} {
                 Fail $number "expected \"FIELD: TYPE at OFFSET\" in a layout declaration, got \"$item\""
+            }
+            foreach extent [lreverse $dims] {
+                dict set field type [list array $extent [dict get $field type]]
             }
             lappend fields $field
         }
@@ -620,6 +630,19 @@ proc hir::read::Referenced {hirVar b name s number} {
     }
 }
 
+# The representation term (hir/layouts.tcl's "Fixed arrays") hir::layouts::
+# ShowTerm printed as TEXT: "array N of ...", a nested layout's identity, or
+# an element type.
+proc hir::read::ParseTerm {text number} {
+    if {[regexp {^array ([0-9]+) of (.+)$} $text -> extent inner]} {
+        return [list array $extent [ParseTerm $inner $number]]
+    }
+    if {[hir::layouts::declared $text]} {
+        return [list layout $text]
+    }
+    return [ParseType $text $number]
+}
+
 # The type form shown as TEXT (hir::types::show).
 proc hir::read::ParseType {text number} {
     set text [string trim $text]
@@ -683,6 +706,11 @@ proc hir::read::ParseType {text number} {
     if {[regexp {^MutableArray\[(.+)\]$} $text -> inner]} {
         # PARAMETERIZED-MUTABLEARRAY.md: hir::types::show's own notation.
         return [list mutarray [ParseType $inner $number]]
+    }
+    if {[regexp {^Native(View|Edit)\[(array [0-9]+ of .+)\]$} $text -> which term]} {
+        # A live fixed array (FIXED-LAYOUT-ARRAYS.md): hir::types::show's
+        # notation, its representation term read back.
+        return [list [expr {$which eq "View" ? "nview" : "nedit"}] [ParseTerm $term $number]]
     }
     if {[regexp {^NativeView\[(\S+)\]$} $text -> layout] && [hir::layouts::declared $layout]} {
         # A native view of a layout (NATIVE-LAYOUT-VIEWS.md): hir::types::

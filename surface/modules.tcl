@@ -606,6 +606,12 @@ proc surface::modules::TypeRefs {type span foundVar} {
         }
         return
     }
+    if {[llength $type] == 3 && [lindex $type 0] eq "array"} {
+        # A fixed array representation (FIXED-LAYOUT-ARRAYS.md): its
+        # element's references (the extent is a number).
+        TypeRefs [lindex $type 2] $span found
+        return
+    }
     lassign $type head arg
     if {$head eq "fn"} {
         foreach t [dict get $arg args] { TypeRefs $t $span found }

@@ -5104,6 +5104,46 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         Emit fn "raise $kind [Quote $message]" $e
         return {never tagged}
     }
+    switch -- [hir::layouts::RoleOf $role op] {
+        element {
+            # One element of a live fixed array (FIXED-LAYOUT-ARRAYS.md):
+            # the array's address word plus I * STRIDE, after one bounds
+            # check -- a load for a scalar or a pointer, an address for a
+            # nested layout or array; never the whole array.
+            lassign [ElementAccess fn $e] view base element
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            return [list [NativeRepr fn $e $view $element $base] tagged]
+        }
+        store_element {
+            # One scalar or pointer element written through a live array's
+            # edit (hir::layouts::Problems refuses a view's): every operand
+            # evaluated, the index checked, then one store.
+            lassign [ElementAccess fn $e [lindex $args [hir::layouts::RoleOf $role value]]] view base element value
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            ReprWrite fn $e native $view $element $base $value
+            return [list [Assign fn unit $e] tagged]
+        }
+        load_array {
+            # A whole live array copied into its List: element by element
+            # (a row of scalars by one helper call).
+            set constant [lindex $args [hir::layouts::RoleOf $role array]]
+            if {[hir::kind $hir $constant] ne "const"} {
+                throw {NATIVE BUG} "native lowering: the array operand of $name ($e) is not its descriptor"
+            }
+            lassign [ViewBase fn [lindex $args 0]] view base
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            return [list [ArrayRead fn $e native $view [lindex [hir::get $hir $constant literal] end] $base] tagged]
+        }
+    }
     if {[hir::layouts::RoleOf $role op] eq "field"} {
         # One field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
         # elaborated projection binary#view_field(VIEW, FIELD), FIELD the
@@ -5315,7 +5355,28 @@ proc native::lower::LayoutWrite {fnVar e name role callArgs wantVirtual} {
         Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
         EmitLabel fn $good
     }
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    if {$kind eq "array"} {
+        # A whole fixed array from a List (FIXED-LAYOUT-ARRAYS.md): every
+        # extent checked first (LayoutExtentMismatch, nothing written), then
+        # the elements -- through the edit in place, or into ONE fresh copy
+        # of the byte storage (`mbytesclone`), never a copy per element.
+        set repr [lrange $field 2 end]
+        ArrayCheck fn $e $repr $value
+        if {$op eq "store"} {
+            ReprWrite fn $e native $target $repr [BasePlus fn $e $base $offset] $value
+            return [list [Assign fn unit $e] tagged]
+        }
+        set storage [Assign fn "op mbytesclone $target" $e]
+        ReprWrite fn $e bytes $storage $repr $offset $value
+        if {$wantVirtual ne ""} {
+            if {$wantVirtual != 1} {
+                throw {NATIVE BUG} "native lowering: expected a one-field MutableBytes at $e"
+            }
+            return [list [list $storage] virtual]
+        }
+        return [list [Assign fn "structnew [ShapeIndex $mutableType [hir::structs::names $mutableType]] $storage" $e] tagged]
+    }
+    set at [At fn $e $base $offset]
     if {$kind eq "ptr"} {
         set code [Assign fn "int $width" $e]
         set suffix ptr
@@ -5343,87 +5404,216 @@ proc native::lower::LayoutWrite {fnVar e name role callArgs wantVirtual} {
 # receiver a binary#view_field call of a layout field) is the outer view's
 # register with the nested field's offset added -- one load at the absolute
 # offset, no intermediate address -- and any other view its own register at
-# 0.
+# 0. So is a live fixed array read off a view (`v.items`, FIXED-LAYOUT-
+# ARRAYS.md), and an element of a live array that is itself a window (a
+# nested layout or array: `binary::element(v.pts, i)`), whose bounds check
+# and I * STRIDE are emitted here (ElementAccess). BASE is a byte count, or
+# a register holding one once an element index is dynamic.
 proc native::lower::ViewBase {fnVar arg} {
     upvar 1 $fnVar fn
     variable hir
-    if {[hir::kind $hir $arg] eq "call" && [lindex [hir::get $hir $arg target] 0] eq "native"
-            && [dict get [hir::symbol $hir [lindex [hir::get $hir $arg target] 1]] name] eq [hir::layouts::ViewReadNative]} {
-        lassign [hir::get $hir $arg args] receiver field
-        if {[hir::kind $hir $field] eq "const"} {
-            set entry [lindex [hir::get $hir $field literal] end]
-            if {[lindex $entry 2] eq "layout"} {
-                lassign [ViewBase fn $receiver] view base
-                return [list $view [expr {$base + [lindex $entry 1]}]]
+    if {[hir::kind $hir $arg] eq "call" && [lindex [hir::get $hir $arg target] 0] eq "native"} {
+        set name [dict get [hir::symbol $hir [lindex [hir::get $hir $arg target] 1]] name]
+        if {$name eq [hir::layouts::ViewReadNative]} {
+            lassign [hir::get $hir $arg args] receiver field
+            if {[hir::kind $hir $field] eq "const"} {
+                set entry [lindex [hir::get $hir $field literal] end]
+                if {[lindex $entry 2] in {layout array}} {
+                    lassign [ViewBase fn $receiver] view base
+                    if {$view eq "never"} {
+                        return [list never 0]
+                    }
+                    return [list $view [BasePlus fn $arg $base [lindex $entry 1]]]
+                }
+            }
+        }
+        set role [hir::layouts::Role $name]
+        if {[hir::layouts::RoleOf $role op] eq "element" && [hir::layouts::RoleOf $role array] ne ""} {
+            set constant [lindex [hir::get $hir $arg args] [hir::layouts::RoleOf $role array]]
+            if {[hir::kind $hir $constant] eq "const"
+                    && [lindex [lindex [hir::get $hir $constant literal] end] 3 0] in {layout array}
+                    && [hir::layouts::Problems $hir $arg $name $role] eq ""} {
+                dict lappend fn calls [list native $name]
+                lassign [ElementAccess fn $arg] view base
+                return [list $view $base]
             }
         }
     }
     return [list [Expr fn $arg] 0]
 }
 
-# The value of the descriptor field entry FIELD read through the native view
-# VIEW (a register holding a C address word) at byte BASE: a scalar's Int
-# (one `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
-# layout's view (`cptroffset`: no memory read) -- NATIVE-LAYOUT-VIEWS.md.
-proc native::lower::NativeField {fnVar e view field base} {
+# The base BASE (a byte count or a register holding one, ViewBase) plus
+# OFFSET (a byte count, or a register): a constant when both are, else the
+# register of their sum.
+proc native::lower::BasePlus {fnVar e base offset} {
     upvar 1 $fnVar fn
-    lassign $field name offset kind
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
-    switch -- $kind {
-        layout {
+    set baseReg [expr {[string index $base 0] eq "%"}]
+    set offsetReg [expr {[string index $offset 0] eq "%"}]
+    if {!$baseReg && !$offsetReg} {
+        return [expr {$base + $offset}]
+    }
+    if {!$offsetReg && $offset == 0} {
+        return $base
+    }
+    if {!$baseReg && $base == 0} {
+        return $offset
+    }
+    set a [expr {$baseReg ? $base : [Assign fn "int $base" $e]}]
+    set b [expr {$offsetReg ? $offset : [Assign fn "int $offset" $e]}]
+    return [Assign fn "op iadd $a $b" $e]
+}
+
+# The register holding the byte offset BASE + OFFSET (BasePlus): the operand
+# of a load or store.
+proc native::lower::At {fnVar e base offset} {
+    upvar 1 $fnVar fn
+    set at [BasePlus fn $e $base $offset]
+    if {[string index $at 0] eq "%"} {
+        return $at
+    }
+    return [Assign fn "int $at" $e]
+}
+
+# {VIEW BASE ELEMENT} of the element access E (an elaborated binary#element
+# or binary#store_element call, FIXED-LAYOUT-ARRAYS.md): VIEW the array's
+# address word, BASE the element's byte offset from it, ELEMENT the
+# element's representation words -- after the array and index operands are
+# evaluated (and VALUEEXPR, a store's value, whose register is the fourth
+# element), the index guarded as an Int, and one bounds check, 0 <= I < N,
+# whose failure is the declared IndexNotFound. The check is left out where
+# the completion analysis proved every index in range (BoundsProven); a
+# constant index then folds into BASE, so `binary::element(v.items, 3)` is
+# one access at an absolute offset. VIEW "never" when an operand never
+# completes.
+proc native::lower::ElementAccess {fnVar e {valueExpr ""}} {
+    upvar 1 $fnVar fn
+    variable hir
+    set name [dict get [hir::symbol $hir [lindex [hir::get $hir $e target] 1]] name]
+    set role [hir::layouts::Role $name]
+    set args [hir::get $hir $e args]
+    set constant [lindex $args [hir::layouts::RoleOf $role array]]
+    if {[hir::kind $hir $constant] ne "const"} {
+        throw {NATIVE BUG} "native lowering: the array operand of $name ($e) is not its descriptor"
+    }
+    lassign [lindex [hir::get $hir $constant literal] end] - extent stride element
+    lassign [ViewBase fn [lindex $args 0]] view base
+    if {$view eq "never"} {
+        return {never 0 {} never}
+    }
+    set indexExpr [lindex $args [hir::layouts::RoleOf $role index]]
+    set proven [BoundsProven $e]
+    set index ""
+    if {$proven} {
+        set index [ConstantIntValue $indexExpr]
+    }
+    if {$index ne "" && [hir::kind $hir $indexExpr] eq "const"} {
+        set at [BasePlus fn $e $base [expr {$index * $stride}]]
+    } else {
+        set index [Expr fn $indexExpr]
+        if {$index eq "never"} {
+            return {never 0 {} never}
+        }
+        EmitArgGuards fn $e [list $indexExpr] [list $index] {int} $name
+        set at ""
+    }
+    set value ""
+    if {$valueExpr ne ""} {
+        set value [Expr fn $valueExpr]
+        if {$value eq "never"} {
+            return {never 0 {} never}
+        }
+    }
+    if {$at eq ""} {
+        if {!$proven} {
+            set good [NewLabel fn]
+            set next [NewLabel fn]
+            set bad [NewLabel fn]
+            set low [Assign fn "op ige $index [Assign fn "int 0" $e]" $e]
+            Emit fn "br $low $next $bad" $e
+            EmitLabel fn $next
+            set high [Assign fn "op ilt $index [Assign fn "int $extent" $e]" $e]
+            Emit fn "br $high $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId IndexNotFound] [Quote IndexNotFound]" $e
+            EmitLabel fn $good
+        }
+        set scaled [expr {$stride == 1 ? $index : [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]}]
+        set at [BasePlus fn $e $base $scaled]
+    }
+    return [list $view $at $element $value]
+}
+
+# The value of the representation words REPR (a descriptor field entry's
+# words after its name and offset) read through the native view VIEW (a
+# register holding a C address word) at BASE (ViewBase): a scalar's Int (one
+# `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
+# layout's or a fixed array's live window (`cptroffset`: no memory read) --
+# NATIVE-LAYOUT-VIEWS.md, FIXED-LAYOUT-ARRAYS.md.
+proc native::lower::NativeRepr {fnVar e view repr base} {
+    upvar 1 $fnVar fn
+    set at [At fn $e $base 0]
+    switch -- [lindex $repr 0] {
+        layout - array {
             return [Assign fn "op cptroffset $view $at" $e]
         }
         ptr {
-            lassign $field name offset kind width endian
-            set w [Assign fn "int $width" $e]
+            set w [Assign fn "int [lindex $repr 1]" $e]
             return [Assign fn "op nativeloadptr $view $at $w" $e]
         }
     }
-    lassign $field name offset sign width endian
+    lassign $repr sign width endian
     set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
     return [Assign fn "op nativeload $view $at $code" $e]
 }
 
-# The LayoutStruct DESCRIPTOR describes, read through the native view VIEW
-# at byte BASE (binary::load): every scalar and pointer field loaded in
-# declared (slot) order, a nested layout's struct recursively, then the
-# object -- LayoutDecode's shape, over live memory instead of bytes.
-proc native::lower::NativeDecode {fnVar e view descriptor base} {
+# The value of the descriptor field entry FIELD read through the native view
+# VIEW at BASE (NativeRepr at the field's offset).
+proc native::lower::NativeField {fnVar e view field base} {
     upvar 1 $fnVar fn
-    lassign $descriptor structId size align fields
-    set names {}
-    set registers {}
-    foreach field $fields {
-        lassign $field name offset kind
-        lappend names $name
-        if {$kind eq "layout"} {
-            lappend registers [NativeDecode fn $e $view [lindex $field 3] [expr {$base + $offset}]]
-            continue
-        }
-        lappend registers [NativeField fn $e $view $field $base]
-    }
-    return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
+    return [NativeRepr fn $e $view [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
 }
 
-# The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE
-# at byte BASE: its fields' loads in declared (slot) order, then its object
-# (or, FIELDS 1, the field registers without the object).
-proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}} {
+# The copied value of the representation words REPR read from SOURCE at
+# BASE: MODE native reads through the native view SOURCE (binary::load), MODE
+# bytes from the byte storage SOURCE (binary::parse). A scalar or a pointer
+# is one load, a nested layout its LayoutStruct (every field, then its
+# object), a fixed array its List (ArrayRead).
+proc native::lower::ReprRead {fnVar e mode source repr base} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $repr 0] {
+        layout {
+            return [DecodeAt fn $e $mode $source [lindex $repr 1] $base]
+        }
+        array {
+            return [ArrayRead fn $e $mode $source $repr $base]
+        }
+        ptr {
+            if {$mode ne "native"} {
+                throw {NATIVE BUG} "native lowering: a C pointer read from bytes ($e)"
+            }
+            return [NativeRepr fn $e $source $repr $base]
+        }
+    }
+    if {$mode eq "native"} {
+        return [NativeRepr fn $e $source $repr $base]
+    }
+    lassign $repr sign width endian
+    set at [At fn $e $base 0]
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op binload $source $at $code" $e]
+}
+
+# The LayoutStruct DESCRIPTOR describes read from SOURCE at BASE (MODE as
+# ReprRead's): its fields' values in declared (slot) order, then its object
+# (or, FIELDSONLY 1, the field registers without the object).
+proc native::lower::DecodeAt {fnVar e mode source descriptor base {fieldsOnly 0}} {
     upvar 1 $fnVar fn
     lassign $descriptor structId size align fields
     set names {}
     set registers {}
     foreach field $fields {
-        lassign $field name offset kind
-        lappend names $name
-        if {$kind eq "layout"} {
-            lappend registers [LayoutDecode fn $e $storage [lindex $field 3] [expr {$base + $offset}]]
-            continue
-        }
-        lassign $field name offset sign width endian
-        set at [Assign fn "int [expr {$base + $offset}]" $e]
-        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
-        lappend registers [Assign fn "op binload $storage $at $code" $e]
+        lappend names [lindex $field 0]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
     }
     if {$fieldsOnly} {
         return $registers
@@ -5431,9 +5621,198 @@ proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}
     return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
 }
 
-# {OFFSET SIGN WIDTH ENDIAN} of every scalar field of DESCRIPTOR at byte BASE,
-# depth-first in declared order: the order of a LayoutStruct's leaves
-# (ContextObjectLeaves, ContextLeafRegs).
+# The List the fixed array REPR ({array N STRIDE ELEMENT}) holds at BASE of
+# SOURCE (MODE as ReprRead's), copied: a row of scalars by one helper call
+# (`binloadarray` / `nativeloadarray`: N contiguous scalars, STRIDE their
+# width); any other element in a counted loop, element I read at BASE + I *
+# STRIDE and appended -- O(N), straight from the descriptor's constants, no
+# descriptor read at run time (FIXED-LAYOUT-ARRAYS.md).
+proc native::lower::ArrayRead {fnVar e mode source repr base} {
+    upvar 1 $fnVar fn
+    lassign $repr - extent stride element
+    if {[lindex $element 0] in {u i}} {
+        lassign $element sign width endian
+        set at [At fn $e $base 0]
+        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+        set count [Assign fn "int $extent" $e]
+        set op [expr {$mode eq "native" ? "nativeloadarray" : "binloadarray"}]
+        return [Assign fn "op $op $source $at $code $count" $e]
+    }
+    set acc [CollectStart fn $e]
+    lassign [ArrayLoopStart fn $e $extent] index body exit
+    set elementBase [BasePlus fn $e $base [ArrayScaled fn $e $index $stride]]
+    CollectAppend fn $e $acc [ReprRead fn $e $mode $source $element $elementBase]
+    ArrayLoopEnd fn $e $index $body $exit
+    return [CollectFinish fn $e $acc]
+}
+
+# {INDEX BODY EXIT}: the head of a counted loop over 0..EXTENT-1 (the index
+# register INDEX, the label of the head to jump back to, the label after
+# the loop), its body to follow; closed by ArrayLoopEnd.
+proc native::lower::ArrayLoopStart {fnVar e extent} {
+    upvar 1 $fnVar fn
+    set index [NewReg fn]
+    Emit fn "$index = move [Assign fn "int 0" $e]" $e
+    set head [NewLabel fn]
+    set body [NewLabel fn]
+    set exit [NewLabel fn]
+    Emit fn "jump $head" $e
+    EmitLabel fn $head
+    set more [Assign fn "op ilt $index [Assign fn "int $extent" $e]" $e]
+    Emit fn "br $more $body $exit" $e
+    EmitLabel fn $body
+    return [list $index $head $exit]
+}
+
+proc native::lower::ArrayLoopEnd {fnVar e index head exit} {
+    upvar 1 $fnVar fn
+    set next [Assign fn "op iadd $index [Assign fn "int 1" $e]" $e]
+    Emit fn "$index = move $next" $e
+    Emit fn "jump $head" $e
+    EmitLabel fn $exit
+}
+
+# The register of INDEX * STRIDE.
+proc native::lower::ArrayScaled {fnVar e index stride} {
+    upvar 1 $fnVar fn
+    if {$stride == 1} {
+        return $index
+    }
+    return [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]
+}
+
+# Checks that VALUE, a register holding the copied value of the
+# representation words REPR, fills every fixed array in it exactly: the
+# declared LayoutExtentMismatch otherwise (FIXED-LAYOUT-ARRAYS.md). A List's
+# length against its extent (and, when its elements hold arrays, each
+# element in a loop); a LayoutStruct's array fields (`structget`). Emits
+# nothing for a representation without arrays: everything a write writes
+# is checked before the first byte is.
+proc native::lower::ArrayCheck {fnVar e repr value} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $repr 0] {
+        array {
+            lassign $repr - extent stride element
+            set length [Assign fn "op listlen $value" $e]
+            set fits [Assign fn "op ieq $length [Assign fn "int $extent" $e]" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $fits $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId LayoutExtentMismatch] [Quote LayoutExtentMismatch]" $e
+            EmitLabel fn $good
+            if {[ReprHasArrays $element]} {
+                lassign [ArrayLoopStart fn $e $extent] index body exit
+                ArrayCheck fn $e $element [Assign fn "op listgetproven $value $index" $e]
+                ArrayLoopEnd fn $e $index $body $exit
+            }
+        }
+        layout {
+            lassign [lindex $repr 1] structId size align fields
+            set slot 0
+            foreach field $fields {
+                set words [lrange $field 2 end]
+                if {[ReprHasArrays $words]} {
+                    ArrayCheck fn $e $words [Assign fn "structget $slot $value" $e]
+                }
+                incr slot
+            }
+        }
+    }
+}
+
+# 1 if the representation words REPR hold a fixed array, itself or in a
+# nested layout.
+proc native::lower::ReprHasArrays {repr} {
+    switch -- [lindex $repr 0] {
+        array {
+            return 1
+        }
+        layout {
+            foreach field [lindex $repr 1 3] {
+                if {[ReprHasArrays [lrange $field 2 end]]} {
+                    return 1
+                }
+            }
+        }
+    }
+    return 0
+}
+
+# Writes VALUE (a register holding the copied value of the representation
+# words REPR, its extents already checked: ArrayCheck) to TARGET at BASE:
+# MODE native stores through the native edit TARGET (binary::store), MODE
+# bytes into the private, fresh byte storage TARGET (binary::emit's
+# `byteszeroed`, a byte write's `mbytesclone`). A scalar or a pointer is one
+# store, a LayoutStruct its fields (`structget`), a fixed array its elements
+# -- a row of scalars by one helper call that encodes every element before
+# it writes any (`binstorearray` / `nativestorearray`), any other element
+# in a counted loop. Only the representation's own bytes are written.
+proc native::lower::ReprWrite {fnVar e mode target repr base value} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $repr 0] {
+        layout {
+            lassign [lindex $repr 1] structId size align fields
+            set slot 0
+            foreach field $fields {
+                ReprWrite fn $e $mode $target [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]] \
+                    [Assign fn "structget $slot $value" $e]
+                incr slot
+            }
+            return
+        }
+        array {
+            lassign $repr - extent stride element
+            if {[lindex $element 0] in {u i}} {
+                lassign $element sign width endian
+                set at [At fn $e $base 0]
+                set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+                set op [expr {$mode eq "native" ? "nativestorearray" : "binstorearray"}]
+                Assign fn "op $op $target $at $code $value" $e
+                return
+            }
+            lassign [ArrayLoopStart fn $e $extent] index body exit
+            ReprWrite fn $e $mode $target $element [BasePlus fn $e $base [ArrayScaled fn $e $index $stride]] \
+                [Assign fn "op listgetproven $value $index" $e]
+            ArrayLoopEnd fn $e $index $body $exit
+            return
+        }
+        ptr {
+            set at [At fn $e $base 0]
+            set w [Assign fn "int [lindex $repr 1]" $e]
+            set op [expr {$mode eq "native" ? "nativestoreptr" : "binstoreptr"}]
+            Assign fn "op $op $target $at $w $value" $e
+            return
+        }
+    }
+    lassign $repr sign width endian
+    set at [At fn $e $base 0]
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    set op [expr {$mode eq "native" ? "nativestore" : "binstore"}]
+    Assign fn "op $op $target $at $code $value" $e
+}
+
+# The value of the descriptor field entry FIELD read through the native view
+# VIEW at byte BASE -- see NativeField. The LayoutStruct DESCRIPTOR
+# describes, read through the native view VIEW at BASE (binary::load):
+# DecodeAt over live memory.
+proc native::lower::NativeDecode {fnVar e view descriptor base} {
+    upvar 1 $fnVar fn
+    return [DecodeAt fn $e native $view $descriptor $base]
+}
+
+# The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE
+# at byte BASE: its fields' loads in declared (slot) order, then its object
+# (or, FIELDS 1, the field registers without the object).
+proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}} {
+    upvar 1 $fnVar fn
+    return [DecodeAt fn $e bytes $storage $descriptor $base $fieldsOnly]
+}
+
+# {OFFSET REPR} of every leaf of DESCRIPTOR at byte BASE -- a scalar field,
+# or a fixed array field (one leaf: its List) -- depth-first in declared
+# order: the order of a LayoutStruct's leaves (ContextObjectLeaves,
+# ContextLeafRegs), REPR the leaf's representation words.
 proc native::lower::LayoutLeaves {descriptor base} {
     set leaves {}
     foreach field [lindex $descriptor 3] {
@@ -5441,26 +5820,29 @@ proc native::lower::LayoutLeaves {descriptor base} {
         if {$kind eq "layout"} {
             lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
         } else {
-            lassign $field name offset sign width endian
-            lappend leaves [list [expr {$base + $offset}] $sign $width $endian]
+            lappend leaves [list [expr {$base + $offset}] [lrange $field 2 end]]
         }
     }
     return $leaves
 }
 
 # Writes the leaf registers LEAVES of a LayoutStruct of DESCRIPTOR (depth-
-# first, declared order) into the fresh storage STORAGE.
+# first, declared order) into the fresh storage STORAGE: a scalar's one
+# `binstore`; a fixed array's List checked against its extent (the declared
+# LayoutExtentMismatch: the storage is private, so nothing is observed when
+# a later array fails) and written element by element.
 proc native::lower::LayoutEncode {fnVar e storage leaves descriptor} {
     upvar 1 $fnVar fn
     set scalars [LayoutLeaves $descriptor 0]
     if {[llength $leaves] != [llength $scalars]} {
-        throw {NATIVE BUG} "native lowering: binary::emit $e has [llength $leaves] leaves for [llength $scalars] scalar fields"
+        throw {NATIVE BUG} "native lowering: binary::emit $e has [llength $leaves] leaves for [llength $scalars] fields"
     }
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian
-        set at [Assign fn "int $offset" $e]
-        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
-        Assign fn "op binstore $storage $at $code $r" $e
+        lassign $leaf offset repr
+        if {[lindex $repr 0] eq "array"} {
+            ArrayCheck fn $e $repr $r
+        }
+        ReprWrite fn $e bytes $storage $repr $offset $r
     }
 }
 

@@ -1992,12 +1992,14 @@ proc hir::types::show {type} {
             }
             nview {
                 # A native view, by its layout's identity
-                # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown.
-                return "NativeView\[[lindex $type 1]\]"
+                # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown --
+                # or a live array, by its representation
+                # (FIXED-LAYOUT-ARRAYS.md: NativeView[array 16 of ...]).
+                return "NativeView\[[hir::layouts::ShowNative [lindex $type 1]]\]"
             }
             nedit {
                 # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
-                return "NativeEdit\[[lindex $type 1]\]"
+                return "NativeEdit\[[hir::layouts::ShowNative [lindex $type 1]]\]"
             }
             imprint {
                 # An imprint variable, by its name (hir/imprint.tcl).
@@ -2313,10 +2315,27 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         view-struct {
             # binary::load(v): the LayoutStruct[L] of argument I's static
-            # NativeView[L] (or NativeEdit[L]) type.
-            set id [hir::layouts::OfNativeType [lindex $argTypes [lindex $shape 1]]]
+            # NativeView[L] (or NativeEdit[L]) type -- or, of a live fixed
+            # array NativeView[array N of E], the List its copy is
+            # (FIXED-LAYOUT-ARRAYS.md).
+            set argType [lindex $argTypes [lindex $shape 1]]
+            set id [hir::layouts::OfNativeType $argType]
             if {$id ne ""} {
                 return [hir::layouts::structType $id]
+            }
+            set term [hir::layouts::OfArrayType $argType]
+            if {$term ne ""} {
+                return [hir::layouts::TermConsumerType $term]
+            }
+            return $result
+        }
+        native-element {
+            # binary::element(a, i) (FIXED-LAYOUT-ARRAYS.md): the element of
+            # argument I's static live array type, read in place (a scalar,
+            # a pointer, or a nested layout's or array's live view or edit).
+            set t [hir::layouts::ElementType [lindex $argTypes [lindex $shape 1]]]
+            if {$t ne ""} {
+                return $t
             }
             return $result
         }
@@ -3376,7 +3395,9 @@ proc hir::types::Call {hirVar ctxVar e} {
                 set result [ShapeResult $hir [dict get $meta resultShape] $argExprs $argTypes $result]
                 set shapeKind [lindex [dict get $meta resultShape] 0]
                 if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]
-                        && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq "")
+                        && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq ""
+                                && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
+                            || ($shapeKind eq "native-element" && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
                             || ($shapeKind eq "layout-struct" && [hir::layouts::RoleOf [dict get $meta layout] op] eq "parse"
                                 && [hir::layouts::OfType $result] ne "" && [hir::layouts::NativeOnly [hir::layouts::OfType $result]]))} {
                     # binary::load of a value not statically a NativeView[L]

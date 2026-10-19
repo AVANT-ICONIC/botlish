@@ -2838,8 +2838,141 @@ proc hir::completions::NativeEffectiveFacts {hir ctx name argExprs argRanges} {
                 return [SliceFacts $hir $ctx $slices]
             }
         }
+        extents {
+            # A whole fixed array written from a List (FIXED-LAYOUT-
+            # ARRAYS.md): LayoutExtentMismatch only when some array it
+            # writes is not proven to get exactly its extent -- and
+            # certainly when a List's length is proven to be another.
+            set verdicts [list [list LayoutExtentMismatch]]
+            switch -- [ExtentsVerdict $hir $ctx $name $argExprs [lindex $bounds 1]] {
+                in  { return [list 1 [lsearch -all -inline -not -exact $errors LayoutExtentMismatch] {{}}] }
+                out { return [list 0 [list LayoutExtentMismatch] $verdicts] }
+            }
+        }
     }
     return [list 1 $errors $verdicts]
+}
+
+# Whether every fixed array the value argument V of call ARGEXPRS of the
+# layout operation NAME writes gets a List of exactly its extent
+# (FIXED-LAYOUT-ARRAYS.md, the `extents` bounds of core/native.tcl): `in`
+# (proven: no LayoutExtentMismatch), `out` (a List's length is proven to be
+# another: the call always fails) or "" (unproven). The arrays are those of
+# the field a write's designator names, or of the layout an emitted
+# LayoutStruct's static type (or its elaborated descriptor) names -- none at
+# all for an array-free layout or a scalar field, which is every program
+# before fixed arrays. A malformed operand (diagnosed by hir::layouts::
+# verify) is vacuously `in`: nothing runs.
+proc hir::completions::ExtentsVerdict {hir ctx name argExprs v} {
+    set role [hir::layouts::Role $name]
+    set value [lindex $argExprs $v]
+    if {$value eq ""} {
+        return ""
+    }
+    set path [hir::layouts::RoleOf $role path]
+    if {$path ne ""} {
+        set field [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $argExprs $path]]]
+        if {$field eq ""} {
+            return in
+        }
+        return [ReprValueVerdict $hir $ctx $field $value]
+    }
+    set id ""
+    set typed [hir::layouts::RoleOf $role typed]
+    if {$typed ne ""} {
+        set id [hir::layouts::OfType [hir::typeOf $hir [lindex $argExprs [lindex $typed 0]]]]
+    } elseif {[hir::layouts::RoleOf $role operand] ne ""} {
+        set id [hir::layouts::DescriptorLayout [hir::layouts::ConstText $hir [lindex $argExprs [hir::layouts::RoleOf $role operand]]]]
+    }
+    if {$id eq "" || ![hir::layouts::declared $id]} {
+        return in
+    }
+    return [ReprValueVerdict $hir $ctx [dict create kind layout layout $id] $value]
+}
+
+# Whether the value expression E written as the representation REPR fills
+# every fixed array in it exactly (in / out / "", ExtentsVerdict): a scalar
+# or pointer trivially; an array when the List's length is proven its
+# extent (hir/cardinality.tcl's size form: an exactly known List, a list
+# literal, a collecting loop of an exactly known count -- or a size an
+# enclosing branch proved, ctx.sizes) and, if its elements hold arrays
+# themselves, E is a list literal each of whose elements is proven; a layout
+# with arrays when E is (an alias of) a construction of its LayoutStruct
+# each of whose array fields is proven. `out` when one of those lengths is
+# proven to be another. Nothing else: the length of a List is a fact about
+# the List, never about its type.
+proc hir::completions::ReprValueVerdict {hir ctx repr e} {
+    switch -- [dict get $repr kind] {
+        array {
+            set steps 0
+            set form [hir::cardinality::ListLength $hir $e steps]
+            set n ""
+            if {[hir::cardinality::IsConst $form]} {
+                set n [lindex $form 0]
+            } elseif {[dict exists $ctx sizes $form]} {
+                set n [dict get $ctx sizes $form]
+            }
+            if {$n eq ""} {
+                return ""
+            }
+            if {$n != [dict get $repr extent]} {
+                return out
+            }
+            set element [dict get $repr element]
+            if {![hir::layouts::ReprHasArrays $element]} {
+                return in
+            }
+            lassign [hir::cardinality::Chase $hir $e steps] kind id
+            if {$kind ne "expr" || [hir::cardinality::NativeName $hir [dict get $hir exprs $id]] ne "list"} {
+                return ""
+            }
+            return [AllVerdicts [lmap item [dict get $hir exprs $id args] {
+                ReprValueVerdict $hir $ctx $element $item
+            }]]
+        }
+        layout {
+            set id [dict get $repr layout]
+            if {![hir::layouts::HasArrays $id]} {
+                return in
+            }
+            set steps 0
+            lassign [hir::cardinality::Chase $hir $e steps] kind x
+            if {$kind ne "expr"} {
+                return ""
+            }
+            set node [dict get $hir exprs $x]
+            if {[dict get $node kind] ne "struct" || ![dict get $node named]
+                    || [dict get $node structId] ne [hir::layouts::structId $id]} {
+                return ""
+            }
+            set verdicts {}
+            foreach field [dict get [hir::layouts::entry $id] fields] {
+                if {![hir::layouts::ReprHasArrays $field]} continue
+                set i [lsearch -exact [dict get $node names] [dict get $field name]]
+                if {$i < 0} {
+                    # (MISSING-FIELD, diagnosed by the construction's check.)
+                    return in
+                }
+                lappend verdicts [ReprValueVerdict $hir $ctx $field [lindex [dict get $node fields] $i]]
+            }
+            return [AllVerdicts $verdicts]
+        }
+    }
+    return in
+}
+
+# The verdict of several checks that all must hold: `out` if one is, `in`
+# if every one is, else "".
+proc hir::completions::AllVerdicts {verdicts} {
+    if {"out" in $verdicts} {
+        return out
+    }
+    foreach v $verdicts {
+        if {$v ne "in"} {
+            return ""
+        }
+    }
+    return in
 }
 
 # ---------------------------------------------------------------------------
@@ -3170,6 +3303,16 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     # against, and either one may be the constant the range check needs.
     if {$family eq "list"} {
         set size [hir::cardinality::ListLength $hir $container steps]
+    } elseif {$family eq "narray"} {
+        # A live fixed array (FIXED-LAYOUT-ARRAYS.md): its extent is its
+        # static type's, a constant.
+        set term [hir::layouts::OfArrayType [hir::typeOf $hir $container]]
+        if {$term eq ""} {
+            # (Not a live array: BINARY-OPERAND, hir::layouts::verify --
+            # nothing runs, so the access is vacuously in range.)
+            return in
+        }
+        set size [hir::cardinality::FormConst [lindex $term 1]]
     } elseif {$family eq "str"} {
         # A character index (str::char_at): checked against the String's
         # length in Unicode scalars, the size str::length's guards state.

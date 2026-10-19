@@ -133,11 +133,13 @@ proc hir::format::TypeDecl {entry} {
         # A layout declaration (hir/layouts.tcl, BINARY-LAYOUT.md): "layout
         # ID ns NS size N align A fields F1: T1 at O1, F2: T2 at O2" (NS "-"
         # for the entry program), the fields in declared order, each type
-        # the canonical identity of its integer domain or nested layout.
+        # the canonical identity of its integer domain or nested layout
+        # (`array N of ...` for a fixed array, FIXED-LAYOUT-ARRAYS.md).
         # Read back by hir::read::TypeDeclLine through the same validation.
         set fields [lmap field [dict get $entry fields] {
             format {%s: %s at %s} [dict get $field name] \
-                [hir::layouts::FieldTypeText [dict get $field type]] [dict get $field offset]
+                [expr {[dict exists $field repr] ? [hir::layouts::ReprText [dict get $field repr]]
+                    : [hir::layouts::FieldTypeText [dict get $field type]]}] [dict get $field offset]
         }]
         set ns [dict get $entry namespace]
         return "layout [dict get $entry id] ns [expr {$ns eq "" ? "-" : $ns}] size [dict get $entry size] align [dict get $entry align] fields [join $fields {, }]"

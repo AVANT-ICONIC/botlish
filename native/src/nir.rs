@@ -372,6 +372,27 @@ pub enum OpCode {
     MBytesWrite,
     MBytesWritePtr,
     CPtrFixtureBytes,
+    /// Fixed arrays (FIXED-LAYOUT-ARRAYS.md, runtime/nview.rs): a row of %n
+    /// contiguous scalars of one encoding %c read or written whole.
+    /// `binloadarray %s %o %c %n` and `nativeloadarray %v %o %c %n`: the List
+    /// of the row at offset %o of byte storage %s (imprinting) or at address
+    /// %v + %o (a live array's copy), one allocation (a u64 above i64::MAX a
+    /// BigInt too). `binstorearray %s %o %c %l`: the List %l written at %o of
+    /// the FRESH storage %s an emission or a whole-array byte write is
+    /// building (byteszeroed / mbytesclone: still private), every element
+    /// encoded before any byte is written. `nativestorearray %e %o %c %l`:
+    /// the same at address %e + %o of a native edit. `binstoreptr %s %o %w
+    /// %q`: the %w-byte address bits of %q written at %o of such a fresh
+    /// storage (one element of an array of pointers, binary::write_foreign).
+    /// Every other array (of layouts, of pointers, of rows) is a NIR loop
+    /// over the per-field ops; an element access is one of those at a
+    /// computed offset. Fallible only on an operand a checked program never
+    /// produces (the length was checked against the extent before).
+    BinLoadArray,
+    NativeLoadArray,
+    BinStoreArray,
+    NativeStoreArray,
+    BinStorePtr,
     /// The borrow test fixture's synthetic foreign operations
     /// (C-POINTER-BORROWING.md; runtime/ffifixture.rs): only the natives
     /// core/cabi.tcl's installBorrowFixture registers lower to them, so no
@@ -724,6 +745,11 @@ op_spellings! {
     "nativestoreptr" => NativeStorePtr,
     "mbyteswrite" => MBytesWrite,
     "mbyteswriteptr" => MBytesWritePtr,
+    "binloadarray" => BinLoadArray,
+    "nativeloadarray" => NativeLoadArray,
+    "binstorearray" => BinStoreArray,
+    "nativestorearray" => NativeStoreArray,
+    "binstoreptr" => BinStorePtr,
     "cptrfixturebytes" => CPtrFixtureBytes,
     "ffifixtureread" => FfiFixtureRead,
     "ffifixturereadreentrant" => FfiFixtureReadReentrant,
@@ -807,7 +833,8 @@ impl OpCode {
             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | NativeLoad | NativeLoadPtr | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
             RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed
-            | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr => Some(4),
+            | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr
+            | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),
             _ => Some(2),
         }

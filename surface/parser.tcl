@@ -81,7 +81,11 @@
 #                  [ "errors" errorName { "," errorName } ] ":" suite
 #                  -- typeExpr (TypeExpr) is a type name, a qualified or
 #                  applied one, a structural Fn type, or the keyword "unit"
-#                  as the unit type's name (`-> unit`)
+#                  as the unit type's name (`-> unit`); or the fixed array
+#                  representation `"array" INT "of" typeExpr`
+#                  (FIXED-LAYOUT-ARRAYS.md), which resolution accepts only
+#                  as a layout field's type or the argument of NativeView /
+#                  NativeEdit
 #   proofClause  = "proves" IDENT ":" typeExpr
 #                  -- REFINEMENT-VALUES.md: when the function returns true
 #                  (a predicate, "-> bool") or completes normally (a
@@ -197,7 +201,9 @@
 #                  the layout body only, so every one of them stays an
 #                  ordinary name everywhere else (a field may be called
 #                  `size`). What the items mean -- widths, bounds, overlap --
-#                  is hir/layouts.tcl's
+#                  is hir/layouts.tcl's. A field's type may be a fixed
+#                  array, `array N of TYPE` (FIXED-LAYOUT-ARRAYS.md), whose
+#                  "array" and "of" are contextual too
 #   structDecl   = { structModifier } "struct" IDENT ":" NEWLINE INDENT structField { structField } DEDENT
 #   structModifier = "opaque"       -- OPAQUE-STRUCTS.md; contextual (below)
 #                  | "context"      -- CONTEXTS.md; contextual (below). The
@@ -2067,6 +2073,17 @@ proc surface::parser::Value {pVar} {
 # errors here, each with its own message.
 proc surface::parser::TypeExpr {pVar what} {
     upvar 1 $pVar p
+    if {[Kind p] eq "IDENT" && [dict get [Peek p] text] eq "array" && [Kind p 1] eq "INT"} {
+        # `array N of TYPE` (FIXED-LAYOUT-ARRAYS.md): a fixed repetition of
+        # a layout representation. "array" is contextual -- a type name
+        # directly followed by an integer is never another type expression
+        # -- so a type or a variable called `array` is unaffected. Parsed
+        # wherever a type is, so that resolution can say where it belongs (a
+        # layout field's type, or the argument of NativeView/NativeEdit);
+        # the result {array N ELEMENT} has three words, which no applied
+        # type {NAME ARG} or function type {fn FIELDS} has.
+        return [ArrayTypeExpr p]
+    }
     if {[Kind p] eq "unit"} {
         # `unit` is a keyword (the unit value, lexer.tcl); in a type
         # position it is the name of the unit type (`fn log(x) -> unit:`,
@@ -2108,6 +2125,25 @@ proc surface::parser::TypeExpr {pVar what} {
     set arg [TypeExpr p "a type argument after \"\["]
     Expect p \] "\"\]\" after the type argument"
     return [list $name $arg]
+}
+
+# "array" INT "of" TypeExpr -- a fixed array representation
+# (FIXED-LAYOUT-ARRAYS.md): exactly INT consecutive elements of the element
+# representation, which may itself be an array (`array 2 of array 3 of
+# binary::U32`: two rows of three, C's dimension order). The extent is the
+# INT token's decimal text; what it may be (positive, within the layout) is
+# hir/layouts.tcl's.
+proc surface::parser::ArrayTypeExpr {pVar} {
+    upvar 1 $pVar p
+    Advance p
+    set extent [Advance p]
+    set of [Peek p]
+    if {[dict get $of kind] ne "IDENT" || [dict get $of text] ne "of"} {
+        Fail $of "expected \"of\" and the element representation after \"array [dict get $extent value]\" (array N of TYPE), found [Describe $of]"
+    }
+    Advance p
+    set element [TypeExpr p "an element type after \"of\""]
+    return [list array [dict get $extent value] $element]
 }
 
 # "Fn" "{" fnField { "," fnField } [ "," ] "}", after the "Fn" token FN:

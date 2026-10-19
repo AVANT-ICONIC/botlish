@@ -2129,6 +2129,14 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         MBytesWrite => ("rt_mbytes_write", None, true, Some(("mbyteswrite", KIND_MUTBYTES))),
                         MBytesWritePtr => ("rt_mbytes_write_ptr", None, true, Some(("mbyteswriteptr", KIND_MUTBYTES))),
                         CPtrFixtureBytes => ("rt_cptr_fixture_bytes", None, true, Some(("cptrfixturebytes", KIND_LIST))),
+                        // Fixed arrays (FIXED-LAYOUT-ARRAYS.md): one helper
+                        // call per row of scalars; a read makes its List (a
+                        // safepoint), a write allocates nothing.
+                        BinLoadArray => ("rt_bin_load_array", None, true, Some(("binloadarray", KIND_LIST))),
+                        NativeLoadArray => ("rt_native_load_array", None, true, Some(("nativeloadarray", KIND_LIST))),
+                        BinStoreArray => ("rt_bin_store_array", None, true, None),
+                        NativeStoreArray => ("rt_native_store_array", None, true, None),
+                        BinStorePtr => ("rt_bin_store_ptr", None, true, None),
                         // The writable byte storage (MUTABLE-BYTES.md): new /
                         // from / set / clone allocate one object, freeze and
                         // freeze_prefix one immutable one (all fallible, all

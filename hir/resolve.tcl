@@ -563,6 +563,12 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         }
         return [hir::types::resolveNamed $typeExpr $ns]
     }
+    if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
+        # `array N of T` (FIXED-LAYOUT-ARRAYS.md) describes bytes, like a
+        # layout: a layout field's type or NativeView/NativeEdit's argument
+        # (both resolved by hir/layouts.tcl), never a type of values.
+        return -code error -errorcode {BOTLISH LAYOUT-NOT-A-TYPE} [hir::layouts::ArrayNotATypeMessage $typeExpr]
+    }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
         # A structural function type (surface::parser::FnType's
@@ -772,6 +778,9 @@ proc hir::resolve::ResolveProofs {hirVar e node params declaredTypes declared ct
 proc hir::resolve::ShowTypeExpr {typeExpr} {
     if {[llength $typeExpr] == 1} {
         return $typeExpr
+    }
+    if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
+        return "array [lindex $typeExpr 1] of [ShowTypeExpr [lindex $typeExpr 2]]"
     }
     lassign $typeExpr name arg
     if {$name eq "fn"} {

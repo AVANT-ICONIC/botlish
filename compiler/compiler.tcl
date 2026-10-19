@@ -1334,14 +1334,17 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
             return $result
         }
     }
-    if {[dict get $meta errors] ne "" && ![hir::completions::BoundsProven $hir $e]} {
+    if {[dict get $meta errors] ne "" && (![hir::completions::BoundsProven $hir $e]
+            || [core::native::unboundedErrors $meta] ne {})} {
         # A native with declared errors (`argv`, `list::at`) completes with
         # propagate-error: only the generic call turns its completion into
         # compiled code's Tcl completion code 5 (core::runtime::callValue).
         # Not when every one of this call's bounds checks was proven never to
         # fail (hir/completions.tcl, PROOF-FACT-CENSUS.md G1): the error
-        # cannot occur here, so it is an ordinary direct call. Only a proof
-        # counts, never a handler or an `errors` clause.
+        # cannot occur here, so it is an ordinary direct call -- unless the
+        # native declares an error no bounds check produces (a layout
+        # write's LayoutLengthMismatch beside its `extents` check). Only a
+        # proof counts, never a handler or an `errors` clause.
         return [GenericCall ctx $callee $argOps]
     }
     # Demanded as a branch (CompileCondition): a Boolean intrinsic answers
@@ -1379,8 +1382,13 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
 # straight-line shape native lowering gives it, never core/binary.tcl's
 # run-time walk of the descriptor (which the interpreter runs).
 
-# {PATH OFFSET SIGN WIDTH ENDIAN} for every scalar field of DESCRIPTOR at
-# byte BASE, depth-first in declared order; PATH the slots leading to it.
+# {PATH OFFSET SIGN WIDTH ENDIAN DIMS} for every scalar field of DESCRIPTOR
+# at byte BASE, depth-first in declared order; PATH the slots leading to it.
+# DIMS is {} for a scalar, the extents of a fixed array of scalars (FIXED-
+# LAYOUT-ARRAYS.md: {16}, or {2 3} for two rows of three), whose elements
+# are contiguous -- a scalar's stride is its width -- so it is one `binary`
+# field with a count. Raises {LAYOUT GENERIC} for an array of nested
+# layouts or pointers: the reference implementation then runs it.
 proc core::compiler::LayoutLeaves {descriptor base path} {
     set leaves {}
     set slot 0
@@ -1388,13 +1396,35 @@ proc core::compiler::LayoutLeaves {descriptor base path} {
         lassign $field name offset kind
         if {$kind eq "layout"} {
             lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}] [linsert $path end $slot]]
+        } elseif {$kind eq "array"} {
+            set dims {}
+            set repr [lrange $field 2 end]
+            while {[lindex $repr 0] eq "array"} {
+                lappend dims [lindex $repr 1]
+                set repr [lindex $repr 3]
+            }
+            if {[lindex $repr 0] ni {u i}} {
+                throw {LAYOUT GENERIC} "an array of [lindex $repr 0]"
+            }
+            lassign $repr sign width endian
+            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian $dims]
         } else {
             lassign $field name offset sign width endian
-            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian]
+            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian {}]
         }
         incr slot
     }
     return $leaves
+}
+
+# The `binary` format count of a fixed array of scalars of extents DIMS
+# (LayoutLeaves): every element, row after row.
+proc core::compiler::LeafCount {dims} {
+    set count 1
+    foreach d $dims {
+        set count [expr {$count * $d}]
+    }
+    return $count
 }
 
 # The Tcl expression building the LayoutStruct DESCRIPTOR describes from the
@@ -1408,6 +1438,18 @@ proc core::compiler::LayoutValueText {descriptor varsVar} {
         lappend names $name
         if {$kind eq "layout"} {
             lappend values [LayoutValueText [lindex $field 3] vars]
+        } elseif {$kind eq "array"} {
+            # A fixed array of scalars, scanned as one counted field: its
+            # List (core::binary::Rows for several dimensions).
+            set var [lindex $vars 0]
+            set vars [lrange $vars 1 end]
+            set dims {}
+            set repr [lrange $field 2 end]
+            while {[lindex $repr 0] eq "array"} {
+                lappend dims [lindex $repr 1]
+                set repr [lindex $repr 3]
+            }
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
         } else {
             set var [lindex $vars 0]
             set vars [lrange $vars 1 end]
@@ -1438,7 +1480,17 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
         return ""
     }
     set size [lindex $descriptor 1]
-    set leaves [LayoutLeaves $descriptor 0 {}]
+    if {[hir::layouts::RoleOf $role op] eq "emit" && [core::binary::HasArrays $descriptor]} {
+        # An emission of a layout with fixed arrays (FIXED-LAYOUT-ARRAYS.md)
+        # checks every List's extent before it can encode it (the declared
+        # LayoutExtentMismatch): the reference implementation's.
+        return ""
+    }
+    try {
+        set leaves [LayoutLeaves $descriptor 0 {}]
+    } trap {LAYOUT GENERIC} {} {
+        return ""
+    }
     switch -- [hir::layouts::RoleOf $role op] {
         parse {
             # (hir::layouts::verify proved the bytes an abi::bytes::Bytes:
@@ -1450,8 +1502,11 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
             set format ""
             set vars {}
             foreach leaf $leaves {
-                lassign $leaf path offset sign width endian
+                lassign $leaf path offset sign width endian dims
                 append format @$offset[core::binary::Letter $width $sign $endian]
+                if {$dims ne ""} {
+                    append format [LeafCount $dims]
+                }
                 lappend vars [NewTemp]
             }
             Emit ctx "binary scan \$$raw [Word $format] [join $vars { }]"
