@@ -4,9 +4,10 @@
 # (callgrind) for the tables and trees the first instruction ladder did not
 # reach, the Rust reference's counts, managed-heap allocations per lookup,
 # per-function profiles, and the copy, memory and NIR phases of the merged
-# tree. Counts do not depend on the machine's load, so this may share the
-# machine. Arguments as plan.sh's; RESULTS-DIR receives instructions.tsv,
-# allocs.tsv, profiles.txt and the run-all phases' files.
+# tree. Counts do not depend on the machine's load, so everything after
+# the first step (the algorithm corpus timed again) may share the machine.
+# Arguments as plan.sh's; RESULTS-DIR receives corpus-again.txt,
+# instructions.tsv, allocs.tsv, profiles.txt and the run-all phases' files.
 #
 #   sh audit/hash-table/tools/plan4.sh RESULTS-DIR BASE HASH INLINE MOD BOUNDS VS COMBO PROBE COMBOPROBE
 set -u
@@ -17,6 +18,21 @@ export LANG=C.utf8 LC_ALL=C.utf8
 stamp() { echo "$(date +%H:%M:%S) $*"; }
 counts="$out/instructions.tsv"
 lookups="build hit miss replace"
+
+# The algorithm corpus again, the baseline and the merged tree alternating
+# twice: plan2.sh's single pass of each showed differences on programs whose
+# machine code is identical on both trees. This step is a timing: it runs
+# before anything else is started on the machine.
+for round in 1 2; do
+    for tree in base combo; do
+        eval root=\$$tree
+        stamp "corpus, round $round: $tree"
+        echo "== $tree, round $round" >> "$out/corpus-again.txt"
+        $tclsh "$root/bench/corpus.tcl" -runs 5 -backends cranelift >> "$out/corpus-again.txt" 2>&1 \
+            || stamp "  (a corpus case failed: see corpus-again.txt)"
+    done
+done
+stamp "corpus done"
 
 count() {
     root=$1; tag=$2; shift 2
