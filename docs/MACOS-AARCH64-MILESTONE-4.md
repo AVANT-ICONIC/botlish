@@ -850,7 +850,58 @@ limitations -- Mach-O executables, C calls, Linux imports -- unchanged).
 
 ## 22. Performance observations
 
-@@PERF@@
+`bench/native-stack-guard.tcl` (a coarse check, made to show a
+catastrophic regression, not a few percent): four workloads -- a
+recursion that stays within the stack (`fib(25)`, about 250 000 calls), a
+loop (`count(2000000)`, a tail recursion), an allocating loop (200 000
+String concatenations) and a coroutine resumed 100 000 times -- each run
+N times in one driver process (`botlish-native bench`), the median of the
+runs, R rounds alternating the two drivers, the median of the rounds. Both
+drivers run the same NIR, so only the runtime and the code generator
+differ. The baseline is main's driver (8338b2b, whose native/ equals the
+branch base's), on the same host.
+
+**macOS arm64** (Tier C of run 39293822194, job 118201686534; `-baseline-rev
+main`, 20 runs x 5 rounds):
+
+| Workload | main (us) | this branch (us) | ratio |
+|---|---:|---:|---:|
+| recursion | 555.0 | 381.9 | 0.688 |
+| loop | 1398.9 | 1426.0 | 1.019 |
+| allocation | 7576.7 | 7905.7 | 1.043 |
+| coroutine | 11926.5 | 12413.8 | 1.041 |
+
+@@MACPERF2@@
+
+- **Recursion is about 30% faster on macOS**, and the cause is known: the
+  depth token is gone (section 15). Every calling function used to bump the
+  Vm's shadow-stack top, zero a slot, compare against the limit and restore
+  the top on exit; now its prologue has none of it, and the stack probes
+  add nothing to a frame under 4 KiB. That is the per-call cost Linux
+  never had.
+- **The loop** shows no change beyond noise.
+- **The coroutine workload's 4%** is in the direction of the one cost this
+  milestone adds on macOS: two publications per resume (the coroutine's
+  stack on arrival, the resumer's when the segment returns; each a load
+  of the guard's state and three atomic stores), about 2.5 ns each
+  against 124 ns a resume. Before, macOS published nothing (it had no
+  guard). The allocation workload calls nothing the milestone changed;
+  its 4% is within what one sample can say (see the Linux noise below).
+- No per-call syscall, pthread query or stack scan was added: the
+  thread's stack is read when the Vm is made and when the guard is
+  installed (`NativeStack::current()`, once each per driver process, not
+  per run), and publication is inlined atomic stores.
+
+**Linux x86-64** (this container, 4 CPUs, 30 runs x 11 rounds against
+main's driver): recursion 0.811, loop 1.055, allocation 1.049, coroutine
+1.017. On Linux the generated code is identical by construction (no
+code-generation file changed and `native_stack_overflow_supported()` was
+already true), so the runtime's publication changes are the only
+difference, and these numbers are this container's noise: the same
+benchmark with *the same driver on both sides* gave recursion 1.002, loop
+0.870, allocation 1.001, coroutine 1.019, and the current driver's own
+recursion median was 578 us in one run and 749 us in the other. Nothing on
+Linux moved beyond that.
 
 ## 23. Remaining limitations
 
