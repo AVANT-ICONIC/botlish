@@ -543,13 +543,13 @@ Regression: `tests/local.tcl` passes whole (6,161 Tcl tests on interp and
 6,156 on compile, none failing; 95 golden suites on all four backends), and
 on the branch CI's `tests` workflow (every Tcl test, duplicates included,
 the native coverage, the golden check beside the Tcl originals, the Rust
-tests, the stub-linked executables, the warning gate), `c-bindgen` (68 of 68
+tests, the stub-linked executables, the warning gate), `c-bindgen` (69 of 69
 tests, none skipped: the BoringSSL and SDL3 layout oracles run against the
 built libraries; every committed binding current; both fuzzers on all four
 targets) and `tests (macos arm64)` pass; on Linux arm64
 (`tests-arm64.yml`) the Tcl suite on interp and compile, its cranelift and
 cranelift-generic coverage, the golden suites and the Rust tests (also
-under GC stress) pass; its full GC-stress run: ARM64-GC.
+under GC stress) and the whole suite under BOTLISH_NATIVE_GC_STRESS=1 pass.
 
 ## 15. Exclusions
 
