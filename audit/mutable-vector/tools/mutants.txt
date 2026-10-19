@@ -493,6 +493,14 @@ proc hir::mutvec::ShareDescriptor {type} {
                 if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
 >>>>
 
+@@ refined-may-hold (economic) a refined value (an integer domain, a C scalar) is taken to possibly hold a header like an `any` value: a struct of a vector and a domain field copies the domain slot dynamically, and a context of domain members is read out by copy
+## hir/mutvec.tcl
+<<<<
+    if {[lindex $type 0] eq "refined"} {
+====
+    if {0 && [lindex $type 0] eq "refined"} {
+>>>>
+
 @@ installation-any-static a context installation copies by the static descriptor alone: a context whose members are all `any`, installed from a vector, shares its header, and the context's writes reach the vector
 ## hir/mutvec.tcl
 <<<<

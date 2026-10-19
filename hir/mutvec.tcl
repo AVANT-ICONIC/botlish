@@ -1503,6 +1503,12 @@ proc hir::mutvec::Results {hir f} {
 # Result payload or a callable is never a place (extracting one into a place
 # is an entry, which copies): those do not count.
 proc hir::mutvec::MayHoldVector {type {seen {}}} {
+    if {[lindex $type 0] eq "refined"} {
+        # A refined value has exactly its carrier's representation
+        # (REFINEMENT-VALUES.md): an integer domain, a C scalar, a
+        # refinement of a String hold no header.
+        return [MayHoldVector [lindex $type 1] $seen]
+    }
     if {[hir::types::IsStruct $type]} {
         foreach {name t} [lindex $type 1] {
             if {[MayHoldVector $t $seen]} {

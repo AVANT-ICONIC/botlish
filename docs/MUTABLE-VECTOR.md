@@ -291,7 +291,9 @@ any}` is `s2.0.h1.d`), so every slot of a copy owns its headers; a struct
 whose only such slots are imprecise is copied whole by `d`
 (`mv-any-slot-copies`: the descriptor once skipped those slots, so an
 `any` field kept its source's header, and two `any` fields of one copy
-shared one). Where the compiler writes shares: item 11.
+shared one). A refined value has its carrier's representation, so an
+integer domain or a C scalar (`abi::I32`'s field, `ffi::c::Int`) holds no
+header and is no such slot (`MayHoldVector` looks through the refinement). Where the compiler writes shares: item 11.
 The descriptor walks struct fields only, so a struct that names itself
 (STRUCTS.md) is met again inside itself only through fields -- a type no
 finite value has -- and shares nothing there: `Chain {items, next: Chain}`

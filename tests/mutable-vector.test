@@ -1361,12 +1361,21 @@ struct Typed:
     a: MutableVector[int]
     n: int
 
+type Small = Int in 0..9
+
+struct Dom:
+    a: MutableVector[int]
+    n: Small
+
 context struct C:
     a: MutableVector[int]
     d: any
 
 context struct D:
     d: any
+
+context struct Lim:
+    n: Small
 
 fn bump(context c: C) -> int:
     c.d.push(9)
@@ -1391,7 +1400,7 @@ proc mvShareDescriptors {text} {
     return [lsort $ds]
 }
 
-test mv-any-slot-copies {a struct whose `any` slots sit beside a typed vector slot is copied slot by slot, each `any` slot by what it holds at run time (`d`): a place's entry through which the `any` slot is mutated, a read-out of one `any` slot moved at its path's last use while its sibling, which held the same vector, is read later (a named struct, and a generic function's anonymous struct), and a context installation and a context member's read-out (on the Tcl backends: natively an `any` context member is unsupported) -- the source vector never changes; a struct of `any` slots only is still copied whole by `d`, and one of typed slots only by its static descriptor} -body {
+test mv-any-slot-copies {a struct whose `any` slots sit beside a typed vector slot is copied slot by slot, each `any` slot by what it holds at run time (`d`): a place's entry through which the `any` slot is mutated, a read-out of one `any` slot moved at its path's last use while its sibling, which held the same vector, is read later (a named struct, and a generic function's anonymous struct), and a context installation and a context member's read-out (on the Tcl backends: natively an `any` context member is unsupported) -- the source vector never changes; a struct of `any` slots only is still copied whole by `d`, and one of typed slots only -- an integer domain among them, whose values hold no header -- by its static descriptor, and a context of integer domains not at all} -body {
     set results [lmap case {
         {fn f():
     p = mutable_vector::from_list([1])
@@ -1432,6 +1441,17 @@ fn f():
     w.a.push(5)
     [w.a.length(), p.length()]
 }
+        {fn f():
+    p = mutable_vector::from_list([1])
+    w = Dom {a: p, n: 3}
+    w.a.push(5)
+    [w.a.length(), p.length(), w.n]
+}
+        {fn f(context c: Lim) -> int:
+    x = c.n
+    x + 1
+with context Lim {n: 4}
+}
     } {
         set text "${::mvAnySlotDecls}${case}f()\n"
         list [mvAgree $text] [mvShareDescriptors $text]
@@ -1459,7 +1479,7 @@ r = f()
         lappend results [sourceAgree "${::mvAnySlotDecls}${case}" {interp compile}]
     }
     set results
-} -cleanup {unset -nocomplain case text results} -result {{{value {[2, 1]}} s2.0.h1.d} {{value {[1, 2, 1, 2]}} s3.0.h1.d2.d} {{value {[[1, 2, 1], [1]]}} s3.0.h1.d2.d} {{value {[2, 1]}} d} {{value {[2, 1]}} s1.0.h} {value {[[1, 1, 2], [1]]}} {value {[[1, 1, 2], [1]]}}}
+} -cleanup {unset -nocomplain case text results} -result {{{value {[2, 1]}} s2.0.h1.d} {{value {[1, 2, 1, 2]}} s3.0.h1.d2.d} {{value {[[1, 2, 1], [1]]}} s3.0.h1.d2.d} {{value {[2, 1]}} d} {{value {[2, 1]}} s1.0.h} {{value {[2, 1, 3]}} s1.0.h} {{value 5} {}} {value {[[1, 1, 2], [1]]}} {value {[[1, 1, 2], [1]]}}}
 
 test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
