@@ -700,8 +700,18 @@ proc surface::lower::Node {node} {
             return [hir::syntax::structNode $origin $type [FieldInits $node]]
         }
         project {
-            return [hir::syntax::projectNode $origin [Node [dict get $node receiver]] \
+            set project [hir::syntax::projectNode $origin [Node [dict get $node receiver]] \
                 [dict get $node name] [Origin [dict get $node nameSpan] [dict get $node id]/field]]
+            if {[dict exists $node indices]} {
+                # Static element indices (FIXED-LAYOUT-ARRAYS.md), each with
+                # its origin: a layout field designator's (hir/resolve.tcl).
+                set i 0
+                dict set project indices [lmap index [dict get $node indices] {
+                    set origin [Origin [dict get $index span] [dict get $node id]/index[incr i]]
+                    list [dict get $index value] $origin
+                }]
+            }
+            return $project
         }
         binary {
             set op [dict get $node op]

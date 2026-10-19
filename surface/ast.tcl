@@ -708,6 +708,10 @@ proc surface::ast::Expr {node show} {
             return "([::join [concat struct $name [FieldsText $node $show]] { }])$at"
         }
         project {
+            if {[dict exists $node indices]} {
+                set indices [join [lmap index [dict get $node indices] {string cat \[ [dict get $index value] \]}] {}]
+                return "(project [Expr [dict get $node receiver] $show] [dict get $node name]$indices)$at"
+            }
             return "(project [Expr [dict get $node receiver] $show] [dict get $node name])$at"
         }
         unary {

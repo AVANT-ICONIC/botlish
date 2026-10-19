@@ -3202,6 +3202,24 @@ proc surface::parser::Postfix {pVar} {
                     Fail $token "expected a field name after \".\", found [Describe $token]"
                 }
                 Advance p
+                set indices {}
+                while {[Kind p] eq "\[" && [Kind p 1] eq "INT"} {
+                    # receiver.name[3][1]: static element indices -- the
+                    # element designator of a layout's fixed array
+                    # (FIXED-LAYOUT-ARRAYS.md: binary::store(e, L.pts[2].x,
+                    # v)). An integer can never be a type, so this is never
+                    # a method call's imprint list; what it may designate
+                    # (only a layout field designator) is hir/resolve.tcl's.
+                    Advance p
+                    set number [Advance p]
+                    Expect p \] "\"\]\" after the element index [dict get $number value]"
+                    lappend indices [dict create value [dict get $number value] span [dict get $number span]]
+                }
+                if {$indices ne ""} {
+                    set expr [surface::ast::node project [SpanFrom p [dict get $expr span]] \
+                        receiver $expr name [dict get $token value] nameSpan [dict get $token span] indices $indices]
+                    continue
+                }
                 set imprints {}
                 if {[Kind p] eq "\["} {
                     # receiver.name[TYPE, ...](args): a method call with

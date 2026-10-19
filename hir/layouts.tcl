@@ -602,9 +602,16 @@ proc hir::layouts::NativeFieldType {type name} {
 # leaf: a nested layout is written through its fields.
 
 # {ok CONSTANT} for the path NAMES (field names, outermost first) of layout
-# ID, or {problem KIND MESSAGE INDEX}, INDEX the position of the name the
-# problem is located at.
-proc hir::layouts::FieldPath {id names} {
+# ID, INDICES the static element indices written after each name (one list
+# per name, {} for none: `L.pts[2].x`, FIXED-LAYOUT-ARRAYS.md), or {problem
+# KIND MESSAGE INDEX ELEMENT}, INDEX the position of the name the problem
+# is located at and ELEMENT, when it is about an element index, that
+# index's position among the name's ("" otherwise). A designator names a
+# leaf (a scalar or a pointer, a field or an element) or a whole fixed
+# array (a field, or a row of one: `L.m[1]`); an element index past the
+# array's extent is LAYOUT-ARRAY-INDEX, an index of something that is no
+# array LAYOUT-OPERAND.
+proc hir::layouts::FieldPath {id names {indices {}}} {
     set layout $id
     set base 0
     set path {}
@@ -620,29 +627,60 @@ proc hir::layouts::FieldPath {id names} {
         }
         set written [join [concat [list $id] $path] .]
         if {$field eq ""} {
-            return [list problem UNKNOWN-FIELD [format {%s has no field "%s" (layout %s has fields: %s)}                 $written $name $layout [join [StructNames $layout] {, }]] $index]
+            return [list problem UNKNOWN-FIELD [format {%s has no field "%s" (layout %s has fields: %s)} \
+                $written $name $layout [join [StructNames $layout] {, }]] $index ""]
         }
-        lappend path $name
         set offset [expr {$base + [dict get $field offset]}]
-        set last [expr {$index == $count - 1}]
-        if {[dict get $field kind] eq "layout"} {
-            if {$last} {
-                return [list problem LAYOUT-OPERAND [format {%s.%s is the nested layout %s, not a field a write can name: a write names one scalar or pointer field (%s.%s.%s)}                     $written $name [dict get $field layout] $written $name [lindex [StructNames [dict get $field layout]] 0]] $index]
+        set repr $field
+        set text $name
+        set element 0
+        foreach i [lindex $indices $index] {
+            if {[dict get $repr kind] ne "array"} {
+                return [list problem LAYOUT-OPERAND [format {%s.%s is %s, not a fixed array: an element index [%s] names an element of an array} \
+                    $written $text [ReprWhat $repr] $i] $index $element]
             }
-            set layout [dict get $field layout]
+            set extent [dict get $repr extent]
+            if {$i >= $extent} {
+                return [list problem LAYOUT-ARRAY-INDEX [format {%s.%s is a fixed array of %s elements (indices 0..%s): the element index [%s] lies outside it} \
+                    $written $text $extent [expr {$extent - 1}] $i] $index $element]
+            }
+            set offset [expr {$offset + $i * [dict get $repr stride]}]
+            set repr [dict get $repr element]
+            append text "\[$i\]"
+            incr element
+        }
+        lappend path $text
+        set last [expr {$index == $count - 1}]
+        if {[dict get $repr kind] eq "layout"} {
+            if {$last} {
+                return [list problem LAYOUT-OPERAND [format {%s.%s is the nested layout %s, not a field a write can name: a write names one scalar or pointer field, or a fixed array (%s.%s.%s)} \
+                    $written $text [dict get $repr layout] $written $text [lindex [StructNames [dict get $repr layout]] 0]] $index ""]
+            }
+            set layout [dict get $repr layout]
             set base $offset
             incr index
             continue
         }
         if {!$last} {
-            set what [dict get {pointer {a C pointer} scalar {a scalar} array {a fixed array}} [dict get $field kind]]
-            return [list problem UNKNOWN-FIELD [format {%s.%s is %s, which has no field "%s"}                 $written $name $what [lindex $names [expr {$index + 1}]]] [expr {$index + 1}]]
+            set hint [expr {[dict get $repr kind] eq "array" ? " (an element of a fixed array is named by its index: $written.$text\[0\])" : ""}]
+            return [list problem UNKNOWN-FIELD [format {%s.%s is %s, which has no field "%s"%s} \
+                $written $text [ReprWhat $repr] [lindex $names [expr {$index + 1}]] $hint] [expr {$index + 1}] ""]
         }
-        set entry [FieldDescriptor $layout $name]
-        lset entry 1 $offset
+        set entry [list $text $offset {*}[ReprDescriptor $repr]]
         return [list ok [list [structId $id] [size $id] [join $path .] $entry]]
     }
     error "internal compiler error: an empty field path of layout $id"
+}
+
+# What the representation REPR is, for a message: "a scalar", "a C
+# pointer", "a fixed array", "the nested layout L".
+proc hir::layouts::ReprWhat {repr} {
+    switch -- [dict get $repr kind] {
+        pointer { return "a C pointer" }
+        array   { return "a fixed array" }
+        layout  { return "the nested layout [dict get $repr layout]" }
+    }
+    return "a scalar"
 }
 
 # The root layout of the field designator constant PATH, or "" if it is
@@ -654,31 +692,44 @@ proc hir::layouts::PathLayout {path} {
     return [DescriptorLayout $path]
 }
 
-# The registry entry (the file header's FIELD) of the leaf the field
-# designator constant PATH names, or "".
+# The representation (the registry's FIELD, or an array element's) of the
+# leaf the field designator constant PATH names, or "": its path's steps
+# ("pts[2].x": a field name, then any element indices) walked again
+# through the registry.
 proc hir::layouts::PathField {path} {
     set layout [PathLayout $path]
     if {$layout eq "" || ![declared $layout]} {
         return ""
     }
-    set names [split [lindex $path 2] .]
-    set field ""
-    foreach name $names {
-        set field ""
+    set repr ""
+    foreach step [split [lindex $path 2] .] {
+        if {![regexp {^([^\[]+)((?:\[[0-9]+\])*)$} $step -> name indices]} {
+            return ""
+        }
+        if {$repr ne ""} {
+            if {[dict get $repr kind] ne "layout"} {
+                return ""
+            }
+            set layout [dict get $repr layout]
+        }
+        set repr ""
         foreach f [dict get [entry $layout] fields] {
             if {[dict get $f name] eq $name} {
-                set field $f
+                set repr $f
                 break
             }
         }
-        if {$field eq ""} {
+        if {$repr eq ""} {
             return ""
         }
-        if {[dict get $field kind] eq "layout"} {
-            set layout [dict get $field layout]
+        foreach i [regexp -all -inline {[0-9]+} $indices] {
+            if {[dict get $repr kind] ne "array" || $i >= [dict get $repr extent]} {
+                return ""
+            }
+            set repr [dict get $repr element]
         }
     }
-    return $field
+    return $repr
 }
 
 # "RECORD.origin.x": the designator constant PATH as written.

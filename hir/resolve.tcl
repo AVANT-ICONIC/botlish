@@ -1332,6 +1332,13 @@ proc hir::resolve::Expr {hirVar node ctx} {
             # representation authority over an opaque receiver is checked
             # against after inference (hir/structs.tcl, OPAQUE-STRUCTS.md).
             SetField hir $e ns [CtxNamespace $ctx]
+            if {[dict exists $node indices]} {
+                # `x.name[3]` outside a layout field designator
+                # (FIXED-LAYOUT-ARRAYS.md): there is no index expression.
+                set index [lindex [dict get $node indices] 0]
+                hir::DiagnoseAt hir LAYOUT-OPERAND [::format {an element index (%s[%s]) is written only in a layout field designator, binary::store(e, L.items[3], v) or binary::write(d, L.items[3], v): Botlish has no index expression (an element of a live array is binary::element(a, i), of a List list::at(xs, i))} \
+                    [dict get $node name] [lindex $index 0]] $e [lindex $index 1]
+            }
         }
         ok - error {
             SetField hir $e value [Expr hir [dict get $node value] $ctx]
@@ -2071,10 +2078,14 @@ proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
     set placeholder [Expr hir [hir::syntax::constNode [dict get $arg origin] str ""] $ctx]
     set names {}
     set origins {}
+    set indices {}
     set root $arg
     while {[dict get $root kind] eq "project"} {
         set names [linsert $names 0 [dict get $root name]]
         set origins [linsert $origins 0 [dict get $root nameOrigin]]
+        # A step's static element indices (FIXED-LAYOUT-ARRAYS.md:
+        # L.pts[2].x), {VALUE ORIGIN} each.
+        set indices [linsert $indices 0 [expr {[dict exists $root indices] ? [dict get $root indices] : {}}]]
         set root [dict get $root receiver]
     }
     if {$names eq ""} {
@@ -2088,10 +2099,15 @@ proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
     if {$id eq ""} {
         return $placeholder
     }
-    set result [hir::layouts::FieldPath $id $names]
+    set result [hir::layouts::FieldPath $id $names [lmap step $indices {lmap index $step {lindex $index 0}}]]
     if {[lindex $result 0] eq "problem"} {
-        lassign $result - kind message index
-        hir::DiagnoseAt hir $kind $message $placeholder [lindex $origins $index]
+        lassign $result - kind message index element
+        set origin [lindex $origins $index]
+        if {$element ne ""} {
+            # (Located at the element index the problem is about.)
+            set origin [lindex [lindex $indices $index] $element 1]
+        }
+        hir::DiagnoseAt hir $kind $message $placeholder $origin
         return $placeholder
     }
     set constant [lindex $result 1]

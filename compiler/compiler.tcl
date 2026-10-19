@@ -1387,8 +1387,8 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
 # DIMS is {} for a scalar, the extents of a fixed array of scalars (FIXED-
 # LAYOUT-ARRAYS.md: {16}, or {2 3} for two rows of three), whose elements
 # are contiguous -- a scalar's stride is its width -- so it is one `binary`
-# field with a count. Raises {LAYOUT GENERIC} for an array of nested
-# layouts or pointers: the reference implementation then runs it.
+# field with a count. An array of nested layouts or pointers has no such
+# leaf (ArrayOfRecords): the reference implementation runs that layout.
 proc core::compiler::LayoutLeaves {descriptor base path} {
     set leaves {}
     set slot 0
@@ -1403,9 +1403,6 @@ proc core::compiler::LayoutLeaves {descriptor base path} {
                 lappend dims [lindex $repr 1]
                 set repr [lindex $repr 3]
             }
-            if {[lindex $repr 0] ni {u i}} {
-                throw {LAYOUT GENERIC} "an array of [lindex $repr 0]"
-            }
             lassign $repr sign width endian
             lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian $dims]
         } else {
@@ -1415,6 +1412,25 @@ proc core::compiler::LayoutLeaves {descriptor base path} {
         incr slot
     }
     return $leaves
+}
+
+# 1 if DESCRIPTOR has a fixed array (directly or in a nested layout) whose
+# elements are not scalars -- nested layouts or pointers -- which no one
+# `binary scan` field reads.
+proc core::compiler::ArrayOfRecords {descriptor} {
+    foreach field [lindex $descriptor 3] {
+        set repr [lrange $field 2 end]
+        if {[lindex $repr 0] eq "layout" && [ArrayOfRecords [lindex $repr 1]]} {
+            return 1
+        }
+        while {[lindex $repr 0] eq "array"} {
+            set repr [lindex $repr 3]
+            if {[lindex $repr 0] ni {array u i}} {
+                return 1
+            }
+        }
+    }
+    return 0
 }
 
 # The `binary` format count of a fixed array of scalars of extents DIMS
@@ -1486,11 +1502,11 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
         # LayoutExtentMismatch): the reference implementation's.
         return ""
     }
-    try {
-        set leaves [LayoutLeaves $descriptor 0 {}]
-    } trap {LAYOUT GENERIC} {} {
+    if {[ArrayOfRecords $descriptor]} {
+        # (FIXED-LAYOUT-ARRAYS.md: the reference implementation's loop.)
         return ""
     }
+    set leaves [LayoutLeaves $descriptor 0 {}]
     switch -- [hir::layouts::RoleOf $role op] {
         parse {
             # (hir::layouts::verify proved the bytes an abi::bytes::Bytes:

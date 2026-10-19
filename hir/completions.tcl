@@ -2875,6 +2875,21 @@ proc hir::completions::ExtentsVerdict {hir ctx name argExprs v} {
         if {$field eq ""} {
             return in
         }
+        set pointer [expr {[dict get $field kind] eq "pointer" || [hir::layouts::PointerArray $field]}]
+        switch -- [hir::layouts::RoleOf $role op] {
+            write {
+                if {[hir::layouts::ReprPointerPath $field] ne "none"} {
+                    # (LAYOUT-NATIVE-ONLY: the write never runs.)
+                    return in
+                }
+            }
+            write_foreign {
+                if {!$pointer} {
+                    # (LAYOUT-FOREIGN-WRITE: the write never runs.)
+                    return in
+                }
+            }
+        }
         return [ReprValueVerdict $hir $ctx $field $value]
     }
     set id ""

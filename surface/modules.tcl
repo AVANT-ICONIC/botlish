@@ -766,6 +766,11 @@ proc surface::modules::RemapFile {node fileId} {
         project {
             dict set node receiver [RemapFile [dict get $node receiver] $fileId]
             dict set node nameOrigin [RemapOrigin [dict get $node nameOrigin] $fileId]
+            if {[dict exists $node indices]} {
+                dict set node indices [lmap index [dict get $node indices] {
+                    list [lindex $index 0] [RemapOrigin [lindex $index 1] $fileId]
+                }]
+            }
         }
         return - ok - error {
             dict set node value [RemapFile [dict get $node value] $fileId]
