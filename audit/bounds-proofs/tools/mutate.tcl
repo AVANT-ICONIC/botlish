@@ -1,8 +1,9 @@
 # mutate.tcl -- mutation testing of the bounds prover: hir/completions.tcl's
 # IndexBounds and its theorems (ReducedIndex: an index reduced mod the
 # container's size or masked by the size minus one; RelationKey: a guard on
-# a computed local), hir/cardinality.tcl's field-path size keys (ValueKey),
-# the rules beside them and native lowering's use of the verdict.
+# a computed local), hir/cardinality.tcl's field-path size keys (ValueKey)
+# and the length of a loop over a MutableVector (IterationLength), the rules
+# beside them and native lowering's use of the verdict.
 #
 #   tclsh9.0 audit/bounds-proofs/tools/mutate.tcl ?-only NAME,...? ?-timeout SECONDS?
 #       ?-seeds N? ?-count N?

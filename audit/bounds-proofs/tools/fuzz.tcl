@@ -12,12 +12,16 @@
 #   fn f(a, b: MutableArray[int], xs, ys: List[int], s, w: str,
 #        t, u: T, o: O, h: int)
 #
-# (T {s, r: MutableArray[int]}, O {inner: T}) with no `errors` clause, whose
-# body makes one indexed access -- a read (mutable_array::at, list::at,
-# str::char_at) or a write (mutable_array::set, then the array frozen and
-# returned) -- of a container that is a parameter, a local array derived
-# from one (`c = create(capacity(a) + K, 3)`), a field path (t.s) or a
-# nested one (o.inner.s), at an index made sound by one theorem:
+# (T {s, r: MutableArray[int]}, O {inner: T}, V {v: MutableVector[int]})
+# with no `errors` clause, whose body makes one indexed access -- a read
+# (mutable_array::at, list::at, str::char_at) or a write
+# (mutable_array::set, then the array frozen and returned) -- of a
+# container that is a parameter, a local array derived from one (`c =
+# create(capacity(a) + K, 3)`), a field path (t.s) or a nested one
+# (o.inner.s), or the List p a loop collects over a vector (a local or a
+# local struct's field built from xs), pushed to before the loop and
+# pushed, popped or cleared after it (a snapshot's size is its own loop's),
+# at an index made sound by one theorem:
 #
 #   mod       mod(X, SIZE): inline, method syntax, a local of the size, a
 #             local of the index, or the size spelled as an equal form
@@ -49,14 +53,20 @@
 # fields of two call results, a one-sided guard on a local that may be
 # negative, a guard against another size, a guard on one local and a read
 # of another, a guard inside a loop that may run zero times with the read
-# after it, a write guarded by another field. Each must be rejected
+# after it, a write guarded by another field, and a List collected over a
+# vector read at an index proven against a later loop over the same vector
+# (a counted loop, mod, a mask, a guard; a local or a field path) with a
+# push, pop or clear between the two loops. Each must be rejected
 # strictly (UNHANDLED-ERROR), and each names a witness input at which the
 # same program, declaring the error and handling it, does fail with
 # IndexNotFound on the interpreter: the rejection is necessary, not only
-# conservative. Three CONSERVATIVE shapes (the index written twice inline,
+# conservative. A lockstep loop over a vector and a List collected over it
+# before a push must be LOCKSTEP-UNPROVEN, its witness showing the two
+# counts differ. Four CONSERVATIVE shapes (the index written twice inline,
 # a guard in a loop that runs once with the read after it, the field of
-# one call result written twice) are safe but outside every theorem: they
-# must stay rejected, which pins the theorems' scope.
+# one call result written twice, two loops over one vector with nothing
+# between them) are safe but outside every theorem: they must stay
+# rejected, which pins the theorems' scope.
 #
 # The fuzzer reads the compiler of the checkout it is in (the mutation
 # harness runs it from a private copy). Exit status 1 on any failure.
@@ -126,6 +136,23 @@ proc kindInfo {kind} {
                 family array nonzero [expr {$K > 0}] \
                 sizes [list "mutable_array::capacity(%s)" "(mutable_array::capacity(a) + $K)"]]
         }
+        snapshot {
+            # p, the List a loop collects over a vector built from xs (a
+            # local, or a local struct's field), the vector changed before
+            # and after it: p's size is its own loop's, whatever happens to
+            # the vector (hir::cardinality::IterationLength). A push before
+            # the loop makes p nonempty at run time (no capacity-0 mod
+            # failure), though no form says so (a mask still needs a guard).
+            set v [pick {v bx.v}]
+            # (vec: a MutableVector[int] even of the empty xs, which a
+            # specialization types List[never].)
+            set make [expr {$v eq "v" ? "v = vec(xs)" : "bx = V {v: vec(xs)}"}]
+            set before [pick [list "" "$v.push(h)\n    " "$v.push(7)\n    $v.push(8)\n    "]]
+            set after [pick [list "" "$v.push(h)\n    " "$v.pop():\n        on IndexNotFound:\n            0\n    " "$v.clear()\n    "]]
+            return [dict create c p other ys family list nonzero 0 nonempty [expr {$before ne ""}] \
+                prelude "$make\n    ${before}p = loop x in $v:\n        x + 1\n    $after" \
+                sizes {"list::length(%s)"}]
+        }
     }
 }
 
@@ -164,7 +191,7 @@ proc indexSource {} {
 # One SOUND body: {body op zero}, zero `arith` when an empty container
 # reaches an unguarded mod, else `value`.
 proc soundBody {} {
-    set kind [pick {array array list str field field nested derived}]
+    set kind [pick {array array list str field field nested derived snapshot}]
     set info [kindInfo $kind]
     set prelude [dict get $info prelude]
     set write [expr {[dict get $info family] eq "array" && [chance 0.35]}]
@@ -173,7 +200,7 @@ proc soundBody {} {
     set access [expr {$write ? "writeOf" : "readOf"}]
     switch -- $theorem {
         mod {
-            set zero [expr {[dict get $info nonzero] ? "value" : "arith"}]
+            set zero [expr {[dict get $info nonzero] || ([dict exists $info nonempty] && [dict get $info nonempty]) ? "value" : "arith"}]
             switch -- [pick {inline method sizelocal indexlocal}] {
                 inline { return [list "$prelude[$access $info "mod($x, [sizeOf $info])"]" [opOf $info $write] $zero $kind/$theorem] }
                 method { return [list "$prelude[$access $info "($x).mod([sizeOf $info])"]" [opOf $info $write] $zero $kind/$theorem] }
@@ -221,7 +248,7 @@ proc soundBody {} {
 # ---------------------------------------------------------------------------
 # Programs
 
-set header "import list\nimport mutable_array\nimport str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nfn mk(t: T) -> T:\n    t\n\n"
+set header "import list\nimport mutable_array\nimport mutable_vector\nimport str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nstruct V:\n    v: MutableVector\[int\]\n\nfn mk(t: T) -> T:\n    t\n\nfn vec(xs: List\[int\]) -> MutableVector\[int\]:\n    mutable_vector::from_list(xs)\n\n"
 set signature "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], ys: List\[int\], s: str, w: str, t: T, u: T, o: O, h: int)"
 set alphabet [split "aé😀bcdefghijklmnopq" ""]
 
@@ -296,6 +323,24 @@ proc outcome {hir backend} {
 
 proc opCount {text op} { return [llength [regexp -all -inline "op $op\[ \n\]" $text]] }
 
+# The `op OP` lines of NIR TEXT a program's indexed access makes: every one
+# but a collecting loop's own element read (a loop over a List reads its
+# elements with listget, annotated with the loop's expression).
+proc accessOpCount {hir text op} {
+    set n 0
+    foreach line [split $text \n] {
+        if {![regexp "op $op\[ \n\]" "$line\n"]} {
+            continue
+        }
+        if {[regexp {@(e\d+)\s*$} $line -> id] && [dict exists $hir exprs $id]
+                && [hir::kind $hir $id] in {listloop lockloop}} {
+            continue
+        }
+        incr n
+    }
+    return $n
+}
+
 set capsAll {1 2 3 5 7 8 16}
 set hsAll {0 1 2 3 4 7 -1 -2 -8 15 16 12345 -99999 4611686018427387903 -4611686018427387904 9223372036854775808 1180591620717411303424 -1180591620717411303424}
 
@@ -323,8 +368,8 @@ for {set n 1} {$n <= [dict get $options -count]} {incr n} {
     }
     incr sound
     set nir [native::nir $hir]
-    if {[opCount $nir ${op}proven] < 1 || [opCount $nir $op] > 0} {
-        fail "$name ($label): the access is not the proven opcode ($op [opCount $nir $op], ${op}proven [opCount $nir ${op}proven])\n    $body"
+    if {[opCount $nir ${op}proven] < 1 || [accessOpCount $hir $nir $op] > 0} {
+        fail "$name ($label): the access is not the proven opcode ($op [accessOpCount $hir $nir $op], ${op}proven [opCount $nir ${op}proven])\n    $body"
     }
     set reference ""
     foreach backend $backends {
@@ -412,6 +457,92 @@ set unsound {
             return k
     mutable_array::at(a, j)} {3 3 500}
     call-receivers   {mutable_array::at(mk(t).s, mod(h, mutable_array::capacity(mk(u).s)))} {2 5 4}
+    vector-counted   {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    q = loop x in v:
+        x
+    r = loop k from 0 to list::length(q):
+        list::at(p, k)
+    list::length(r)} {2 3 1}
+    vector-mod       {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    v.push(h)
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-mask      {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    v.push(h)
+    q = loop x in v:
+        x
+    if list::length(q) == 0:
+        return -1
+    list::at(p, bit_and(h, list::length(q) - 1))} {2 3 3}
+    vector-guard     {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    q = loop x in v:
+        x
+    if h < 0 or h >= list::length(q):
+        return -1
+    list::at(p, h)} {2 3 2}
+    vector-pop       {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.pop():
+        on IndexNotFound:
+            0
+    q = loop x in v:
+        x
+    list::at(q, mod(h, list::length(p)))} {3 3 2}
+    vector-clear     {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.clear()
+    q = loop x in v:
+        x
+    list::at(q, mod(h, list::length(p)))} {2 3 1}
+    vector-field     {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    q = loop x in bx.v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+}
+# Lockstep clauses over a vector and a List an earlier loop collected over
+# it, the vector grown between them: LOCKSTEP-UNPROVEN, and the witness
+# program (the two clauses' counts) shows they differ there.
+set lockstepUnsound {
+    vector-lockstep {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    r = loop a in v and y in p:
+        a + y
+    list::length(r)} {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    [mutable_vector::length(v), list::length(p)]} {2 3 1}
+    field-lockstep {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    r = loop a in bx.v and y in p:
+        a + y
+    list::length(r)} {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    [mutable_vector::length(bx.v), list::length(p)]} {2 3 1}
 }
 set conservative {
     inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
@@ -423,6 +554,12 @@ set conservative {
             return k
     mutable_array::at(a, j)}
     call-twice       {mutable_array::at(mk(t).s, mod(h, mutable_array::capacity(mk(t).s)))}
+    vector-twice     {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))}
 }
 
 if {[dict get $options -unsound]} {
@@ -459,6 +596,29 @@ if {[dict get $options -unsound]} {
         }
         incr rejected
         puts "ok   conservative $name: rejected"
+    }
+    foreach {name body counts witness} $lockstepUnsound {
+        set path [writeProgram l-$name "$header$signature:\n    $body\n\n[callOf f 2 3 1]\n"]
+        set kind [strict $path hir]
+        if {$kind ne "LOCKSTEP-UNPROVEN"} {
+            fail "lockstep $name: expected LOCKSTEP-UNPROVEN, got [expr {$kind eq "" ? "accepted" : $kind}]"
+            continue
+        }
+        incr rejected
+        lassign $witness ca cb h
+        set wpath [writeProgram lw-$name "$header$signature:\n    $counts\n\n[callOf f $ca $cb $h]\n"]
+        if {[catch {surface::readProgramFile $wpath -warnings off} whir]} {
+            fail "lockstep $name: the witness program does not compile: [string range $whir 0 200]"
+            continue
+        }
+        set got [outcome $whir interp]
+        set numbers [regexp -all -inline {\d+} [lindex $got 1]]
+        if {[lindex $got 0] ne "value" || [llength $numbers] != 2 || [llength [lsort -unique -integer $numbers]] != 2} {
+            fail "lockstep $name: the witness ($ca $cb $h) does not give two different counts: $got"
+            continue
+        }
+        incr witnessed
+        puts "ok   lockstep $name: rejected; witness capacities $ca/$cb, h = $h counts [lindex $got 1]"
     }
 }
 

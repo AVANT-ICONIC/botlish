@@ -2,7 +2,8 @@
 # kill list of hir/completions.tcl's IndexBounds and its theorems --
 # reduced indices (ReducedIndex: mod by the size, bit_and with the size
 # minus one), guards on computed locals (RelationKey), the field-path size
-# keys (hir/cardinality.tcl's ValueKey) -- and of the rules they stand
+# keys (hir/cardinality.tcl's ValueKey) and the length of a loop over a
+# MutableVector (IterationLength) -- and of the rules they stand
 # beside: the relational and range rules of IndexBounds, the size atoms, the
 # per-check verdict (BoundsProven) and native lowering's use of it. Each is
 # a deliberate bug that proves an index it may not, or stops proving one it
@@ -128,6 +129,42 @@
         return [FormAtom [list cap [list b $id]]]
 ====
         return [FormAtom [list cap [list b]]]
+>>>>
+
+# A loop over a MutableVector has the length of its own evaluation
+# (hir::cardinality::IterationLength): a key names one vector, not one
+# length.
+
+@@ vector-length-keyed a loop over a MutableVector has its binding's, path's or definition's length, like a List's, so two loops around a push, pop or clear (or a callee's push to a context member) are one size
+## hir/cardinality.tcl
+<<<<
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+====
+    if {0} {
+>>>>
+
+@@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by the loop's own evaluation, so every loop over one binding or field path shares a length
+## hir/cardinality.tcl
+<<<<
+        return [FormAtom [list len [list o $e]]]
+====
+        return [FormAtom [list len [list o [ValueKey $hir $e steps]]]]
+>>>>
+
+@@ every-domain-per-occurrence a loop over any collection has the length of its own evaluation (precision: two loops over one List or MutableArray, or a lockstep over one and a List collected over it, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+====
+    if {1} {
+>>>>
+
+@@ untyped-domain-per-occurrence a loop over a value of no collection type (an untyped parameter, which the loop requires to be a List) has the length of its own evaluation (precision: a lockstep over it and a List collected over it is unproven)
+## hir/cardinality.tcl
+<<<<
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+====
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray}} {
 >>>>
 
 # ---------------------------------------------------------------------------
