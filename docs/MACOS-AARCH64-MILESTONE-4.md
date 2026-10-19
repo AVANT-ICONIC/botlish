@@ -938,7 +938,7 @@ instead of crashing.
 | Run | Head | Result |
 |---|---|---|
 | [39290986586](https://github.com/mwagner-webdev/botlish/actions/runs/39290986586) | 3b3e664, the change | **success**: all 10 jobs -- the Tcl suite on interp and on compile, cranelift and cranelift-generic coverage, the four golden shards, the native Rust unit tests (also under GC stress) and the whole test suite under `BOTLISH_NATIVE_GC_STRESS=1` |
-| [39304502981](https://github.com/mwagner-webdev/botlish/actions/runs/39304502981) | cfdb02d, the final code | @@ARMFINAL@@ |
+| [39304502981](https://github.com/mwagner-webdev/botlish/actions/runs/39304502981) | cfdb02d, the final code | **success**: all 10 jobs, the whole test suite under `BOTLISH_NATIVE_GC_STRESS=1` among them (84 minutes) |
 
 Linux AArch64 shares the most with macOS -- the AArch64 coroutine switch
 (`aarch64_switch!`, unchanged), the frame-record walk, the stack-probe
