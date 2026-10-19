@@ -10,8 +10,9 @@ name: tests (macos arm64)
 #   smoke          Tier A, every push: the host and its C and Rust
 #                  toolchains (not Botlish), Tcl 9.0.1, core::cabi's macOS row,
 #                  the native build and its Rust unit tests, the native stack
-#                  bounds and overflow tests, the native status, the smoke
-#                  tier (tests/platform/tier.tcl smoke)
+#                  bounds and overflow tests, the native status, native
+#                  objects and executables (tests/platform/aot-facts.tcl),
+#                  the smoke tier (tests/platform/tier.tcl smoke)
 #   acceptance     Tier B, every push, two shards: the acceptance tier --
 #                  the test files and golden suites that pass on macOS
 #   linux control  Tier A on ubuntu-latest, every push: the same smoke
@@ -123,6 +124,12 @@ jobs:
       - name: Native status
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
 
+      # A program object and a standalone executable as the host's tools see
+      # them (file, nm, objdump, otool, lipo, codesign), and the executable
+      # run outside its build directory (milestone 5).
+      - name: Native objects and executables
+        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
+
       - name: Smoke tier
         run: tclsh9.0 tests/platform/tier.tcl smoke 2>&1 | tee tier.log
 
@@ -196,6 +203,9 @@ jobs:
 
       - name: Native status
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Native objects and executables
+        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
 
       - name: Smoke tier
         run: tclsh9.0 tests/platform/tier.tcl smoke
