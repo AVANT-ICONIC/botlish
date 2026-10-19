@@ -1363,10 +1363,13 @@ proc hir::completions::SeedParam {} {
 #                                        linear form -- e.g. the length of
 #                                        the List the loop counts over:
 #                                        IndexBounds' relational case)
-#   upperBounds bindingId -> {FORM ...} (an Int binding proven < each FORM
+#   upperBounds KEY -> {FORM ...}       (an Int value proven < each FORM
 #                                        in the current branch, from an
 #                                        enclosing `if` condition comparing
-#                                        it with a size: BranchRelations)
+#                                        it with a size: BranchRelations;
+#                                        KEY a binding or {e EXPR}, a
+#                                        computed local's defining
+#                                        expression: RelationKey)
 #   sizes     FORM -> N                 (a List length / MutableArray
 #                                        capacity form proven equal to the
 #                                        Int N in the current branch, from
@@ -1636,9 +1639,11 @@ proc hir::completions::BranchOutcome {hir ctx condition outcome} {
 
 # The relational facts the `if` condition CONDITION establishes on its
 # OUTCOME branch, for IndexBounds alone, added to ctx: a comparison of an
-# Int binding with a size (`i < list::length(xs)` true, `i >= list::length
-# (xs)` false, ... in either operand order) records the binding's
-# exclusive upper bound as a hir/cardinality.tcl form (ctx.upperBounds); an
+# Int value with a size (`i < list::length(xs)` true, `i >= list::length
+# (xs)` false, ... in either operand order) records the value's exclusive
+# upper bound as a hir/cardinality.tcl form (ctx.upperBounds, under the
+# value's RelationKey: a binding, or a computed local's defining
+# expression); an
 # equality of a List length or MutableArray capacity with an exact Int
 # (`list::length(bytes) == 1`) records that size (ctx.sizes). Only an Int
 # comparison native (`< <= > >= ==`) is read; anything else adds nothing.
@@ -1712,15 +1717,35 @@ proc hir::completions::BranchRelation {hir ctxVar condition outcome} {
     if {$lowInt ne {} && $sizeForm ne {}} {
         NoteMinSize ctx $sizeForm [expr {$lowInt - $k + 1}]
     }
-    lassign [hir::cardinality::Chase $hir $low steps] kind binding
-    if {$kind ne {binding}} {
-        return
-    }
+    set key [RelationKey $hir $low]
     set form [hir::cardinality::FormAdd [hir::cardinality::IntForm $hir $high steps] \
         [hir::cardinality::FormConst $k]]
     set bounds [dict get $ctx upperBounds]
-    dict lappend bounds $binding $form
+    dict lappend bounds $key $form
     dict set ctx upperBounds $bounds
+}
+
+# The key under which a relation on the Int expression E is recorded
+# (ctx.upperBounds) and looked up (IndexBounds): one convention, Chase's
+# (PROOF-FACT-CENSUS.md, G12). The binding an alias chain ends at with no
+# defining expression (a parameter, a loop variable), else {e D}, the
+# expression D the chain ends at: a computed local `j = i + 1` guarded by
+# `if j < 0 or j >= list::length(xs): return ...` is keyed by its one
+# defining expression, which every reference to j (and to any alias of j)
+# chases to. The relation is then about the value that one evaluation of D
+# bound -- the value every such reference reads, the binding being
+# single-assignment -- and lives only in the scope that proved it, like
+# every relation (Relations): a loop body or handler restores the facts it
+# started with, so another evaluation of D (the next iteration) never sees
+# it. An expression no alias names (a guard on `i + 1` written inline) keys
+# a relation nothing reads: each written `i + 1` is its own expression.
+proc hir::completions::RelationKey {hir e} {
+    set steps 0
+    lassign [hir::cardinality::Chase $hir $e steps] kind id
+    if {$kind eq {binding}} {
+        return $id
+    }
+    return [list e $id]
 }
 
 # The form of E when it is exactly one container size -- a List length, a
@@ -3146,20 +3171,25 @@ proc hir::completions::SliceFacts {hir ctx slices} {
 #     the same immutable List, or the capacity of the same MutableArray --
 #     `loop i from 0 to list::length(xs): list::at(xs, i)`).
 #
-#   * branch relations (BranchRelations): INDEX reads a binding an
-#     enclosing `if` proved below the container's size form, and INDEX's
-#     own Range is provably >= 0 (`if i < 0 or i >= list::length(xs): ...
-#     else: list::at(xs, i)`, or the `and` form's then branch); or the
+#   * branch relations (BranchRelations): INDEX reads a value an
+#     enclosing `if` proved below the container's size form -- a binding,
+#     or a computed local keyed by its defining expression (RelationKey) --
+#     and INDEX's own Range is provably >= 0 (`if i < 0 or i >=
+#     list::length(xs): ... else: list::at(xs, i)`, or the `and` form's then
+#     branch; `j = i + 1` guarded the same way, then `list::at(xs, j)`); or the
 #     container's size form was proven equal to an exact N (`if
 #     list::length(bytes) == 1: list::at(bytes, 0)`), which the range check
 #     above then uses.
+#   * reduction (ReducedIndex): INDEX is (an alias of) `mod(X, SIZE)` or
+#     `bit_and(X, SIZE - 1)` with SIZE the container's own size form
+#     (`list::at(xs, h.mod(list::length(xs)))`).
 #
 # The relational proofs are tried first: an index they place in range is in
 # range on every path that reaches the read, so if this walk's exact ranges
 # also put it out of range, the two cannot both hold and the read is
 # unreachable here (vacuously in).
 #
-# Nothing else is attempted: no arithmetic on a bounded variable, no
+# Nothing else is attempted: no other arithmetic on a bounded variable, no
 # interprocedural parameter facts.
 proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     set steps 0
@@ -3200,27 +3230,44 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         # vacuously designates an element.
         return in
     }
+    # A size an enclosing branch proved at least M (ctx.minSizes) that this
+    # path also knows to be exactly N < M (`if list::length(xs) < 1: return
+    # ...` under this call's exact empty xs) is the same contradiction: the
+    # read is unreachable here.
+    set min [MinSizeOf $ctx $sizes]
+    if {$known ne "" && $min ne "" && [lindex $known 0] < $min} {
+        return in
+    }
     # Relational facts first: when they place the index below a size this
     # path also knows, the read designates an element -- and should the
     # range facts below say otherwise, the facts contradict each other, so
     # the path is unreachable and the read is vacuously in range.
     lassign [hir::cardinality::Chase $hir $index steps] kind binding
-    if {$kind eq "binding"} {
-        if {[dict exists $ctx indexBounds $binding] && [dict get $ctx indexBounds $binding] in $sizes} {
-            return in
-        }
-        if {$indexRange ne {never} && [dict exists $ctx upperBounds $binding]
-                && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
-            foreach form [dict get $ctx upperBounds $binding] {
-                if {$form in $sizes} {
-                    return in
-                }
+    if {$kind eq "binding" && [dict exists $ctx indexBounds $binding]
+            && [dict get $ctx indexBounds $binding] in $sizes} {
+        return in
+    }
+    set key [RelationKey $hir $index]
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]
+            && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
+        foreach form [dict get $ctx upperBounds $key] {
+            if {$form in $sizes} {
+                return in
             }
         }
     }
+    # An index reduced into the container's own size by arithmetic
+    # (ReducedIndex: mod by the size, bit_and with the size minus one). A
+    # container of known size 0 is left to the range rule below: it has no
+    # element, so a read of it that is reached is out -- and a read whose
+    # index is reduced by that size 0 is never reached at all (mod fails
+    # with ARITHMETIC first) -- so such a read stays KNOWN-ERROR, as it
+    # always was, rather than becoming vacuously in.
+    if {$kind eq "expr" && 0 ni $known && [ReducedIndex $hir $ctx $binding $sizes $known]} {
+        return in
+    }
     # A size an enclosing branch proved at least M (`if list::length(xs) >
     # 0:`) holds every index in 0..M-1.
-    set min [MinSizeOf $ctx $sizes]
     if {$min ne "" && $indexRange ne {never}} {
         set lo [dict get $indexRange min]
         set hi [dict get $indexRange max]
@@ -3250,6 +3297,57 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         }
     }
     return ""
+}
+
+# 1 if the Int expression E -- the expression an index's alias chain ends at
+# (hir::cardinality::Chase) -- is provably in 0..N-1, N the container size
+# that each of the forms SIZES names (KNOWN: the sizes this path knows
+# exactly, IndexBounds'), by one of two facts of integer arithmetic:
+#
+#   * mod(X, D) with D's form one of SIZES: mod is Euclidean
+#     (core/primitives.tcl) and returns only when D != 0 -- D == 0 fails
+#     with ARITHMETIC, which no handler catches -- with 0 <= r < |D|. D is
+#     a size, so D >= 0 and r < D = N: `xs.at(h.mod(xs.length()))`.
+#   * bit_and(X, M), in either operand order, with M + 1's form one of
+#     SIZES and M >= 0: two's-complement AND of a nonnegative M keeps a
+#     subset of M's bits, so 0 <= X & M <= M < N whatever X is (negative or
+#     beyond any machine word). M >= 0 holds when the size is proven at
+#     least 1 (an enclosing guard: ctx.minSizes, `if a.capacity() == 0:
+#     return ...`; or a known size), when M's form is nonnegative
+#     (hir::cardinality::NonNeg) or when M's Range in this walk is. No
+#     power of two is assumed: a mask keeps any index in range, whatever
+#     the size; a power of two only makes it reach every element. Without
+#     M >= 0 nothing is proven: for N = 0 the mask is -1 and X & -1 = X.
+#
+# Both forms name immutable values (hir/cardinality.tcl), so D and M + 1
+# are the container's size wherever the index is read. Nothing else is
+# recognized: no other operation, no offset of a reduced index.
+proc hir::completions::ReducedIndex {hir ctx e sizes known} {
+    set node [dict get $hir exprs $e]
+    set name [hir::cardinality::NativeName $hir $node]
+    if {$name ni {mod bit_and} || [llength [dict get $node args]] != 2} {
+        return 0
+    }
+    lassign [dict get $node args] x y
+    if {$name eq "mod"} {
+        set steps 0
+        return [expr {[hir::cardinality::IntForm $hir $y steps] in $sizes}]
+    }
+    set min [MinSizeOf $ctx $sizes]
+    set positive [expr {($min ne "" && $min >= 1) || ($known ne "" && [lindex $known 0] >= 1)}]
+    foreach m [list $y $x] {
+        set steps 0
+        set form [hir::cardinality::IntForm $hir $m steps]
+        if {[hir::cardinality::FormAdd $form [hir::cardinality::FormConst 1]] ni $sizes} {
+            continue
+        }
+        set range [expr {[dict exists $ctx exprs $m] ? [dict get $ctx exprs $m] : {never}}]
+        if {$positive || [hir::cardinality::NonNeg $form]
+                || ($range ne {never} && [dict get $range min] ne "-inf" && [dict get $range min] >= 0)} {
+            return 1
+        }
+    }
+    return 0
 }
 
 proc hir::completions::ErrorsPhrase {names} {

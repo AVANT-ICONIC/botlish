@@ -1,0 +1,253 @@
+# Mutants of the bounds prover (audit/bounds-proofs/tools/mutate.tcl): the
+# kill list of hir/completions.tcl's IndexBounds and its theorems --
+# reduced indices (ReducedIndex: mod by the size, bit_and with the size
+# minus one), guards on computed locals (RelationKey), the field-path size
+# keys (hir/cardinality.tcl's ValueKey) -- and of the rules they stand
+# beside: the relational and range rules of IndexBounds, the size atoms, the
+# per-check verdict (BoundsProven) and native lowering's use of it. Each is
+# a deliberate bug that proves an index it may not, or stops proving one it
+# should.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit
+# are comments. Update a mutant's text when the code it mutates changes,
+# keeping it a mutant of the same rule.
+
+# ---------------------------------------------------------------------------
+# T1: reduced indices
+
+@@ mod-any-divisor mod(X, D) proves an index whatever D is (the divisor is never compared with the container's size)
+## hir/completions.tcl
+<<<<
+        return [expr {[hir::cardinality::IntForm $hir $y steps] in $sizes}]
+====
+        return 1
+>>>>
+
+@@ mod-any-size mod(X, D) proves an index when D is any container's size, not this container's
+## hir/completions.tcl
+<<<<
+        return [expr {[hir::cardinality::IntForm $hir $y steps] in $sizes}]
+====
+        return [expr {[SizeForm $hir $y] ne ""}]
+>>>>
+
+@@ mask-is-the-size bit_and(X, M) proves an index when M is the size itself, not the size minus one (X & n reaches n)
+## hir/completions.tcl
+<<<<
+        if {[hir::cardinality::FormAdd $form [hir::cardinality::FormConst 1]] ni $sizes} {
+====
+        if {$form ni $sizes} {
+>>>>
+
+@@ mask-without-nonnegative bit_and(X, SIZE - 1) proves an index without M >= 0 (an empty container's mask is -1, and X & -1 = X)
+## hir/completions.tcl
+<<<<
+        if {$positive || [hir::cardinality::NonNeg $form]
+====
+        if {1 || $positive || [hir::cardinality::NonNeg $form]
+>>>>
+
+@@ mask-range-off-by-one M >= 0 is read from a Range whose minimum may be -1 (the unguarded mask of capacity - 1)
+## hir/completions.tcl
+<<<<
+                || ($range ne {never} && [dict get $range min] ne "-inf" && [dict get $range min] >= 0)} {
+            return 1
+====
+                || ($range ne {never} && [dict get $range min] ne "-inf" && [dict get $range min] >= -1)} {
+            return 1
+>>>>
+
+@@ mask-one-operand-order bit_and is recognized with the mask second only (precision: bit_and(n - 1, h) is no longer proven)
+## hir/completions.tcl
+<<<<
+    foreach m [list $y $x] {
+        set steps 0
+====
+    foreach m [list $y] {
+        set steps 0
+>>>>
+
+@@ size-contradiction-ignored a size proven at least M that the walk knows to be N < M is not read as a contradiction (precision: a guarded mask of an exact empty List argument obligates the caller)
+## hir/completions.tcl
+<<<<
+    if {$known ne "" && $min ne "" && [lindex $known 0] < $min} {
+====
+    if {0 && $known ne "" && $min ne "" && [lindex $known 0] < $min} {
+>>>>
+
+@@ empty-container-vacuous a reduced index into a container of known size 0 is vacuously in, so the read loses its KNOWN-ERROR
+## hir/completions.tcl
+<<<<
+    if {$kind eq "expr" && 0 ni $known && [ReducedIndex $hir $ctx $binding $sizes $known]} {
+====
+    if {$kind eq "expr" && [ReducedIndex $hir $ctx $binding $sizes $known]} {
+>>>>
+
+# ---------------------------------------------------------------------------
+# T2: field-path size keys
+
+@@ field-key-name-only a field path is keyed by its field name only, so t.s and u.s (and o.inner.s) are one value
+## hir/cardinality.tcl
+<<<<
+        return [list p [ValueKey $hir [dict get $node receiver] steps] [dict get $node name]]
+====
+        return [list p [dict get $node name]]
+>>>>
+
+@@ field-key-unchased-receiver a field path's receiver is keyed by its own expression, not chased (precision: t.s written twice is two values again)
+## hir/cardinality.tcl
+<<<<
+        return [list p [ValueKey $hir [dict get $node receiver] steps] [dict get $node name]]
+====
+        return [list p [list e [dict get $node receiver]] [dict get $node name]]
+>>>>
+
+@@ expression-key-by-kind an expression that ends an alias chain is keyed by its kind, not its identity, so every call result is one value (mk(t).s and mk(u).s)
+## hir/cardinality.tcl
+<<<<
+        return [list p [ValueKey $hir [dict get $node receiver] steps] [dict get $node name]]
+    }
+    return [list e $id]
+====
+        return [list p [ValueKey $hir [dict get $node receiver] steps] [dict get $node name]]
+    }
+    return [list e [dict get $node kind]]
+>>>>
+
+@@ binding-capacity-unkeyed every binding's capacity is one atom, so a guard or a mod on b's capacity proves a's index
+## hir/cardinality.tcl
+<<<<
+        return [FormAtom [list cap [list b $id]]]
+====
+        return [FormAtom [list cap [list b]]]
+>>>>
+
+# ---------------------------------------------------------------------------
+# T3: guards on computed locals
+
+@@ local-one-sided a guard's upper half proves a computed local's index even when the local may be negative
+## hir/completions.tcl
+<<<<
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]
+            && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
+====
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]
+            && ([lindex $key 0] eq "e" || ([dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0))} {
+>>>>
+
+@@ local-keys-collide every computed local's relation is recorded under one key, so a guard on j proves a read at another local k
+## hir/completions.tcl
+<<<<
+    if {$kind eq {binding}} {
+        return $id
+    }
+    return [list e $id]
+====
+    if {$kind eq {binding}} {
+        return $id
+    }
+    return [list e]
+>>>>
+
+@@ local-lookup-unchased the read looks a computed local's relation up by its expression without chasing it (precision: j = i + 1 guarded, then read at j, is unproven again)
+## hir/completions.tcl
+<<<<
+    set key [RelationKey $hir $index]
+====
+    set key [expr {$kind eq "binding" ? $binding : [list e $index]}]
+>>>>
+
+@@ relations-outlive-loops a counted loop's body keeps the relations it proved after the loop, though the body may have run zero times
+## hir/completions.tcl
+<<<<
+    SubsumeCollected hir ctx $diagnose $guard $e $node [Seq hir ctx $diagnose $enclosing $guard [dict get $node body]]
+    dict set ctx bindings $saved
+    dict set ctx indexBounds $savedBounds
+    RestoreRelations ctx $relations
+    return [hir::range::unknown]
+}
+
+# Records in ctx.indexBounds
+====
+    SubsumeCollected hir ctx $diagnose $guard $e $node [Seq hir ctx $diagnose $enclosing $guard [dict get $node body]]
+    dict set ctx bindings $saved
+    dict set ctx indexBounds $savedBounds
+    return [hir::range::unknown]
+}
+
+# Records in ctx.indexBounds
+>>>>
+
+# ---------------------------------------------------------------------------
+# The rules the theorems stand beside
+
+@@ upper-bound-any-size a guard against any container's size proves an index into this one
+## hir/completions.tcl
+<<<<
+        foreach form [dict get $ctx upperBounds $key] {
+            if {$form in $sizes} {
+                return in
+====
+        foreach form [dict get $ctx upperBounds $key] {
+            if {[lindex $form 1 0 0] in {len cap slen}} {
+                return in
+>>>>
+
+@@ upper-bound-one-sided a guard's upper half proves a parameter's index even when the parameter may be negative
+## hir/completions.tcl
+<<<<
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]
+            && [dict get $indexRange min] ne "-inf" && [dict get $indexRange min] >= 0} {
+====
+    if {$indexRange ne {never} && [dict exists $ctx upperBounds $key]} {
+>>>>
+
+@@ known-size-off-by-one a known size N admits the index N
+## hir/completions.tcl
+<<<<
+        if {$lo ne "-inf" && $hi ne "+inf" && $lo >= 0 && $hi < $n} {
+====
+        if {$lo ne "-inf" && $hi ne "+inf" && $lo >= 0 && $hi <= $n} {
+>>>>
+
+@@ minimum-size-off-by-one a size proven at least M admits the index M
+## hir/completions.tcl
+<<<<
+        if {$lo ne "-inf" && $hi ne "+inf" && $lo >= 0 && $hi < $min} {
+====
+        if {$lo ne "-inf" && $hi ne "+inf" && $lo >= 0 && $hi <= $min} {
+>>>>
+
+@@ verdict-ignores-unproven-checks a call is proven when any one of its checks is (BoundsProven reads no verdict but the first)
+## hir/completions.tcl
+<<<<
+    foreach v $verdicts {
+        if {$v ne {}} {
+            return 0
+        }
+    }
+    return 1
+====
+    foreach v [lrange $verdicts 0 0] {
+        if {$v ne {}} {
+            return 0
+        }
+    }
+    return 1
+>>>>
+
+@@ lowering-ignores-the-proof native lowering emits the check-free opcode for every bounds-bearing call, proven or not
+## native/lower.tcl
+<<<<
+            if {[dict exists $provenOps $op] && [BoundsProven $e]} {
+====
+            if {[dict exists $provenOps $op]} {
+>>>>

@@ -65,7 +65,7 @@ title: Indexed access: when list::at cannot fail
 summary: list::at, mutable_array::at, mutable_array::set and str::char_at fail with IndexNotFound unless the compiler proves the index in range; it proves a handful of recognized forms and nothing else.
 index: proofs stdlib
 alias: bounds proof; bounds; bounds check; IndexNotFound; index proof; range proof; indexed access; list index; index out of range; out of bounds; IndexNotFound proof; array index
-keywords: list::at, at, index, length, guard, loop, descending, field, local binding
+keywords: list::at, at, index, length, guard, loop, descending, field, local binding, mod, bit_and, mask, hash, capacity
 related: proof.slices proof.completions proof.ranges concept.lists concept.errors rule.unhandled-errors rule.known-error stdlib.list::at stdlib.list::get principle.restate-in-proven-form
 docs: STDLIB-NAMESPACES.md STATIC-COMPLETION-PROOFS.md REFACTOR-WARNINGS-CLEAN.md
 match: CORE SEMANTIC UNHANDLED-ERROR | this call of "list::at" may produce*
@@ -90,8 +90,12 @@ the enclosing function's `errors` clause, or be proven unable to raise it.
 A call proven to *always* raise it (a literal index past a literal list) is
 rejected as KNOWN-ERROR, even with a handler (rule.known-error).
 
-The proof removes the obligation only: a proven call still performs its
-bounds check at run time.
+The code generators use the proof: natively a proven call has no
+IndexNotFound path (a proven list::at is a bare element load, and a
+function whose only fallible operations are proven ones stops being
+fallible), and the Tcl compiler calls the native directly instead of
+through the error-handling call path. The interpreter, the reference,
+checks every access at run time.
 
 == RECOGNIZED PATTERNS (PROVEN TODAY)
 The index proof relates an index to the container's size only in these
@@ -105,12 +109,26 @@ forms:
         if i < 0 or i >= xs.length():        if i >= 0 and i < xs.length():
             return ...                           xs.at(i)
         xs.at(i)
-    The guarded name may be a parameter or a loop variable.
+    The guarded name may be a parameter, a loop variable, or a local bound
+    to a computed index (`t = i + 1`, `t = f(i)`): the guard and the read
+    name the same value through it, or through an alias of it.
   * a length guard and a constant index:  if xs.length() > 0: xs.at(0)
   * a container of statically known size with an index of known range:
     a list literal (or an immutable binding of one) and a constant index.
-  * a container reached through a field, once bound to a local name:
-    `xs = s.items` and then the loop or guard over xs.
+  * a container reached through a field, written as the same field path in
+    the loop, guard or reduction and in the access (`s.items.length()` ...
+    `s.items.at(i)`), or bound to a local name first (`xs = s.items`). A
+    field path names one value however often it is written, so this proves
+    a write through the field place too: `t.slots.set(i, v)`.
+  * an index reduced into the container's own size, inline or through
+    local names:
+        xs.at(h.mod(xs.length()))          for any Int h, negative or huge
+        a.at(bit_and(h, a.capacity() - 1)) after `if a.capacity() == 0:
+                                           return ...`
+    mod by the size returns only when the size is not 0, and then
+    0 <= h.mod(n) < n. A mask m keeps bit_and(h, m) in 0..m when m >= 0, so
+    the mask needs m >= 0 proven (a guard that the size is not 0, or m's own
+    range) but no power of two.
 
 @example accept
 import list
@@ -141,6 +159,20 @@ fn pick(xs: List[int], t: int) -> int:
 @example accept
 import list
 
+fn after(xs: List[int], i: int) -> int:
+    t = i + 1
+    if t < 0 or t >= xs.length():
+        return -1
+    xs.at(t)
+
+[10, 20, 30].after(1)
+@caption A guard on a local bound to a computed index
+@value 30
+@end
+
+@example accept
+import list
+
 struct Board:
     cells: List[int]
 
@@ -154,38 +186,67 @@ doubled(Board {cells: [1, 2, 3]})
 @value [2, 4, 6]
 @end
 
+@example accept
+import mutable_array
+
+fn slot(a: MutableArray[int], h: int) -> int:
+    a.at(h.mod(a.capacity()))
+
+mutable_array::from_list([10, 20, 30]).slot(-4)
+@caption An index reduced mod the array's own capacity
+@value 30
+@end
+
+@example accept
+import mutable_array
+
+struct Table:
+    slots: MutableArray[int]
+
+fn store(t: Table, h: int) -> Table:
+    t.slots.set(h.mod(t.slots.capacity()), h)
+    t
+
+t = Table {slots: mutable_array::create(4, 0)}.store(7)
+loop i from 0 to t.slots.capacity():
+    t.slots.at(i)
+@caption A write and a loop through a field path, written each time
+@value [0, 0, 0, 7]
+@end
+
 == LIMITATIONS (NOT PROVEN TODAY)
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
 
-  * an index computed into a local binding, then guarded:
-        t = i + 1                 (or t = f(i), or f(i) written inline)
-        if t < 0 or t >= xs.length(): return -1
-        xs.at(t)
-    The guard is on a binding whose value is computed, not on a parameter
-    or loop variable.
+  * an index computed inline in the guard and again in the access:
+        if i + 1 < 0 or i + 1 >= xs.length(): return -1
+        xs.at(i + 1)
+    Each written `i + 1` is its own expression: bind it to a name once
+    (`t = i + 1`) and guard and read the name.
   * arithmetic on a bounded loop variable: xs.at(i + 1) with i below
     xs.length() - 1, or xs.at(i - 1) with i from 1.
   * a descending loop: `loop i down from xs.length() - 1 through 0:`
     xs.at(i), including as a lockstep clause.
-  * a container written as a field path in the loop or the guard:
-    `loop i from 0 to s.items.length(): s.items.at(i)`.
   * an index or length that crosses a function boundary: facts about a
     caller's arguments are not carried into the callee's analysis.
+  * an index reduced by another container's size, even one of equal size:
+    `keys.at(h.mod(slots.capacity()))` (equal capacities of two arrays are
+    not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
+    with nothing proving the size is not 0 (the mask of an empty array is -1,
+    and bit_and(h, -1) is h).
 
 @example reject
 import list
 
 fn after(xs: List[int], i: int) -> int:
-    t = i + 1
-    if t < 0 or t >= xs.length():
+    if i + 1 < 0 or i + 1 >= xs.length():
         return -1
-    xs.at(t)
+    xs.at(i + 1)
 
 0
-@caption A guard on a computed local binding is not related to the length
+@caption An index computed twice, in the guard and in the read
 @error CORE SEMANTIC UNHANDLED-ERROR
-@at 7:5
+@at 6:5
 @end
 
 @example reject
@@ -202,27 +263,24 @@ fn backwards(xs: List[int]) -> List[int]:
 @end
 
 @example reject
-import list
+import mutable_array
 
-struct Board:
-    cells: List[int]
-
-fn doubled(b: Board) -> List[int]:
-    loop i from 0 to b.cells.length():
-        b.cells.at(i) * 2
+fn masked(a: MutableArray[int], h: int) -> int:
+    a.at(bit_and(h, a.capacity() - 1))
 
 0
-@caption A field path as the container is not proven
+@caption A mask with no guard that the capacity is not 0
 @error CORE SEMANTIC UNHANDLED-ERROR
-@at 8:9
+@at 4:5
 @end
 
 == WHAT TO DO WHEN THE PROOF FAILS
-Restate the access in a recognized form when the code allows it: bind a
-field's list to a local name; pass a computed index to a small helper
-function as a parameter and guard it there; iterate ascending (or iterate
+Restate the access in a recognized form when the code allows it: write
+the container the same way in the guard and the access; bind a computed
+index to a name once and guard that name; iterate ascending (or iterate
 the elements, `loop x in xs:`, when the index is not needed); use lockstep
-(`loop x in xs and i from 0 to xs.length():`) for an element and its index.
+(`loop x in xs and i from 0 to xs.length():`) for an element and its
+index.
 Otherwise make the outcome explicit: handle IndexNotFound where the read is
 (`xs.at(t): on IndexNotFound: fallback`), or use list::get(xs, i, default),
 which is that handler written once (stdlib.list::get). Admitting the error
@@ -274,7 +332,10 @@ index space of str::length and str::char_at.
   * a counted loop over the String's length: `loop i from 0 to s.length():
     s.substring(i, i + 1)`;
   * lengths of str::concat results (the sum of the parts' lengths), and a
-    MutableArray's capacity for freeze and copy.
+    MutableArray's capacity for freeze and copy;
+  * a String or MutableArray reached through a field path, written the same
+    way in the guard and in the slice (`p.name.length()` ...
+    `p.name.substring(n, p.name.length())`).
 
 @example accept
 import str
@@ -290,10 +351,11 @@ fn prefix(s: str, n: int) -> str:
 @end
 
 == LIMITATIONS (NOT PROVEN TODAY)
-The same as for indexed access (proof.list-bounds): a bound computed into a
-local and then guarded, a bound that depends on a value the analysis cannot
-relate to the length, a String reached through a field path. A slice whose
-start is an unconstrained parameter cannot be proven:
+A bound computed into a local and then guarded (unlike an index: a guard on
+a computed local proves no slice), and, as for indexed access
+(proof.list-bounds), a bound that depends on a value the analysis cannot
+relate to the length. A slice whose start is an unconstrained parameter
+cannot be proven:
 
 @example reject
 import str

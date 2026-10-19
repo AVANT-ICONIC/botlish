@@ -145,6 +145,150 @@ test bounds-verdict-unreached-call-unproven {a call the proof never reaches carr
     list [hir::completions::BoundsVerdictsOf $hir $e] [hir::completions::BoundsProven $hir $e]
 } -result {{} 0}
 
+# ---------------------------------------------------------------------------
+# Reduced indices (hir::completions::ReducedIndex): mod by the container's
+# own size, bit_and with its size minus one
+
+# The first diagnostic kind of a strict compilation of SOURCE ("" when it
+# compiles).
+proc strictKind {source} {
+    set path [makeFile [withImports $source] proven-bounds-strict.bot]
+    try {
+        surface::readProgramFile $path -warnings off
+        return ""
+    } on error {message options} {
+        set first [lindex [dict get $options -diagnostics] 0]
+        return [lindex [dict get $first errorcode] end]
+    } finally {
+        removeFile proven-bounds-strict.bot
+    }
+}
+
+test bounds-reduced-mod-index {an index reduced mod the container's own size designates an element (mod returns only for a nonzero divisor, and then 0 <= r < |d|): every indexed access, every way of writing it (inline, method syntax, through local bindings of the size and of the index), a parameter or a local container} -body {
+    list \
+        [verdictOf "fn f(a: MutableArray\[int\], h: int) -> int:\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(mutable_array::create(3, 0), -7)" mutable_array::at] \
+        [verdictOf "fn f(a: MutableArray\[int\], h: int):\n    c = mutable_array::capacity(a)\n    i = h.mod(c)\n    mutable_array::set(a, i, h)\nf(mutable_array::create(3, 0), -7)" mutable_array::set] \
+        [verdictOf "fn f(xs: List\[int\], k) -> int:\n    list::at(xs, hash(k).mod(list::length(xs)))\nf(\[1, 2, 3\], \"k\")" list::at] \
+        [verdictOf "fn f(s: str, h: int):\n    str::char_at(s, mod(h + 1, str::length(s)))\nf(\"abc\", 5)" str::char_at] \
+        [verdictOf "fn f(h: int) -> int:\n    a = mutable_array::create(5, 0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(9)" mutable_array::at]
+} -result [lrepeat 5 {{{}} 1}]
+
+test bounds-reduced-mod-rejected {mod proves nothing by a divisor that is not exactly the container's size: another container's size, the size plus one, an unrelated Int, or the size of the container a read reached through another binding} -body {
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, n: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(2, 0), mutable_array::create(3, 0), 5, 4)"
+    list \
+        [verdictOf [format $decl "mutable_array::at(a, mod(h, mutable_array::capacity(b)))"] mutable_array::at] \
+        [verdictOf [format $decl "mutable_array::at(a, mod(h, mutable_array::capacity(a) + 1))"] mutable_array::at] \
+        [verdictOf [format $decl "mutable_array::at(a, mod(h, n))"] mutable_array::at] \
+        [verdictOf [format $decl "i = mod(h, mutable_array::capacity(b))\n    mutable_array::at(a, i)"] mutable_array::at]
+} -result [lrepeat 4 {IndexNotFound 0}]
+
+test bounds-reduced-mask-index {bit_and(x, m), in either operand order, is in 0..m for m >= 0 whatever x is, so it designates an element when m + 1 is the container's own size and m >= 0 is proven: by a guard on the size (== 0, <= 0 on a local binding, < 1), a known size, a nonnegative form, or m's own Range; no power of two is needed} -body {
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, m: int) -> int:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(6, 0), -5, 4)"
+    list \
+        [verdictOf [format $decl "if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))"] mutable_array::at] \
+        [verdictOf [format $decl "cap = mutable_array::capacity(a)\n    if cap <= 0:\n        return 0\n    mutable_array::at(a, bit_and(cap - 1, h))"] mutable_array::at] \
+        [verdictOf [format $decl "if mutable_array::capacity(a) < 1:\n        return 0\n    mutable_array::at(a, bit_and(mutable_array::capacity(a) - 1, h))"] mutable_array::at] \
+        [verdictOf [format $decl "c = mutable_array::create(6, 0)\n    mutable_array::at(c, bit_and(h, mutable_array::capacity(c) - 1))"] mutable_array::at] \
+        [verdictOf [format $decl "c = mutable_array::create(mutable_array::capacity(b) + 1, 0)\n    mutable_array::at(c, bit_and(h, mutable_array::capacity(b)))"] mutable_array::at] \
+        [verdictOf [format $decl "if m < 0:\n        return 0\n    c = mutable_array::create(m + 1, 0)\n    mutable_array::at(c, bit_and(h, m))"] mutable_array::at]
+} -result [lrepeat 6 {{{}} 1}]
+
+test bounds-reduced-mask-rejected {a mask proves nothing without m >= 0 (an empty container's mask is -1, and x & -1 = x), with the size itself as the mask, or with another container's size} -body {
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(6, 0), -5)"
+    list \
+        [verdictOf [format $decl "mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))"] mutable_array::at] \
+        [verdictOf [format $decl "if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a)))"] mutable_array::at] \
+        [verdictOf [format $decl "if mutable_array::capacity(b) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(b) - 1))"] mutable_array::at]
+} -result [lrepeat 3 {IndexNotFound 0}]
+
+test bounds-reduced-empty-container-stays-known-error {a container of known size 0 has no element: a read of it whose index is reduced by that size is never reached (mod fails with ARITHMETIC first), and stays KNOWN-ERROR as before rather than becoming vacuously proven} -body {
+    list \
+        [verdictOf "fn f(h: int) -> int:\n    a = mutable_array::allocate(0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(3)" mutable_array::at] \
+        [strictKind "fn f(h: int):\n    a = mutable_array::allocate(0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\n0"] \
+        [strictKind "fn f(h: int) -> int:\n    xs = \[\]\n    list::at(xs, h.mod(list::length(xs)))\n0"]
+} -result {{IndexNotFound 0} KNOWN-ERROR KNOWN-ERROR}
+
+test bounds-reduced-contradicted-size {a size a guard proved at least 1 that the call-specific walk knows to be 0 (an exact empty List argument) is a contradiction, like two disagreeing known sizes: the masked read is unreachable there, so the call has no effective errors; without the guard the same call may fail} -body {
+    proc callErrors {source} {
+        set hir [boundsHir $source]
+        return [hir::completions::effectiveErrorsOf $hir [nativeCall $hir f]]
+    }
+    set body "    list::at(xs, bit_and(list::length(xs) - 1, h))\nf(\[\], -1)"
+    list \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) < 1:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) == 0:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int) errors IndexNotFound:\n$body"]
+} -result {{} {} IndexNotFound}
+
+# ---------------------------------------------------------------------------
+# Field paths (hir::cardinality::ValueKey): `t.slots` written twice is one
+# value, so its size proves an access through the path
+
+set fieldStructs "struct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\nstruct Outer:\n    inner: T\nstruct Board:\n    cells: List\[int\]\n    name: str\n"
+
+test bounds-field-path-index {a guard, a counted loop or a reduction on the size of a field path proves an access through the same path written again: a parameter's field, a nested path, a struct bound to a construction, a List and a String field, and a slice of a String field} -body {
+    set decl "${fieldStructs}fn f(t: T, o: Outer, b: Board, a: MutableArray\[int\], i: int, h: int):\n    %s\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, Outer {inner: T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}}, Board {cells: \[1\], name: \"ab\"}, mutable_array::create(1, 0), 1, 5)"
+    list \
+        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.s):\n        return 0\n    mutable_array::at(t.s, i)"] mutable_array::at] \
+        [verdictOf [format $decl "loop k from 0 to list::length(b.cells):\n        list::at(b.cells, k)"] list::at] \
+        [verdictOf [format $decl "mutable_array::at(o.inner.s, mod(h, mutable_array::capacity(o.inner.s)))"] mutable_array::at] \
+        [verdictOf [format $decl "u = T {s: a, r: a}\n    mutable_array::at(u.s, mod(h, mutable_array::capacity(u.s)))"] mutable_array::at] \
+        [verdictOf [format $decl "str::char_at(b.name, h.mod(str::length(b.name)))"] str::char_at] \
+        [verdictOf [format $decl "if i < 0 or i > str::length(b.name):\n        return \"\"\n    str::substring(b.name, i, str::length(b.name))"] str::substring]
+} -result [lrepeat 6 {{{}} 1}]
+
+test bounds-field-path-write {a write through a field place, t.s.set(i, v), is proven by a guard or a reduction on the same path's capacity, or on a local copy of the field (a copy has the field's capacity): the in-place write has no local-alias form} -body {
+    set decl "${fieldStructs}fn f(t: T, i: int, h: int) -> T:\n    %s\n    t\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, 1, 5)"
+    list \
+        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.s):\n        return t\n    t.s.set(i, 7)"] mutable_array::set] \
+        [verdictOf [format $decl "s = t.s\n    if i < 0 or i >= mutable_array::capacity(s):\n        return t\n    t.s.set(i, 7)"] mutable_array::set] \
+        [verdictOf [format $decl "t.s.set(h.mod(t.s.capacity()), 7)"] mutable_array::set]
+} -result [lrepeat 3 {{{}} 1}]
+
+test bounds-field-path-rejected {a field path's size proves nothing about another field, the same field of another struct, or the field of a call result written twice (two calls, two values)} -body {
+    set decl "${fieldStructs}fn mk(a: MutableArray\[int\]) -> T:\n    T {s: a, r: a}\nfn f(t: T, u: T, a: MutableArray\[int\], i: int, h: int) -> int errors IndexNotFound:\n    %s\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, mutable_array::create(1, 0), 1, 5)"
+    list \
+        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.r):\n        return 0\n    mutable_array::at(t.s, i)"] mutable_array::at] \
+        [verdictOf [format $decl "mutable_array::at(t.s, mod(h, mutable_array::capacity(u.s)))"] mutable_array::at] \
+        [verdictOf [format $decl "mutable_array::at(mk(a).s, mod(h, mutable_array::capacity(mk(a).s)))"] mutable_array::at]
+} -result [lrepeat 3 {IndexNotFound 0}]
+
+test bounds-field-path-lockstep {the lockstep cardinality proof reads the same keys: a clause over a field's List and a counted clause to that field path's length are equal; a clause one longer is provably unequal, and the diagnostic names the path} -body {
+    set decl "${fieldStructs}fn f(b: Board) -> List\[int\]:\n    loop x in b.cells and k from 0 to %s:\n        x + k\n0"
+    set path [makeFile [withImports [format $decl "list::length(b.cells) + 1"]] proven-bounds-lockstep.bot]
+    try {
+        catch {surface::readProgramFile $path -warnings off} message options
+    } finally {
+        removeFile proven-bounds-lockstep.bot
+    }
+    set first [lindex [dict get $options -diagnostics] 0]
+    list [strictKind [format $decl "list::length(b.cells)"]] [lindex [dict get $first errorcode] end] \
+        [string match "*clause 1 iterates length(b.cells) times but clause 2 iterates length(b.cells) + 1 times*" [dict get $first message]]
+} -result {{} LOCKSTEP-UNEQUAL 1}
+
+# ---------------------------------------------------------------------------
+# Guards on computed locals (hir::completions::RelationKey): a relation on a
+# local bound to a computed value is keyed by its one defining expression
+
+test bounds-guarded-local-index {a guard on a local bound to a computed index proves the access through it, or through an alias of it, in either guard form: an offset, a call result, a product; the guard's lower half may be the local's own Range} -body {
+    set decl "fn g(n: int) -> int:\n    n - 1\nfn f(a: MutableArray\[int\], xs: List\[int\], s: str, i: int, h: int):\n    %s\nf(mutable_array::create(3, 0), \[1, 2\], \"abc\", 1, 5)"
+    list \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "t = g(i)\n    if t >= 0 and t < list::length(xs):\n        list::at(xs, t)\n    else:\n        0"] list::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    k = j\n    mutable_array::set(a, k, 1)"] mutable_array::set] \
+        [verdictOf [format $decl "j = h.mod(7)\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "j = i * 2\n    if j < 0 or j >= str::length(s):\n        return 0\n    str::char_at(s, j)"] str::char_at]
+} -result [lrepeat 5 {{{}} 1}]
+
+test bounds-guarded-local-rejected {a guard on a computed local proves nothing with only its upper half when the local may be negative, against another container's size, written inline (each written `i + 1` is its own expression), or once its scope ended (a guard on a nonnegative local in a loop body that may run zero times, the read after the loop)} -body {
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], i: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(5, 0), 1)"
+    list \
+        [verdictOf [format $decl "j = i + 1\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(b):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
+        [verdictOf [format $decl "if i + 1 < 0 or i + 1 >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, i + 1)"] mutable_array::at] \
+        [verdictOf [format $decl "j = mod(i, 1000)\n    loop k from 0 to i - 500:\n        if j >= mutable_array::capacity(a):\n            return k\n    mutable_array::at(a, j)"] mutable_array::at]
+} -result [lrepeat 4 {IndexNotFound 0}]
+
 test bounds-declared-signature-unchanged {proving a check never changes the native's declared signature: list::at is still errors IndexNotFound, and the call's effective errors are the proof's} -body {
     set hir [boundsHir "xs = \[1, 2, 3\]\nlist::at(xs, 1)"]
     set e [nativeCall $hir list::at]
@@ -161,6 +305,29 @@ test bounds-nir-index-ops {proven list::at / mutable_array::at / ::set lower to 
     list [pairCounts $text listget] [pairCounts $text mutarrayget] [pairCounts $text mutarrayset] \
         [pairCounts $unknown listget] [pairCounts $unknown mutarrayget] [pairCounts $unknown mutarrayset]
 } -result {{0 1} {0 1} {0 1} {1 0} {1 0} {1 0}}
+
+test bounds-nir-reduced-index {a read or write whose index is reduced mod, or masked by, the container's own size lowers to the check-free opcode; reduced by another size (another array's, the length plus one) or masked without a proven m >= 0 it keeps the checked one} -body {
+    set proven [boundsNir "fn f(a: MutableArray\[int\], xs: List\[int\], h: int) -> int:\n    i = h.mod(mutable_array::capacity(a))\n    mutable_array::set(a, i, h)\n    if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1)) + list::at(xs, h.mod(list::length(xs)))\nf(mutable_array::create(3, 0), \[1, 2\], 7)"]
+    set unknown [boundsNir "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], h: int) -> int errors IndexNotFound:\n    i = h.mod(mutable_array::capacity(b))\n    mutable_array::set(a, i, h)\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1)) + list::at(xs, h.mod(list::length(xs) + 1))\nf(mutable_array::create(3, 0), mutable_array::create(3, 0), \[1, 2\], 7)"]
+    list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] [pairCounts $proven listget] \
+        [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget] [pairCounts $unknown listget]
+} -result {{0 1} {0 1} {0 1} {1 0} {1 0} {1 0}}
+
+test bounds-nir-field-path-write {a write through a field place reduced by the field path's own capacity lowers to mutarraysetproven, in place (no logical copy of the field: no mvshare), and the read through the path to mutarraygetproven; reduced by another field's capacity both stay checked} -body {
+    set source "struct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\nfn store(t: T, h: int) -> T%s:\n    t.s.set(h.mod(mutable_array::capacity(t.%s)), h)\n    t\nfn read(t: T, h: int) -> int%s:\n    mutable_array::at(t.s, h.mod(mutable_array::capacity(t.%s)))\nread(store(T {s: mutable_array::create(3, 0), r: mutable_array::create(4, 0)}, 5), 5)"
+    set proven [boundsNir [format $source "" s "" s]]
+    set unknown [boundsNir [format $source " errors IndexNotFound" r " errors IndexNotFound" r]]
+    list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] [opCount $proven mvshare] \
+        [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget]
+} -result {{0 1} {0 1} 0 {1 0} {1 0}}
+
+test bounds-nir-guarded-local {a read and a write at a computed local guarded against the container's size lower to the check-free opcodes; guarded on one side only they keep the checked ones} -body {
+    set source "fn f(a: MutableArray\[int\], i: int) -> int%s:\n    j = i + 1\n    if %sj >= mutable_array::capacity(a):\n        return 0\n    mutable_array::set(a, j, i)\n    mutable_array::at(a, j)\nf(mutable_array::create(3, 0), 1)"
+    set proven [boundsNir [format $source "" "j < 0 or "]]
+    set unknown [boundsNir [format $source " errors IndexNotFound" ""]]
+    list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] \
+        [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget]
+} -result {{0 1} {0 1} {1 0} {1 0}}
 
 test bounds-nir-slice-ops {proven substring / freeze / copy lower to the check-free opcodes, unproven ones keep the checked opcode} -body {
     set text [boundsNir "s = \"abcd\"\na = mutable_array::allocate(3)\nb = mutable_array::allocate(5)\nmutable_array::copy(a, 0, b, 2, 3)\n\[str::substring(s, 1, 3), mutable_array::freeze(a, 3)\]"]
@@ -276,6 +443,31 @@ test bounds-values-agree-unknown {an unknown site still fails when its check fai
         [agreedValue "fn st(a, i):\n    mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\nb = mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), st(b, -1)\]"] \
         [agreedValue "fn c(a, b, i, n):\n    mutable_array::copy(a, i, b, 0, n):\n        on LowerUnderrun:\n            \"lo\"\n        on UpperOverrun:\n            \"hi\"\nx = mutable_array::allocate(3)\ny = mutable_array::allocate(2)\n\[c(x, y, 0, 2), c(x, y, 0, 3), c(x, y, 2, 2), c(x, y, -1, 1)\]"]
 } -result [list {[2, -1, -1, -1]} {["ab", "lo", "lo", "hi"]} {[unit, 2, 2]} {[unit, "hi", "hi", "lo"]}]
+
+test bounds-values-agree-reduced {indices reduced mod or masked by the container's own size compute the same values on every backend, for negative indices, indices beyond a machine word, a capacity that is no power of two and an empty array} -body {
+    set reads "fn pick(a: MutableArray\[int\], h: int) -> int:\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nfn masked(a: MutableArray\[int\], h: int) -> int:\n    if mutable_array::capacity(a) == 0:\n        return -1\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))\nfn item(xs: List\[int\], h: int) -> int:\n    list::at(xs, h.mod(list::length(xs)))\nhs = \[0, 7, -1, -8, 4611686018427387904, -1180591620717411303424\]\na = mutable_array::from_list(\[10, 20, 30, 40, 50\])\n"
+    list \
+        [agreedValue "${reads}loop h in hs:\n    pick(a, h)"] \
+        [agreedValue "${reads}loop h in hs:\n    masked(a, h)"] \
+        [agreedValue "${reads}e = mutable_array::create(0, 0)\nloop h in hs:\n    masked(e, h)"] \
+        [agreedValue "${reads}loop h in hs:\n    item(\[1, 2, 3\], h)"] \
+        [agreedValue "fn put(a: MutableArray\[int\], h: int) -> MutableArray\[int\]:\n    a.set(h.mod(a.capacity()), h)\n    a\nb = mutable_array::create(3, 0)\nc = put(put(put(b, -1), 4), 9)\nloop i from 0 to mutable_array::capacity(c):\n    mutable_array::at(c, i)"]
+} -result {{[10, 30, 50, 30, 50, 20]} {[10, 50, 50, 10, 10, 10]} {[-1, -1, -1, -1, -1, -1]} {[1, 2, 3, 2, 2, 3]} {[9, 4, -1]}}
+
+test bounds-values-agree-field-path {accesses through field paths proven by the same path's size compute the same values on every backend: in-place writes reduced mod the field's capacity, guarded reads of every index around it, a reduced List read and a lockstep loop over a field} -body {
+    set table "struct Table:\n    slots: MutableArray\[int\]\n    names: List\[str\]\nfn store(t: Table, h: int) -> Table:\n    t.slots.set(h.mod(mutable_array::capacity(t.slots)), h)\n    t\nfn read(t: Table, i: int) -> int:\n    if i < 0 or i >= mutable_array::capacity(t.slots):\n        return -1\n    mutable_array::at(t.slots, i)\nfn name(t: Table, h: int) -> str:\n    list::at(t.names, h.mod(list::length(t.names)))\nfn widths(t: Table) -> List\[int\]:\n    loop x in t.names and k from 0 to list::length(t.names):\n        str::length(x) + k\nt = store(store(store(Table {slots: mutable_array::create(5, 0), names: \[\"a\", \"bb\", \"ccc\"\]}, -3), 11), 1180591620717411303424)\n"
+    list \
+        [agreedValue "${table}loop i from -1 to 6:\n    read(t, i)"] \
+        [agreedValue "${table}loop h in \[0, -1, 4, 1180591620717411303424\]:\n    name(t, h)"] \
+        [agreedValue "${table}widths(t)"]
+} -result {{[-1, 0, 11, -3, 0, 1180591620717411303424, -1]} {["a", "ccc", "bb", "bb"]} {[1, 3, 5]}}
+
+test bounds-values-agree-guarded-local {reads and writes at computed locals proven by a guard compute the same values on every backend, for indices in range, just outside it on both sides and far outside it} -body {
+    set fns "fn after(xs: List\[int\], i: int) -> int:\n    t = i + 1\n    if t < 0 or t >= list::length(xs):\n        return -1\n    list::at(xs, t)\nfn bump(a: MutableArray\[int\], i: int) -> MutableArray\[int\]:\n    j = i * 2\n    if j >= 0 and j < mutable_array::capacity(a):\n        mutable_array::set(a, j, mutable_array::at(a, j) + 1)\n    a\n"
+    list \
+        [agreedValue "${fns}loop i in \[-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424\]:\n    after(\[10, 20, 30\], i)"] \
+        [agreedValue "${fns}b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)\nloop k from 0 to mutable_array::capacity(b):\n    mutable_array::at(b, k)"]
+} -result {{[-1, -1, 10, 20, 30, -1, -1, -1]} {[1, 0, 1, 0, 1]}}
 
 test bounds-values-agree-known-error-checked {a certain failure (KNOWN-ERROR, accepted only without -strict) is never proven: it stays a checked operation and still fails identically everywhere} -body {
     list \
