@@ -5047,6 +5047,7 @@ tests/proven-bounds.test bounds-field-path-index pass
 tests/proven-bounds.test bounds-field-path-lockstep pass
 tests/proven-bounds.test bounds-field-path-rejected pass
 tests/proven-bounds.test bounds-field-path-write pass
+tests/proven-bounds.test bounds-fixed-length-snapshots-proven pass
 tests/proven-bounds.test bounds-guarded-local-index pass
 tests/proven-bounds.test bounds-guarded-local-rejected pass
 tests/proven-bounds.test bounds-nir-copy-one-slice-proven-stays-checked pass
@@ -5075,6 +5076,9 @@ tests/proven-bounds.test bounds-values-agree-known-error-checked pass
 tests/proven-bounds.test bounds-values-agree-proven pass
 tests/proven-bounds.test bounds-values-agree-reduced pass
 tests/proven-bounds.test bounds-values-agree-unknown pass
+tests/proven-bounds.test bounds-vector-snapshots-fail pass
+tests/proven-bounds.test bounds-vector-snapshots-lockstep pass
+tests/proven-bounds.test bounds-vector-snapshots-rejected pass
 tests/proven-bounds.test bounds-verdict-index pass
 tests/proven-bounds.test bounds-verdict-literal-loop-walks pass
 tests/proven-bounds.test bounds-verdict-per-element-union pass

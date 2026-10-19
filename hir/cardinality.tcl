@@ -115,7 +115,12 @@ proc hir::cardinality::of_loop {hir e} {
 #   {len KEY}   the length of one List value (KEY identifies the value,
 #               ValueKey: {b B} for a parameter / loop binding B, {p KEY
 #               FIELD} for a field path, {e E} for the defining expression E
-#               an alias chain ends at), always >= 0
+#               an alias chain ends at), always >= 0; or the length a loop
+#               domain over a collection whose length is not fixed (a
+#               MutableVector) had when that one loop evaluated its
+#               iterable expression E: KEY is then {o E}, the occurrence
+#               itself, never its binding, path or definition
+#               (IterationLength)
 #   {cap KEY}   the capacity of one MutableArray value (KEY as for len),
 #               always >= 0 and fixed at allocation (STDLIB-NAMESPACES.md's
 #               indexed-access proof is its one consumer besides lockstep)
@@ -257,7 +262,10 @@ proc hir::cardinality::Chase {hir e stepsVar} {
 # place (MUTABLE-ARRAY.md) -- and `b.cells` written twice one List. That is
 # what lets a guard or a reduction on `t.slots.capacity()` prove the read
 # `t.slots.at(i)` and the write `t.slots.set(i, v)`: the write has no
-# local-alias form, a local `s = t.slots` being a logical copy.
+# local-alias form, a local `s = t.slots` being a logical copy. A key names
+# one value, not one length: a field (or binding) holding a MutableVector
+# holds one vector whose length a push changes in place, so no size form
+# measures a vector by its key (IterationLength).
 proc hir::cardinality::ValueKey {hir e stepsVar} {
     upvar 1 $stepsVar steps
     lassign [Chase $hir $e steps] kind id
@@ -393,6 +401,11 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
 }
 
 # The length of the List value of expression E, as a (nonnegative) form.
+# E's value is a List wherever its length is read -- an operand a List
+# native (list::length, list::at, a slice, mutable_array::from_list) takes,
+# which fails on anything else, or the iterable of a loop that requires one
+# -- or a MutableArray a loop walks (IterationLength), whose length is fixed
+# too, so the length of one is its key's (ValueKey).
 proc hir::cardinality::ListLength {hir e stepsVar} {
     upvar 1 $stepsVar steps
     set fact [hir::exact::ListOf $hir $e]
@@ -416,6 +429,30 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
         return [FormConst [llength [dict get $node args]]]
     }
     return [FormAtom [list len [ValueKey $hir $id steps]]]
+}
+
+# The number of elements the list domain over the iterable expression E
+# visits: the length E's value has when its loop evaluates E, once. A loop
+# walks a List -- an iterable of any static type but MutableVector and
+# MutableArray must be one when the loop runs (its TYPE check) -- or the
+# snapshot (or, affine, the consumption) of a MutableArray or MutableVector
+# (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md). A List's length never changes (it
+# is immutable), nor does a MutableArray's (its capacity, fixed at
+# allocation), so a binding, field path or definition that names one names
+# one length: ListLength's, keyed by it. A MutableVector's does change, in
+# place, through whatever place holds it -- push, pop, take and clear on
+# the binding or the field path, a callee's on its own context parameter --
+# while the binding, path or member stays the same. A domain over a vector
+# has the length of this one evaluation only: the atom {len {o E}}, E the
+# iterable itself, equal to no other occurrence's. Two loops over one vector
+# have unrelated lengths, as do a vector and a List an earlier loop
+# collected over it, whatever runs between them.
+proc hir::cardinality::IterationLength {hir e stepsVar} {
+    upvar 1 $stepsVar steps
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+        return [FormAtom [list len [list o $e]]]
+    }
+    return [ListLength $hir $e steps]
 }
 
 # ---- domains -----------------------------------------------------------------
@@ -451,7 +488,7 @@ proc hir::cardinality::of_domain {hir domain {stepsVar ""}} {
         upvar 1 $stepsVar steps
     }
     if {[dict get $domain kind] eq "list"} {
-        return [ListLength $hir [dict get $domain iterable] steps]
+        return [IterationLength $hir [dict get $domain iterable] steps]
     }
     set start [IntForm $hir [dict get $domain start] steps]
     set end [IntForm $hir [dict get $domain end] steps]
@@ -526,8 +563,28 @@ proc hir::cardinality::ShowKey {hir key} {
     switch -- $how {
         b { return [hir::semantic::SourceName $hir $what] }
         p { return "[ShowKey $hir $what].$field" }
+        o {
+            # One evaluation of an iterable: its path and where it is
+            # written, so that two loops over one vector read apart.
+            set origin [dict get $hir exprs $what origin]
+            set text [ShowPath $hir $what]
+            set at [lrange $origin 2 end]
+            if {[lindex $origin 0] eq "file" && [dict exists $at line] && [dict exists $at column]} {
+                append text " at [dict get $at line]:[dict get $at column]"
+            }
+            return $text
+        }
     }
     return [ShowExpr $hir $what]
+}
+
+# Source-like text of E, a field path (`b.v`) written out.
+proc hir::cardinality::ShowPath {hir e} {
+    set node [dict get $hir exprs $e]
+    if {[dict get $node kind] eq "project"} {
+        return "[ShowPath $hir [dict get $node receiver]].[dict get $node name]"
+    }
+    return [ShowExpr $hir $e]
 }
 
 proc hir::cardinality::ShowExpr {hir e} {

@@ -234,6 +234,30 @@ to the length, so the call must handle or admit IndexNotFound:
     not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
     with nothing proving the size is not 0 (the mask of an empty array is -1,
     and bit_and(h, -1) is h).
+  * the List of a loop over a MutableVector, against the length of another
+    loop over the same vector: a push, pop or clear (or a function's push
+    to a context's vector) changes the vector's length in place, so each
+    loop over a vector has only its own length, even with nothing between
+    the two loops.
+
+@example reject
+import list
+import mutable_vector
+
+fn grown(h: int) -> int:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+0
+@caption Two loops over one vector, a push between them
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 11:5
+@end
 
 @example reject
 import list
@@ -636,7 +660,26 @@ fn pairs(xs: List[int], ys: List[int]) -> List[int]:
 
 == LIMITATIONS
 Two different lists are unrelated even when the caller passes lists of the
-same length.
+same length. So are two loops over one MutableVector, or a vector and the
+List an earlier loop over it collected: a push, pop or clear changes the
+vector's length in place, so each loop over it counts only its own walk.
+
+@example reject
+import mutable_vector
+
+fn widened() -> List[int]:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    loop a in v and y in ys:
+        a + y
+
+0
+@caption A vector grown after the List was collected from it
+@error CORE SEMANTIC LOCKSTEP-UNPROVEN
+@at 8:5
+@end
 
 @topic proof.contexts
 title: Context requirements

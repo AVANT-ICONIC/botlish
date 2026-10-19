@@ -506,6 +506,19 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
 * **Result.** `t.slots.set(i, v)` under a guard on `capacity(t.slots)`
   lowers to `mutarraysetproven` with no share.
 * **Cost.** Cheap.
+* **Soundness correction (review).** A field path names one value, but a
+  `MutableVector`'s length is not fixed: `b.v.push(x)` (or a callee's push
+  to a context member) changes it in place. With the path key, two loops
+  over `b.v` around a push had one length, and a read of the first loop's
+  List at an index proven against the second's lowered to an unchecked
+  `listgetproven` past its end. CP-1's reductions reached the same defect
+  with a local vector, and the counted-loop and lockstep forms had it
+  before both changes. The fix keys no vector's length: a loop over a
+  `MutableVector` has the length of its own evaluation
+  (`hir::cardinality::IterationLength`), whatever its binding or path. List
+  and MutableArray lengths keep their keys (`lpmask`'s NIR is unchanged).
+  The cost is that two loops over one vector with nothing between them are
+  unrelated too.
 
 ### CP-4. Facts do not cross a call
 

@@ -140,7 +140,14 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   loop binding), `{max FORM}`, `{v B}` (an Int-valued binding) and `{e E}` (one
   specific expression no rule folds, equal only to itself). Immutable
   single-assignment bindings are what make equal atoms the same value — the
-  argument `hir/exactvalue.tcl` already relies on.
+  argument `hir/exactvalue.tcl` already relies on. A `MutableVector` is the
+  exception: a push, pop or clear changes its length in place while its
+  binding, field path or context member stays the same, so a domain `x in v`
+  over a vector has the length of that one evaluation of `v`, an atom equal
+  to no other (`hir::cardinality::IterationLength`). Two loops over one
+  vector, or a vector and a List an earlier loop collected over it, are
+  unrelated sizes. A List and a MutableArray (whose length is its capacity,
+  fixed at allocation) keep the key of their binding or path.
 * **Existing facts reused**, no new List-length inference: exact Ints and exact
   List literals from `hir/exactvalue.tcl` (followed through immutable
   bindings); the `+ - *` and `list_length` natives; `list(...)` literals; and

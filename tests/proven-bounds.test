@@ -267,6 +267,149 @@ test bounds-field-path-lockstep {the lockstep cardinality proof reads the same k
 } -result {{} LOCKSTEP-UNEQUAL 1}
 
 # ---------------------------------------------------------------------------
+# A loop over a MutableVector (hir::cardinality::IterationLength): a vector's
+# length changes in place while its binding, field path or context member
+# stays the same, so a loop over one has the length of that one evaluation:
+# two loops over one vector, with a push, pop or clear (or a callee's push
+# through its context parameter) between them, are unrelated sizes
+
+set vectorDecls "import mutable_vector\nstruct Box:\n    v: MutableVector\[int\]\ncontext struct Log:\n    items: MutableVector\[int\]\nfn add(x: int, context log: Log):\n    log.items.push(x)\n"
+# Each body reads a List an earlier loop collected over a vector at an index
+# proven only against a later loop's length (or the reverse after a pop),
+# the vector changed between them: {NAME BODY H}, f(..., H, ...) reaching an
+# index the earlier List does not have.
+set vectorSnapshots {
+    local-counted {v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    zs = loop x in v:
+        x
+    loop k from 0 to list::length(zs):
+        ys.at(k)} 0
+    local-mod {v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    v.push(5)
+    v.push(6)
+    zs = loop x in v:
+        x
+    ys.at(h.mod(list::length(zs)))} 4
+    local-mask {v = mutable_vector::from_list([1, 2])
+    ys = loop x in v:
+        x * 10
+    v.push(3)
+    v.push(4)
+    zs = loop x in v:
+        x
+    if list::length(zs) == 0:
+        return -1
+    ys.at(bit_and(h, list::length(zs) - 1))} 3
+    local-guard {v = mutable_vector::from_list([1, 2])
+    ys = loop x in v:
+        x * 10
+    v.push(3)
+    zs = loop x in v:
+        x
+    if h >= 0 and h < list::length(zs):
+        return ys.at(h)
+    -1} 2
+    local-pop {v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.pop():
+        on IndexNotFound:
+            0
+    zs = loop x in v:
+        x
+    loop k from 0 to list::length(ys):
+        zs.at(k)} 0
+    local-clear {v = mutable_vector::from_list([1, 2])
+    ys = loop x in v:
+        x
+    v.clear()
+    zs = loop x in v:
+        x
+    zs.at(h.mod(list::length(ys)))} 1
+    parameter {ys = loop x in w:
+        x * 10
+    w.push(4)
+    zs = loop x in w:
+        x
+    loop k from 0 to list::length(zs):
+        ys.at(k)} 0
+    field-path {ys = loop x in b.v:
+        x * 10
+    b.v.push(4)
+    b.v.push(5)
+    zs = loop x in b.v:
+        x
+    ys.at(h.mod(list::length(zs)))} 4
+    context-callee {ys = loop x in log.items:
+        x * 10
+    add(7)
+    add(8)
+    zs = loop x in log.items:
+        x
+    ys.at(h.mod(list::length(zs)))} 3
+}
+# The program of one snapshot shape: f declares ERRORS ("" for none) and is
+# called at H (with HANDLER, if any, as the call's handler).
+proc vectorSnapshotProgram {body h errors {handler ""}} {
+    set signature "fn f(b: Box, h: int, w: MutableVector\[int\], context log: Log) -> any"
+    if {$errors ne ""} {
+        append signature " errors $errors"
+    }
+    set v "mutable_vector::from_list(\[1, 2, 3\])"
+    return "${::vectorDecls}$signature:\n    $body\n\nwith context Log {items: mutable_vector::from_list(\[1, 2\])}\nf(Box {v: $v}, $h, $v)$handler\n"
+}
+
+test bounds-vector-snapshots-rejected {a List collected over a MutableVector has the length of that loop's own evaluation: an index proven against a later loop over the vector (a counted loop, mod, a mask, a guard) or an earlier one after a pop or clear proves nothing about it -- a local, a parameter, a field path, a context member a callee grows -- so the read is checked and a function without `errors` is rejected} -body {
+    lmap {name body h} $vectorSnapshots {
+        list $name [strictKind [vectorSnapshotProgram $body $h ""]] \
+            [verdictOf [vectorSnapshotProgram $body $h IndexNotFound ":\n    on IndexNotFound:\n        -424242"] list::at]
+    }
+} -result {{local-counted UNHANDLED-ERROR {IndexNotFound 0}} {local-mod UNHANDLED-ERROR {IndexNotFound 0}} {local-mask UNHANDLED-ERROR {IndexNotFound 0}} {local-guard UNHANDLED-ERROR {IndexNotFound 0}} {local-pop UNHANDLED-ERROR {IndexNotFound 0}} {local-clear UNHANDLED-ERROR {IndexNotFound 0}} {parameter UNHANDLED-ERROR {IndexNotFound 0}} {field-path UNHANDLED-ERROR {IndexNotFound 0}} {context-callee UNHANDLED-ERROR {IndexNotFound 0}}}
+
+test bounds-vector-snapshots-fail {each snapshot shape the prover leaves checked really reads past the end of the earlier List: declared and handled, every backend fails the read with IndexNotFound and runs the handler -- the rejection is necessary, not only conservative} -body {
+    lmap {name body h} $vectorSnapshots {
+        set hir [boundsHir [vectorSnapshotProgram $body $h IndexNotFound ":\n    on IndexNotFound:\n        -424242"]]
+        set nir [native::nir $hir]
+        list $name [lmap b $::boundsBackends {lindex [outcomeUnderHir $b $hir] 1}] \
+            [expr {[opCount $nir listget] > 0}] [opCount $nir listgetproven]
+    }
+} -result [lmap name {local-counted local-mod local-mask local-guard local-pop local-clear parameter field-path context-callee} {
+    list $name {-424242 -424242 -424242 -424242} 1 0
+}]
+
+test bounds-vector-snapshots-lockstep {a lockstep clause over a MutableVector and a List an earlier loop collected over it, the vector grown in between, are not proven equal (a local or a field path): LOCKSTEP-UNPROVEN, the diagnostic naming each loop's evaluation of the vector by where it is written} -body {
+    set out {}
+    foreach {v setup} {v "v = mutable_vector::from_list(\[1, 2, 3\])\n    " b.v ""} {
+        set source "${vectorDecls}fn f(b: Box) -> List\[int\]:\n    ${setup}ys = loop x in $v:\n        x * 10\n    $v.push(4)\n    loop a in $v and y in ys:\n        a + y\n0"
+        set path [makeFile [withImports $source] proven-bounds-vector-lockstep.bot]
+        try {
+            catch {surface::readProgramFile $path -warnings off} message options
+        } finally {
+            removeFile proven-bounds-vector-lockstep.bot
+        }
+        set first [lindex [dict get $options -diagnostics] 0]
+        lappend out [lindex [dict get $first errorcode] end] [regexp -inline {could not prove [^(]*\([^)]*\) == [^(]*\([^)]*\)} [dict get $first message]]
+    }
+    set out
+} -result {LOCKSTEP-UNPROVEN {{could not prove length(v at 13:15) == length(v at 10:20)}} LOCKSTEP-UNPROVEN {{could not prove length(b.v at 12:15) == length(b.v at 9:20)}}}
+
+test bounds-fixed-length-snapshots-proven {a List and a MutableArray keep their keyed lengths: two loops over one List or one MutableArray (a parameter, a field path), the array written in place between them, have one length, so a reduction or a counted loop by the later one proves a read of the earlier, and a lockstep over a field's array and a List collected over it is accepted; so does an iterable of no collection type (an untyped parameter), which a loop requires to be a List} -body {
+    set decl "struct T:\n    s: MutableArray\[int\]\nfn f(xs: List\[int\], a: MutableArray\[int\], t: T, h: int) -> any:\n    %s\nf(\[1, 2, 3\], mutable_array::create(3, 0), T {s: mutable_array::create(3, 0)}, 7)"
+    list \
+        [verdictOf [format $decl "ys = loop x in xs:\n        x * 10\n    zs = loop x in xs:\n        x\n    ys.at(h.mod(list::length(zs)))"] list::at] \
+        [verdictOf [format $decl "ys = loop x in a:\n        x * 10\n    a.set(h.mod(a.capacity()), 9)\n    zs = loop x in a:\n        x\n    ys.at(h.mod(list::length(zs)))"] list::at] \
+        [verdictOf [format $decl "ys = loop x in t.s:\n        x * 10\n    t.s.set(h.mod(t.s.capacity()), 9)\n    zs = loop x in t.s:\n        x\n    loop k from 0 to list::length(zs):\n        ys.at(k)"] list::at] \
+        [strictKind [format $decl "ys = loop x in t.s:\n        x * 10\n    t.s.set(h.mod(t.s.capacity()), 9)\n    loop x in t.s and y in ys:\n        x + y"]] \
+        [strictKind "fn g(zs, h: int):\n    ys = loop x in zs:\n        x * 10\n    r = loop a in zs and y in ys:\n        a + y\n    ys.at(h.mod(list::length(r)))\ng(\[1, 2\], 3)"]
+} -result [list {{{}} 1} {{{}} 1} {{{}} 1} {} {}]
+
+# ---------------------------------------------------------------------------
 # Guards on computed locals (hir::completions::RelationKey): a relation on a
 # local bound to a computed value is keyed by its one defining expression
 
