@@ -357,8 +357,9 @@ layout field:
   m[2][3]` `array 2 of array 3 of ffi::c::Int`.
 * **What stays blocked**: a flexible array member or a zero-length array
   (`flexible-array`); an array whose element is blocked (an array of floats
-  is `float`, of a union `union`, of a blocked record nested-layout-blocked)
-  -- the element's own reason, so the pressure analysis sees it.
+  is `float`, of a union `union`, of a blocked record nested-layout-blocked
+  through an array element: `cb-layout-array-of-blocked`) -- the element's
+  own reason, so the pressure analysis sees it.
 * **layouts-check.c** asserts, per array field, that the member is an array
   type at every dimension (never a pointer:
   `!__builtin_types_compatible_p(__typeof__(m), __typeof__(&m[0]))`), each
@@ -458,8 +459,8 @@ record is blocked by its element alone, and recovered with it.
   programs each: no disagreement (section 14 for GC stress).
 * **audit/c-bindgen/tools/layout-fuzz.tcl** now draws arrays of C integers,
   stdint types, pointers, earlier records, struct lf_inner and two
-  dimensions as layout fields, and arrays of floats, Bools and unions as
-  blocked by their element; a second compiler (GCC) checks every array's
+  dimensions as layout fields, and arrays of floats, Bools, unions and
+  earlier blocked records as blocked by their element; a second compiler (GCC) checks every array's
   sizeof and last element's offset; the runtime oracle reads and writes the
   elements. Results: section 14.
 * Rust: `array_native_rows_load_every_encoding`,
@@ -479,7 +480,7 @@ Fuzzers (no disagreement in any run):
 | audit/native-view/tools/fuzz.tcl | seed 1 | 30 |
 | audit/native-edit/tools/fuzz.tcl, native backends; all four | seeds 1; 2 | 30; 30 |
 | audit/c-bindgen/tools/fuzz.tcl | seeds 1, 2 | 10 each (158, 170 declarations) |
-| audit/c-bindgen/tools/layout-fuzz.tcl, the host, linux-aarch64, windows-x86_64-gnu, macos-aarch64 | seeds 1, 2, 3 each | 8 each (80 records, 64-66 layouts) |
+| audit/c-bindgen/tools/layout-fuzz.tcl, the host, linux-aarch64, windows-x86_64-gnu, macos-aarch64 (arrays of blocked records drawn too) | seeds 1, 2, 3 each | 8 each (80 records, 56-67 layouts) |
 
 The C layout fuzzer's first seed-2 run on the host found one disagreement:
 a fuzzed binding with no pointee identities has no `ctypes` module, which
