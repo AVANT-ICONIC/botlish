@@ -155,7 +155,8 @@ proc drawRecord {r earlier typedefs enums} {
     for {set i 0} {$i < $n} {incr i} {
         set name f${r}_$i
         if {$i == $blockAt && $kind eq "struct"} {
-            lappend fields [drawBlocked $r $i $name $earlier [expr {$i == $n - 1}]]
+            # A flexible array member only last, after a named member (C).
+            lappend fields [drawBlocked $r $i $name $earlier [expr {$i == $n - 1 && $i > 0}]]
             continue
         }
         set f [drawField $r $i $name $earlier $typedefs $enums [expr {$anonymous ? "" : "$kind $tag"}] \

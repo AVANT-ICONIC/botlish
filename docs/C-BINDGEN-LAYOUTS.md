@@ -674,10 +674,15 @@ size, alignment and offset through its own C designators: run on the host,
 static assertions for a cross target) and, on the host, against the
 **runtime oracle** on both native backends.
 
-Runs: seeds 1, 2, 3 on the host (linux-x86_64), seeds 1 to 3 for
-windows-x86_64-gnu and linux-aarch64, seed 7 for macos-aarch64 (no second
-compiler there: the model and the generator's own static check), 0
-disagreements; CI runs four programs of 24 records per target per run.
+Runs, each of four programs of ten records: seeds 1, 2, 3, 21, 31 and 41 on
+the host (linux-x86_64); seeds 1 to 3, 21 and 31 for windows-x86_64-gnu and
+linux-aarch64; seeds 7, 21 and 31 for macos-aarch64 (no second compiler
+there: the model and the generator's own static check); seed 9 under
+`-gc-stress 1`; seed 5 with 24 records a program. 0 disagreements. One
+first run (seed 21) reported a disagreement that was the fuzzer's own: it
+had drawn a struct whose only member is a flexible array, which C rejects;
+the fuzzer now draws one only after a named member. CI runs four programs of
+24 records per target per run.
 
 ## 17. Mutation testing
 
@@ -771,8 +776,17 @@ The shims are unchanged (layouts need no C code); the manifests grow by
 0.7 KB, the reports by 2-5%. Tcl's layout manifest is large for its 65
 records because TclStubs' 1,036 rows spell their function-pointer types.
 
-**Compile cost.** A program importing a layouts module and naming one layout
-compiles in COMPILE-COST.
+**Compile cost.** A program importing a layouts module and naming one
+layout, compiled by the front end in a fresh process with no cache, against
+the same program importing only the binding's ctypes module: SDL3 0.50 s
+against 0.30 s, Win32 (564 layouts, 5,390 lines) 2.72 s against 0.41 s.
+Once the module is parsed in the process, the compilations take 0.11 s
+(fixture), 0.16 s (Tcl), 0.15 s (SDL3), 0.20 s (BoringSSL) and 0.43 s
+(Win32), against 0.09-0.17 s with ctypes alone. A module of N synthetic
+four-field layouts costs 1.05, 1.86, 3.58 and 7.82 s for N = 250, 500,
+1,000, 2,000: linear, about 3.5 ms a layout (measured while the mutation
+run used two cores). A program pays only for the layouts modules it
+imports.
 
 ## 20. Regression and CI
 
@@ -788,7 +802,14 @@ the mutation run (section 17); for the target-table row,
 change (a calling-convention attribute before a declarator's pointer star)
 the archaeology's `parser.test` (50), `corpus.test` (22) and `tools/all.tcl`
 (results unchanged but its environment-dependent lines); `tools/compilerpedia.tcl
-check` (the target lists and `concept.c-bindgen-layouts`). REGRESSION-EXTRA
+check` (the target lists and `concept.c-bindgen-layouts`); through
+`tests/local.tcl`, on interp and compile, `binary-layout.test`,
+`native-view.test`, `native-edit.test`, `c-pointer-borrowing.test`,
+`c-ffi.test`, `direct-modules.test`, `main-cli.test`, `compilerpedia.test`,
+`hir-interchange.test` and `compilation-isolation.test` (405 and 404
+passed, 0 failed) and the `binary-layout.bot` golden suite on all four
+backends (56 of 56 each); `audit/c-bindgen/tools/fuzz.tcl` (seeds 101, 202);
+the oracle and the acceptance test under `BOTLISH_NATIVE_GC_STRESS=1`.
 
 CI (`.github/workflows/c-bindgen.yml`) now installs MinGW-w64's headers,
 import libraries and GCC (`mingw-w64-x86-64-dev`, `gcc-mingw-w64-x86-64`,
