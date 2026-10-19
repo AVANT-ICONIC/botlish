@@ -234,3 +234,75 @@ the page:
 METHOD-ELIGIBLE and every other warning, rule, diagnostic, proof, library
 signature and backend are unchanged. The existence of the page is no evidence
 that any warning should be broader or narrower.
+
+## 10. Follow-up: String, UnicodeChar and List[UnicodeChar]
+
+A documentation-only follow-up. `ONE-CHAR-STRING-LITERAL`, the String and
+`UnicodeChar` representations, List semantics, lowering and the standard
+library are unchanged.
+
+**Where it landed.**
+
+* `concept.strings` (the canonical String/character page) states the
+  distinction once.
+* `warning.one-char-string-literal` has a new section, TEXT OR CODE POINTS,
+  with the semantic reason, the performance reason, one checked example
+  (`"ULDR"` against `['U', 'L', 'D', 'R']`) and one sentence on the C
+  precedent. It links `concept.strings` instead of repeating the definition.
+* `principle.characters-not-strings` gained a three-line "Beyond one
+  character" pointer to both.
+* `principle.idiomatic-botlish` did not change.
+
+**The distinction, as worded** (`concept.strings`):
+
+```
+str                text: an immutable sequence of Unicode scalar values
+                   (the native backends store it as UTF-8)
+UnicodeChar        one Unicode scalar value (a code point other than a
+                   surrogate), a type of its own
+List[UnicodeChar]  an addressable, iterable sequence of such values
+```
+
+A UnicodeChar is not a user-perceived character or a grapheme cluster, and
+not a one-character String. It is "comparable to a Go rune, except that it is
+a type of its own"; that sentence is in the body only, with no alias,
+keyword or summary mention.
+
+**Where the brief and the compiler differ, the page follows the compiler.**
+
+* The type is `UnicodeChar`, not `Char`; the pages use that name.
+* A UnicodeChar is not an integer. UNICODE-CHAR-LITERALS.md defines it as a
+  scalar value of a type distinct from Int; the number is observed only
+  through `char::scalar_value`. The pages say "scalar value / code point".
+* UTF-8 is how the native backends store a String, not a promise of the
+  language, which promises a sequence of scalar values. The page says so.
+
+**Performance rationale.** Reading text as code points decodes the UTF-8
+(for non-ASCII text, finding character i decodes forward; ASCII text indexes
+directly, `native/src/runtime/ops.rs`), and building text from code points
+encodes it. A `List[UnicodeChar]` already holds the scalar values, so a
+decode, manipulate, encode round trip is avoidable work for data that was a
+code-point sequence from the start. The page claims no figure.
+
+**What the warning page says it asks.** The warning is a request to choose
+between text and a code-point value, not a preference for `'x'` over `"x"`. A
+separator given to an API that works on a code point is usually meant as the
+UnicodeChar. A multi-character symbolic sequence is a List only when it is
+not conceptually text.
+
+**Search regression.** The 3,317-query corpus was looked up before and
+after: identical except two list tails (`character code` and `index string`
+each gain a string-related page in third place). Outside the corpus,
+`string performance` (no match before) now finds the warning page, through
+its new body text; `rune` still has no match, but its near matches now
+include `concept.strings`; `c strings` lists one more topic. No alias or
+keyword was added. `ONE-CHAR-STRING-LITERAL`, its phrase and its full code
+still land on the warning page. `cp-string-char-search` pins this.
+
+**Validation.** `tools/compilerpedia.tcl check`: 668 topics, 515 examples
+run (one new), 0 problems. `compilerpedia.test` 39 of 39 on interp and
+compile, `main-cli.test` and `one-char-string-literal.test` pass. A rebuilt
+single executable, run outside the repository, shows the new sections, no
+line over 80 columns, `-help ONE-CHAR-STRING-LITERAL` on the warning page,
+and the earlier queries (`best practices`, `idiomatic`, `METHOD-ELIGIBLE`)
+unchanged.
