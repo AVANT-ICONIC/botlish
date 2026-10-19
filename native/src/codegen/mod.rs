@@ -842,7 +842,7 @@ mod euclid_mod_tests {
 
     fn rig() -> Rig {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let mut vm = Vm::new(
             Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
