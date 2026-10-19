@@ -686,12 +686,17 @@ reach is the same guard. The Rust test milestone 3 corrected
 (`rt_bytes_from_list`'s rooting) runs in the `rust` item under stress.
 
 The focused GC-stress run on the final code (section 19, run
-@@GCRUN@@): native-stack-overflow.test, coroutines.test,
-native-stack-map.test, native-root-storage.test and native.test on both
-Tcl backends, and the Rust tests and native_stack, all under
-`BOTLISH_NATIVE_GC_STRESS=1` -- every test of these files with a
-collection at every allocation, not only the stress tests above.
-@@GCRESULT@@ Locally on Linux x86-64 under the same variable:
+[39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542),
+cfdb02d, Tier C job
+[118237876232](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237876232)):
+native-stack-overflow.test, coroutines.test, native-stack-map.test,
+native-root-storage.test and native.test on both Tcl backends, and the
+Rust tests and native_stack, all under `BOTLISH_NATIVE_GC_STRESS=1` --
+every test of these files with a collection at every allocation, not only
+the stress tests above. **Success:** the Rust tests 253 + 37 and every
+native_stack check pass; the Tcl files 208 of 210 on interp (186 s) and on
+compile (200 s), the two skipped by host constraints (`nativeLinux`,
+`readelf`), none failed. Locally on Linux x86-64 under the same variable:
 native-stack-overflow.test 18 of 18 (5 min 24 s), the Rust tests and
 native_stack pass.
 
@@ -892,11 +897,50 @@ limitations -- Mach-O executables, C calls, Linux imports -- unchanged).
 
 ## 20. Linux x86-64 regression results
 
-@@LINUXX86@@
+`tests.yml` dispatched on the branch:
+
+| Run | Head | Result |
+|---|---|---|
+| [39290982366](https://github.com/mwagner-webdev/botlish/actions/runs/39290982366) | 3b3e664, the change | **success**: all 11 jobs that run on a branch -- the Tcl suite on interp and on compile, cranelift and cranelift-generic coverage, the four golden shards beside their Tcl originals, the native Rust unit tests, the stub-linked executables, the warning gate |
+| [39304498347](https://github.com/mwagner-webdev/botlish/actions/runs/39304498347) | cfdb02d, the final code (main merged) | @@X86FINAL@@ |
+
+The workflow's `native GC-stress` job runs on pushes to main only (it is
+skipped on a dispatch); the GC-stress evidence for Linux x86-64 is local:
+native-stack-overflow.test, coroutines.test, native-stack-map.test and
+native-root-storage.test (120 of 120), the Rust tests and native_stack
+under `BOTLISH_NATIVE_GC_STRESS=1`, all passing, and the whole of
+native-stack-overflow.test again under it on the final tree (18 of 18).
+
+What Linux x86-64 keeps, and what checks it: the same guard (now
+platform/guard.rs) on the same thread, the same line and statuses
+(native-stack-overflow.test's four original tests unchanged and passing,
+native-executable.test's `native-executable-stack-overflow` on both
+linkers), the same code generation (no codegen file changed;
+`native_stack_overflow_supported()` was already true), coroutine overflow
+(`co-errors-uncaught-native-limit`), native_stack's every check (the
+switch sweep among them: the publication fix is Linux's too), and the
+mutation run (section 18). The behavior that changed on Linux, on
+purpose: an unrelated fault goes to the disposition before the guard
+(Rust's handler, the default for any other signal) instead of `SIG_DFL`
+-- the same end for a program, and Rust's own message for its guard page
+(section 17) -- and a resume within 48-176 bytes of a stack's end reports
+instead of crashing.
 
 ## 21. Linux AArch64 regression results
 
-@@LINUXARM@@
+`tests-arm64.yml` (ubuntu-24.04-arm) dispatched on the branch:
+
+| Run | Head | Result |
+|---|---|---|
+| [39290986586](https://github.com/mwagner-webdev/botlish/actions/runs/39290986586) | 3b3e664, the change | **success**: all 10 jobs -- the Tcl suite on interp and on compile, cranelift and cranelift-generic coverage, the four golden shards, the native Rust unit tests (also under GC stress) and the whole test suite under `BOTLISH_NATIVE_GC_STRESS=1` |
+| [39304502981](https://github.com/mwagner-webdev/botlish/actions/runs/39304502981) | cfdb02d, the final code | @@ARMFINAL@@ |
+
+Linux AArch64 shares the most with macOS -- the AArch64 coroutine switch
+(`aarch64_switch!`, unchanged), the frame-record walk, the stack-probe
+configuration -- and keeps its own stack discovery (glibc, unchanged) and
+thread identity (`gettid`). Its GC-stress job runs the native stack-map
+and root tests across the publication change, which is the one runtime
+path that now runs on every switch.
 
 ## 22. Performance observations
 
