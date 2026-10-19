@@ -9,8 +9,9 @@ name: tests (macos arm64)
 #
 #   smoke          Tier A, every push: the host and its C and Rust
 #                  toolchains (not Botlish), Tcl 9.0.1, core::cabi's macOS row,
-#                  the native build and its Rust unit tests, the native
-#                  status, the smoke tier (tests/platform/tier.tcl smoke)
+#                  the native build and its Rust unit tests, the native stack
+#                  bounds and overflow tests, the native status, the smoke
+#                  tier (tests/platform/tier.tcl smoke)
 #   acceptance     Tier B, every push, two shards: the acceptance tier --
 #                  the test files and golden suites that pass on macOS
 #   linux control  Tier A on ubuntu-latest, every push: the same smoke
@@ -110,6 +111,12 @@ jobs:
 
       - name: Native Rust unit tests
         run: cargo test --release --manifest-path native/Cargo.toml --lib
+
+      # The host's stack bounds and guards and the runtime's overflow guard,
+      # checked in child processes (native/tests/native_stack.rs, milestone 4):
+      # its log records the macOS stack facts it observed.
+      - name: Native stack bounds and overflow (isolated processes)
+        run: cargo test --release --manifest-path native/Cargo.toml --test native_stack
 
       # Each native capability works or is refused exactly as recorded for
       # macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md, section 15).

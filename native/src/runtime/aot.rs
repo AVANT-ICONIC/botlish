@@ -49,10 +49,10 @@ pub fn run(argv: Vec<Vec<u8>>, init: impl FnOnce() -> (Box<Vm>, ProgramEntry) + 
         if let Some(path) = protocol {
             return driver_protocol(std::path::Path::new(&path), &mut vm, entry);
         }
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
         let _guard = {
             let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
-            super::platform::linux::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
+            super::platform::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
         };
         let result = entry(&mut *vm);
         if result == NO_VALUE {
@@ -98,11 +98,11 @@ fn driver_protocol(path: &std::path::Path, vm: &mut Vm, entry: ProgramEntry) -> 
             return 2;
         }
     };
-    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
     let _guard = {
-        super::platform::linux::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
+        super::platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
         let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
-        super::platform::linux::OverflowGuard::install(&stack).expect("pthread stack guard")
+        super::platform::OverflowGuard::install(&stack).expect("pthread stack guard")
     };
     let runs = std::env::var("BOTLISH_NATIVE_RUNS").ok().and_then(|n| n.parse::<usize>().ok()).filter(|n| *n > 0);
     let mut lines = Vec::new();

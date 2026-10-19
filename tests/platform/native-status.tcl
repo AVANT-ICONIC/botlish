@@ -4,8 +4,9 @@
 #   tclsh9.0 tests/platform/native-status.tcl ?-verbose 0|1?
 #
 # Runs one small probe per native capability -- the JIT, the GC's frame walk
-# under stress, a native stack overflow, coroutines, a Linux syscall, a C
-# call and a standalone executable -- and of the target boundary (the
+# under stress, a native stack overflow (of the thread's stack and of a
+# coroutine's), coroutines, a Linux syscall, a C call and a standalone
+# executable -- and of the target boundary (the
 # driver's reading of the host target's triple, the C calling convention of
 # a foreign signature, a program built for the other operating system of the
 # host's architecture) and compares each outcome with the expectation
@@ -57,6 +58,22 @@ fib(20)
 } {}] \
     gc-frame-walk [list driver build400.nir {BOTLISH_NATIVE_GC_STRESS 1}] \
     stack-overflow [list driver stack_overflow.ir {BOTLISH_NATIVE_STACK_BYTES 4194304}] \
+    coroutine-stack-overflow [list program {struct Event:
+    value: int
+
+fn down(n: int) -> int:
+    if n == 0:
+        return 0
+
+    1 + down(n - 1)
+
+fn worker(depth: int) -> Event:
+    yield Event {value: 0}
+    return Event {value: down(depth)}
+
+coroutine {step, first} = worker(100000000)
+step().value
+} {}] \
     coroutine [list program {struct Message:
     value: int
 
@@ -111,10 +128,11 @@ f(1)
 } {}]]
 
 # The recorded outcomes: HOST-TARGET -> NAME -> {value TEXT} (exactly) or
-# {error CODE MESSAGE-GLOB}. On macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md,
-# sections 6 and 15) the stack overflow is not Botlish's: with no guard of
-# its own the driver dies in Rust's stack-overflow abort -- the one recorded
-# outcome that is a crash, kept here so that milestone 5 has to change it.
+# {error CODE MESSAGE-GLOB}. A native stack overflow is NATIVE LIMIT STACK on
+# every host, the thread's stack and a coroutine's alike: on macos-aarch64
+# since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
+# driver died in Rust's stack-overflow abort (the thread's stack) or of
+# SIGBUS (a coroutine's).
 #
 # Since milestone 2 (MACOS-AARCH64-MILESTONE-2.md) a program importing a
 # Linux namespace does not compile for macos-aarch64 at all
@@ -125,6 +143,7 @@ set linux [dict create \
     jit {value 6765} \
     gc-frame-walk [list value [list str [string repeat xy 400]]] \
     stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+    coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
     coroutine {value {[10, 7]}} \
     linux-syscall {value 0} \
     c-call {value 5} \
@@ -138,7 +157,8 @@ set expected [dict create \
     macos-aarch64 [dict create \
         jit {value 6765} \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
-        stack-overflow {error {NATIVE BUG} {native backend failed: child killed: SIGABRT*has overflowed its stack*}} \
+        stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+        coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
         c-call {error {NATIVE LINK} {*executable emission requires Linux glibc on x86_64 or aarch64*}} \

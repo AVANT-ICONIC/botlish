@@ -123,13 +123,13 @@ proc underGcStress {body} {
 test stack-map-fib-1 {fib<int> uses native roots and target-specific overflow protection} -body {
     set report [native::roots [sourceIrHir [file join $::projectRoot bench fib.ir]]]
     list [storageOf $report fib] [depthReservationOf $report fib]
-} -result [list {native frame} [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64} ? "no" : "yes"}]]
+} -result [list {native frame} [expr {[testConstraint nativeStackGuard] ? "no" : "yes"}]]
 
-test stack-map-fib-2 {fib<int> has no depth helper on Linux x86-64 or AArch64} -body {
+test stack-map-fib-2 {fib<int> has no depth helper where the native stack guard is (nativeStackGuard: Linux x86-64 and AArch64, macOS AArch64)} -body {
     set hir [sourceIrHir [file join $::projectRoot bench fib.ir]]
     set clif [native::clif $hir]
     usesHelper $clif [clifFunctionBlock $clif fib] rt_stack_overflow
-} -result [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64} ? 0 : 1}]
+} -result [expr {[testConstraint nativeStackGuard] ? 0 : 1}]
 
 test stack-map-fib-3 {fib<int> still computes the right answer, natively} -body {
     native "fn fib(n):\n    if n < 2:\n        return n\n    fib(n - 1) + fib(n - 2)\n\nfib(15)"

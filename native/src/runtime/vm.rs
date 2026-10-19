@@ -276,27 +276,30 @@ impl Vm {
             empty_mutbytes: BytesObj::new_static_mutable_empty(),
             framemap: Rc::new(ProgramMap::new()),
             native_stack: {
-                #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+                #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
                 { Some(NativeStack::current().expect("pthread stack bounds")) }
-                #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+                #[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
                 { None }
             },
             co_current: std::ptr::null_mut(),
         })
     }
 
-    /// Publishes STACK (None: the main stack) as the one native stack running
-    /// now, for the overflow handler: a fault in its guard is a stack
-    /// overflow (runtime/coroutine.rs switches stacks).
+    /// Publishes STACK (None: the thread's own stack) as the one native stack
+    /// running now, for the overflow handler: a fault in its guard is a stack
+    /// overflow. runtime/coroutine.rs calls it on arriving on a stack, never
+    /// before leaving one. Inlined, and only atomic stores: it adds no frame
+    /// to the stack it runs on (runtime::platform's guard).
+    #[inline(always)]
     pub fn publish_active_stack(&mut self, stack: Option<NativeStack>) {
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
         {
             let stack = stack.or(self.native_stack);
             if let Some(stack) = stack {
-                super::platform::linux::set_active_stack(&stack);
+                super::platform::set_active_stack(&stack);
             }
         }
-        #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+        #[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
         let _ = stack;
     }
 

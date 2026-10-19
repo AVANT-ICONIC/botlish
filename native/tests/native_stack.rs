@@ -11,7 +11,16 @@
 //!
 //! Prints one line per check (and the raw facts each one saw, for the CI
 //! log) and exits 1 if any check failed.
+use botlish_native::runtime::coroutine::{rt_co_create, rt_co_resume, rt_co_start, rt_co_yield, CoroutineObj};
+use botlish_native::runtime::metrics::AllocMode;
+use botlish_native::runtime::native_stack::NativeStack;
+use botlish_native::runtime::ops::GenericEntry;
+use botlish_native::runtime::platform::{self, OverflowGuard};
+use botlish_native::runtime::value::*;
+use botlish_native::runtime::vm::{ProgramInfo, Vm};
 use std::process::{Command, ExitStatus};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // Raw facts, straight from the thread library (not the runtime's reading)
@@ -199,12 +208,285 @@ fn on_thread<T: Send + 'static>(name: &str, f: impl FnOnce() -> T + Send + 'stat
 }
 
 // ---------------------------------------------------------------------------
+// The runtime: its reading of a stack, its guard and its coroutines
+
+const OVERFLOW_LINE: &str = "error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}";
+
+fn new_vm() -> Box<Vm> {
+    Vm::new(Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
+        AllocMode::Summary)
+}
+
+/// A zero-argument Block whose code is the Rust function CODE (the generic
+/// entry ABI), standing in for a compiled coroutine body.
+fn thunk(vm: &mut Vm, code: GenericEntry) -> Value {
+    let caps: Box<[Value]> = Vec::new().into_boxed_slice();
+    vm.alloc(
+        ClosureObj {
+            hdr: Header::new(KIND_CLOSURE, false),
+            func: 0,
+            arity: 0,
+            code: code as *const () as usize,
+            ncaps: 0,
+            caps: Box::into_raw(caps) as *mut Value,
+        },
+        0,
+    )
+}
+
+/// A coroutine of BODY, rooted for the rest of the run.
+fn coroutine(p: *mut Vm, body: GenericEntry) -> Value {
+    // SAFETY: P is the Vm of this thread's run.
+    unsafe {
+        let block = thunk(&mut *p, body);
+        (*p).temp_roots.push(block);
+        let handle = rt_co_create(p, block);
+        (*p).temp_roots.push(handle);
+        handle
+    }
+}
+
+/// The bounds of the coroutine running now on P's thread.
+fn running_bounds(p: *mut Vm) -> NativeStack {
+    // SAFETY: called from a coroutine body, so co_current is that coroutine.
+    unsafe { (*(*p).co_current).stack.as_ref().expect("a running coroutine has a stack").bounds() }
+}
+
+/// Recurses with a 256-byte frame until the stack ends.
+#[inline(never)]
+fn exhaust(depth: usize) -> usize {
+    let frame = std::hint::black_box([depth as u8; 256]);
+    if depth == std::hint::black_box(usize::MAX) {
+        return 0;
+    }
+    exhaust(depth + 1).wrapping_add(frame[depth % 256] as usize)
+}
+
+/// The same with a 64 KiB frame: a frame larger than any guard page, which
+/// only stack probes keep from stepping over the guard.
+#[inline(never)]
+fn exhaust_wide(depth: usize) -> usize {
+    let frame = std::hint::black_box([depth as u8; 64 * 1024]);
+    if depth == std::hint::black_box(usize::MAX) {
+        return 0;
+    }
+    exhaust_wide(depth + 1).wrapping_add(frame[depth % 1024] as usize)
+}
+
+/// Calls F(ARG) with the stack pointer at SP (16-byte aligned, on the
+/// running stack, below the current stack pointer) and restores it after:
+/// the call then has exactly SP - low_bound bytes of stack left.
+///
+/// # Safety
+/// SP must lie in the usable part of the stack running now, below every
+/// live frame.
+#[cfg(target_arch = "x86_64")]
+unsafe fn call_at(sp: usize, f: extern "C" fn(usize), arg: usize) {
+    // SAFETY: the caller's contract; r12 is callee-saved, so it holds the
+    // old stack pointer across the call.
+    unsafe {
+        std::arch::asm!(
+            "mov r12, rsp",
+            "mov rsp, {sp}",
+            "call {f}",
+            "mov rsp, r12",
+            sp = in(reg) sp,
+            f = in(reg) f,
+            in("rdi") arg,
+            out("r12") _,
+            clobber_abi("C"),
+        );
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+unsafe fn call_at(sp: usize, f: extern "C" fn(usize), arg: usize) {
+    // SAFETY: as above; x20 is callee-saved.
+    unsafe {
+        std::arch::asm!(
+            "mov x20, sp",
+            "mov sp, {sp}",
+            "blr {f}",
+            "mov sp, x20",
+            sp = in(reg) sp,
+            f = in(reg) f,
+            in("x0") arg,
+            out("x20") _,
+            clobber_abi("C"),
+        );
+    }
+}
+
+/// What one child scenario shares with the coroutine bodies it runs (each
+/// child runs one scenario: plain statics).
+static VM: AtomicUsize = AtomicUsize::new(0);
+static HANDLE: AtomicUsize = AtomicUsize::new(0);
+static OFFSET: AtomicUsize = AtomicUsize::new(0);
+static ADDRESS: AtomicUsize = AtomicUsize::new(0);
+
+fn vm_ptr() -> *mut Vm {
+    VM.load(Ordering::Relaxed) as *mut Vm
+}
+
+/// Runs F on a 64 MiB thread with a Vm and the guard installed in MODE
+/// (`driver`: the line on the result descriptor, exit 0; `executable`: on
+/// standard error, exit 1), as main.rs and runtime/aot.rs install it; `none`
+/// installs no guard.
+fn guarded(mode: &str, f: impl FnOnce(*mut Vm, NativeStack) + Send + 'static) {
+    let mode = mode.to_string();
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || {
+            let mut vm = new_vm();
+            let p: *mut Vm = &mut *vm;
+            VM.store(p as usize, Ordering::Relaxed);
+            let stack = NativeStack::current().expect("the thread's stack");
+            let _guard = match mode.as_str() {
+                "none" => None,
+                "executable" => Some(OverflowGuard::install_executable(&stack).expect("the guard installs")),
+                _ => Some(OverflowGuard::install(&stack).expect("the guard installs")),
+            };
+            f(p, stack);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+/// Reads the byte at ADDRESS (which may fault: what the parent observes).
+fn touch(address: usize) {
+    // SAFETY: deliberately not safe: a fault is the point.
+    let byte = unsafe { std::ptr::read_volatile(address as *const u8) };
+    std::hint::black_box(byte);
+}
+
+// Coroutine bodies (each a Block's generic entry).
+
+extern "C" fn yield_forever(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    loop {
+        rt_co_yield(p, UNIT);
+    }
+}
+
+extern "C" fn exhaust_at_start(_: *mut Vm, _: Value, _: *const Value) -> Value {
+    make_small(exhaust(0) as i64)
+}
+
+extern "C" fn exhaust_after_yield(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    rt_co_yield(p, make_small(1));
+    rt_co_yield(p, make_small(2));
+    make_small(exhaust(0) as i64)
+}
+
+/// main -> a -> b -> c: each starts the next and yields; each resume goes on
+/// down to c, which exhausts its stack on its first resume.
+extern "C" fn nested_c(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    rt_co_yield(p, make_small(3));
+    make_small(exhaust(0) as i64)
+}
+
+extern "C" fn nested_b(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    let c = coroutine(p, nested_c);
+    rt_co_start(p, c);
+    rt_co_yield(p, make_small(2));
+    rt_co_resume(p, c, UNIT)
+}
+
+extern "C" fn nested_a(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    let b = coroutine(p, nested_b);
+    rt_co_start(p, b);
+    rt_co_yield(p, make_small(1));
+    rt_co_resume(p, b, UNIT)
+}
+
+/// Reads ADDRESS while running on a coroutine stack.
+extern "C" fn touch_address(_: *mut Vm, _: Value, _: *const Value) -> Value {
+    touch(ADDRESS.load(Ordering::Relaxed));
+    UNIT
+}
+
+extern "C" fn resume_handle(_: usize) {
+    rt_co_resume(vm_ptr(), HANDLE.load(Ordering::Relaxed) as Value, UNIT);
+}
+
+extern "C" fn start_handle(_: usize) {
+    rt_co_start(vm_ptr(), HANDLE.load(Ordering::Relaxed) as Value);
+}
+
+extern "C" fn yield_unit(_: usize) {
+    rt_co_yield(vm_ptr(), UNIT);
+}
+
+/// Resumes HANDLE from OFFSET bytes above this coroutine's stack's low end.
+extern "C" fn resume_near_edge(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    let low = running_bounds(p).low_bound;
+    // SAFETY: OFFSET is far below this body's own frame on a fresh 8 MiB stack.
+    unsafe { call_at(low + OFFSET.load(Ordering::Relaxed), resume_handle, 0) };
+    UNIT
+}
+
+/// Yields from OFFSET bytes above this coroutine's stack's low end.
+extern "C" fn yield_near_edge(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    let low = running_bounds(p).low_bound;
+    // SAFETY: as in resume_near_edge.
+    unsafe { call_at(low + OFFSET.load(Ordering::Relaxed), yield_unit, 0) };
+    UNIT
+}
+
+/// The publication check: what the guard reads at each point of a nested
+/// lifecycle, against the stack that runs there.
+static PUBLISHED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn expect_published(at: &str, stack: &NativeStack) {
+    let published = platform::published_stack();
+    let wanted = Some((stack.guard_low, stack.low_bound));
+    if published != wanted {
+        PUBLISHED.lock().unwrap().push(format!("{at}: published {published:x?}, running {wanted:x?}"));
+    }
+}
+
+extern "C" fn publication_b(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    expect_published("b started", &running_bounds(p));
+    rt_co_yield(p, UNIT);
+    expect_published("b resumed", &running_bounds(p));
+    UNIT
+}
+
+extern "C" fn publication_a(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    expect_published("a started", &running_bounds(p));
+    let b = coroutine(p, publication_b);
+    rt_co_start(p, b);
+    expect_published("a after starting b", &running_bounds(p));
+    rt_co_yield(p, UNIT);
+    expect_published("a resumed", &running_bounds(p));
+    rt_co_resume(p, b, UNIT);
+    expect_published("a after b completed", &running_bounds(p));
+    UNIT
+}
+
+// ---------------------------------------------------------------------------
 // Child scenarios (each runs alone, in its own process)
 
-/// `touch:THREAD:WHERE`: reads one byte, on THREAD, at WHERE relative to the
-/// thread library's stack: `below` (the byte below the lowest usable one),
-/// `page-below` (one page below it) or `low` (the lowest usable byte). Prints
-/// `survived` when the read returned.
+/// One scenario, named by `BOTLISH_STACK_TEST_CHILD`:
+///
+///   touch:THREAD:WHERE    no guard: reads a byte on THREAD -- the lowest
+///                         the thread library reports (`reported-low`), the
+///                         runtime's lowest usable one (`usable-low`), the
+///                         top or the bottom of the runtime's confirmed guard
+///                         (`guard-top`, `guard-bottom`) -- and prints
+///                         `survived`
+///   guard:THREAD:MODE     installs the guard on THREAD (`driver`,
+///                         `executable`, `result-file`; `wide`: driver, with
+///                         64 KiB frames) and exhausts the stack; prints
+///                         `refused: ...` when the stack has no confirmed
+///                         guard, `returned` if the recursion ever returns
+///   co:SHAPE              a coroutine's stack exhausted: `fresh`, `after-
+///                         yields`, `nested` (main -> a -> b -> c)
+///   fault:KIND            a fault that is not an overflow, guard installed
+///   fault:KIND:unguarded  the same without the guard
+///   sweep:DIRECTION:X     a coroutine switch made X bytes above the low end
+///                         of the stack it leaves; prints `completed`
+///   publication           the published stack along a nested lifecycle
 fn child(scenario: &str) -> ! {
     let parts: Vec<&str> = scenario.split(':').collect();
     match parts.as_slice() {
@@ -220,25 +502,156 @@ fn child(scenario: &str) -> ! {
             }
             on_thread(thread, move || {
                 let raw = raw_stack();
-                let address = match place.as_str() {
-                    "below" => raw.low - 1,
-                    "page-below" => raw.low - page_size(),
-                    "low" => raw.low,
+                let stack = NativeStack::current().expect("the thread's stack");
+                touch(match place.as_str() {
+                    "reported-low" => raw.low,
+                    "usable-low" => stack.low_bound,
+                    "guard-top" => stack.low_bound - 1,
+                    "guard-bottom" => stack.guard_low,
                     other => panic!("no place {other}"),
-                };
-                // SAFETY: deliberately not: the read may fault, which is what
-                // the parent observes.
-                let byte = unsafe { std::ptr::read_volatile(address as *const u8) };
-                std::hint::black_box(byte);
+                });
                 println!("survived");
             });
-            std::process::exit(0)
+        }
+        ["guard", thread, mode] => {
+            let mode = mode.to_string();
+            on_thread(thread, move || {
+                let stack = NativeStack::current().expect("the thread's stack");
+                if mode == "result-file" {
+                    let path = std::env::var("BOTLISH_STACK_TEST_RESULT").expect("a result file");
+                    let file = std::fs::File::create(path).expect("the result file");
+                    platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
+                    std::mem::forget(file);
+                }
+                let installed = if mode == "executable" { OverflowGuard::install_executable(&stack) } else { OverflowGuard::install(&stack) };
+                match installed {
+                    Ok(_guard) => {
+                        let n = if mode == "wide" { exhaust_wide(0) } else { exhaust(0) };
+                        println!("returned {n}");
+                    }
+                    Err(error) => println!("refused: {error}"),
+                }
+            });
+        }
+        ["co", shape] => {
+            let shape = shape.to_string();
+            guarded("driver", move |p, _| {
+                let body: GenericEntry = match shape.as_str() {
+                    "fresh" => exhaust_at_start,
+                    "after-yields" => exhaust_after_yield,
+                    "nested" => nested_a,
+                    other => panic!("no shape {other}"),
+                };
+                let handle = coroutine(p, body);
+                rt_co_start(p, handle);
+                rt_co_resume(p, handle, UNIT);
+                rt_co_resume(p, handle, UNIT);
+                println!("returned");
+            });
+        }
+        ["fault", kind] | ["fault", kind, _] => {
+            let kind = kind.to_string();
+            let mode = if parts.len() == 3 { "none" } else { "driver" };
+            guarded(mode, move |p, stack| {
+                let page = page_size();
+                match kind.as_str() {
+                    // A null pointer's page.
+                    "null" => touch(8),
+                    // An inaccessible page that is no stack's.
+                    "elsewhere" => unsafe {
+                        let base = libc::mmap(std::ptr::null_mut(), page, libc::PROT_NONE,
+                            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS, -1, 0);
+                        touch(base as usize + 64);
+                    },
+                    // A write to a read-only page: a protection fault.
+                    "read-only" => unsafe {
+                        let base = libc::mmap(std::ptr::null_mut(), page, libc::PROT_READ,
+                            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS, -1, 0);
+                        std::ptr::write_volatile(base as *mut u8, 1);
+                    },
+                    // A suspended coroutine's guard, from the thread's stack.
+                    "suspended-guard" => unsafe {
+                        let handle = coroutine(p, yield_forever);
+                        rt_co_start(p, handle);
+                        let co = handle as *mut CoroutineObj;
+                        touch((*co).stack.as_ref().unwrap().bounds().guard_low);
+                    },
+                    // The thread stack's guard, from a running coroutine.
+                    "thread-guard-from-coroutine" => {
+                        ADDRESS.store(stack.low_bound - 1, Ordering::Relaxed);
+                        let handle = coroutine(p, touch_address);
+                        rt_co_start(p, handle);
+                    }
+                    // The guarded stack's guard, read by another thread.
+                    "other-thread" => {
+                        let address = stack.low_bound - 1;
+                        std::thread::spawn(move || touch(address)).join().ok();
+                    }
+                    // A SIGSEGV sent, not raised by a fault.
+                    "sent" => unsafe {
+                        libc::raise(libc::SIGSEGV);
+                    },
+                    other => panic!("no fault {other}"),
+                }
+                println!("survived");
+            });
+        }
+        ["sweep", direction, offset] => {
+            let direction = direction.to_string();
+            let offset: usize = offset.parse().expect("an offset");
+            OFFSET.store(offset, Ordering::Relaxed);
+            guarded("driver", move |p, stack| {
+                match direction.as_str() {
+                    "resume-from-thread" => {
+                        let handle = coroutine(p, yield_forever);
+                        rt_co_start(p, handle);
+                        HANDLE.store(handle as usize, Ordering::Relaxed);
+                        // SAFETY: far below this frame on a 64 MiB stack.
+                        unsafe { call_at(stack.low_bound + offset, resume_handle, 0) };
+                    }
+                    "start-from-thread" => {
+                        HANDLE.store(coroutine(p, yield_forever) as usize, Ordering::Relaxed);
+                        // SAFETY: as above.
+                        unsafe { call_at(stack.low_bound + offset, start_handle, 0) };
+                    }
+                    "resume-from-coroutine" => {
+                        let inner = coroutine(p, yield_forever);
+                        rt_co_start(p, inner);
+                        HANDLE.store(inner as usize, Ordering::Relaxed);
+                        rt_co_start(p, coroutine(p, resume_near_edge));
+                    }
+                    "yield-from-coroutine" => {
+                        let handle = coroutine(p, yield_near_edge);
+                        rt_co_start(p, handle);
+                        rt_co_resume(p, handle, UNIT);
+                    }
+                    other => panic!("no direction {other}"),
+                }
+                println!("completed");
+            });
+        }
+        ["publication"] => {
+            guarded("driver", |p, stack| {
+                expect_published("thread", &stack);
+                let a = coroutine(p, publication_a);
+                rt_co_start(p, a);
+                expect_published("thread after a yielded", &stack);
+                rt_co_resume(p, a, UNIT);
+                expect_published("thread after a completed", &stack);
+                let mismatches = PUBLISHED.lock().unwrap();
+                if mismatches.is_empty() {
+                    println!("publication ok");
+                } else {
+                    println!("{}", mismatches.join("; "));
+                }
+            });
         }
         _ => {
             eprintln!("no child scenario {scenario}");
             std::process::exit(2)
         }
     }
+    std::process::exit(0)
 }
 
 struct Outcome {
@@ -250,6 +663,12 @@ struct Outcome {
 impl Outcome {
     fn signal(&self) -> Option<i32> {
         std::os::unix::process::ExitStatusExt::signal(&self.status)
+    }
+
+    /// Exit status 0 with exactly the overflow line on standard output: the
+    /// driver's report of a stack overflow.
+    fn is_overflow_line(&self) -> bool {
+        self.signal().is_none() && self.status.code() == Some(0) && self.stdout.trim_end() == OVERFLOW_LINE
     }
 
     fn brief(&self) -> String {
@@ -272,8 +691,13 @@ fn signal_name(signal: i32) -> &'static str {
 }
 
 fn run_child(scenario: &str) -> Outcome {
+    run_child_with(scenario, &[])
+}
+
+fn run_child_with(scenario: &str, environment: &[(&str, &str)]) -> Outcome {
     let output = Command::new(std::env::current_exe().expect("the test executable"))
         .env("BOTLISH_STACK_TEST_CHILD", scenario)
+        .envs(environment.iter().copied())
         .output()
         .expect("the child ran");
     Outcome {
@@ -304,8 +728,8 @@ impl Report {
 }
 
 /// The thread library's facts on every thread of THREADS: the current stack
-/// pointer lies inside the reported stack, the stack is page-aligned, nested
-/// calls stay inside it, and what is mapped around it.
+/// pointer lies inside the reported stack, its bottom is page-aligned,
+/// nested calls stay inside it, and what is mapped around it.
 fn facts(report: &mut Report) {
     let page = page_size();
     report.note(format!("page size {page} bytes ({} KiB)", page / 1024));
@@ -327,10 +751,13 @@ fn facts(report: &mut Report) {
         });
         let size = raw.high - raw.low;
         let inside = sp >= raw.low && sp < raw.high;
-        let aligned = raw.low % page == 0 && raw.high % page == 0;
-        report.check(&format!("facts {thread}"), inside && raw.low < raw.high && nested_ok,
-            format!("stack [{:#x}, {:#x}) {} KiB, sp {sp:#x} ({} KiB below the top), page-aligned {aligned}, nested calls inside {nested_ok}{}",
+        // The low end is page-aligned; the top need not be (macOS puts the
+        // thread's descriptor right above its stack).
+        let aligned = raw.low % page == 0;
+        report.check(&format!("facts {thread}"), inside && raw.low < raw.high && nested_ok && aligned,
+            format!("stack [{:#x}, {:#x}) {} KiB, sp {sp:#x} ({} KiB below the top), bottom page-aligned {aligned}, top {}, nested calls inside {nested_ok}{}",
                 raw.low, raw.high, size / 1024, (raw.high - sp) / 1024,
+                if raw.high % page == 0 { "page-aligned".to_string() } else { format!("{} bytes into a page", raw.high % page) },
                 raw.reported_guard.map(|g| format!(", reported guard {g} bytes")).unwrap_or_default()));
         report.note(format!("the byte below: {below}"));
         report.note(format!("a page below:  {below_page}"));
@@ -339,26 +766,149 @@ fn facts(report: &mut Report) {
     }
 }
 
-/// Whether the byte below each thread's stack, and the page below it, is
-/// inaccessible (a read kills the process with SIGSEGV or SIGBUS) and the
-/// lowest usable byte readable: observed, in child processes.
-fn guard_probes(report: &mut Report) {
-    for &thread in THREADS {
-        for place in ["below", "page-below", "low"] {
-            let outcome = run_child(&format!("touch:{thread}:{place}"));
-            let faulted = matches!(outcome.signal(), Some(libc::SIGSEGV | libc::SIGBUS));
-            let survived = outcome.status.success() && outcome.stdout.trim() == "survived";
-            let expected = match (thread, place) {
-                (_, "low") => survived,
-                ("pthread-no-guard", _) => true,
-                _ => faulted,
-            };
-            report.check(&format!("touch {thread} {place}"), expected, outcome.brief());
-            if !outcome.stderr.trim().is_empty() {
-                report.note(format!("stderr: {}", outcome.stderr.trim().lines().next().unwrap_or("")));
-            }
+/// What the runtime's bounds mean, observed in child processes with no
+/// handler: the lowest usable byte is readable; both ends of a confirmed
+/// guard kill the process with SIGSEGV or SIGBUS; and the runtime's low
+/// bound differs from the thread library's exactly when the reported lowest
+/// byte is not readable (the macOS main thread).
+fn guard_probes(report: &mut Report, guarded: &[(&'static str, bool)]) {
+    for &(thread, has_guard) in guarded {
+        let (raw_low, low) = on_thread(thread, || (raw_stack().low, NativeStack::current().expect("the stack").low_bound));
+        let outcome = |place: &str| run_child(&format!("touch:{thread}:{place}"));
+        let faulted = |o: &Outcome| matches!(o.signal(), Some(libc::SIGSEGV | libc::SIGBUS));
+        let survived = |o: &Outcome| o.status.success() && o.stdout.trim() == "survived";
+        let usable = outcome("usable-low");
+        report.check(&format!("touch {thread} usable-low"), survived(&usable), usable.brief());
+        let reported = outcome("reported-low");
+        report.check(&format!("touch {thread} reported-low"), survived(&reported) == (raw_low == low),
+            format!("{} (the runtime's low bound is {})", reported.brief(), if raw_low == low { "the reported one" } else { "above the reported one" }));
+        for place in ["guard-top", "guard-bottom"] {
+            let o = outcome(place);
+            report.check(&format!("touch {thread} {place}"), !has_guard || faulted(&o),
+                if has_guard { o.brief() } else { format!("no confirmed guard: {}", o.brief()) });
         }
     }
+}
+
+/// The runtime's reading of each thread's stack (NativeStack::current): the
+/// thread library's bounds, and a guard below exactly when one is confirmed.
+/// Returns, per thread, whether the runtime found a guard.
+fn runtime_facts(report: &mut Report) -> Vec<(&'static str, bool)> {
+    let page = page_size();
+    let mut guarded = Vec::new();
+    for &thread in THREADS {
+        let (raw, stack, below) = on_thread(thread, || {
+            let stack = NativeStack::current().expect("the runtime reads the stack");
+            (raw_stack(), stack, region(stack.low_bound - 1))
+        });
+        let has_guard = stack.guard_low < stack.low_bound;
+        let guard = stack.low_bound - stack.guard_low;
+        // The runtime's top is the thread library's; its low bound is the
+        // reported one, or above it where the reported bottom is
+        // inaccessible (guard_probes checks which).
+        let same_bounds = stack.high_bound == raw.high && stack.low_bound >= raw.low && stack.low_bound < raw.high;
+        // The guard is what the host reports (Linux) or the inaccessible
+        // mapping that ends at the stack (macOS), never an assumption.
+        let guard_as_host_says = match raw.reported_guard {
+            Some(reported) => stack.low_bound == raw.low && guard == reported,
+            None => has_guard == matches!(&below, Some((_, end, prot)) if prot == "---" && *end == stack.low_bound)
+                && (!has_guard || below.as_ref().is_some_and(|(start, _, _)| *start >= stack.guard_low)),
+        };
+        // Every thread Botlish runs on (a std thread) and a thread made with
+        // a four-page guard has one; the process's main thread is reported.
+        let required = match thread {
+            "std-default" | "std-1MiB" | "std-1GiB" => has_guard && guard >= page,
+            "pthread-guard-4-pages" => has_guard && guard >= 4 * page,
+            _ => true,
+        };
+        report.check(&format!("runtime stack {thread}"), same_bounds && guard_as_host_says && required,
+            format!("[{:#x}, {:#x}){}, guard {}", stack.low_bound, stack.high_bound,
+                if stack.low_bound == raw.low { String::new() } else { format!(" ({} KiB above the reported bottom)", (stack.low_bound - raw.low) / 1024) },
+                if has_guard { format!("[{:#x}, {:#x}) {} KiB", stack.guard_low, stack.low_bound, guard / 1024) } else { "none confirmed".to_string() }));
+        guarded.push((thread, has_guard));
+    }
+    guarded
+}
+
+/// The guard on each thread: a stack with a confirmed guard, exhausted, ends
+/// in the overflow line and exit status 0 (the driver), and one without is
+/// refused; the executable and result-file modes; a 64 KiB frame.
+fn guard_checks(report: &mut Report, guarded: &[(&'static str, bool)]) {
+    for &(thread, has_guard) in guarded {
+        if thread == "std-default" {
+            continue;
+        }
+        let outcome = run_child(&format!("guard:{thread}:driver"));
+        let ok = if has_guard { outcome.is_overflow_line() } else { outcome.status.success() && outcome.stdout.starts_with("refused:") };
+        report.check(&format!("guard {thread} driver"), ok, outcome.brief());
+    }
+    let outcome = run_child("guard:std-1MiB:executable");
+    report.check("guard std-1MiB executable", outcome.signal().is_none() && outcome.status.code() == Some(1)
+        && outcome.stdout.is_empty() && outcome.stderr.trim() == OVERFLOW_LINE, format!("{} stderr {:?}", outcome.brief(), outcome.stderr.trim()));
+    let path = std::env::temp_dir().join(format!("botlish-native-stack-{}.result", std::process::id()));
+    let outcome = run_child_with("guard:std-1MiB:result-file", &[("BOTLISH_STACK_TEST_RESULT", path.to_str().unwrap())]);
+    let written = std::fs::read_to_string(&path).unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    report.check("guard std-1MiB result-file", outcome.status.success() && outcome.stdout.is_empty() && written.trim() == OVERFLOW_LINE,
+        format!("{} result file {:?}", outcome.brief(), written.trim()));
+    let outcome = run_child("guard:std-1MiB:wide");
+    report.check("guard std-1MiB 64 KiB frames", outcome.is_overflow_line(), outcome.brief());
+}
+
+/// A coroutine's own stack exhausted: at its start, after yields, and at the
+/// bottom of main -> a -> b -> c.
+fn coroutine_checks(report: &mut Report) {
+    for shape in ["fresh", "after-yields", "nested"] {
+        let outcome = run_child(&format!("co:{shape}"));
+        report.check(&format!("coroutine {shape}"), outcome.is_overflow_line(), outcome.brief());
+    }
+}
+
+/// Faults that are not the running stack's exhaustion, with the guard
+/// installed: never the overflow line, and each ends exactly as it does
+/// without the guard (the same signal, or -- a SIGSEGV sent rather than
+/// raised by a fault -- what the previous disposition does with it). Every
+/// memory fault kills the process.
+fn fault_checks(report: &mut Report) {
+    for kind in ["null", "elsewhere", "read-only", "suspended-guard", "thread-guard-from-coroutine", "other-thread", "sent"] {
+        let with = run_child(&format!("fault:{kind}"));
+        let without = run_child(&format!("fault:{kind}:unguarded"));
+        let relabelled = with.stdout.contains("NATIVE LIMIT STACK") || with.stderr.contains("NATIVE LIMIT STACK");
+        let same = with.signal() == without.signal() && with.status.code() == without.status.code() && with.stdout == without.stdout;
+        let killed = kind == "sent" || matches!(with.signal(), Some(libc::SIGSEGV | libc::SIGBUS | libc::SIGABRT));
+        report.check(&format!("fault {kind}"), !relabelled && same && killed,
+            format!("{}; without the guard: {}", with.brief(), without.brief()));
+    }
+}
+
+/// A coroutine switch made X bytes above the low end of the stack it leaves,
+/// for X from 0 to 1.5 KiB in 16-byte steps: whichever instruction of the
+/// switch path (the helper's frames, bl_co_switch's pushes, the arriving
+/// side) the stack ends at, the run either completes or ends in the overflow
+/// line -- never a crash. Both must occur, or the sweep missed the edge.
+fn sweep_checks(report: &mut Report) {
+    for direction in ["resume-from-thread", "start-from-thread", "resume-from-coroutine", "yield-from-coroutine"] {
+        let (mut completed, mut overflowed, mut failures) = (0, 0, Vec::new());
+        for offset in (0..=1536).step_by(16) {
+            let outcome = run_child(&format!("sweep:{direction}:{offset}"));
+            if outcome.status.success() && outcome.stdout.trim() == "completed" {
+                completed += 1;
+            } else if outcome.is_overflow_line() {
+                overflowed += 1;
+            } else {
+                failures.push(format!("{offset}: {}", outcome.brief()));
+            }
+        }
+        report.check(&format!("sweep {direction}"), failures.is_empty() && completed > 0 && overflowed > 0,
+            format!("{overflowed} overflowed, {completed} completed{}", if failures.is_empty() { String::new() } else { format!(", failed at {}", failures.join(", ")) }));
+    }
+}
+
+/// The stack the guard reads is the one that runs, at every point of a
+/// nested lifecycle (the thread's, a's, b's, back again).
+fn publication_check(report: &mut Report) {
+    let outcome = run_child("publication");
+    report.check("publication", outcome.status.success() && outcome.stdout.trim() == "publication ok", outcome.brief());
 }
 
 fn main() {
@@ -367,7 +917,13 @@ fn main() {
     }
     let mut report = Report { failures: 0 };
     facts(&mut report);
-    guard_probes(&mut report);
+    let guarded = runtime_facts(&mut report);
+    guard_probes(&mut report, &guarded);
+    guard_checks(&mut report, &guarded);
+    coroutine_checks(&mut report);
+    fault_checks(&mut report);
+    publication_check(&mut report);
+    sweep_checks(&mut report);
     if report.failures > 0 {
         println!("{} native stack checks failed", report.failures);
         std::process::exit(1);
