@@ -18,6 +18,11 @@
 #       tools/instructions.tcl's rows, one row per implementation, keys,
 #       size and mode, one column per tag, with the reference's RUST-IMPL
 #       (tag "rust") and the first tag's ratio to it
+#   tclsh9.0 audit/hash-table/tools/summarize.tcl regimes FILE.tsv KEYS MODES ?IMPLS?
+#       the median ns per operation over each size regime -- tiny (1-8),
+#       small (16-256), medium (716-4096), large (11468-16384) -- one
+#       row per implementation and mode: robust against the one-run
+#       outliers a single size can show
 #   tclsh9.0 audit/hash-table/tools/summarize.tcl membership FILE.tsv DOMAIN MODE ?COLUMN?
 #       tools/membership.tcl's rows for one domain and mode (hit/miss): one
 #       row per strategy, one column per set size K; COLUMN is ns (default:
@@ -190,6 +195,34 @@ switch -- $command {
                 append row " [format %.0f $chi] ([format %.0f $mchi]) | $empty ($mempty) | [fmt $khit] / [fmt $kmiss] |"
             } else { append row " | | |" }
             puts $row
+        }
+    }
+    regimes {
+        lassign $argv _ path keys modes impls
+        set regimes {tiny {1 8} small {16 256} medium {716 4096} large {11468 16384}}
+        set cells [dict create]
+        set seen {}
+        foreach r [readRows $path] {
+            lassign $r tag impl k backend n m _ _ _ per
+            if {$k ne $keys || $m ni $modes} continue
+            if {$impl ni $seen} { lappend seen $impl }
+            foreach {name range} $regimes {
+                lassign $range lo hi
+                if {$n >= $lo && $n <= $hi} { dict lappend cells [list $impl $m $name] $per }
+            }
+        }
+        if {$impls eq ""} { set impls $seen }
+        puts "| impl | mode | tiny (1-8) | small (16-256) | medium (716-4096) | large (11468-16384) |"
+        puts "|---|---|---:|---:|---:|---:|"
+        foreach impl $impls {
+            foreach m $modes {
+                set row "| $impl | $m |"
+                foreach {name range} $regimes {
+                    set key [list $impl $m $name]
+                    append row " [expr {[dict exists $cells $key] ? [fmt [median [dict get $cells $key]]] : {}}] |"
+                }
+                puts $row
+            }
         }
     }
     membership {
