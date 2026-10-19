@@ -827,7 +827,7 @@ cancelled; each run's results below are from its completed jobs.
 | [39289576003](https://github.com/mwagner-webdev/botlish/actions/runs/39289576003) | 3b3e664, the change | -- | cancelled by the next push before a macOS runner started (Linux control: success) |
 | [39291788199](https://github.com/mwagner-webdev/botlish/actions/runs/39291788199) | 1ba91c7, the mutation harness | smoke | success: the first macOS run of the guard -- every native_stack check (stack facts, guard probes, overflows in every reporting mode, coroutine overflows, faults, publication, sweeps) and native-status's `stack-overflow` and `coroutine-stack-overflow` |
 | [39293822194](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194) | e9bbb03, the benchmark | smoke; Tier C `native-stack-overflow.test native-stack-map.test native-root-storage.test coroutines.test native.test rust native-stack-mutants native-stack-bench` | smoke: success. Tier C (job [118201686534](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194/job/118201686534)): the five Tcl files 208 of 210 on interp and on compile (2 skipped by host constraints, `nativeLinux` and `readelf`), the Rust tests and native_stack pass, the benchmark (section 22); its one failure was the mutation harness's two survivors (section 18) |
-| [39297872127](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127) | e0b04c5, faults inside the running stack | smoke; Tier C (the same items but the benchmark); acceptance | smoke: success, all ten faults of section 17. Tier C (job [118215508236](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508236)): success -- mutants 21 killed of 21, the five Tcl files as above, Rust tests and native_stack. Acceptance: @@ACC1@@ |
+| [39297872127](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127) | e0b04c5, faults inside the running stack | smoke; Tier C (the same items but the benchmark); acceptance | smoke: success, all ten faults of section 17. Tier C (job [118215508236](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508236)): success -- mutants 21 killed of 21, the five Tcl files as above, Rust tests and native_stack. Acceptance: success -- shards [1/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508310) and [2/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508242): 194 Tcl test files on interp (all but tier.tcl's `notYet`, c-bindgen.test and c-ffi.test) and 94 golden suites on interp, compile, cranelift-generic and cranelift (a Linux program's native runs excluded as `NATIVE TARGET`), 0 failed |
 | @@FINALRUNROW@@ |
 
 What the runs cover, against the brief's list: native smoke and the
@@ -835,7 +835,7 @@ stack-bound tests (native_stack, in every smoke job since 39291788199);
 main-thread, coroutine and nested-coroutine overflow and recovery
 (native-stack-overflow.test and coroutines.test on both native backends,
 every Tier C run); native golden suites on both Cranelift backends and the
-broader acceptance tier (Tier B, @@ACCRUN@@); focused GC stress (section
+broader acceptance tier (Tier B, run 39297872127 and the final run); focused GC stress (section
 14); native-status (every smoke job: `stack-overflow` and
 `coroutine-stack-overflow` are `NATIVE LIMIT STACK`, the other recorded
 limitations -- Mach-O executables, C calls, Linux imports -- unchanged).

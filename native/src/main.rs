@@ -81,7 +81,8 @@
 //! ```
 //!
 //! Native code runs on a worker pthread with a large native stack. On
-//! x86-64/Linux its guard supplies overflow protection.
+//! Linux (x86-64, AArch64) and macOS AArch64 the stack guard
+//! (runtime/platform/) supplies overflow protection.
 
 mod codegen;
 use botlish_native::{nir, runtime};
