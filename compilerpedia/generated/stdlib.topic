@@ -2226,9 +2226,73 @@ related: stdlib.module.binary concept.binary-layouts
 == MODULE
 lib/binary.bot: import binary, then write binary::I64.
 
+@topic stdlib.binary::element
+title: binary::element -- intrinsic of namespace binary
+summary: Element i of a live fixed array, written binary::element(a, i): a scalar's Int, a pointer, or a nested layout's or row's own live view or edit; IndexNotFound unless 0 <= i < N.
+index: stdlib
+symbol: binary::element
+keywords: array element; index native array; read element; c array; subscript
+related: stdlib.module.binary stdlib.binary::store_element stdlib.binary::load stdlib.binary::native::view concept.binary-layouts rule.unhandled-errors
+
+== SIGNATURE
+    binary::element(any, int) -> any
+
+== ERRORS
+    IndexNotFound
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::element. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::element(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+a must statically be a live fixed array, NativeView[array N of E] or
+NativeEdit[array N of E] (an array field read through a view or an edit,
+v.items, or an element of one); anything else is BINARY-OPERAND. One
+access at the array's address plus i times the element's width: a scalar
+element is one load, a pointer element is read fresh (observed, affine
+like any pointer), and a record or row element is its own live view
+(edit, through an edit) at its address, nothing read. The whole array is
+never copied. An index the compiler proves in 0..N-1 (a constant, a loop
+over the extent, a branch) needs no handler; one proven outside is
+KNOWN-ERROR. It reads native memory only on the native backends (a view
+of a non-null pointer is refused on interp and compile). Declared
+nomethod. FIXED-LAYOUT-ARRAYS.md.
+
+== EXAMPLES
+@example accept
+direct module
+
+import binary
+import binary::native
+import ffi::c
+
+layout Name:
+    size 16
+    align 1
+    field chars: array 16 of ffi::c::UChar at 0
+
+fn first_two(p: ffi::c::Ptr[ffi::c::Void]) -> int errors NativeViewNull:
+    v = binary::native::view(Name, p)
+    binary::element(v.chars, 0) + binary::element(v.chars, 1)
+
+r = first_two(ffi::c::null[ffi::c::Void]()):
+    on NativeViewNull:
+        -1
+r
+@caption Proven indices need no handler; a view of null fails first
+@value -1
+@end
+
 @topic stdlib.binary::emit
 title: binary::emit -- intrinsic of namespace binary
-summary: The bytes of a LayoutStruct[L] value laid out by L, written v.emit(): an abi::bytes::Bytes of L's size, padding zero; never fails.
+summary: The bytes of a LayoutStruct[L] value laid out by L, written v.emit(): an abi::bytes::Bytes of L's size, padding zero; fails only when a fixed array's List has another length (LayoutExtentMismatch).
 index: stdlib
 symbol: binary::emit
 keywords: serialize; encode; write struct; pack; to bytes
@@ -2236,6 +2300,12 @@ related: stdlib.module.binary concept.binary-layouts stdlib.binary::parse
 
 == SIGNATURE
     binary::emit(struct) -> struct
+
+== ERRORS
+    LayoutExtentMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
 
 == USE
 An intrinsic of namespace binary: import binary, then write binary::emit.
@@ -2248,9 +2318,13 @@ every backend (interp, compile, cranelift-generic, cranelift)
 L is read from the value's static type, which must be LayoutStruct[L]
 (an untyped value or an ordinary struct is BINARY-OPERAND). Every field
 is written at its offset in its encoding, little-endian, and padding is
-written as zero bytes, so equal values emit equal bytes. It cannot fail:
-a field's value is in its domain by its type. parse of emit's result
-gives the value back. A LayoutStruct is built from its fields with
+written as zero bytes, so equal values emit equal bytes. A field's value
+is in its domain by its type; a fixed array's List must have exactly the
+array's extent (its type cannot say so), else the call fails with the
+declared LayoutExtentMismatch and emits nothing -- unless the compiler
+proves every extent (a list literal, a counted loop, a value binary::parse
+or binary::load made), when it declares no error. A layout without arrays
+never fails. parse of emit's result gives the value back. A LayoutStruct is built from its fields with
 `LayoutStruct[L] {field: value, ...}`. It is never a function value.
 
 == EXAMPLES
@@ -2353,7 +2427,7 @@ keywords: read whole struct; copy native record; snapshot; load view
 related: stdlib.module.binary concept.binary-layouts stdlib.binary::native::view stdlib.binary::parse
 
 == SIGNATURE
-    binary::load(any) -> struct
+    binary::load(any) -> any
 
 == USE
 An intrinsic of namespace binary: import binary, then write binary::load.
@@ -2364,11 +2438,13 @@ every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
 v must statically be a NativeView[L] or a NativeEdit[L] (anything else
-is BINARY-OPERAND).
+is BINARY-OPERAND) -- or a live fixed array, NativeView[array N of E]
+(v.items, or an element of one), whose copy is its List of exactly N
+elements (rows a List of Lists, records a List of LayoutStructs).
 The result is the same immutable LayoutStruct[L] binary::parse would
-give for the same bytes, nested layouts included, so a record read many
-times can be loaded once and read as ordinary fields; padding is never
-read. For a native-only layout the LayoutStruct owns the pointers it read
+give for the same bytes, nested layouts and arrays included, so a record
+read many times can be loaded once and read as ordinary fields; padding
+is never read. For a native-only layout the LayoutStruct owns the pointers it read
 and is affine like any value that holds a Ptr. Natively only, like the
 view itself.
 
@@ -2446,6 +2522,12 @@ related: stdlib.module.binary stdlib.binary::native::edit stdlib.binary::write c
 == SIGNATURE
     binary::store(any, str, any) -> unit
 
+== ERRORS
+    LayoutExtentMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
 == USE
 An intrinsic of namespace binary: import binary, then write binary::store.
 Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
@@ -2464,9 +2546,48 @@ a construction's field values are: a scalar proven in its integer domain
 declared ffi::c::Ptr or FnPtr type. A pointer stored is observed, never
 moved: its address bits are copied, the memory does not own the pointee,
 and nothing keeps it alive. Padding and every other field are untouched.
-It declares no error and returns unit. A store is an ordinary native
+A designator may name an array element statically (L.items[3]) or a
+whole fixed array, whose value is a List of exactly its extent: every
+extent is checked before the first byte is written (LayoutExtentMismatch,
+declared only when the compiler cannot prove the extents). Otherwise it
+declares no error and returns unit. A store is an ordinary native
 store: not volatile, atomic or ordered; another thread's synchronization
 is the program's protocol. Declared nomethod. NATIVE-LAYOUT-WRITES.md.
+
+@topic stdlib.binary::store_element
+title: binary::store_element -- intrinsic of namespace binary
+summary: One scalar or pointer element of a live fixed array written through a native edit, binary::store_element(e.items, i, v): one store at the element's offset; IndexNotFound unless 0 <= i < N.
+index: stdlib
+symbol: binary::store_element
+keywords: write array element; store element; set native array; c array assignment
+related: stdlib.module.binary stdlib.binary::element stdlib.binary::store stdlib.binary::native::edit concept.binary-layouts
+
+== SIGNATURE
+    binary::store_element(any, int, any) -> unit
+
+== ERRORS
+    IndexNotFound
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::store_element. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::store_element(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+The array must statically be NativeEdit[array N of E] (an array read
+through a view is read-only: BINARY-OPERAND) and its element a scalar or
+a pointer (a record or row element is LAYOUT-OPERAND: write its fields
+through binary::element(a, i), the element's own edit). The value is held
+to the element's type as binary::store's is. Exactly the element's bytes
+are written; a store outside 0..N-1 writes nothing. A static index is
+also a designator: binary::store(e, L.items[3], v). Declared nomethod.
+FIXED-LAYOUT-ARRAYS.md.
 
 @topic stdlib.binary::write
 title: binary::write -- intrinsic of namespace binary
@@ -2480,7 +2601,7 @@ related: stdlib.module.binary stdlib.binary::write_foreign stdlib.binary::store 
     binary::write(struct, str, any) -> struct
 
 == ERRORS
-    LayoutLengthMismatch
+    LayoutExtentMismatch, LayoutLengthMismatch
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2499,9 +2620,12 @@ L.FIELD or a path through nested layouts, and its value is held to the
 field's integer domain like a construction's. The result is a fresh
 MutableBytes (MutableBytes is a value: data and every copy of it are
 unchanged), so a record is built a write at a time from
-abi::bytes::zeroed(abi::usize(binary::layout_length(L))). A pointer field
-is never written this way (LAYOUT-NATIVE-ONLY): binary::write_foreign
-encodes an existing pointer. Runs on every backend. Declared nomethod.
+abi::bytes::zeroed(abi::usize(binary::layout_length(L))). A designator may
+name an array element (L.items[3]) or a whole fixed array written from a
+List of exactly its extent (LayoutExtentMismatch otherwise, checked after
+the size and before anything is written). A pointer field, or an array
+holding pointers, is never written this way (LAYOUT-NATIVE-ONLY):
+binary::write_foreign encodes existing pointers. Runs on every backend. Declared nomethod.
 
 == EXAMPLES
 @example accept
@@ -2541,7 +2665,7 @@ related: stdlib.module.binary stdlib.binary::write stdlib.binary::store concept.
     binary::write_foreign(struct, str, any) -> struct
 
 == ERRORS
-    LayoutLengthMismatch
+    LayoutExtentMismatch, LayoutLengthMismatch
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2555,9 +2679,11 @@ binary::write_foreign. Declared nomethod: method syntax does not apply
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-The explicit foreign encoding: the field must be a C pointer field
-(LAYOUT-FOREIGN-WRITE otherwise) and p exactly its declared ffi::c::Ptr or
-FnPtr type (an Int is TYPE). p is observed, never moved: the bytes do not
+The explicit foreign encoding: the field must be a C pointer field, or a
+fixed array of them written from a List of pointers of exactly its extent
+(LAYOUT-FOREIGN-WRITE otherwise: an array of records holding pointers is
+filled a field at a time, L.rs[1].p), and p exactly its declared
+ffi::c::Ptr or FnPtr type (an Int is TYPE). p is observed, never moved: the bytes do not
 own it, keep it alive, or know whether C keeps it after a call -- a
 wrapper models that protocol. The record built this way is exposed to C
 by the existing borrowing contract (a read noescape pointer parameter).
@@ -2569,7 +2695,7 @@ NATIVE-LAYOUT-WRITES.md.
 
 @topic stdlib.module.binary
 title: binary -- standard namespace
-summary: Fixed binary layouts: parse, emit and field writes of byte records (binary::parse, emit, write, write_foreign), native views and edits (load, store), and layout queries.
+summary: Fixed binary layouts: parse, emit and field writes of byte records (binary::parse, emit, write, write_foreign), native views and edits (load, store, element, store_element), and layout queries.
 index: stdlib
 symbol: binary
 keywords: binary format; struct packing; serialize; deserialize; byte layout; parse bytes
@@ -2638,25 +2764,32 @@ lib/binary.bot (import binary).
     binary::U32                    type
     binary::U64                    type
     binary::U8                     type
+    binary::element                intrinsic -- Element i of a live fixed a...
     binary::emit                   intrinsic -- The bytes of a LayoutStruct...
     binary::layout_alignment       intrinsic -- The alignment in bytes of l...
     binary::layout_length          intrinsic -- The size in bytes of layout...
     binary::load                   intrinsic -- Every field of a native vie...
     binary::parse                  intrinsic -- The LayoutStruct[L] imprint...
     binary::store                  intrinsic -- One field written into live...
+    binary::store_element          intrinsic -- One scalar or pointer eleme...
     binary::write                  intrinsic -- A new abi::bytes::MutableBy...
     binary::write_foreign          intrinsic -- A new abi::bytes::MutableBy...
 
 Each member is a topic: -help NAME (e.g. -help binary::I16).
 
 == NOTES
-`import binary` for the nine intrinsics and the scalar field types
+`import binary` for the ten intrinsics and the scalar field types
 binary::U8 ... binary::I64. A `layout` declaration names a fixed number of
 bytes with explicit size, alignment and field offsets; every multi-byte
 field is little-endian (the target's order), and padding is never a
 field. The layout is static: it is named at a parse or a query and read
-from the value's type at an emit, never a runtime value. There are no
-arrays, unions, bitfields, variable-length tails or floats in a layout.
+from the value's type at an emit, never a runtime value. A field may be a
+fixed array, `field name: array 16 of ffi::c::Char at 8`: N elements of
+any representation (a scalar, a pointer, a nested layout, another array),
+element i at the field's offset plus i times the element's width; its
+copied value is a List of exactly N elements (FIXED-LAYOUT-ARRAYS.md).
+There are no unions, bitfields, variable-length tails, zero-length arrays
+or floats in a layout.
 
 A field may be a C pointer (ffi::c::Ptr[T] or ffi::c::FnPtr[F], of the
 target's pointer width). Such a layout is native-only: bytes never become
@@ -2672,6 +2805,16 @@ pointer field takes an existing pointer only through the explicit
 binary::write_foreign. Live native memory foreign code handed out is
 written through a NativeEdit[L] (binary::native::edit, then
 binary::store). NATIVE-LAYOUT-WRITES.md.
+
+A fixed array read through a view or an edit (v.items) is a live array,
+NativeView[array N of E] or NativeEdit[array N of E]: binary::element(a, i)
+reads one element at a dynamic index (IndexNotFound outside 0..N-1, no
+failure when the index is proven), binary::store_element(e.items, i, v)
+writes one scalar or pointer element, and binary::load(a) copies the whole
+array into its List. A designator names an element statically too
+(L.items[3], L.m[1][2], L.pts[2].x), and a whole array is written from a
+List of exactly its extent (the declared LayoutExtentMismatch otherwise,
+before anything is written).
 
 @topic stdlib.binary::native::edit
 title: binary::native::edit -- intrinsic of namespace binary::native

@@ -673,14 +673,14 @@ test la-emit-extent {emission checks every List against its array's extent -- a 
         [laKinds "fn go(v: LayoutStruct\[TAILED\]) -> abi::bytes::Bytes:\n    binary::emit(v)\n0\n"]
 } -cleanup {unset -nocomplain short ragged} -result {{same: [[-1], [-1], false]} {same: [[-1], [-1], [48]]} accepted UNHANDLED-ERROR KNOWN-ERROR UNHANDLED-ERROR accepted}
 
-test la-characters-are-not-text {an array of characters is an array of integers of its element type, never a String: a C char array imprints every byte as an ffi::c::Char Int -- a NUL in the middle and the bytes after it included, nothing trimmed, terminated or decoded -- and a wide-character array every unit as an ffi::c::UShort; the field's type is a List of the scalar, not str} -body {
+test la-characters-are-not-text {an array of characters is an array of integers of its element type, never a String: a C char array imprints every byte as an ffi::c::Char Int (signed or not as the target's plain char is) -- a NUL in the middle and the bytes after it included, nothing trimmed, terminated or decoded -- and a wide-character array every unit as an ffi::c::UShort; the field's type is a List of the scalar, not str} -body {
     set chars "layout CHARS:\n    size 16\n    align 2\n    field name: array 8 of ffi::c::Char at 0\n    field wide: array 4 of ffi::c::UShort at 8\n\n"
     set bytes {72 105 0 66 255 128 0 0 65 0 0 216 0 220 0 0}
     list \
         [laRun "${chars}[laParseProgram CHARS $bytes]"] \
         [laKinds "${chars}fn f(v: LayoutStruct\[CHARS\]) -> List\[ffi::c::Char\]:\n    v.name\n0\n"] \
         [laKinds "${chars}fn f(v: LayoutStruct\[CHARS\]) -> str:\n    v.name\n0\n"]
-} -cleanup {unset -nocomplain chars bytes} -result {{same: [LayoutStruct[CHARS] {name: [72, 105, 0, 66, -1, -128, 0, 0], wide: [65, 55296, 56320, 0]}]} accepted TYPE}
+} -cleanup {unset -nocomplain chars bytes} -result [list "same: \[LayoutStruct\[CHARS\] {name: \[72, 105, 0, 66, [expr {[dict get [core::cabi::target [core::cabi::hostTarget]] charSigned] ? "-1, -128" : "255, 128"}], 0, 0\], wide: \[65, 55296, 56320, 0\]}\]" accepted TYPE]
 
 # ---------------------------------------------------------------------------
 # Byte storage: binary::write of a whole array, static element designators,

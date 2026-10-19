@@ -1672,6 +1672,100 @@ layout Node:
 @at 4:17
 @end
 
+@topic error.layout-array-extent
+title: LAYOUT-ARRAY-EXTENT: a fixed array's extent is not a positive size
+summary: A fixed array's extent is a compile-time integer of at least 1 whose width fits a layout; a zero-length or flexible array is not a fixed array.
+index: errors
+alias: a fixed array's extent is a positive integer
+keywords: layout, array, extent, zero-length, flexible array member, length, fixed array
+related: concept.binary-layouts error.layout-field-bounds error.layout-array-index stdlib.module.binary
+docs: FIXED-LAYOUT-ARRAYS.md
+code: CORE SEMANTIC LAYOUT-ARRAY-EXTENT
+
+== MEANING
+    field "items" of layout "Packet" is an array of 0 elements: a fixed
+    array's extent is a positive integer (a C zero-length or flexible
+    array is not a fixed array)
+
+The extent is a literal of any size, multiplied exactly (never wrapped):
+an array wider than the largest layout is rejected here too. An array
+whose elements are arrays says so ("the elements of field ... are arrays
+of 0 elements"). The same rule holds for the live array type
+NativeView[array N of E].
+
+== WHAT TO DO
+Give the array its real extent. A C flexible array member or a
+variable-length tail is not a fixed layout: describe the fixed header as a
+layout and read the tail separately (its length is data, not
+representation).
+
+@example reject
+import binary
+
+layout Packet:
+    size 8
+    align 1
+    field items: array 0 of binary::U8 at 0
+
+0
+@caption An array of no elements
+@error CORE SEMANTIC LAYOUT-ARRAY-EXTENT
+@at 6:18
+@end
+
+@example accept
+import binary
+
+layout Packet:
+    size 8
+    align 1
+    field kind: binary::U8 at 0
+    field items: array 7 of binary::U8 at 1
+
+binary::layout_length(Packet)
+@value 8
+@caption Seven one-byte elements after the kind byte
+@end
+
+@topic error.layout-array-index
+title: LAYOUT-ARRAY-INDEX: a static element index outside its fixed array
+summary: An element designator (L.items[3], L.m[1][2]) names its index statically, so an index outside 0..N-1 is rejected where it is written.
+index: errors
+alias: the element index lies outside the fixed array
+keywords: layout, array, index, designator, out of range, element, subscript
+related: concept.binary-layouts error.layout-array-extent stdlib.binary::store stdlib.binary::write stdlib.binary::element
+docs: FIXED-LAYOUT-ARRAYS.md
+code: CORE SEMANTIC LAYOUT-ARRAY-INDEX
+
+== MEANING
+    Packet.items is a fixed array of 4 elements (indices 0..3): the element
+    index [4] lies outside it
+
+The designator of binary::write, binary::write_foreign and binary::store
+is static: its indices are part of the field it names, resolved to one
+offset at compile time. A dynamic index is binary::element or
+binary::store_element on a live array, checked at run time (IndexNotFound)
+unless the compiler proves it.
+
+@example reject
+import abi
+import abi::bytes
+import binary
+
+layout Packet:
+    size 4
+    align 1
+    field items: array 4 of binary::U8 at 0
+
+fn last(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    binary::write(d, Packet.items[4], 1)
+
+0
+@caption Four elements: the last is items[3]
+@error CORE SEMANTIC LAYOUT-ARRAY-INDEX
+@at 11:35
+@end
+
 @topic error.layout-native-only
 title: LAYOUT-NATIVE-ONLY: bytes and a C pointer field, the ordinary way
 summary: A pointer field is never parsed from bytes (that would forge a pointer) nor emitted or written into them as ordinary data: binary::write_foreign is the explicit encoding.

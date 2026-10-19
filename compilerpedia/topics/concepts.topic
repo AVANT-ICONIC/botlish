@@ -3118,9 +3118,9 @@ title: Binary layouts: `layout`, binary::parse and binary::emit
 summary: A `layout` declares a fixed-size byte format with explicit size, alignment and field offsets; binary::parse imprints bytes into an immutable LayoutStruct[L] and binary::emit writes it back.
 index: concepts
 alias: binary layout; layout declaration; parse bytes; byte format
-keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS
+keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS, array, fixed array, LayoutExtentMismatch
 related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.binary error.layout-field-bounds
-docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md
+docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md FIXED-LAYOUT-ARRAYS.md
 
 == WHAT IT IS
     layout Header:
@@ -3159,6 +3159,16 @@ be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
     pointer field; binary::native::edit(L, p) is a NativeEdit[L] -- live
     native memory read like a view and written by binary::store -- write
     authority, never ownership (NATIVE-LAYOUT-WRITES.md).
+  * A field may be a fixed array, `field name: array 16 of ffi::c::Char
+    at 8`, of any element representation (rows: `array 2 of array 3 of
+    binary::U16`; records: `array 4 of Point`), element i at the offset
+    plus i times the element's width. Its copied value is a List of
+    exactly that many elements (LayoutExtentMismatch otherwise, when
+    emitted or written); an array of characters is integers, never a
+    String. Through a view it is a live array, NativeView[array N of E]:
+    binary::element(a, i), binary::store_element(e.items, i, v) and
+    binary::load(a); a designator names an element statically (L.items[3])
+    (FIXED-LAYOUT-ARRAYS.md).
 
 == WHY
 A layout owns representation and ordinary structs own meaning: reading
