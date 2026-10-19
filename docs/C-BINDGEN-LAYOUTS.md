@@ -858,7 +858,10 @@ check` (the target lists and `concept.c-bindgen-layouts`); through
 `hir-interchange.test` and `compilation-isolation.test` (405 and 404
 passed, 0 failed) and the `binary-layout.bot` golden suite on all four
 backends (56 of 56 each); `audit/c-bindgen/tools/fuzz.tcl` (seeds 101, 202);
-the oracle and the acceptance test under `BOTLISH_NATIVE_GC_STRESS=1`.
+the oracle and the acceptance test under `BOTLISH_NATIVE_GC_STRESS=1`; and
+the whole `tests/local.tcl` (every Tcl test file on interp and compile: 6,098
+and 6,093 passed, 0 failed; all 94 golden suites on all four backends, 0
+failed; 40 minutes with 4 jobs and an empty front-end cache).
 
 CI (`.github/workflows/c-bindgen.yml`) now installs MinGW-w64's headers,
 import libraries and GCC (`mingw-w64-x86-64-dev`, `gcc-mingw-w64-x86-64`,
