@@ -150,25 +150,15 @@
                 set items [linsert $items 0 [DecodeRepr $element $bytes [expr {$at + $i * $stride}] $name $structId]]
 >>>>
 
-@@ tcl-compiler-rows-flattened the Tcl compiler reads a two-dimensional array of scalars as one row of all its elements
+@@ tcl-compiler-rows-flattened the Tcl compiler builds a two-dimensional array of scalars as one row of all its elements
 ## compiler/compiler.tcl
 <<<<
-            while {[lindex $repr 0] eq "array"} {
-                lappend dims [lindex $repr 1]
-                set repr [lindex $repr 3]
-            }
-            lassign $repr sign width endian
-            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian $dims]
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
 ====
-            while {[lindex $repr 0] eq "array"} {
-                lappend dims [lindex $repr 1]
-                set repr [lindex $repr 3]
-            }
             if {[llength $dims] > 1} {
                 set dims [list [expr [join $dims *]]]
             }
-            lassign $repr sign width endian
-            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian $dims]
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
 >>>>
 
 @@ native-index-inclusive native code admits an index equal to the extent (one past the array is read or written)
