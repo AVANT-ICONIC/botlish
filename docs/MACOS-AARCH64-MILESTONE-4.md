@@ -12,7 +12,57 @@ milestones before it are MACOS-AARCH64-MILESTONE-1.md to -3.md.
 
 ## Result
 
-@@RESULT@@
+On macOS arm64 a runaway native recursion now ends in the established
+`NATIVE LIMIT STACK` -- the driver's ordinary result line, the same bytes
+as on Linux -- on the worker thread's stack and on coroutine stacks,
+nested ones included, on both native backends, in every reporting mode,
+under GC stress; finite recursions return their values. Before, the same
+programs died of SIGABRT (Rust's stack-overflow abort), SIGSEGV or SIGBUS,
+or met the shadow-stack depth token's error when their frames were small
+(section 1).
+
+**Before** (Gate A, run 39286923808): 13 of the 18 tests of
+native-stack-overflow.test failed on macOS -- `down(10^8)` on the 1 GiB
+worker: `NATIVE BUG native backend failed: child killed: segmentation
+violation`; the same recursion inside a coroutine: `... child killed: bus
+error`; stack_overflow.ir on a 4 MiB thread: `thread '<unknown>' has
+overflowed its stack`, SIGABRT.
+**After** (every run from 39293822194 on; the final code in run
+@@FINALMAC@@): the same programs end in `error {NATIVE LIMIT STACK}
+{native stack exhausted: too many nested calls}`, 18 of 18 tests, on
+cranelift and cranelift-generic.
+
+How (sections 2-10): the guard Linux had -- a guard-page fault, classified
+on an alternate signal stack, reported with `write` and `_exit` -- is now
+one module shared by Linux x86-64, Linux AArch64 and macOS AArch64
+(`runtime/platform/guard.rs`). macOS finds the thread's stack through
+libpthread and *confirms* the guard below it with `mach_vm_region`
+(`runtime/platform/macos.rs`); the main thread's lowest reported page is
+inaccessible, which discovery steps over. Coroutine switches publish the
+stack they arrive on, which also closed a window where a resume close to a
+stack's end crashed -- on Linux too. Faults that are not the running
+stack's exhaustion end exactly as they would without the guard (ten
+kinds, section 17). The shadow-stack depth token is retired on macOS
+(section 15). The contract stays terminal: no in-process recovery, no new
+error, no change to coroutine semantics or the collector.
+
+Gates, all on GitHub Actions runners (no shared Mac):
+
+| Gate | What | Evidence |
+|---|---|---|
+| A | baseline failures captured | run 39286923808 (section 1) |
+| B | stack bounds, main and created threads | native_stack's facts and runtime bounds on six thread kinds (sections 4-7) |
+| C | active-stack tracking | native_stack's `publication` and the switch sweeps (section 8) |
+| D | a thread-stack overflow is the line | section 11 |
+| E | a coroutine overflow, after yields too | section 12 |
+| F | nested coroutines | section 13 |
+| G | GC stress | section 14, run @@FINALMAC@@ |
+| H | broad acceptance and Linux | macOS acceptance (runs 39297872127 and @@FINALMAC@@), tests.yml and tests-arm64.yml (sections 20-21) |
+
+Mutation testing: no survivor -- 21 of 21 applicable mutants killed on
+macOS, 17 of 17 on Linux x86-64 (section 18). Performance: no regression
+beyond noise on Linux; on macOS recursion about 30% faster without the
+depth token, coroutine resumes about 4% slower in one sample (section 22).
 
 ## 1. Initial failure evidence
 
