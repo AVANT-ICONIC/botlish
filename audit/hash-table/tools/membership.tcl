@@ -4,7 +4,7 @@
 #
 #   tclsh9.0 audit/hash-table/tools/membership.tcl ?-domains LIST?
 #       ?-strategies LIST? ?-sizes LIST? ?-queries M? ?-runs R? ?-out FILE?
-#       ?-backend B? ?-show DOMAIN/STRATEGY/K? ?-check 1?
+#       ?-backend B? ?-show DOMAIN/STRATEGY/K? ?-check 1? ?-data-limit N?
 #
 # -check 1 times nothing: it runs every program's hit and miss modes with 128
 # queries on interp, compile, cranelift and cranelift-generic and requires
@@ -56,7 +56,7 @@ source [file join [file dirname [file normalize [info script]]] lib.tcl]
 set options [dict create -domains {int-dense int-sparse str enum} \
     -strategies {chain list iset table bsearch tree bits direct pmod phash length trie} \
     -sizes {1 2 3 4 6 8 12 16 24 32 48 64 128 256 512 1024} -queries 1000000 -runs 5 \
-    -out "" -backend cranelift -show "" -check 0]
+    -out "" -backend cranelift -show "" -check 0 -data-limit 16384]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -556,6 +556,14 @@ try {
                 set made [programOf $domain $strategy $k]
                 if {$made eq ""} continue
                 lassign $made text data generateMs
+                # A constant table of more than DATA-LIMIT elements is not
+                # measured: native lowering of a List literal grows faster
+                # than its length (15531 elements took 173 s, 62949 ran out
+                # of 15 GB of memory: HASH-TABLE-COMPILER-PRESSURE.md, CO-7).
+                if {$data > [dict get $options -data-limit]} {
+                    puts "SKIP $domain $strategy $k: $data data elements (over -data-limit [dict get $options -data-limit])"
+                    continue
+                }
                 set dir [file join [ht::workDir] m-$domain-$strategy-$k]
                 file mkdir $dir
                 ht::writeFile [file join $dir main.bot] $text

@@ -16,6 +16,12 @@ mkdir -p "$out/lookups"
 stamp() { echo "$(date +%H:%M:%S) $*"; }
 lookups="hit miss member replace"
 
+stamp "baseline membership, the domains the first run did not reach"
+BOTLISH_HT_ROOT=$base $tclsh "$here/membership.tcl" -domains int-sparse -strategies phash -runs 5 \
+    -out "$out/membership-baseline.tsv" > "$out/membership-rest.log" 2>&1 || stamp "FAILED: membership int-sparse phash"
+BOTLISH_HT_ROOT=$base $tclsh "$here/membership.tcl" -domains "str enum" -runs 5 \
+    -out "$out/membership-baseline.tsv" >> "$out/membership-rest.log" 2>&1 || stamp "FAILED: membership str enum"
+
 stamp "baseline lookups as passes"
 BOTLISH_HT_ROOT=$base $tclsh "$here/run-all.tcl" -tag baseline -results "$out/lookups" -passes 4 -only "$lookups" \
     -phases "sizes keys typed" || stamp "FAILED: baseline lookups"
