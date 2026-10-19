@@ -42,9 +42,9 @@
 #
 # -target NAME selects the C ABI target of a .bot compilation (C-ABI-TYPES.md;
 # core/cabi.tcl lists linux-x86_64, linux-aarch64, macos-x86_64,
-# macos-aarch64, windows-x86_64, windows-aarch64): the widths and signedness
-# of ffi::c's integer scalars follow its data model, and its architecture
-# picks the file of an architecture-specific module (linux::sys: the Linux
+# macos-aarch64, windows-x86_64, windows-x86_64-gnu, windows-aarch64): the
+# widths and signedness of ffi::c's integer scalars follow its data model, and
+# its architecture picks the file of an architecture-specific module (linux::sys: the Linux
 # syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md), and its
 # operating system which platform namespaces it may import (linux::* only
 # for a Linux target: UNSUPPORTED-PLATFORM otherwise). The default is the

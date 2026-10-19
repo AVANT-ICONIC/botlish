@@ -136,6 +136,12 @@ typedef struct bgf_packed_outer {
 } bgf_packed_outer;
 #pragma pack(pop)
 
+/* A member whose name a later macro rewrites (glibc's st_atime pattern):
+ * the record's member is late_value, which the probes must not read as
+ * code. */
+typedef struct bgf_late { int code; int late_value; } bgf_late;
+#define late_value code
+
 /* Anonymous records: a typedef of an anonymous struct, a named member of an
  * anonymous struct type, and an anonymous struct member (its members are
  * the record's own, C11). */

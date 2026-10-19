@@ -43,37 +43,37 @@ proc ::cbind::pressure::features {} {
 # The blocked complete records of RECS that the reasons LIFT would make
 # representable: {DIRECT TRANSITIVE}, DIRECT those with a direct blocker of
 # their own (all of them lifted), TRANSITIVE those blocked only by what they
-# contain (recovered with it). Keys, in RECS order.
-proc ::cbind::pressure::recovered {recs lift} {
-    set memo [dict create]
+# contain (recovered with it). Keys, in RECS order. ORDER is the records in
+# dependency order (records.tcl's Order, the model's recordOrder), so that
+# each is decided once, after what it holds.
+proc ::cbind::pressure::recovered {recs lift {order ""}} {
+    if {$order eq ""} { set order [::cbind::records::Order recs [dict keys $recs]] }
+    set ok [dict create]
+    foreach key $order {
+        set rec [dict get $recs $key]
+        switch -- [dict get $rec status] {
+            layout-direct { dict set ok $key 1; continue }
+            layout-blocked {}
+            default { dict set ok $key 0; continue }
+        }
+        set yes 1
+        foreach b [dict get $rec direct] {
+            if {[lindex $b 0] ni $lift} { set yes 0; break }
+        }
+        if {$yes} {
+            foreach d [dict get $rec deps] {
+                if {![dict exists $ok [lindex $d 0]] || ![dict get $ok [lindex $d 0]]} { set yes 0; break }
+            }
+        }
+        dict set ok $key $yes
+    }
     set direct {}
     set transitive {}
     dict for {key rec} $recs {
-        if {[dict get $rec status] ne "layout-blocked"} continue
-        if {[Representable $recs $key $lift memo {}]} {
-            if {[llength [dict get $rec direct]]} { lappend direct $key } else { lappend transitive $key }
-        }
+        if {[dict get $rec status] ne "layout-blocked" || ![dict get $ok $key]} continue
+        if {[llength [dict get $rec direct]]} { lappend direct $key } else { lappend transitive $key }
     }
     return [list $direct $transitive]
-}
-
-proc ::cbind::pressure::Representable {recs key lift memoVar path} {
-    upvar 1 $memoVar memo
-    if {[dict exists $memo $key]} { return [dict get $memo $key] }
-    set rec [dict get $recs $key]
-    if {[dict get $rec status] eq "layout-direct"} { dict set memo $key 1; return 1 }
-    if {[dict get $rec status] ne "layout-blocked" || $key in $path} { dict set memo $key 0; return 0 }
-    set ok 1
-    foreach b [dict get $rec direct] {
-        if {[lindex $b 0] ni $lift} { set ok 0; break }
-    }
-    if {$ok} {
-        foreach d [dict get $rec deps] {
-            if {![Representable $recs [lindex $d 0] $lift memo [concat $path [list $key]]]} { set ok 0; break }
-        }
-    }
-    dict set memo $key $ok
-    return $ok
 }
 
 # The pointer SHAPE of C TYPE and the record it reaches: {SHAPE KEY} with

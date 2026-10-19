@@ -284,6 +284,7 @@ proc ::cbind::emit::Layouts {} {
     set target [dict get $model target]
     set keys {}
     set body ""
+    set anonNames [AnonNames $recs]
     foreach key [dict get $model layoutOrder] {
         set rec [dict get $recs $key]
         set where [expr {[dict get $rec origin] in {public bundled internal} ? "[dict get $rec header]:[dict get $rec line]" : "a system header"}]
@@ -300,7 +301,7 @@ proc ::cbind::emit::Layouts {} {
                 default { error "c-bindgen: a blocked field in the emitted layout $key" }
             }
             lappend keys {*}[Keys [dict get $f type]]
-            set decl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname] [AnonNames $recs]] " "]
+            set decl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname] $anonNames] " "]
             lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
         }
         set width 0

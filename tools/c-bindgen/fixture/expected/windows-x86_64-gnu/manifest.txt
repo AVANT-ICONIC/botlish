@@ -18,21 +18,21 @@ toolchain_target x86_64-w64-mingw32
 toolchain_sysroot none
 user_label_prefix {}
 evidence llvm {Ubuntu clang version 18.1.3 (1ubuntu1)}
-preprocessed_tokens 1744
+preprocessed_tokens 1757
 header include/bgf/bgf.h 49359c5b
-header include/bgf/bgf_records.h 99c37199
+header include/bgf/bgf_records.h dbe615db
 header include/bgf/bgf_types.h 7f558d1b
 shim_library botlish_shim_bgf_1ca27e51
 file bgf/bgf.bot 145 78933b29
 file bgf/ctypes.bot 71 1c828aa1
-file bgf/layouts.bot 237 a74844ee
+file bgf/layouts.bot 244 a87b0b5d
 file bgf/records.bot 40 ef98ed2c
 file bgf/thunks/bgf.bot 27 6d0b9688
 file bgf/types.bot 10 e2b19f32
-file layouts-check.c 170 3419256a
-file layouts.tsv 187 0b708b2e
-file report.tsv 249 8ea59933
-file report.txt 159 8360ec7f
+file layouts-check.c 175 50187f57
+file layouts.tsv 190 3aab67df
+file report.tsv 253 3a2e8fcf
+file report.txt 160 bc728a7b
 file shim.c 26 1ca27e51
 libraries bgf/bgf.bot bgf
 libraries bgf/records.bot bgf
@@ -43,7 +43,7 @@ count aliases 2
 count bool 2
 count boolOnly 2
 count callbacks 3
-count complete 47
+count complete 48
 count constants 16
 count constantsSeen 13
 count declared 42
@@ -85,11 +85,11 @@ layout_count blockedDirect 18
 layout_count blockedStructs 20
 layout_count blockedTransitive 4
 layout_count blockedUnions 2
-layout_count emitted 28
+layout_count emitted 29
 layout_count incomplete 5
 layout_count promoted 1
-layout_count public 50
-layout_count structs 48
+layout_count public 51
+layout_count structs 49
 layout_count system 0
 layout_count unions 2
 layout_blocked anonymous-overlay 1

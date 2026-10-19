@@ -597,7 +597,7 @@ test cb-layout-blockers {every representation the layout language lacks is a blo
         list $key [lsort -unique [lmap b [dict get $r direct] {lindex $b 0}]] [lmap b [dict get $r transitive] {lindex $b 1}] \
             [::cbind::records::RootReasons $recs $key]
     }
-} -result {{{struct bgf_chars} fixed-array {} fixed-array} {{struct bgf_wide_text} fixed-array {} fixed-array} {{struct bgf_points4} fixed-array {} fixed-array} {{struct bgf_ptrs3} fixed-array {} fixed-array} {{struct bgf_matrix} fixed-array {} fixed-array} {{struct bgf_flex} flexible-array {} flexible-array} {{union bgf_value} union {} union} {{struct bgf_tagged} {} {{field value (union bgf_value, field) -> union}} union} {{struct bgf_overlay} anonymous-overlay {{member 2 (union anon@bgf_records.h:183, anonymous-member) -> union}} {anonymous-overlay union}} {{struct bgf_bits} bitfield {} bitfield} {{struct bgf_real} {double float} {} {double float}} {{struct bgf_ld} long-double {} long-double} {{struct bgf_flag} c-bool {} c-bool} {{struct bgf_vol} volatile {} volatile} {{struct bgf_wide_field} typedef-abi-mismatch {} typedef-abi-mismatch} {{struct bgf_float_ptr} unsupported-pointer {} unsupported-pointer} {{struct bgf_bad_callback} unsupported-pointer {} unsupported-pointer} {{struct bgf_ms_field} unsupported-calling-convention {} unsupported-calling-convention} {{struct bgf_outer_blocked} {} {{field chars (struct bgf_chars, field) -> fixed-array}} fixed-array} {{struct bgf_chain2} {} {{field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}} fixed-array} {{struct bgf_mixed} fixed-array {{field u (union bgf_value, field) -> union}} {fixed-array union}} {{struct bgf_flagged_rect} {} {{field flag (struct bgf_flag, field) -> c-bool}} c-bool}}
+} -result {{{struct bgf_chars} fixed-array {} fixed-array} {{struct bgf_wide_text} fixed-array {} fixed-array} {{struct bgf_points4} fixed-array {} fixed-array} {{struct bgf_ptrs3} fixed-array {} fixed-array} {{struct bgf_matrix} fixed-array {} fixed-array} {{struct bgf_flex} flexible-array {} flexible-array} {{union bgf_value} union {} union} {{struct bgf_tagged} {} {{field value (union bgf_value, field) -> union}} union} {{struct bgf_overlay} anonymous-overlay {{member 2 (union anon@bgf_records.h:189, anonymous-member) -> union}} {anonymous-overlay union}} {{struct bgf_bits} bitfield {} bitfield} {{struct bgf_real} {double float} {} {double float}} {{struct bgf_ld} long-double {} long-double} {{struct bgf_flag} c-bool {} c-bool} {{struct bgf_vol} volatile {} volatile} {{struct bgf_wide_field} typedef-abi-mismatch {} typedef-abi-mismatch} {{struct bgf_float_ptr} unsupported-pointer {} unsupported-pointer} {{struct bgf_bad_callback} unsupported-pointer {} unsupported-pointer} {{struct bgf_ms_field} unsupported-calling-convention {} unsupported-calling-convention} {{struct bgf_outer_blocked} {} {{field chars (struct bgf_chars, field) -> fixed-array}} fixed-array} {{struct bgf_chain2} {} {{field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}} fixed-array} {{struct bgf_mixed} fixed-array {{field u (union bgf_value, field) -> union}} {fixed-array union}} {{struct bgf_flagged_rect} {} {{field flag (struct bgf_flag, field) -> c-bool}} c-bool}}
 
 test cb-layout-arrays {an array field is recorded for the pressure analysis, never flattened: its element type and category, its bounds and the compiler's element count; a bitfield its declared type and width} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
@@ -700,18 +700,18 @@ test cb-layout-pressure {the report weighs every missing feature on the dependen
     set b [string first "Macro APIs" $text]
     string trim [string range $text $a [expr {$b - 1}]]
 } -result {Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  fixed arrays                                                                 7    14.0%  5 + 2
-  unions and anonymous overlays                                                4     8.0%  3 + 1
-  ffi::c::Bool fields                                                          2     4.0%  1 + 1
+  fixed arrays                                                                 7    13.7%  5 + 2
+  unions and anonymous overlays                                                4     7.8%  3 + 1
+  ffi::c::Bool fields                                                          2     3.9%  1 + 1
   float fields                                                                 0     0.0%  0 + 0
   double fields                                                                0     0.0%  0 + 0
   float and double fields                                                      1     2.0%  1 + 0
   long double fields                                                           1     2.0%  1 + 0
   bitfields                                                                    1     2.0%  1 + 0
   flexible array members                                                       1     2.0%  1 + 0
-  fixed arrays and unions                                                     12    24.0%  9 + 3
-  fixed arrays, unions and Bool                                               14    28.0%  10 + 4
-  all of the above                                                            18    36.0%  14 + 4
+  fixed arrays and unions                                                     12    23.5%  9 + 3
+  fixed arrays, unions and Bool                                               14    27.5%  10 + 4
+  all of the above                                                            18    35.3%  14 + 4
 
 API pressure (bound APIs pointing to C records)
   bound APIs with a pointer to a C record (parameter or result)               15    29.4%
@@ -739,7 +739,7 @@ test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record an
         [string map {\t " | "} [lindex $tsv 1]] $rows \
         [regsub -all {\{[^{}]*clang version[^{}]*\}} [regexp -all -inline -line {^layout_(?:abi|count emitted|count blocked) .*$} [dict get $files manifest.txt]] VERSION] \
         [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}]
-} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | - | layout-blocked | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:175; blockers=fixed-array: field name: char elements, char [16]; roots=fixed-array; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | fixed-array | 4 | 16 | - | char name[16] | - | c=name; element=char char; bounds=16; extent=16; blockers=fixed-array: char elements, char [16]}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 23} {layout_count emitted 27}} {tag struct bgf_chain2: not generated (unused): complete
+} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | - | layout-blocked | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; blockers=fixed-array: field name: char elements, char [16]; roots=fixed-array; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | fixed-array | 4 | 16 | - | char name[16] | - | c=name; element=char char; bounds=16; extent=16; blockers=fixed-array: char elements, char [16]}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 23} {layout_count emitted 28}} {tag struct bgf_chain2: not generated (unused): complete
   no bound signature points to it
 record struct bgf_chain2: not generated (layout-blocked): nested-layout-blocked
   field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}}

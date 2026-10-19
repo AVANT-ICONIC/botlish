@@ -607,7 +607,7 @@ proc ::cbind::report::RecordSections {model apis} {
     if {[dict exists $model layouts]} {
         set recs [dict get $model layouts]
         foreach {label lift} [::cbind::pressure::features] {
-            lassign [::cbind::pressure::recovered $recs $lift] d t
+            lassign [::cbind::pressure::recovered $recs $lift [dict get $model recordOrder]] d t
             lappend out [Line "$label" [expr {[llength $d] + [llength $t]}] $complete "[llength $d] + [llength $t]"]
         }
     }

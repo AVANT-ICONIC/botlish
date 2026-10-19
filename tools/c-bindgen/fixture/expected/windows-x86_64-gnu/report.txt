@@ -9,7 +9,7 @@ Inventory (public headers, as this target's preprocessor sees them)
   object-like macros naming a function (aliases)                               2
   API names in all                                                            50
   opaque (incomplete) struct types                                             5
-  complete struct and union types                                             47
+  complete struct and union types                                             48
   function-pointer typedefs                                                    4
   object-like constant macros                                                 13
   enumerators                                                                  7
@@ -60,24 +60,24 @@ Capability pressure (API names a missing FFI capability blocks or limits)
   bound, a pointer parameter that may be retained (direct)                    10    20.0%
 
 Records and layouts (complete C records of the public headers and every record they hold by value)
-  complete structs                                                            48
+  complete structs                                                            49
   complete unions                                                              2
     of them in a system header (held by value by a public record)              0
     of them anonymous                                                          3
   incomplete struct and union tags (pointee identities only)                   5
   anonymous struct members promoted into their record                          1
-  layouts emitted                                                             28    56.0%
-  records whose layout is blocked                                             22    44.0%
-    structs                                                                   20    40.0%
-    unions                                                                     2     4.0%
-    with a direct blocker of their own                                        18    36.0%
-    only through a record they hold by value                                   4     8.0%
+  layouts emitted                                                             29    56.9%
+  records whose layout is blocked                                             22    43.1%
+    structs                                                                   20    39.2%
+    unions                                                                     2     3.9%
+    with a direct blocker of their own                                        18    35.3%
+    only through a record they hold by value                                   4     7.8%
 
 Layout blockers (records blocked; a record may have several)
-  fixed-array                                                                  6    12.0%
-  nested-layout-blocked                                                        6    12.0%
-  union                                                                        2     4.0%
-  unsupported-pointer                                                          2     4.0%
+  fixed-array                                                                  6    11.8%
+  nested-layout-blocked                                                        6    11.8%
+  union                                                                        2     3.9%
+  unsupported-pointer                                                          2     3.9%
   anonymous-overlay                                                            1     2.0%
   bitfield                                                                     1     2.0%
   c-bool                                                                       1     2.0%
@@ -88,23 +88,23 @@ Layout blockers (records blocked; a record may have several)
   typedef-abi-mismatch                                                         1     2.0%
   volatile                                                                     1     2.0%
   records blocked only transitively, by the direct reasons below them:
-      fixed-array                                                              2     4.0%
+      fixed-array                                                              2     3.9%
       c-bool                                                                   1     2.0%
       union                                                                    1     2.0%
 
 Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  fixed arrays                                                                 7    14.0%  5 + 2
-  unions and anonymous overlays                                                4     8.0%  3 + 1
-  ffi::c::Bool fields                                                          2     4.0%  1 + 1
+  fixed arrays                                                                 7    13.7%  5 + 2
+  unions and anonymous overlays                                                4     7.8%  3 + 1
+  ffi::c::Bool fields                                                          2     3.9%  1 + 1
   float fields                                                                 0     0.0%  0 + 0
   double fields                                                                0     0.0%  0 + 0
   float and double fields                                                      1     2.0%  1 + 0
   long double fields                                                           1     2.0%  1 + 0
   bitfields                                                                    1     2.0%  1 + 0
   flexible array members                                                       1     2.0%  1 + 0
-  fixed arrays and unions                                                     12    24.0%  9 + 3
-  fixed arrays, unions and Bool                                               14    28.0%  10 + 4
-  all of the above                                                            18    36.0%  14 + 4
+  fixed arrays and unions                                                     12    23.5%  9 + 3
+  fixed arrays, unions and Bool                                               14    27.5%  10 + 4
+  all of the above                                                            18    35.3%  14 + 4
 
 API pressure (bound APIs pointing to C records)
   bound APIs with a pointer to a C record (parameter or result)               15    30.0%
@@ -144,6 +144,7 @@ Macros
   function: call wrapper: computed arguments                                   1
   function: call wrapper: rename                                               1
   object: alias: function                                                      1
+  object: alias: undeclared identifier                                         1
   object: constant: char literal                                               1
   object: constant: floating literal                                           1
   object: constant: integer expression                                         1
@@ -151,9 +152,9 @@ Macros
 
 Generated source
   Botlish files                                                                6
-  lines                                                                      530
+  lines                                                                      537
   extern c fn declarations                                                    40
   opaque types                                                                11
   constants                                                                   16
-  layouts                                                                     28
+  layouts                                                                     29
   shim thunks                                                                  5

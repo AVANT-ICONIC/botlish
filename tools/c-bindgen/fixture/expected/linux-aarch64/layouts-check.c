@@ -4,6 +4,7 @@
  * layout whose size, alignment, an offset or a field's width, class or
  * signedness differs from this target's C compiler does not compile. */
 #include <bgf/bgf.h>
+#undef late_value
 #define BOTLISH_M(T, m) (((T *)0)->m)
 #define BOTLISH_RECORD(T, size, align, L) \
     _Static_assert(sizeof(T) == (size), L ": sizeof"); \
@@ -124,6 +125,10 @@ BOTLISH_RECORD(struct bgf_packed_outer, 11, 1, "bgf_packed_outer");
 BOTLISH_SCALAR(struct bgf_packed_outer, lead, 0, 1, 0, "bgf_packed_outer.lead");
 BOTLISH_NESTED(struct bgf_packed_outer, inner, 1, 8, "bgf_packed_outer.inner");
 BOTLISH_SCALAR(struct bgf_packed_outer, tail, 9, 2, 1, "bgf_packed_outer.tail");
+
+BOTLISH_RECORD(struct bgf_late, 8, 4, "bgf_late");
+BOTLISH_SCALAR(struct bgf_late, code, 0, 4, 1, "bgf_late.code");
+BOTLISH_SCALAR(struct bgf_late, late_value, 4, 4, 1, "bgf_late.late_value");
 
 BOTLISH_RECORD(bgf_anon_point, 8, 4, "bgf_anon_point");
 BOTLISH_SCALAR(bgf_anon_point, x, 0, 4, 1, "bgf_anon_point.x");

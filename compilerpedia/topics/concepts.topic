@@ -2985,7 +2985,7 @@ summary: `extern c fn` declares a C function by its ABI signature and pointer co
 index: concepts
 alias: C FFI; extern c; foreign function interface; call C function
 keywords: extern, c, ffi, foreign, library, link, ffi::c, Ptr, Int, noescape, borrow, NATIVE-ONLY, bindgen
-related: concept.direct-modules concept.binary-layouts backend.native-only backend.native-executable error.native-only
+related: concept.direct-modules concept.binary-layouts concept.c-bindgen-layouts backend.native-only backend.native-executable error.native-only
 docs: C-FFI.md C-ABI-TYPES.md C-POINTER-BORROWING.md C-BINDGEN.md
 
 == WHAT IT IS
@@ -3015,7 +3015,9 @@ says `read noescape` or `write noescape`.
     and passed by the borrowing contract.
   * A retaining call (a pointer that may escape) is direct authority
     (concept.direct-modules).
-  * tools/c-bindgen.tcl generates such declarations from real headers.
+  * tools/c-bindgen.tcl generates such declarations from real headers,
+    and a layout for every C record a layout represents, as the target's C
+    compiler lays it out (concept.c-bindgen-layouts).
 
 == WHY
 C interop reuses the platform ABI and linker for the machine problem and
@@ -3036,6 +3038,80 @@ abs(-5)
 
 == MORE
 C-FFI.md; C-ABI-TYPES.md; C-POINTER-BORROWING.md; C-BINDGEN.md.
+
+@topic concept.c-bindgen-layouts
+title: Generated C record layouts: a target's and a toolchain's facts
+summary: tools/c-bindgen.tcl writes an ordinary `layout` for every complete C record whose fields a layout represents, with the size, alignment and offsets the target's C compiler gave; a generated layout is that target's and that toolchain's, never another's.
+index: concepts
+alias: generated layout; C struct layout; c-bindgen layouts; layouts.bot; Win32 layouts; MinGW layouts
+keywords: bindgen, layout, struct, C record, sizeof, alignof, offsetof, padding, packed, target, toolchain, windows-x86_64-gnu, mingw, Win32
+related: concept.c-ffi concept.binary-layouts backend.targets error.layout-field-bounds
+docs: C-BINDGEN-LAYOUTS.md C-BINDGEN.md BINARY-LAYOUT.md NATIVE-LAYOUT-VIEWS.md NATIVE-LAYOUT-WRITES.md
+
+== WHAT IT IS
+A generated binding (generated/c/PROFILE/TARGET/) has a module NS::layouts
+beside NS::ctypes: one ordinary `layout` per complete C record whose every
+field is a C integer scalar, a data or function pointer or a nested
+generated layout, e.g. Win32's
+
+    # struct _FILETIME, typedef FILETIME (minwindef.h:222): sizeof 8, _Alignof 4
+    layout FILETIME:
+        size 8
+        align 4
+        field dwLowDateTime: ffi::c::ULong at 0   # DWORD dwLowDateTime
+        field dwHighDateTime: ffi::c::ULong at 4  # DWORD dwHighDateTime
+
+Every number is the C compiler's answer for the binding's target (sizeof,
+_Alignof, __builtin_offsetof, a member's type), never a rule the generator
+or the compiler applies; a generated C file of _Static_asserts
+(layouts-check.c) checks them against the compiler again. The layout reads
+and writes C memory through the ordinary operations (binary::native::view,
+binary::native::edit, binary::write); the record's pointee identity stays
+NS::ctypes' opaque type, and a pointer field keeps its pointee's identity.
+
+== RULES
+  * A generated layout is its target's: the widths of ffi::c's scalars are
+    the compilation's target's, so a layout generated for Windows (LLP64:
+    a 32-bit long) does not describe, or even compile as, a Linux one.
+    Compile a binding for the target it was generated for (-target).
+  * It is also its toolchain's. The Win32 binding is generated with
+    MinGW-w64's headers and compiler for windows-x86_64-gnu (Windows x86-64,
+    the GNU ABI), never for MSVC's windows-x86_64: MSVC's headers and
+    layouts are not probed, and a GNU layout is never taken for MSVC's.
+  * A record with a field no layout represents yet (a fixed or flexible
+    array, a union or anonymous overlay, a bitfield, float or double, C
+    _Bool) gets no layout, and neither does a record holding one by value;
+    a pointer to it is still an ordinary typed pointer. layouts.tsv and the
+    report name each record's blockers.
+  * Nothing in the compiler knows a layout was generated: it is ordinary
+    source, checked like any other.
+
+== WHY
+The C compiler decides a record's layout; the binding records the result.
+Botlish implements no C layout rule (packing, alignment attributes, the
+Windows bitfield and long double rules), so a layout can only be as right
+as the compiler that answered, and only for the target it answered for.
+
+== EXAMPLES
+@example reject
+import binary
+import ffi::c
+
+layout FILETIME:
+    size 8
+    align 4
+    field dwLowDateTime: ffi::c::ULong at 0
+    field dwHighDateTime: ffi::c::ULong at 4
+
+binary::layout_length(FILETIME)
+@caption Win32's FILETIME, generated for windows-x86_64-gnu, compiled for this host (a 64-bit unsigned long)
+@error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
+@at 8:44
+@end
+
+== MORE
+C-BINDGEN-LAYOUTS.md; C-BINDGEN.md; `tclsh9.0 tools/c-bindgen.tcl report
+PROFILE -target TARGET -why NAME` explains one record's layout or blockers.
 
 @topic concept.binary-layouts
 title: Binary layouts: `layout`, binary::parse and binary::emit

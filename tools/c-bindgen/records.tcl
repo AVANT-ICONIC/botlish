@@ -492,19 +492,18 @@ proc ::cbind::records::resolve {model theFacts} {
     }
     # Emittability: a record is emitted when it has no direct blocker and
     # every record it contains by value is emitted (the dependency graph,
-    # by-value edges only: a pointer is no dependency).
-    set status [dict create]
-    dict for {key rec} $recs {
-        Settle $key recs status {}
+    # by-value edges only: a pointer is no dependency), decided in
+    # dependency order, once each.
+    set order [Order recs [dict keys $recs]]
+    foreach key $order {
+        Settle $key recs
     }
-    # Names, then the emission order.
+    # Names, then the emission order: every emitted record after the ones it
+    # holds by value, translation-unit order otherwise.
     set recs [Name $recs]
-    set emitted {}
-    set state [dict create]
-    dict for {key rec} $recs {
-        if {[dict get $rec status] eq "layout-direct"} { Visit $key recs state emitted }
-    }
+    set emitted [Order recs [lmap {k r} $recs {expr {[dict get $r status] eq "layout-direct" ? $k : [continue]}}]]
     dict set model layouts $recs
+    dict set model recordOrder $order
     dict set model layoutOrder $emitted
     dict set model identities $::cbind::model::identities
     return $model
@@ -644,40 +643,95 @@ proc ::cbind::records::FieldConvention {key i} {
     return [expr {$st eq "ok" && [lindex $data 0] == 1}]
 }
 
-# Decides record KEY's status (and its transitive blockers) after its
-# dependencies'.
-proc ::cbind::records::Settle {key recsVar statusVar path} {
-    upvar 1 $recsVar recs $statusVar status
-    if {[dict exists $status $key]} { return [dict get $status $key] }
-    set rec [dict get $recs $key]
-    if {[dict exists $rec status] && [dict get $rec status] in {opaque-only promoted}} {
-        dict set status $key [dict get $rec status]
-        dict set recs $key transitive {}
-        return [dict get $rec status]
-    }
-    if {$key in $path} {
-        # A by-value cycle is no C; the parser's records say otherwise.
-        dict set recs $key direct [concat [dict get $rec direct] [list [list layout-cycle "a by-value cycle: [join [concat $path [list $key]] { -> }]"]]]
-        dict set status $key layout-blocked
-        dict set recs $key status layout-blocked
-        dict set recs $key transitive {}
-        return layout-blocked
-    }
-    set transitive {}
-    foreach d [dict get $rec deps] {
-        lassign $d dep relation
-        set s [Settle $dep recs status [concat $path [list $key]]]
-        if {$s ne "layout-direct"} {
-            set chain [Chain $recs $dep]
-            set where [FieldOfDep $rec $dep]
-            lappend transitive [list nested-layout-blocked "$where ($dep, $relation) -> $chain" $dep]
+# The records STARTS and every record they hold by value, in dependency
+# order: each after every record it holds by value, STARTS' order otherwise
+# (a depth-first walk with its own stack: no depth limits it). A by-value
+# cycle -- no C has one, but the parser's records might say so -- is noted on
+# the record whose dependency closes it (`cycle`), and the walk goes on.
+proc ::cbind::records::Order {recsVar starts} {
+    upvar 1 $recsVar recs
+    set state [dict create]
+    set order {}
+    foreach key $starts {
+        if {[dict exists $state $key]} continue
+        dict set state $key visiting
+        set stack [list [list $key 0]]
+        while {[llength $stack]} {
+            lassign [lindex $stack end] k i
+            set deps [dict get $recs $k deps]
+            if {$i < [llength $deps]} {
+                lset stack end 1 [expr {$i + 1}]
+                set d [lindex $deps $i 0]
+                if {![dict exists $state $d]} {
+                    dict set state $d visiting
+                    lappend stack [list $d 0]
+                } elseif {[dict get $state $d] eq "visiting"} {
+                    set path [lmap e $stack {lindex $e 0}]
+                    dict set recs $k cycle [concat [lrange $path [lsearch -exact $path $d] end] [list $d]]
+                }
+                continue
+            }
+            set stack [lrange $stack 0 end-1]
+            dict set state $k done
+            lappend order $k
         }
     }
-    set result [expr {[llength [dict get $recs $key direct]] || [llength $transitive] ? "layout-blocked" : "layout-direct"}]
-    dict set status $key $result
-    dict set recs $key status $result
+    return $order
+}
+
+# Decides record KEY's status after its dependencies' (Order): `status`,
+# `transitive` (a nested-layout-blocked blocker per blocked record it holds,
+# with the chain to that record's first direct blocker), `chain` (its own:
+# the records down to its first direct blocker, then that reason) and
+# `roots` (every direct reason it waits for, itself and through what it
+# holds: the pressure analysis's).
+proc ::cbind::records::Settle {key recsVar} {
+    upvar 1 $recsVar recs
+    set rec [dict get $recs $key]
+    if {[dict exists $rec status] && [dict get $rec status] in {opaque-only promoted}} {
+        dict set recs $key transitive {}
+        dict set recs $key chain {}
+        dict set recs $key roots {}
+        return
+    }
+    if {[dict exists $rec cycle]} {
+        dict lappend rec direct [list layout-cycle "a by-value cycle: [join [dict get $rec cycle] { -> }]"]
+        dict set recs $key direct [dict get $rec direct]
+    }
+    set transitive {}
+    set roots [lmap b [dict get $rec direct] {lindex $b 0}]
+    foreach d [dict get $rec deps] {
+        lassign $d dep relation
+        # A dependency not decided yet closes a cycle (reported above).
+        if {![dict exists $recs $dep roots]} continue
+        if {[dict get $recs $dep status] ne "layout-direct"} {
+            set where [FieldOfDep $rec $dep]
+            lappend transitive [list nested-layout-blocked "$where ($dep, $relation) -> [ChainText [dict get $recs $dep chain]]" $dep]
+            lappend roots {*}[dict get $recs $dep roots]
+        }
+    }
+    set direct [dict get $recs $key direct]
+    if {[llength $direct]} {
+        set chain [list [lindex $direct 0 0]]
+    } elseif {[llength $transitive]} {
+        set first [lindex $transitive 0 2]
+        set chain [concat [list $first] [dict get $recs $first chain]]
+    } else {
+        set chain {}
+    }
+    dict set recs $key status [expr {[llength $direct] || [llength $transitive] ? "layout-blocked" : "layout-direct"}]
     dict set recs $key transitive $transitive
-    return $result
+    dict set recs $key chain $chain
+    dict set recs $key roots [lsort -unique $roots]
+}
+
+# A chain (Settle's) as text: "fixed-array", "struct B -> fixed-array"; one
+# longer than sixteen records shows its first and last ones.
+proc ::cbind::records::ChainText {chain} {
+    if {[llength $chain] > 17} {
+        set chain [concat [lrange $chain 0 7] [list "... [expr {[llength $chain] - 12} ] more ..."] [lrange $chain end-3 end]]
+    }
+    return [join $chain " -> "]
 }
 
 # The member of REC whose type contains record DEP.
@@ -692,38 +746,11 @@ proc ::cbind::records::FieldOfDep {rec dep} {
     return "a member"
 }
 
-# The chain from the blocked record KEY to its first direct blocker:
-# "fixed-array" or "struct B (field b) -> fixed-array".
-proc ::cbind::records::Chain {recs key} {
-    set seen {}
-    set out {}
-    while 1 {
-        if {$key in $seen} { return [join [concat $out [list cycle]] " -> "] }
-        lappend seen $key
-        set rec [dict get $recs $key]
-        if {[llength [dict get $rec direct]]} {
-            return [join [concat $out [list [lindex [dict get $rec direct] 0 0]]] " -> "]
-        }
-        if {![dict exists $rec transitive] || ![llength [dict get $rec transitive]]} {
-            return [join [concat $out [list unknown]] " -> "]
-        }
-        set next [lindex [dict get $rec transitive] 0 2]
-        lappend out $next
-        set key $next
-    }
-}
-
 # Every direct blocker reason the blocked record KEY waits for, itself and
-# through what it contains by value (the pressure analysis's roots).
-proc ::cbind::records::RootReasons {recs key {seen {}}} {
-    if {$key in $seen} { return {} }
-    lappend seen $key
-    set rec [dict get $recs $key]
-    set out [lmap b [dict get $rec direct] {lindex $b 0}]
-    foreach t [dict get $rec transitive] {
-        lappend out {*}[RootReasons $recs [lindex $t 2] $seen]
-    }
-    return [lsort -unique $out]
+# through what it contains by value (the pressure analysis's roots: Settle
+# computed them).
+proc ::cbind::records::RootReasons {recs key} {
+    return [dict get $recs $key roots]
 }
 
 # RECS with every record's names: `layoutName` (the Botlish name of its
@@ -815,22 +842,4 @@ proc ::cbind::records::TypeIdent {name} {
 # answer (hir/layouts.tcl's rule for a layout's name), never a list here.
 proc ::cbind::records::ReservedType {name} {
     return [expr {[::hir::layouts::OtherDeclaration $name $name] eq "a built-in type"}]
-}
-
-# Depth-first emission order: a record after every record it contains by
-# value, records in translation-unit order otherwise.
-proc ::cbind::records::Visit {key recsVar stateVar outVar} {
-    upvar 1 $recsVar recs $stateVar state $outVar out
-    if {[dict exists $state $key]} {
-        if {[dict get $state $key] eq "visiting"} {
-            error "c-bindgen: a by-value cycle among emitted layouts at $key"
-        }
-        return
-    }
-    dict set state $key visiting
-    foreach d [dict get $recs $key deps] {
-        Visit [lindex $d 0] recs state out
-    }
-    dict set state $key done
-    lappend out $key
 }

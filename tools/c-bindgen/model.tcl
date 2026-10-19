@@ -59,6 +59,7 @@ namespace eval ::cbind::model {
     variable target {}
     variable options {}
     variable identities {}
+    variable identityNames {}
 }
 
 # ---------------------------------------------------------------------------
@@ -153,6 +154,7 @@ proc ::cbind::model::Canonical {type {seen {}}} {
 # registered on first use with its naming typedef.
 proc ::cbind::model::Identity {key} {
     variable identities
+    variable identityNames
     variable ix
     if {[dict exists $identities $key]} {
         return [dict get $identities $key name]
@@ -163,14 +165,14 @@ proc ::cbind::model::Identity {key} {
     } else {
         set tag [lindex $key 1]
         if {[string match anon@* $tag]} {
-            set name anon_[llength [dict keys $identities]]
+            set name anon_[dict size $identities]
         } else {
             set name $tag
         }
     }
     set name [Ident $name]
-    set taken [lmap {k v} $identities {dict get $v name}]
-    while {$name in $taken} { append name _[lindex $key 0] }
+    while {[dict exists $identityNames $name]} { append name _[lindex $key 0] }
+    dict set identityNames $name $key
     set complete [expr {[dict exists $ix tag $key] && [dict get $ix tag $key complete]}]
     set loc [expr {[dict exists $ix tag $key] ? [dict get $ix tag $key loc] : {}}]
     set origin [expr {[dict exists $ix tag $key] ? [dict get $ix tag $key origin] : "system"}]
@@ -646,6 +648,7 @@ proc ::cbind::model::candidates {theProfile theTarget run theOptions} {
     variable target $theTarget
     variable options $theOptions
     variable identities [dict create]
+    variable identityNames [dict create]
     variable tagNames
     set records [dict get $run records]
     set ix [::cir::index $records]

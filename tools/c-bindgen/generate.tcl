@@ -99,9 +99,9 @@ proc ::cbind::generate::run {profile target {options {}}} {
     if {![dict get $run ok]} {
         error "c-bindgen: preprocessing [dict get $profile name] for $target failed:\n[string range [dict get $run stderr] 0 3000]"
     }
-    dict set timing preprocess [dict get $run timing preprocess]
-    dict set timing parse [dict get $run timing parse]
-    dict set timing macros [expr {[dict get $run timing macroPreprocess] + [dict get $run timing probe]}]
+    dict set timing preprocess [format %.3f [dict get $run timing preprocess]]
+    dict set timing parse [format %.3f [dict get $run timing parse]]
+    dict set timing macros [format %.3f [expr {[dict get $run timing macroPreprocess] + [dict get $run timing probe]}]]
     set prefix [LabelPrefix [dict get $run predefined]]
 
     set t0 [clock microseconds]
