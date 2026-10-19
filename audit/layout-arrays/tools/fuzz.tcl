@@ -11,7 +11,8 @@
 # one to seven elements whose element is any of these again -- an array of
 # arrays (rows), an array of records (whose stride is the record's size, its
 # tail padding included) -- up to three levels deep; the outermost layout's
-# first field is always an array of scalars. This script draws a random value
+# first field is always an array of scalars, and every other program has no
+# array of records (so the Tcl compiler's own reading of rows runs). This script draws a random value
 # (scalars biased toward each encoding's extremes and zero) and random input
 # bytes (padding included), and computes everything the program must give
 # itself, little-endian and two's complement, element i of an array at its
@@ -125,13 +126,16 @@ proc randomScalarRepr {} {
 }
 
 # A random representation DEPTH levels of arrays deep at most, nesting one
-# of INNERS (layouts declared before) sometimes.
-proc randomRepr {depth inners} {
+# of INNERS (layouts declared before) sometimes -- never as an array's
+# element while ::rowsOnly is set (the program's arrays are then all of
+# scalars or rows, which the Tcl compiler reads with one counted `binary
+# scan` instead of the reference implementation's loop).
+proc randomRepr {depth inners {element 0}} {
     set r [rand 10]
     if {$depth > 0 && $r < 4} {
-        return [list array [expr {1 + [rand 7]}] [randomRepr [expr {$depth - 1}] $inners]]
+        return [list array [expr {1 + [rand 7]}] [randomRepr [expr {$depth - 1}] $inners 1]]
     }
-    if {$inners ne {} && $r < 6} {
+    if {$inners ne {} && $r < 6 && !($element && $::rowsOnly)} {
         return [list layout [pick $inners]]
     }
     return [randomScalarRepr]
@@ -380,6 +384,8 @@ foreach width {1 2 4 8} {
 
 # One seed's programs: {BYTES-SOURCE BYTES-EXPECTED LIVE-SOURCE LIVE-EXPECTED}.
 proc program {index} {
+    # Every other program's arrays are of scalars and rows only.
+    set ::rowsOnly [expr {$index % 2}]
     set inners {}
     set layouts {}
     foreach suffix {a b} {

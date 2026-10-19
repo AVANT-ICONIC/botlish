@@ -524,6 +524,16 @@ outcomes) and HIR interchange (`roundtrip.tcl -via interchange`: 99;
 `-via cache`: 110) show no difference with layout-arrays.bot among the
 suites.
 
+Regression: `tests/local.tcl` passes whole (6,161 Tcl tests on interp and
+6,156 on compile, none failing; 95 golden suites on all four backends), and
+on the branch CI's `tests` workflow (every Tcl test, duplicates included,
+the native coverage, the golden check beside the Tcl originals, the Rust
+tests, the stub-linked executables, the warning gate), `c-bindgen` (68 of 68
+tests, none skipped: the BoringSSL and SDL3 layout oracles run against the
+built libraries; every committed binding current; both fuzzers on all four
+targets) and `tests (macos arm64)` pass; `tests (linux arm64)`:
+ARM64-RESULT.
+
 ## 15. Exclusions
 
 Deliberately not added, each a separate decision: unions and overlays;
