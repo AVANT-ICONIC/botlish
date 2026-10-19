@@ -200,8 +200,13 @@ proc check {name ok summary {detail ""}} {
     if {!$ok} { incr failures }
     puts [format "%-4s %-28s %s" [expr {$ok ? "ok" : "FAIL"}] $name $summary]
     if {$detail ne "" && (!$ok || $verbose)} {
-        foreach line [split [string trimright $detail \n] \n] {
+        # At most 40 lines of a tool's output (a symbol table is long).
+        set lines [split [string trimright $detail \n] \n]
+        foreach line [lrange $lines 0 39] {
             puts "       $line"
+        }
+        if {[llength $lines] > 40} {
+            puts "       ... [expr {[llength $lines] - 40}] more lines"
         }
     }
     return $ok
@@ -301,7 +306,13 @@ proc checks {} {
     native::object $hir $object
     set objectMs [expr {([clock microseconds] - $started) / 1000}]
     set objectHeader [binaryHeader $object]
-    check object-header [expr {$objectHeader eq [dict get $facts object] && $objectHeader eq [hostBinaryHeader object]}] "$objectHeader ([file size $object] bytes, $objectMs ms)"
+    set flags ""
+    if {[lindex $objectHeader 0] eq "macho"} {
+        # MH_SUBSECTIONS_VIA_SYMBOLS (0x2000): cranelift-object's, what lets
+        # Apple's ld dead-strip per symbol.
+        set flags [format ", flags 0x%x" [machoFlags $object]]
+    }
+    check object-header [expr {$objectHeader eq [dict get $facts object] && $objectHeader eq [hostBinaryHeader object]}] "$objectHeader$flags ([file size $object] bytes, $objectMs ms)"
     set described [string trim [string range [tool file -b $object] 0 end]]
     check object-file [string match [dict get $facts objectFile] $described] $described
 
@@ -381,10 +392,11 @@ proc checks {} {
     set executableHeader [binaryHeader $executable]
     set pie ""
     if {[lindex $executableHeader 0] eq "macho"} {
-        set pie [expr {[machoFlags $executable] & 0x200000 ? " pie" : " not pie"}]
+        set flags [machoFlags $executable]
+        set pie [format "%s, flags 0x%x" [expr {$flags & 0x200000 ? " pie" : " not pie"}] $flags]
     }
     check executable-header [expr {$executableHeader eq [dict get $facts executable]
-        && $executableHeader eq [hostBinaryHeader executable] && $pie ne " not pie"}] "$executableHeader$pie"
+        && $executableHeader eq [hostBinaryHeader executable] && ![string match " not pie*" $pie]}] "$executableHeader$pie"
     set described [string trim [tool file -b $executable]]
     check executable-file [string match [dict get $facts executableFile] $described] $described
     if {$macos} {
@@ -435,7 +447,9 @@ proc checks {} {
     }
     set command [expr {[file exists $printed] ? [string trim [readText $printed]] : ""}]
     set release [file dirname [native::binary]]
-    # rustc prints the linker's environment first (NAME="VALUE" ...).
+    # rustc prints the linker's environment first: on macOS `env -u NAME
+    # ...`, then NAME="VALUE" assignments.
+    regsub {^env(\s+-u\s+\S+)*\s+} $command {} command
     regsub {^(\w+="[^"]*"\s+)*} $command {} command
     set sysroot [string trim [lindex [run rustc --print sysroot] 1]]
     set named [string map [list $buildDir BUILD $release RELEASE $work WORK] $command]

@@ -124,14 +124,16 @@ jobs:
       - name: Native status
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
 
-      # A program object and a standalone executable as the host's tools see
-      # them (file, nm, objdump, otool, lipo, codesign), and the executable
-      # run outside its build directory (milestone 5).
-      - name: Native objects and executables
-        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
-
       - name: Smoke tier
         run: tclsh9.0 tests/platform/tier.tcl smoke 2>&1 | tee tier.log
+
+      # A program object and a standalone executable as the host's tools see
+      # them (file, nm, objdump, otool, lipo, codesign), the executable run
+      # outside its build directory, the link command and timings
+      # (milestone 5). Last, so that its lines are the log's last.
+      - name: Native objects and executables
+        if: always()
+        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
 
       - name: Publish summary
         if: always()
