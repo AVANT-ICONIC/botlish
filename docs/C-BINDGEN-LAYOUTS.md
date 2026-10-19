@@ -716,7 +716,47 @@ target of the table has 64-bit pointers, so taking the host's pointer width
 changes no output on any target; it is not retained (a 32-bit target would
 make it a real one).
 
-MUTATION-RESULTS
+**Result: 59 of 59 killed**, every one by a test of behavior or a fuzzer and
+none only by the pinned comparison of the committed bindings (14 mutants ran
+against the tree of the round's first commit, the other 45 against the
+final one; `twin-identities-merged` follows the pointee identities' new name
+index, the same rule). Most layout corruptions stop generation itself: the
+static check compiles `layouts-check.c` from the emitted text, so a wrong
+size, alignment, offset, packing or nested offset fails every test that
+generates a binding (48 to 63 failed tests). The layout fuzzer kills 13 of
+the 25 new mutants, the binding fuzzer 1; the rest fall to tests written for
+them:
+
+| mutant | tests failed | among them | layout fuzz |
+|---|---:|---|---|
+| layout-size-ignored | 55 | every generation (the static check) | killed |
+| layout-alignment-ignored | 62 | every generation; the binding fuzzer too | killed |
+| layout-offset-sequential | 63 | every generation | killed |
+| layout-offset-off-by-one | 62 | every generation | killed |
+| layout-packed-rounded-up | 52 | every generation | killed |
+| layout-long-width-from-host | 17 | cb-fixture-compiles, cb-fixture-cross-headers, cb-fixture-targets (the cross targets' generation) | |
+| layout-nested-offset-ignored | 48 | every generation | killed |
+| layout-nested-blocked-emitted | 62 | every generation | killed |
+| layout-pointer-blocks | 19 | cb-layout-arrays, cb-layout-manifest, cb-boringssl-layouts | killed |
+| layout-array-flattened | did not complete | cb-tcl-layouts (the oracle) | killed |
+| layout-union-as-struct | 58 | every generation | killed |
+| layout-bitfield-as-integer | 8 | cb-layout-blockers, cb-layout-pressure, cb-boringssl-layouts | |
+| layout-float-as-integer | 51 | the fixture's generation (the static check: a float is no integer) | |
+| layout-bool-as-uchar | 40 | the fixture's generation | killed |
+| layout-pointee-collapsed | 11 | cb-layout-pointers, cb-layout-verified | killed |
+| layout-typedef-duplicates | 55 | every generation | |
+| layout-order-unstable | 10 | cb-fixture-deterministic | |
+| layout-anonymous-member-dropped | 6 | cb-layout-records | killed |
+| layout-windows-gnu-as-msvc | 1 | cb-win32-identity | |
+| layout-probe-undef-dropped | 33 | the fixture's generation (bgf_late) | |
+| convention-default-always | 6 | cb-fixture-unsupported, cb-fixture-targets | |
+| convention-typedef-ignored | 3 | cb-layout-conventions | |
+| import-library-last | 2 | cb-win32-libraries | |
+| import-library-missing-bound | 2 | cb-win32-libraries | |
+| pressure-ignores-dependencies | 9 | cb-layout-pressure | |
+
+The target model's own mutants (`audit/target-model/tools/mutate.tcl`) run
+against the new row: 17 of 17 killed.
 
 ## 18. Determinism
 
@@ -803,7 +843,7 @@ Run for this milestone, all passing: `tests/c-bindgen.test` (68 tests, none
 skipped with the pinned sources, libraries and MinGW-w64 installed),
 `tools/c-bindgen.tcl check` for fixture, tcl, tclstubs, boringssl, sdl3 and
 win32, `audit/c-bindgen/tools/fuzz.tcl` and `layout-fuzz.tcl` (section 16),
-the mutation run (section 17); for the target-table row,
+the mutation run (section 17: 59 of 59 killed); for the target-table row,
 `tests/target-model.test` (25), `tests/linux-syscall-transports.test`,
 `tests/c-abi-types.test` (73), `tests/hir-cache.test` (17), `cargo test
 --release --bin botlish-native target::` (4) and
