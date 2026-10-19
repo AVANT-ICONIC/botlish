@@ -244,10 +244,15 @@ namespace eval hir {
     # `builds` counts every hir::BuildOnce, `methodTrials` and `methodFinals`
     # the method-call decisions' trial and final builds among them, and
     # `methodReused` the builds those decisions did not repeat because the
-    # one they needed had already been made (DecideMethodCalls). Measurement
-    # only: read as differences by hir/static.tcl and the benchmarks, never
-    # by an analysis.
-    variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0]
+    # one they needed had already been made (DecideMethodCalls). The kind
+    # filter (hir/methodfilter.tcl) counts its waves' builds as method trials
+    # too, `methodFiltered` the decisions it made complete,
+    # `methodFilterAbandoned` the ones it gave to the exact decision after
+    # building and `methodFilterEvicted` the decisions it took back.
+    # Measurement only: read as differences by hir/static.tcl and the
+    # benchmarks, never by an analysis.
+    variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0 \
+        methodFiltered 0 methodFilterAbandoned 0 methodFilterEvicted 0]
     # 0 makes DecideMethodCalls build every trial and final build again even
     # when a build of the same configuration was already made (measurement
     # and audits only).
@@ -259,6 +264,30 @@ namespace eval hir {
     variable methodBuildAudit 0
     if {[info exists ::env(BOTLISH_METHOD_BUILD_AUDIT)] && $::env(BOTLISH_METHOD_BUILD_AUDIT) ni {"" 0}} {
         set methodBuildAudit 1
+    }
+    # 0 makes DecideMethodCalls make the exact decision only, never trying the
+    # kind filter first (hir/methodfilter.tcl, METHOD-DECISION-FILTER.md):
+    # measurement and the tests of the exact decision. The filter reaches the
+    # exact decision's outcome with fewer builds, so neither this switch nor
+    # the audit below is a front-end input: they are in no cache key.
+    # BOTLISH_METHOD_FILTER=0 sets it for a whole process. The exact
+    # decision's own audits (methodBuildAudit, methodBuildReuse 0) run
+    # without the filter, whatever this says.
+    variable methodFilter 1
+    if {[info exists ::env(BOTLISH_METHOD_FILTER)] && $::env(BOTLISH_METHOD_FILTER) in {0 off no}} {
+        set methodFilter 0
+    }
+    # 1 makes DecideMethodCalls make the exact decision as well whenever the
+    # filter certified one, and fail unless both decided the same and gave the
+    # same HIR (the audit of the filter: tests and audit tools only; the
+    # exact decision's result is the one returned). BOTLISH_METHOD_FILTER_AUDIT=1
+    # sets it for a whole process, so the existing suites and fuzzers run
+    # under it.
+    variable methodFilterAudit 0
+    # The certified decisions the audit compared with the exact decision's.
+    variable methodFilterAudits 0
+    if {[info exists ::env(BOTLISH_METHOD_FILTER_AUDIT)] && $::env(BOTLISH_METHOD_FILTER_AUDIT) ni {"" 0}} {
+        set methodFilterAudit 1
     }
     # 0 makes hir::check redo the check after a demotion from the start,
     # sharing nothing with the check before it (measurement and audits only).
@@ -725,11 +754,11 @@ proc hir::MethodCallProblems {hir expr} {
                     && [dict get $hir symbols [dict get $binding symbol] kind] eq "native"} {
                 set native [dict get $binding name]
                 set receiver [lindex [dict get $node args] 0]
-                set receiverType [hir::typeOf $hir $receiver]
-                set kind [hir::types::kindOf $receiverType]
-                set paramTypes [dict get [core::native::metadata $native] paramTypes]
-                set wanted [expr {$paramTypes eq "" ? "" : [core::type::base [lindex $paramTypes 0]]}]
-                if {$receiverType ne "never" && $kind ne "" && $wanted ne "" && $kind ne $wanted} {
+                # (The one statement of this rule, which the kind filter,
+                # hir/methodfilter.tcl, rules candidates out by.)
+                set mismatch [hir::methodfilter::NativeMismatch $native [hir::typeOf $hir $receiver]]
+                if {$mismatch ne {}} {
+                    lassign $mismatch kind wanted
                     lappend problems [list TYPE \
                         "the receiver is a $kind, but argument 1 of native $native requires $wanted" $receiver]
                 }
@@ -739,7 +768,69 @@ proc hir::MethodCallProblems {hir expr} {
     return [lsort -unique $problems]
 }
 
-# Decides the method-style calls `receiver.name(args)` that have several
+# The decision of the method-style calls of HIR: the kind filter's when it
+# certifies one (hir/methodfilter.tcl, METHOD-DECISION-FILTER.md), else the
+# exact decision's below, made from the start. Both reach the same decisions
+# and the same program (hir::methodFilterAudit checks it); the filter takes
+# fewer builds. A decision with a rejection -- an ambiguous call, no
+# applicable method -- is always the exact one's.
+proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
+    variable methodFilter
+    variable methodFilterAudit
+    variable methodBuildAudit
+    variable methodBuildReuse
+    if {!$methodFilter || $methodBuildAudit || !$methodBuildReuse} {
+        return [DecideMethodCallsExact $nodes $options $given $hir $seeds]
+    }
+    set outcome [hir::methodfilter::Decide $nodes $options $given $hir $seeds]
+    if {![dict get $outcome certified]} {
+        if {[dict get $outcome builds] > 0} {
+            # The filter's builds left the process in their state: the exact
+            # decision starts from HIR's.
+            hir::activate $hir
+        }
+        return [DecideMethodCallsExact $nodes $options $given $hir $seeds]
+    }
+    set final [dict get $outcome hir]
+    if {!$methodFilterAudit} {
+        return $final
+    }
+    hir::activate $hir
+    set exact [DecideMethodCallsExact $nodes $options $given $hir $seeds]
+    FilterAudit $final $exact $seeds
+    return $exact
+}
+
+# Fails unless FILTERED, the program the kind filter certified, is EXACT, the
+# one the exact decision gave: the same decisions (as sets) and the same HIR
+# but for the decisions' own spelling, methodChoices and methodDecided, which
+# the exact decision writes in the order it made them.
+proc hir::FilterAudit {filtered exact seeds} {
+    variable methodFilterAudits
+    foreach key {methodChoices methodDecided} {
+        set a [lsort -stride 2 [dict get $filtered $key]]
+        set b [lsort -stride 2 [dict get $exact $key]]
+        if {$a ne $b} {
+            error "hir::methodFilterAudit: the filter decided $key differently from the exact decision\nfilter: $a\nexact:  $b\nseeds: $seeds"
+        }
+        dict unset filtered $key
+        dict unset exact $key
+    }
+    if {$filtered ne $exact} {
+        set where {}
+        foreach key [lsort -unique [concat [dict keys $filtered] [dict keys $exact]]] {
+            if {![dict exists $filtered $key] || ![dict exists $exact $key]} {
+                lappend where "$key (present in one only)"
+            } elseif {[dict get $filtered $key] ne [dict get $exact $key]} {
+                lappend where $key
+            }
+        }
+        error "hir::methodFilterAudit: the filter's program differs from the exact decision's in: [join $where {, }]"
+    }
+    incr methodFilterAudits
+}
+
+# The exact decision of the method-style calls `receiver.name(args)` that have several
 # distinct visible candidate functions (lexical ones and members of directly
 # imported namespaces, hir/resolve.tcl's MethodCandidates), by the rule of
 # METHOD-SUGAR.md: the call is accepted exactly when the ordinary call with
@@ -775,7 +866,7 @@ proc hir::MethodCallProblems {hir expr} {
 # dependency analysis, the warnings -- is not audited for reading it.)
 # hir::methodBuildAudit builds every reused build again and fails unless the
 # decision reads the same of both.
-proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
+proc hir::DecideMethodCallsExact {nodes options given hir {seeds {}}} {
     variable buildStats
     variable methodBuildReuse
     variable methodBuildAudit
@@ -1561,7 +1652,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery methodfilter declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

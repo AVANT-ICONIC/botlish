@@ -1812,6 +1812,48 @@ machine. So:
 * **A failing run on main is a standing signal**, like a failing `gc-stress`
   run: reproduce the disagreement on a small program and fix it.
 
+## Method-call decisions (the kind filter)
+
+`hir::DecideMethodCalls` decides which function a method-style call means by
+the rule of METHOD-SUGAR.md: the exact decision (`DecideMethodCallsExact`)
+tries candidates with whole-program trial builds; the kind filter
+(`hir/methodfilter.tcl`, METHOD-DECISION-FILTER.md) settles most calls from
+the receiver's kind first and gives everything else to the exact decision, made
+from the start. The filter changes how many builds a decision takes, never its
+outcome. Keep it so:
+
+* The filter *excludes*, it never *accepts*. A candidate is excluded only when
+  the ordinary call is provably invalid by kind (a native's first parameter,
+  a module function's declared or inferred first-parameter contract, the plain
+  value kinds only); that a survivor is valid is the certificate's job (a
+  build with no problem in the call), never an inference. Never exclude a
+  lexical name, never exclude by a domain, a refinement or a type's name, and
+  never decide a call with several survivors (no precedence, ever).
+* One statement of each rule. The native receiver rule is
+  `hir::methodfilter::NativeMismatch`, which `hir::MethodCallProblems` also
+  asks; a second copy of it, a restated admission rule, or a table of
+  methods by type is a second source of truth.
+* A rejection, an ambiguity, a message and every diagnostic is the exact
+  decision's. The filter hands over (certified 0) on anything it cannot settle;
+  it never discards or reorders a diagnostic. The decisions it made before
+  handing over are discarded, not passed on as seeds.
+* Its builds are counted as `methodTrials`; `hir::methodFilter` and
+  `hir::methodFilterAudit` are no front-end input (no cache key, no new
+  interchange rule). The exact decision's own audits run without the filter.
+
+If you change `hir/methodfilter.tcl`, `hir::DecideMethodCalls`,
+`hir::MethodCallProblems`, `hir::resolve::MethodCandidates`, the contracts
+`hir/signatures.tcl` records on a first parameter, or `hir::types::kindOf`, run
+`tests/method-filter.test`, `tests/static-economics.test`,
+`tests/static-compile.test`, `tests/method-sugar.test`,
+`audit/method-filter/tools/fuzz.tcl` (several seeds) and
+`audit/method-filter/tools/mutate.tcl` (every mutant in it must still apply and
+be killed: update a mutant's text when you change the code it mutates, keeping
+it a mutant of the same rule), and run the golden suites that decide method
+calls (`bench/method-filter.tcl -suites -audit 1`) and the suites above under
+`BOTLISH_METHOD_FILTER_AUDIT=1`. A new test file's tests get census rows
+(`audit/golden/migration/census/method-filter.tsv`).
+
 ## Workloads (examples/games/2048)
 
 `examples/games/2048/` is the first workload of the post-golden stress-test
