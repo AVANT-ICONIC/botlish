@@ -3911,13 +3911,46 @@ mod tests {
     fn bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes() {
         let mut vm = vm();
         let p: *mut Vm = &mut *vm;
-        let l = bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
+        // Rooted, as a compiled caller roots an operand it uses after the
+        // call: this test compares L with the result afterwards, and under
+        // BOTLISH_NATIVE_GC_STRESS=1 the allocation inside rt_bytes_from_list
+        // collects first. An unrooted L is swept there, its block is free for
+        // the result to take (Apple's allocator hands a freed block of the
+        // same size class back at once, glibc's happened not to), and
+        // `assert_ne!(b, l)` then compares the result with a dead object.
+        let l = rooted!(vm, bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]));
         let b = rt_bytes_from_list(p, l);
         assert_eq!(heap_kind(b), KIND_BYTES);
         assert_eq!(bytes_of(b), &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
         assert_eq!(rt_bytes_len(p, b), make_small(7));
-        // Eager copy: the storage is its own allocation, not the List.
+        // Eager copy: the storage is its own allocation, not the List. Both
+        // are live, so they cannot share an address whatever the allocator.
         assert_ne!(b, l);
+    }
+
+    /// The production side of the same contract: a native's operand is
+    /// rooted by its caller only while the caller still uses it, so a native
+    /// must be done with its operand before it allocates. Here the List is
+    /// deliberately unrooted and a collection is forced before every
+    /// allocation (not left to the environment), so the collection inside
+    /// the call really sweeps it; the result must still be exact. The sweep
+    /// is observed through the collector's own accounting, not through
+    /// addresses, so the test holds on every allocator.
+    #[test]
+    fn bytes_from_list_is_done_with_its_list_before_it_allocates() {
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let expected = [0x41u8, 0, 0x42, 0xff, 0x80, 0, 0];
+        let l = bytes_list(&mut vm, &expected.map(i64::from));
+        assert!(vm.temp_roots.is_empty());
+        let swept_before = vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects;
+        let b = rt_bytes_from_list(p, l);
+        // The collection that ran inside the call freed the unrooted List ...
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, swept_before + 1);
+        // ... and the storage, built after it, is still exactly its bytes.
+        assert_eq!(heap_kind(b), KIND_BYTES);
+        assert_eq!(bytes_of(b), &expected);
     }
 
     #[test]
