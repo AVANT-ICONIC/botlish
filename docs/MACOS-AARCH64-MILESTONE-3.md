@@ -287,7 +287,7 @@ tests, cabi and the examples; three shards).
 | native coroutine program | `NATIVE UNSUPPORTED value` | returns `[10, 7]` |
 | golden suites, native runs | 78 cranelift + 71 cranelift-generic runs blocked by the refusal | every native run passes (94 suites in shards of 32 + 31 + 31); the suites that do not run natively are exactly the Linux programs below and the ones that already carry a `golden-exclude` with its reason |
 | Tcl test files failing | 119 tests in 16 files (`notYet`) | `c-bindgen.test` (1: the fixture's manifest records Ubuntu's clang) and `c-ffi.test` (1: `cf-missing-library`, wording of the Linux linker), both milestone 7's |
-| Rust tests | 215 library + driver's 37 | the same plus the six above; all pass |
+| Rust tests | 215 library + driver's 37 | the same plus the new ones above; all pass, and under GC stress too since section 14's fix |
 | smoke, acceptance, linux control | success | success |
 
 Eligible suites: the Linux programs (the 16 suites that import a Linux
@@ -311,30 +311,106 @@ No suite was skipped to improve a count, and no exclusion was added.
 
 ## 14. GC-stress results
 
+### Before: the one red test
+
 Run 39166998920 (head 3fec593): `CI-Tests: acceptance rust`, `CI-GC-Stress:
 1`: the acceptance tier (every Tcl test file but the two above on interp and
 compile, every golden suite on all four backends) and the Rust tests under
 `BOTLISH_NATIVE_GC_STRESS=1`, three shards.
 
-Result: shards 2 and 3 **passed**. In shard 1, every Tcl test file on
-interp and compile (64 files) and all 32 golden suites on all four backends
-passed under stress (the suites in 273 s); the one failure was the native
-Rust tests, **one test of 241**:
+Result: shards 2 and 3 passed. In shard 1, every Tcl test file on interp and
+compile (64 files) and all 32 golden suites on all four backends passed
+under stress (the suites in 273 s); the native Rust tests failed on **one
+test of 241**,
 `runtime::ops::tests::bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes`
-(`assertion left != right failed`, ops.rs:3920: the same address twice). It
-is the unrooted Rust local milestone 1 reported, in a test that has nothing to
-do with coroutines: under stress a collection frees an object that only a
-Rust local holds and the allocator hands its address out again, which Linux's
-allocator happens not to do. A rerun of just the Rust tests under stress
-(run [39171832146](https://github.com/mwagner-webdev/botlish/actions/runs/39171832146))
-reproduced it identically: 240 passed, 1 failed, with every coroutine,
-framewalk, affine and mutvec test among the passing. It does not block
-coroutine validation, so, as the task said, it is **not fixed here** and is
-left for the stack/GC robustness milestone; it should be fixed by rooting the
-list in that test, not by touching the collector. Because `cargo test` stops
-at the failing library target, the driver's own 37 tests did not run under
-stress on macOS in that step (they run, and passed, in the census without
-stress).
+(`assertion left != right failed`, ops.rs:3920: `left: 105553161871808`,
+`right: 105553161871808`). A rerun of just the Rust tests under stress (run
+[39171832146](https://github.com/mwagner-webdev/botlish/actions/runs/39171832146))
+reproduced it identically: 240 passed, 1 failed. Because `cargo test` stops
+at the failing library target, the driver's own tests did not run under
+stress on macOS in those runs. The first version of this report left the
+failure for a later milestone; it is resolved here, before merge.
+
+### Root cause
+
+Milestone 1's diagnosis (an unrooted Rust local) is right, and the
+investigation shows it is the *test's* defect, not the runtime's:
+
+1. The test built a List with `bytes_list` and kept it in a Rust local `l`,
+   unrooted, then called `rt_bytes_from_list(p, l)` and asserted
+   `assert_ne!(b, l)` afterwards.
+2. `rt_bytes_from_list` allocates its result with `Vm::new_bytes`, and an
+   allocation under `BOTLISH_NATIVE_GC_STRESS=1` collects *first*
+   (`alloc_byte_storage`: `if wants_collection() { collect() }`, then the
+   block is allocated). Nothing roots `l`, so the collection sweeps it.
+3. The allocator then handed the result the block just freed: on the macOS
+   runner `b` and `l` are the same address. `assert_ne!(b, l)` compared the
+   result with a dead object.
+4. Rooting contract: `new_bytes_with`'s documentation says an allocation
+   "may collect first, so a caller's operands must be rooted", the test
+   module's own `rooted!` macro says that under stress "a value held only in
+   a Rust local is freed by the next allocation", and compiled code does
+   root a call's operands for the whole call, even an operand it never reads
+   again (codegen::roots's `call_argument_is_rooted_during_the_call`). The
+   test broke the contract that the runtime's callers keep. Production was
+   not at fault: `rt_bytes_from_list` is called with a rooted list, and it
+   also copies the items into a buffer before it allocates, so it would not
+   read a swept list either. (An earlier draft of this fix pinned that
+   second, stronger property with an unrooted-list test; it is not part of
+   the contract, since operands are rooted, so the test was replaced by the
+   one below.)
+
+What was measured on Linux (glibc, a throwaway probe, not committed) to make
+sure the macOS result is the same mechanism with different luck, not a
+second defect:
+
+- the original, unrooted form under a forced collection: the collector's
+  accounting shows **one List swept during the call** (so the sweep happens
+  on glibc too), and the result address differs from the list's;
+- a freed List block and a same-size request on glibc: **the address is
+  reused**. So glibc reuses freed blocks like any allocator; it simply did
+  not hand this one to the result here, because the two blocks are not
+  interchangeable there: a `ListObj` is a 24-byte, 8-aligned allocation and a
+  bytes object a 32-byte, 16-aligned one (`BYTES_ALIGN`, padded), which
+  glibc serves from different bins. That Apple's allocator serves them from
+  one reuse path is inferred from the identical addresses in CI, not from
+  its source.
+
+### The fix (test only; no collector or runtime change)
+
+- `bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes`
+  now roots `l` with `rooted!`, as compiled code roots a call's operand. Two
+  live objects cannot share an address on any allocator, so
+  `assert_ne!(b, l)` is sound; it stays a check that the storage is an
+  eager copy.
+- New test
+  `bytes_from_list_survives_its_own_collection_and_the_list_is_reclaimed_after_it`
+  makes the collection and the reclamation certain and observable, so the
+  test no longer depends on the allocator or the environment. It forces a
+  collection before every allocation (`set_stress_for_test(true)`), roots the
+  List and calls `rt_bytes_from_list`; it asserts, through the collector's
+  own accounting, that (a) a collection ran inside the call (the cycle count
+  rose), (b) the rooted List survived it (`by_kind[KIND_LIST].
+  reclaimed_objects` unchanged) and the bytes are exact; then it unroots the
+  List, roots the storage, collects, and asserts (c) the List is now
+  reclaimed (+1) and the storage is intact. Addresses appear nowhere.
+- Checked that it can fail: with the List left unrooted (the original
+  defect) assertion (b), "a rooted List was swept", fails on Linux/glibc
+  every time, although glibc never put the result at the List's address. No
+  sanitizer or Miri was run.
+
+### After
+
+- Locally, Linux x86-64: the full `cargo test --release` (246 library tests,
+  38 driver tests) passes with and without `BOTLISH_NATIVE_GC_STRESS=1`.
+- macOS Apple Silicon, run
+  [39199704894](https://github.com/mwagner-webdev/botlish/actions/runs/39199704894)
+  (head 9295d6c, `CI-Tests: rust`, `CI-GC-Stress: 1`), whose test change was
+  then revised (the second test above): `full (Tier C, macOS arm64, shard
+  1/3)`, the Rust tests under `BOTLISH_NATIVE_GC_STRESS=1`, **success**, where
+  the same step failed before; the smoke job (the same tests without stress,
+  and native-status) and the Linux control job: success. The final revision's
+  runs are in the table of section 17.
 
 What the stress run covers for suspended roots: `co-gc-stress`,
 `co-gc-nested-suspended-roots-stress`, `ep-gc-stress-coroutine`,

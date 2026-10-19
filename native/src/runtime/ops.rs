@@ -3911,13 +3911,13 @@ mod tests {
     fn bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes() {
         let mut vm = vm();
         let p: *mut Vm = &mut *vm;
-        // Rooted, as a compiled caller roots an operand it uses after the
-        // call: this test compares L with the result afterwards, and under
-        // BOTLISH_NATIVE_GC_STRESS=1 the allocation inside rt_bytes_from_list
-        // collects first. An unrooted L is swept there, its block is free for
-        // the result to take (Apple's allocator hands a freed block of the
-        // same size class back at once, glibc's happened not to), and
-        // `assert_ne!(b, l)` then compares the result with a dead object.
+        // Rooted, as compiled code roots a call's operands for the whole
+        // call (codegen::roots's `call_argument_is_rooted_during_the_call`):
+        // under BOTLISH_NATIVE_GC_STRESS=1 the allocation inside
+        // rt_bytes_from_list collects first, and an unrooted L is swept
+        // there. Its block is then free for the result to take (Apple's
+        // allocator handed it back at once; glibc's did not), and
+        // `assert_ne!(b, l)` compared the result with a dead object.
         let l = rooted!(vm, bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]));
         let b = rt_bytes_from_list(p, l);
         assert_eq!(heap_kind(b), KIND_BYTES);
@@ -3928,28 +3928,30 @@ mod tests {
         assert_ne!(b, l);
     }
 
-    /// The production side of the same contract: a native's operand is
-    /// rooted by its caller only while the caller still uses it, so a native
-    /// must be done with its operand before it allocates. Here the List is
-    /// deliberately unrooted and a collection is forced before every
-    /// allocation (not left to the environment), so the collection inside
-    /// the call really sweeps it; the result must still be exact. The sweep
-    /// is observed through the collector's own accounting, not through
-    /// addresses, so the test holds on every allocator.
+    /// The same call with the collection made certain and observed, not left
+    /// to the environment or to the allocator: a collection is forced before
+    /// every allocation, so one runs inside the call (the collector's cycle
+    /// count rises); the rooted List survives it (no List is reclaimed); and
+    /// once the caller lets go of the List, the next collection reclaims it
+    /// while the storage, now the rooted one, stays exact.
     #[test]
-    fn bytes_from_list_is_done_with_its_list_before_it_allocates() {
+    fn bytes_from_list_survives_its_own_collection_and_the_list_is_reclaimed_after_it() {
         let mut vm = vm();
         vm.heap.set_stress_for_test(true);
         let p: *mut Vm = &mut *vm;
         let expected = [0x41u8, 0, 0x42, 0xff, 0x80, 0, 0];
-        let l = bytes_list(&mut vm, &expected.map(i64::from));
-        assert!(vm.temp_roots.is_empty());
-        let swept_before = vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects;
+        let l = rooted!(vm, bytes_list(&mut vm, &expected.map(i64::from)));
+        let cycles = vm.metrics.gc_cycles.len();
+        let lists_swept = vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects;
         let b = rt_bytes_from_list(p, l);
-        // The collection that ran inside the call freed the unrooted List ...
-        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, swept_before + 1);
-        // ... and the storage, built after it, is still exactly its bytes.
-        assert_eq!(heap_kind(b), KIND_BYTES);
+        assert!(vm.metrics.gc_cycles.len() > cycles, "no collection ran inside the call");
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept, "a rooted List was swept");
+        assert_eq!(bytes_of(b), &expected);
+        // The caller is done with the List: unroot it, root the storage.
+        vm.temp_roots.pop();
+        vm.temp_roots.push(b);
+        vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept + 1, "the dead List was not reclaimed");
         assert_eq!(bytes_of(b), &expected);
     }
 
