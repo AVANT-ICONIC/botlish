@@ -294,6 +294,11 @@ character question exactly and allocates nothing; comparing one-character
 substrings states it in String terms and allocates a String per position on
 the native backends.
 
+== BEYOND ONE CHARACTER
+The same question applies to a sequence of symbols: text is a String, a
+sequence the program indexes or enumerates is a List[UnicodeChar]
+(concept.strings, warning.one-char-string-literal).
+
 == CHECKED BY
 ONE-CHAR-STRING-LITERAL (warning.one-char-string-literal), context-blind by
 design: where an API takes a String for a character, the finding is about

@@ -177,6 +177,11 @@ test cp-idiomatic-shape {the Idiomatic Botlish page stays a map: 8 to 12 numbere
         [llength [dict get $topic examples]]
 } -cleanup {unset -nocomplain topic principles words linked all section heading items text item} -result {1 1 1 {principles concepts} 0 1}
 
+test cp-string-char-search {the String / UnicodeChar / List[UnicodeChar] explanation adds no alias: the warning keeps its own code and phrase lookups, canonical names reach the concept, and words other languages use for a code point (rune) stay unmatched} -body {
+    list [found ONE-CHAR-STRING-LITERAL] [found "one char string literal"] [found UnicodeChar] \
+        [lindex [found rune] 0] [dict get [compilerpedia::topic concept.strings] alias]
+} -result {{page warning.one-char-string-literal} {page warning.one-char-string-literal} {page concept.strings} none {{str type} UnicodeChar {character literal} {char literal} {text values}}}
+
 test cp-search-missing {a query nothing matches finds nothing and offers near matches: close identifiers by edit distance, then topics holding most of the words; never an invented topic} -body {
     set near [found metod-eligibel]
     list [lindex $near 0] [lindex $near 1 0] [lindex [found "quantum entanglement"] 0]

@@ -626,6 +626,51 @@ backends and states a character question in String terms. The character
 idiom -- `text.char_at(i) == '%'`, `text.append_char('\n')` -- says what is
 meant and allocates nothing.
 
+== TEXT OR CODE POINTS
+The warning is not a cosmetic preference for 'x' over "x". Both are
+values, of different kinds: "x" is text, 'x' is one Unicode code point (a
+UnicodeChar, concept.strings). It asks which is meant where the two are
+easy to blur. A separator such as a space or a newline given to an API that
+works on a code point (append_char, a comparison with char_at) is usually
+meant as the UnicodeChar. The warning itself reports one-character String
+literals only; a String of any other length is never reported.
+
+Semantic reason. A String literal is compact, which makes it a tempting
+spelling for a collection of symbols, but it says "text". "ULDR" is text.
+['U', 'L', 'D', 'R'] is an addressable sequence of code points: its
+elements are enumerated by `loop` and read as list elements, whereas a
+String is read through char_at and cannot be iterated by `loop`. Use the
+String when the value is notation that is read, printed or concatenated;
+use the List when the program treats its elements as symbols. Neither is
+better in general, and a symbolic sequence is not always a List: the choice
+follows whether the value is conceptually text.
+
+@example accept
+import str
+
+notation = "ULDR"
+moves = ['U', 'L', 'D', 'R']
+ups = loop m in moves:
+    m == 'U'
+[notation.length(), ups]
+@caption The same four symbols as text, and as a sequence the program enumerates
+@value [4, [true, false, false, false]]
+@nowarn ONE-CHAR-STRING-LITERAL
+@quiet
+@end
+
+Performance reason. The native backends store a String's text as UTF-8
+(the language promises only a sequence of scalar values). Reading text as
+code points decodes it -- for non-ASCII text, finding character i means
+decoding forward -- and building text from code points encodes it. A
+List[UnicodeChar] already holds the scalar values. Converting text to code
+points, manipulating them and encoding the result back is work that data
+which was a code-point sequence from the start does not need. No figure is
+claimed here: the cost depends on the program and the backend.
+
+C programmers draw a similar line when they choose between a string
+literal and a brace initializer for a char array.
+
 == RECOMMENDED PRACTICE
 Write characters as character literals and use the character operations:
 str::char_at to read one, str::append_char to append one, ==

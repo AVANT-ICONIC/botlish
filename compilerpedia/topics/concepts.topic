@@ -452,6 +452,19 @@ counts characters, not bytes. A character literal 'a' (escapes '\n',
 '\'', '\\') is a `UnicodeChar`: one scalar value, neither an Int nor a
 one-character String.
 
+Three different abstractions, not three spellings of one thing:
+
+    str                text: an immutable sequence of Unicode scalar
+                       values (the native backends store it as UTF-8)
+    UnicodeChar        one Unicode scalar value (a code point other than
+                       a surrogate), a type of its own
+    List[UnicodeChar]  an addressable, iterable sequence of such values
+
+A UnicodeChar is not a user-perceived character or a grapheme cluster
+(`e` plus a combining accent is two), and not a one-character String. It
+is comparable to a Go rune, except that it is a type of its own. A String
+is not iterable by `loop`; a List of UnicodeChars is.
+
 After `import str`: length, concat, append_char, char_at, substring,
 lowercase, encode_utf8 (to a List of bytes). `char::scalar_value(c)`
 (`import char`) gives a character's number.
