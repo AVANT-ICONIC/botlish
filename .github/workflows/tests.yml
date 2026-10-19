@@ -190,6 +190,33 @@ jobs:
       - name: Warning gate
         run: tclsh9.0 audit/refactor/tools/gate.tcl
 
+  method-filter:
+    name: method-call kind filter (audit)
+    # The kind filter decides method-style calls with fewer builds than the
+    # exact decision and must reach the same decisions and the same programs
+    # (METHOD-DECISION-FILTER.md). The job runs its tests, the fuzzer, and every
+    # golden suite that decides method calls by trial builds under
+    # hir::methodFilterAudit, which makes the exact decision as well and fails on
+    # any difference. The front end only: no native build is needed. (The
+    # mutation harness, audit/method-filter/tools/mutate.tcl, is run by hand.)
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Tests and fuzzer
+        run: |
+          tclsh9.0 tests/method-filter.test -tmpdir "$(mktemp -d)"
+          tclsh9.0 audit/method-filter/tools/fuzz.tcl 200 1
+
+      - name: Golden suites under the audit
+        run: tclsh9.0 bench/method-filter.tcl -suites -audit 1
+
   golden:
     name: golden suites (Botlish-native tests, shard ${{ matrix.shard }}/4)
     # The Botlish golden test suites (tests/golden/*.bot, lib/test.bot,

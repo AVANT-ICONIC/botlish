@@ -75,6 +75,9 @@ inferred contract the receiver cannot prove, an invalid flag, a native whose
 first parameter has a different known kind, ... A declared error nobody
 handled is not evidence against a candidate (it is the obligation of a call
 that fits). Calls with a single candidate -- almost all -- cost nothing extra.
+Where the receiver's kind leaves one candidate (a List receiver rules out
+`str::length`), the call is decided without building the others
+(METHOD-DECISION-FILTER.md); the decisions are the same.
 A candidate that is statically a function of another arity is not a candidate
 (unless none is left, which keeps the ordinary arity error).
 
