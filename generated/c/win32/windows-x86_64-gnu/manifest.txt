@@ -1,11 +1,11 @@
 c-bindgen manifest (C-BINDGEN.md, "Manifest")
 generator_version 2
 profile win32
-profile_file tools/c-bindgen/profiles/win32.tcl 6a2c3d1c
+profile_file tools/c-bindgen/profiles/win32.tcl 13ec0995
 target windows-x86_64-gnu
 library mingw-w64
-source {toolchain windows.h}
-revision unversioned
+source {toolchain windows.h version {__MINGW64_VERSION_MAJOR 11 __MINGW64_VERSION_MINOR 0 __MINGW64_VERSION_BUGFIX 1}}
+revision mingw-w64 __MINGW64_VERSION_MAJOR=11 __MINGW64_VERSION_MINOR=0 __MINGW64_VERSION_BUGFIX=1
 entry windows.h
 include {}
 defines {WIN32_LEAN_AND_MEAN UNICODE _UNICODE _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000000 STRICT NOMINMAX}
@@ -80,7 +80,7 @@ shim_library botlish_shim_win32_e3f8535c
 file layouts-check.c 3738 1ea427f0
 file layouts.tsv 6683 6905dec5
 file report.tsv 24568 47ab9d84
-file report.txt 173 fa05290d
+file report.txt 186 06eb1e15
 file shim.c 198 e3f8535c
 file win32/apiset.bot 9 5357b816
 file win32/basetsd.bot 43 a4712ae3

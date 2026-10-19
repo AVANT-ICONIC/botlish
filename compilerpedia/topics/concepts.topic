@@ -3041,7 +3041,7 @@ C-FFI.md; C-ABI-TYPES.md; C-POINTER-BORROWING.md; C-BINDGEN.md.
 
 @topic concept.c-bindgen-layouts
 title: Generated C record layouts: a target's and a toolchain's facts
-summary: tools/c-bindgen.tcl writes an ordinary `layout` for every complete C record whose fields a layout represents, with the size, alignment and offsets the target's C compiler gave; a generated layout is that target's and that toolchain's, never another's.
+summary: c-bindgen writes a `layout` for each C record a layout represents, with the target C compiler's size, alignment and offsets: a fact of that target and toolchain only.
 index: concepts
 alias: generated layout; C struct layout; c-bindgen layouts; layouts.bot; Win32 layouts; MinGW layouts
 keywords: bindgen, layout, struct, C record, sizeof, alignof, offsetof, padding, packed, target, toolchain, windows-x86_64-gnu, mingw, Win32

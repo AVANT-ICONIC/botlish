@@ -729,20 +729,35 @@ API pressure (bound APIs pointing to C records)
       with an emitted layout                                                   4    40.0%
       whose layout is blocked                                                  1    10.0%
       outside the profile's records (a system header's)                        0     0.0%
-    incomplete (opaque only)                                                   5    50.0%}
+    incomplete (opaque only)                                                   5    50.0%
+  bound APIs a missing feature would give a layout of a record they point to:
+      fixed arrays                                                             1     6.7%  1 record
+      unions and anonymous overlays                                            0     0.0%  0 records
+      ffi::c::Bool fields                                                      0     0.0%  0 records
+      float fields                                                             0     0.0%  0 records
+      double fields                                                            0     0.0%  0 records
+      float and double fields                                                  0     0.0%  0 records
+      long double fields                                                       0     0.0%  0 records
+      bitfields                                                                0     0.0%  0 records
+      flexible array members                                                   0     0.0%  0 records
+      fixed arrays and unions                                                  1     6.7%  1 record
+      fixed arrays, unions and Bool                                            1     6.7%  1 record
+      all of the above                                                         1     6.7%  1 record}
 
-test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record and every member for later pressure analysis, with sizes, offsets, C types, categories, element counts and blockers; the manifest names the ABI identity of the layouts (target and toolchain) and counts them; report.tsv has a row per record and `report -why` explains one} -constraints clang -body {
+test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record and every member for later pressure analysis, with sizes, offsets, C types, categories, element counts and blockers; the manifest names the ABI identity of the layouts (target and toolchain) and counts them; report.tsv has a row per record and `report -why` explains one, by its key or by a typedef naming it} -constraints clang -body {
     set files [dict get [generation $::fixture linux-x86_64] files]
     set tsv [split [dict get $files layouts.tsv] \n]
     set rows [lmap line $tsv {expr {[string match "*\tstruct bgf_chars\t*" $line] ? [string map {\t " | "} $line] : [continue]}}]
     list [string match "# c-bindgen layout manifest: profile bgf, target linux-x86_64, toolchain clang x86_64-linux-gnu (*) (C-BINDGEN-LAYOUTS.md)" [lindex $tsv 0]] \
         [string map {\t " | "} [lindex $tsv 1]] $rows \
         [regsub -all {\{[^{}]*clang version[^{}]*\}} [regexp -all -inline -line {^layout_(?:abi|count emitted|count blocked) .*$} [dict get $files manifest.txt]] VERSION] \
-        [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}]
+        [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}] \
+        [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why bgf_rect]
 } -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | - | layout-blocked | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; blockers=fixed-array: field name: char elements, char [16]; roots=fixed-array; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | fixed-array | 4 | 16 | - | char name[16] | - | c=name; element=char char; bounds=16; extent=16; blockers=fixed-array: char elements, char [16]}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 23} {layout_count emitted 28}} {tag struct bgf_chain2: not generated (unused): complete
   no bound signature points to it
 record struct bgf_chain2: not generated (layout-blocked): nested-layout-blocked
-  field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}}
+  field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array} {typedef bgf_rect: generated (opaque in bgf::ctypes): identity bgf_rect; struct bgf_rect
+record struct bgf_rect: generated (layout-direct in bgf::layouts): bgf_rect; sizeof 16, _Alignof 4, 2 fields}}
 
 test cb-layout-conventions {an explicit calling convention is a blocker only where the compiler says the declared type is not the plain one (__builtin_types_compatible_p): __stdcall is ignored on every 64-bit target, so bgf_stdcall binds everywhere; ms_abi is Windows x86-64's default and another convention on Linux x86-64, for a function, a callback typedef and a record's field alike; the manifest counts the conventions taken as the default} -constraints clang -body {
     lmap target [dict get $::fixture targets] {
@@ -1036,7 +1051,17 @@ test cb-win32-identity {the Win32 binding is Windows x86-64 with MinGW-w64's GNU
         [lindex [split [dict get $files win32/layouts.bot] \n] 0] \
         [dict get [core::cabi::target windows-x86_64-gnu] triple] \
         [string match {toolchain: no C toolchain configuration for target "windows-x86_64"*} $msvc]
-} -result {{{target windows-x86_64-gnu} {source {toolchain windows.h}} {revision unversioned} {defines {WIN32_LEAN_AND_MEAN UNICODE _UNICODE _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000000 STRICT NOMINMAX}} {toolchain_target x86_64-w64-mingw32}} {{layout_abi windows-x86_64-gnu clang x86_64-w64-mingw32 }} {# win32::layouts -- GENERATED by tools/c-bindgen.tcl (profile win32, target windows-x86_64-gnu):} x86_64-pc-windows-gnu 1}
+} -result {{{target windows-x86_64-gnu} {source {toolchain windows.h version {__MINGW64_VERSION_MAJOR 11 __MINGW64_VERSION_MINOR 0 __MINGW64_VERSION_BUGFIX 1}}} {revision mingw-w64 __MINGW64_VERSION_MAJOR=11 __MINGW64_VERSION_MINOR=0 __MINGW64_VERSION_BUGFIX=1} {defines {WIN32_LEAN_AND_MEAN UNICODE _UNICODE _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000000 STRICT NOMINMAX}} {toolchain_target x86_64-w64-mingw32}} {{layout_abi windows-x86_64-gnu clang x86_64-w64-mingw32 }} {# win32::layouts -- GENERATED by tools/c-bindgen.tcl (profile win32, target windows-x86_64-gnu):} x86_64-pc-windows-gnu 1}
+
+test cb-win32-version-pinned {the Win32 profile pins MinGW-w64's headers by their version macros, as a fetched source is pinned by its commit: headers of another version, or a toolchain source without a version, are refused, never generated from} -constraints mingw -body {
+    set other $::win32
+    dict set other headers source version {__MINGW64_VERSION_MAJOR 12 __MINGW64_VERSION_MINOR 0 __MINGW64_VERSION_BUGFIX 1}
+    catch {::cbind::generate::run $other windows-x86_64-gnu} wrong
+    set none [dict get $::win32 headers]
+    dict set none source {toolchain windows.h}
+    catch {::cbind::profile::Validate [dict replace $::win32 headers $none]} unpinned
+    list $wrong $unpinned
+} -result {{c-bindgen: the toolchain's headers are another version: __MINGW64_VERSION_MAJOR is 11, the profile win32 pins 12} {c-bindgen: profile win32: a toolchain source pins its headers by version {MACRO VALUE ...}}}
 
 test cb-win32-sentinels {the familiar Win32 records are the compiler's: POINT, RECT, FILETIME, SYSTEMTIME, SECURITY_ATTRIBUTES, PROCESS_INFORMATION, STARTUPINFOW, BY_HANDLE_FILE_INFORMATION and OVERLAPPED_ENTRY are layouts of MinGW-w64's sizes; OVERLAPPED is blocked by its anonymous union (union pressure), WIN32_FIND_DATAW by its WCHAR arrays (array pressure)} -constraints mingw -body {
     set recs [dict get [generation $::win32 windows-x86_64-gnu] model layouts]

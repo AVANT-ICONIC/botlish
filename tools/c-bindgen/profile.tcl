@@ -13,9 +13,11 @@
 #   description  one line
 #   headers      the header profile: library, source ({url URL tag TAG
 #                commit COMMIT}, {local DIR} relative to the repository, or
-#                {toolchain FILE}: the target toolchain's own headers, the
-#                directory of its include search list that holds FILE --
-#                MinGW-w64's, which a cross installation provides),
+#                {toolchain FILE version {MACRO VALUE ...}}: the target
+#                toolchain's own headers, the directory of its include
+#                search list that holds FILE -- MinGW-w64's, which a cross
+#                installation provides -- pinned by the bodies of its
+#                version macros as the translation unit defines them),
 #                includeDirs, defines, undefines, flags, public, private
 #                (globs of headers under the source root that are never
 #                public: a toolchain's C runtime beside its platform API),
@@ -104,6 +106,10 @@ proc ::cbind::profile::Validate {p} {
         if {![dict exists $h $k]} {
             error "c-bindgen: profile [dict get $p name]: the header profile has no \"$k\""
         }
+    }
+    set source [dict get $h source]
+    if {[dict exists $source toolchain] && (![dict exists $source version] || ![llength [dict get $source version]] || [llength [dict get $source version]] % 2)} {
+        error "c-bindgen: profile [dict get $p name]: a toolchain source pins its headers by version {MACRO VALUE ...}"
     }
     dict set p headers $h
     foreach t [dict get $p targets] {

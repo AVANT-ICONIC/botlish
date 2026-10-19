@@ -52,7 +52,7 @@ dict create \
     description "the raw Win32 API of MinGW-w64 11.0.1's <windows.h> (WIN32_LEAN_AND_MEAN, UNICODE, Windows 10), for Windows x86-64 with the GNU ABI (MinGW-w64), not MSVC" \
     headers {
         library mingw-w64
-        source {toolchain windows.h}
+        source {toolchain windows.h version {__MINGW64_VERSION_MAJOR 11 __MINGW64_VERSION_MINOR 0 __MINGW64_VERSION_BUGFIX 1}}
         defines {WIN32_LEAN_AND_MEAN UNICODE _UNICODE _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000000 STRICT NOMINMAX}
         public {*.h}
         private {_mingw*.h corecrt*.h crtdefs.h ctype.h errno.h excpt.h limits.h malloc.h stdarg.h

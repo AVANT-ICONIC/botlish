@@ -135,9 +135,16 @@ proc Report {name args} {
     set rows [::cbind::generate::readTsv [::chdr::readFile $path]]
     if {[dict get $o -why] ne ""} {
         set found 0
+        # A typedef naming a C record (its detail is the record's key) also
+        # explains the record: its layout, or why it has none.
+        set names [list [dict get $o -why]]
         dict for {key row} $rows {
             lassign $row kind n status module reason detail
-            if {$n ne [dict get $o -why]} continue
+            if {$kind eq "typedef" && $n eq [dict get $o -why] && [regexp {^(struct|union) \S+$} $detail]} { lappend names $detail }
+        }
+        dict for {key row} $rows {
+            lassign $row kind n status module reason detail
+            if {$n ni $names || ($n ne [dict get $o -why] && $kind ne "record")} continue
             set found 1
             switch -- $status {
                 direct - alias - thunk - constant - scalar - opaque - callback - pointer - layout-direct {

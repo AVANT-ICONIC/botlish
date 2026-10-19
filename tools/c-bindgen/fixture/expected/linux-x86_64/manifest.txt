@@ -32,7 +32,7 @@ file bgf/types.bot 10 5770e127
 file layouts-check.c 171 e451f15a
 file layouts.tsv 190 5002e8a3
 file report.tsv 254 8ad4cdbc
-file report.txt 162 a3db34b9
+file report.txt 175 89257ce5
 file shim.c 26 143debf5
 libraries bgf/bgf.bot bgf
 libraries bgf/records.bot bgf

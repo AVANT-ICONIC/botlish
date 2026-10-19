@@ -19,6 +19,31 @@ namespace eval ::cbind::generate {}
 
 # The profile's header profile for TARGET with absolute include
 # directories, as the toolchain adapter takes it.
+# The revision of RUN's headers: a pinned checkout's commit; for a toolchain
+# source, its version macros (the profile's `version`), each of which the
+# translation unit must define with exactly the pinned body -- headers of
+# another version are not the profile's, the way a checkout at another
+# commit is not.
+proc ::cbind::generate::Revision {profile run} {
+    set source [dict get $profile headers source]
+    if {![dict exists $source toolchain]} { return [dict get $run revision] }
+    set defined [dict create]
+    foreach m [dict get $run macros] {
+        if {![dict get [lindex $m 2] undefined]} { dict set defined [lindex $m 1] [dict get [lindex $m 2] body] }
+    }
+    set out {}
+    dict for {macro value} [dict get $source version] {
+        if {![dict exists $defined $macro]} {
+            error "c-bindgen: the toolchain's headers define no $macro (the profile [dict get $profile name] pins $macro $value)"
+        }
+        if {[dict get $defined $macro] ne $value} {
+            error "c-bindgen: the toolchain's headers are another version: $macro is [dict get $defined $macro], the profile [dict get $profile name] pins $value"
+        }
+        lappend out "$macro=$value"
+    }
+    return "[dict get $profile headers library] [join $out { }]"
+}
+
 proc ::cbind::generate::ToolProfile {hprofile sourceRoot} {
     set abs {}
     foreach d [dict get $hprofile includeDirs] { lappend abs [file join $sourceRoot $d] }
@@ -99,6 +124,7 @@ proc ::cbind::generate::run {profile target {options {}}} {
     if {![dict get $run ok]} {
         error "c-bindgen: preprocessing [dict get $profile name] for $target failed:\n[string range [dict get $run stderr] 0 3000]"
     }
+    set revision [Revision $profile $run]
     dict set timing preprocess [format %.3f [dict get $run timing preprocess]]
     dict set timing parse [format %.3f [dict get $run timing parse]]
     dict set timing macros [format %.3f [expr {[dict get $run timing macroPreprocess] + [dict get $run timing probe]}]]
@@ -122,7 +148,7 @@ proc ::cbind::generate::run {profile target {options {}}} {
     set model [::cbind::model::resolve $model [dict create values $values symbols $symbols prefix $prefix]]
     dict set model profile $profile
     dict set model target $target
-    dict set model run [dict create revision [dict get $run revision] command [dict get $run command] \
+    dict set model run [dict create revision $revision command [dict get $run command] \
         tokens [dict get $run tokens] bytes [string length [dict get $run text]]]
     dict set model toolchain [::chdr::toolchain::describe $config]
     dict set model sourceRoot $sourceRoot

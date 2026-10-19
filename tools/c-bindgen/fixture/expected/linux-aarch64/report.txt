@@ -124,6 +124,19 @@ API pressure (bound APIs pointing to C records)
       whose layout is blocked                                                  1    10.0%
       outside the profile's records (a system header's)                        0     0.0%
     incomplete (opaque only)                                                   5    50.0%
+  bound APIs a missing feature would give a layout of a record they point to:
+      fixed arrays                                                             1     6.7%  1 record
+      unions and anonymous overlays                                            0     0.0%  0 records
+      ffi::c::Bool fields                                                      0     0.0%  0 records
+      float fields                                                             0     0.0%  0 records
+      double fields                                                            0     0.0%  0 records
+      float and double fields                                                  0     0.0%  0 records
+      long double fields                                                       0     0.0%  0 records
+      bitfields                                                                0     0.0%  0 records
+      flexible array members                                                   0     0.0%  0 records
+      fixed arrays and unions                                                  1     6.7%  1 record
+      fixed arrays, unions and Bool                                            1     6.7%  1 record
+      all of the above                                                         1     6.7%  1 record
 
 Macro APIs (apparent callables that are macros, and what each became)
   declared functions a function-like macro shadows (thunked: the macro)        1

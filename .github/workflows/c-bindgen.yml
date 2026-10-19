@@ -1,9 +1,13 @@
 name: c-bindgen
 
-# The C binding generator's gate (C-BINDGEN.md, "CI"): every committed
-# binding is what generation produces from the pinned headers, for every
-# target of its profile (the check mode, byte for byte), and the generator's
-# tests and fuzzer pass with the Tcl, BoringSSL and SDL3 acceptance enabled.
+# The C binding generator's gate (C-BINDGEN.md, "CI"; C-BINDGEN-LAYOUTS.md,
+# "Regression and CI"): every committed binding is what generation produces
+# from the pinned headers, for every target of its profile (the check mode,
+# byte for byte, the layouts and their C verification included), and the
+# generator's tests, its fuzzer and the layout fuzzer pass with the Tcl,
+# BoringSSL, SDL3 and Win32 acceptance enabled. The Win32 binding is
+# generated on Linux with the MinGW-w64 cross toolchain (windows-x86_64-gnu):
+# nothing here runs Windows, Wine, a Windows binary or any MSVC tool.
 # The ordinary test jobs (tests.yml) run tests/c-bindgen.test too, but
 # without the pinned sources or libraries: there only the synthetic
 # fixture's tests run.
@@ -36,13 +40,21 @@ jobs:
       # gnu brings libc6-dev-arm64-cross): without it clang would search
       # only the host's /usr/include, which the generator refuses
       # (C-BINDGEN.md, "Pipeline"). CMake and Ninja build BoringSSL and SDL3.
+      # The windows-x86_64-gnu target reads MinGW-w64's headers and import
+      # libraries (mingw-w64-x86-64-dev: the Win32 profile pins its version
+      # macros, MinGW-w64 11.0.1), clang probes it (--target=
+      # x86_64-w64-mingw32), llvm-nm reads the import libraries, and
+      # MinGW-w64's GCC is the layouts' second compiler.
       - name: Install the C toolchain
         run: |
           sudo apt-get update
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            clang llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross cmake ninja-build
+            clang llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross cmake ninja-build \
+            mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
           clang --version
           clang --target=aarch64-linux-gnu -E -v -x c /dev/null -o /dev/null 2>&1 | sed -n '/search starts here/,/End of search/p'
+          clang --target=x86_64-w64-mingw32 -E -v -x c /dev/null -o /dev/null 2>&1 | sed -n '/search starts here/,/End of search/p'
+          x86_64-w64-mingw32-gcc --version | head -1
 
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
@@ -61,13 +73,13 @@ jobs:
             tclsh9.0 tools/c-bindgen.tcl fetch $profile
           done
 
-      # Every committed target (the fixture's three, the Linux targets of
+      # Every committed target (the fixture's four, the Linux targets of
       # the others: their macOS bindings need the macOS SDK's headers and
-      # are generated on a Mac).
+      # are generated on a Mac; Win32's windows-x86_64-gnu).
       - name: Check every committed binding
         run: |
           status=0
-          for profile in fixture tcl tclstubs boringssl sdl3; do
+          for profile in fixture tcl tclstubs boringssl sdl3 win32; do
             tclsh9.0 tools/c-bindgen.tcl check $profile -target committed || status=1
           done
           exit $status
@@ -94,3 +106,14 @@ jobs:
 
       - name: Fuzz the generator
         run: tclsh9.0 audit/c-bindgen/tools/fuzz.tcl -n 8 -seed ${{ github.run_number }} -keep 0
+
+      # Random C records laid out by the compiler for the host and for every
+      # cross target (the model, the generated static assertions and, on the
+      # host, the runtime oracle on both native backends).
+      - name: Fuzz the layouts
+        run: |
+          status=0
+          for target in linux-x86_64 linux-aarch64 windows-x86_64-gnu macos-aarch64; do
+            tclsh9.0 audit/c-bindgen/tools/layout-fuzz.tcl -n 4 -records 24 -seed ${{ github.run_number }} -target $target || status=1
+          done
+          exit $status

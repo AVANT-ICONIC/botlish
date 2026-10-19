@@ -630,6 +630,19 @@ proc ::cbind::report::RecordSections {model apis} {
         lappend out [Line "    whose layout is blocked" [dict get $a blocked] [dict get $a identities]]
         lappend out [Line "    outside the profile's records (a system header's)" [dict get $a outside] [dict get $a identities]]
         lappend out [Line "  incomplete (opaque only)" [dict get $a incomplete] [dict get $a identities]]
+        lappend out "  bound APIs a missing feature would give a layout of a record they point to:"
+        set users [dict get $a users]
+        foreach {label lift} [::cbind::pressure::features] {
+            lassign [::cbind::pressure::recovered $recs $lift [dict get $model recordOrder]] d t
+            set gained {}
+            set pointedTo 0
+            foreach k [concat $d $t] {
+                if {![dict exists $users $k]} continue
+                incr pointedTo
+                lappend gained {*}[dict get $users $k]
+            }
+            lappend out [Line "    $label" [llength [lsort -unique $gained]] [dict get $a functions] "$pointedTo record[expr {$pointedTo == 1 ? "" : "s"}]"]
+        }
     }
     return $out
 }
