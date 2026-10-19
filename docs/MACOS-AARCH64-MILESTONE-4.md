@@ -271,6 +271,13 @@ for comparison: glibc reports the main thread's stack from the rlimit with
 a guard size of 0, so it has no confirmed guard there and the guard refuses
 it (also checked: `guard main driver` is "refused" on Linux).
 
+The runtime's reading on the runner (run 39293822194, smoke): `runtime
+stack main: [0x16afe0000, 0x16b7d8000) (16 KiB above the reported bottom),
+guard [0x1677d8000, 0x16afe0000) 57376 KiB`; the usable bottom is readable,
+the reported bottom and both ends of the guard fault (SIGSEGV), and a
+guard installed on the main thread turns an exhaustion of it into the
+overflow line (`guard main driver`).
+
 Main-thread differences that matter: the reported bottom is not usable,
 the guard is a large reservation rather than one page, and its hit is a
 SIGSEGV where a created thread's is a SIGBUS. None of it is special-cased:
@@ -300,6 +307,10 @@ The same probe on created threads (Gate A, run 39286923808):
   size gets that guard (64 KiB). A thread made with none has nothing
   between its stack and the next allocation -- the case the confirmation
   exists for.
+- The runtime's reading (run 39293822194): the reported bounds and a
+  confirmed 16 KiB guard on every std thread (64 KiB on the four-page
+  pthread), both guard ends faulting with SIGBUS; no confirmed guard on the
+  zero-guard pthread, which the guard refuses to install on.
 - Botlish creates no threads besides its one worker, and a Botlish program
   cannot create any; the created-thread validation above is of
   libpthread's threads as the runtime finds them, not of a threading
@@ -494,11 +505,54 @@ codegen/roots.rs `depth_reservation`, vm.rs `SHADOW_STACK_SLOTS`):
 
 ## 16. Native-driver diagnostic behavior
 
-@@DRIVER@@
+Unchanged, and checked on macOS for the first time:
+
+| Mode | What a stack overflow produces | Checked by |
+|---|---|---|
+| `botlish-native run FILE` (no `--result`) | the line on standard output, exit status 0 | native_stack `guard * driver`, native-stack-overflow.test's driver tests |
+| `botlish-native run --result PATH FILE` (main.tcl's `-output inherit`) | the line in PATH, nothing on standard output, exit 0 | `guard std-1MiB result-file` |
+| a standalone executable's own run (`OverflowGuard::install_executable`) | the line on standard error, exit status 1 | `guard std-1MiB executable` (the guard itself: Mach-O executables are milestone 6's) |
+| `native::evalHir`, main.tcl | error code `NATIVE LIMIT STACK`, message `native stack exhausted: too many nested calls`; main.tcl adds the `help:` line | native-stack-overflow.test, native-status |
+
+The line is the one Linux writes, byte for byte, and the one the driver
+writes for an in-band overflow; no macOS-specific text exists. A crash is
+never relabeled: the Tcl host raises `NATIVE BUG` (`child killed: ...`) for
+a driver killed by a signal, and every overflow test compares the exact
+error code, so a crash whose text mentions a stack fails it (as Gate A's
+SIGABRT runs did).
 
 ## 17. Fault-classification negative tests
 
-@@NEGATIVE@@
+Seven faults that are not the running stack's exhaustion, each in a child
+process with the guard installed, and again without it (native_stack's
+`fault:*`):
+
+| Fault | With the guard (macOS / Linux) | Without | 
+|---|---|---|
+| a read near address 0 | SIGSEGV / SIGSEGV | the same |
+| a read of an inaccessible page that is no stack's | SIGBUS / SIGSEGV | the same |
+| a write to a read-only page | SIGBUS / SIGSEGV | the same |
+| a read of a *suspended* coroutine's guard | SIGBUS / SIGSEGV | the same |
+| a read of the thread stack's guard while a coroutine runs | SIGABRT (Rust's own guard report) / SIGABRT | the same |
+| a read of the guarded stack's guard by *another thread* | SIGBUS / SIGSEGV | the same |
+| a SIGSEGV sent with `raise` | survives (Rust's handler ignores a sent one) / survives | the same |
+
+None prints the overflow line, and each ends exactly as it does without the
+guard: the guard defers every unrelated fault to the disposition before it
+(section 9). The fourth and fifth are "a fault outside the identified active
+stack is not its guard overflow": a guard, but not the running stack's.
+The fifth shows the deferral is exact: Rust's std handler, restored and
+given the re-executed fault, reports its own guard page as it would have.
+
+The mutants `every-fault-overflows`, `any-thread-overflows`,
+`guard-includes-stack` and `defer-exits-quietly` are killed by these
+(section 18).
+
+A limitation of the deferral, not of classification: a SIGSEGV *sent* to
+the driver by another process reaches Rust's handler, which resets the
+disposition to the default; for the rest of that run, a stack overflow is
+then Rust's crash, not the line -- as it would be had the guard never been
+installed. No Botlish process sends itself SIGSEGV or SIGBUS.
 
 ## 18. Mutation testing
 
