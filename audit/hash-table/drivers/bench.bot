@@ -92,6 +92,13 @@ fn gets(t, qs, j: int, default: int, acc: int) errors IndexNotFound:
         return acc
     gets(t, qs, j + 1, default, acc + table::get(t, list::at(qs, j), default))
 
+# REPS passes of lookups of QS in one table T: tools/bench.tcl's -passes
+# subtracts a one-pass run, which leaves the lookups alone.
+fn get_passes(t, qs, reps: int, default: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    get_passes(t, qs, reps - 1, default, gets(t, qs, 0, default, acc))
+
 fn members(t, qs, ms, j: int, acc: int) errors IndexNotFound:
     if j >= list::length(qs):
         return acc
@@ -101,6 +108,16 @@ fn replaced(t, qs, j: int) errors IndexNotFound:
     if j >= list::length(qs):
         return t
     replaced(table::put(t, list::at(qs, j), j), qs, j + 1)
+
+fn member_passes(t, qs, ms, reps: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    member_passes(t, qs, ms, reps - 1, members(t, qs, ms, 0, acc))
+
+fn replace_passes(t, qs, reps: int) errors IndexNotFound:
+    if reps <= 0:
+        return t
+    replace_passes(replaced(t, qs, 0), qs, reps - 1)
 
 fn dropped(t, ks, i: int) errors IndexNotFound:
     if i >= list::length(ks):
@@ -140,13 +157,13 @@ fn run(mode: str, ks, vs, qs, ms, reps: int) errors IndexNotFound:
     if mode == "presized":
         return builds(ks, reps, list::length(ks), 0)
     if mode == "hit":
-        return gets(built(ks, 0), qs, 0, -1, 0)
+        return get_passes(built(ks, 0), qs, reps, -1, 0)
     if mode == "miss":
-        return gets(built(ks, 0), ms, 0, 1, 0)
+        return get_passes(built(ks, 0), ms, reps, 1, 0)
     if mode == "member":
-        return members(built(ks, 0), qs, ms, 0, 0)
+        return member_passes(built(ks, 0), qs, ms, reps, 0)
     if mode == "replace":
-        return table::size(replaced(built(ks, 0), qs, 0))
+        return table::size(replace_passes(built(ks, 0), qs, reps))
     if mode == "drop":
         return drops(ks, reps, 0)
     if mode == "life":

@@ -8,12 +8,14 @@
 # Phases: rust copies memory nir sizes keys typed life policy mixed backends
 # membership (default all). -tag labels every row (the compiler/runtime
 # variant under test, e.g. "baseline" or a prototype's name) and goes into
-# the file names (PHASE-TAG.tsv).
+# the file names (PHASE-TAG.tsv). -passes P is tools/bench.tcl's (lookups
+# timed as P passes minus one); -only MODES restricts every bench step to
+# those of its modes in MODES (re-measuring the lookups alone).
 
 set here [file dirname [file normalize [info script]]]
 set base [file dirname $here]
 set options [dict create -phases {rust copies memory nir sizes keys typed life policy mixed backends membership} \
-    -runs 5 -tag baseline -results [file join $base results]]
+    -runs 5 -tag baseline -results [file join $base results] -passes 1 -only {}]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -44,8 +46,16 @@ proc step {what args} {
 }
 
 proc bench {phase args} {
-    global tclsh here runs tag
-    step "bench $phase: $args" $tclsh [file join $here bench.tcl] -runs $runs -tag $tag -out [out $phase] {*}$args
+    global tclsh here runs tag options
+    set only [dict get $options -only]
+    if {$only ne ""} {
+        set i [lsearch -exact $args -modes]
+        set modes [lmap m [lindex $args [expr {$i + 1}]] {expr {$m in $only ? $m : [continue]}}]
+        if {$modes eq ""} return
+        lset args [expr {$i + 1}] $modes
+    }
+    step "bench $phase: $args" $tclsh [file join $here bench.tcl] -runs $runs -tag $tag -out [out $phase] \
+        -passes [dict get $options -passes] {*}$args
 }
 
 set sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384}

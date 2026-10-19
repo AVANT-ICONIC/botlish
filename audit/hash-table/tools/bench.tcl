@@ -14,6 +14,12 @@
 #   bulk               (bulk: table::from_lists)
 #   hit, miss, replace (T - T[build, REPS 1]) / M      per operation
 #   member             (T - T[build, REPS 1]) / 2M     per membership test
+#
+# With -passes P > 1, a lookup mode (hit, miss, member, replace) runs P
+# passes over its M queries in one table and the per-operation time is
+# (T[P passes] - T[1 pass]) / ((P - 1) * M) (member: 2M): everything but
+# the lookups -- the key lists, the build -- cancels exactly, which the
+# build subtraction does not when the build is large or noisy.
 #   drop               (T - T[build]) / (REPS * N)     per removal
 #   life               (T - T[keys]) / REPS            per build-and-L-lookups
 #
@@ -29,7 +35,7 @@ source [file join [file dirname [file normalize [info script]]] lib.tcl]
 
 set options [dict create -impls {lp} -keys {int-dense} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} \
     -modes {build presized hit miss member replace drop} -ops 200000 -runs 5 -backend cranelift \
-    -out "" -edits {} -tag "" -lower {} -life {1 10 1000}]
+    -out "" -edits {} -tag "" -lower {} -life {1 10 1000} -passes 1]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -103,7 +109,12 @@ try {
                 foreach mode [dict get $options -modes] {
                     switch -- $mode {
                         build - presized - drop - bulk { dict set runs $mode [list $mode $kind $n $m $reps] }
-                        hit - miss - member - replace { dict set runs $mode [list $mode $kind $n $m 1] }
+                        hit - miss - member - replace {
+                            dict set runs $mode [list $mode $kind $n $m 1]
+                            if {[dict get $::options -passes] > 1} {
+                                dict set runs $mode-passes [list $mode $kind $n $m [dict get $::options -passes]]
+                            }
+                        }
                         life {
                             foreach l [dict get $options -life] {
                                 dict set runs keys$l [list keys $kind $n $l $reps]
@@ -126,15 +137,19 @@ try {
                     lassign [dict get $t $name] us sum
                     lassign [dict get $runs $name] mode _ _ mm rr
                     switch -glob -- $name {
-                        keys* - build1 { continue }
+                        keys* - build1 - *-passes { continue }
                         build - presized - bulk {
                             set per [expr {($us - [lindex [dict get $t keys] 0]) * 1000.0 / ($rr * $n)}]
                         }
-                        hit - miss - replace {
-                            set per [expr {($us - [lindex [dict get $t build1] 0]) * 1000.0 / $mm}]
-                        }
-                        member {
-                            set per [expr {($us - [lindex [dict get $t build1] 0]) * 1000.0 / (2 * $mm)}]
+                        hit - miss - replace - member {
+                            set queries [expr {$name eq "member" ? 2 * $mm : $mm}]
+                            set passes [dict get $::options -passes]
+                            if {$passes > 1} {
+                                set many [lindex [dict get $t $name-passes] 0]
+                                set per [expr {($many - $us) * 1000.0 / (($passes - 1) * $queries)}]
+                            } else {
+                                set per [expr {($us - [lindex [dict get $t build1] 0]) * 1000.0 / $queries}]
+                            }
                         }
                         drop {
                             set per [expr {($us - [lindex [dict get $t build] 0]) * 1000.0 / ($rr * $n)}]
