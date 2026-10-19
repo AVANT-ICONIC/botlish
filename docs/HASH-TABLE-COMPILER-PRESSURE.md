@@ -515,10 +515,11 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   with a local vector, and the counted-loop and lockstep forms had it
   before both changes. The fix keys no vector's length: a loop over a
   `MutableVector` has the length of its own evaluation
-  (`hir::cardinality::IterationLength`), whatever its binding or path. List
-  and MutableArray lengths keep their keys (`lpmask`'s NIR is unchanged).
-  The cost is that two loops over one vector with nothing between them are
-  unrelated too.
+  (`hir::cardinality::IterationLength`), whatever its binding or path,
+  except that two clauses of one lockstep loop over the same place, with no
+  code run between them, walk one vector. List and MutableArray lengths
+  keep their keys (`lpmask`'s NIR is unchanged). The cost is that two
+  loops over one vector with nothing between them are unrelated too.
 
 ### CP-4. Facts do not cross a call
 

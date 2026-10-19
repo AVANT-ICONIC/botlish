@@ -663,6 +663,9 @@ Two different lists are unrelated even when the caller passes lists of the
 same length. So are two loops over one MutableVector, or a vector and the
 List an earlier loop over it collected: a push, pop or clear changes the
 vector's length in place, so each loop over it counts only its own walk.
+Only two clauses of one lockstep loop naming the same vector (`loop a in v
+and b in v`, the same variable or field path, nothing but names and
+constants between them) are known to walk the same vector.
 
 @example reject
 import mutable_vector

@@ -146,9 +146,26 @@
 @@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by the loop's own evaluation, so every loop over one binding or field path shares a length
 ## hir/cardinality.tcl
 <<<<
-        return [FormAtom [list len [list o $e]]]
+        return [FormAtom [list len [list o [expr {$same ne "" ? $same : $e}]]]]
 ====
         return [FormAtom [list len [list o [ValueKey $hir $e steps]]]]
+>>>>
+
+@@ same-place-by-value-key two clauses of one lockstep loop walk the same vector when their iterables have one value key (an alias chased to its definition), so a copy w = v, v then pushed, is taken for v
+## hir/cardinality.tcl
+<<<<
+                    set path [expr {$quiet ? [hir::mutvec::Path $hir $iterable] : ""}]
+====
+                    set s 0
+                    set path [expr {$quiet ? [ValueKey $hir $iterable s] : ""}]
+>>>>
+
+@@ same-place-unused two clauses of one lockstep loop over the same vector place are unrelated, like two loops over it (precision: `loop a in v and c in v` is unproven)
+## hir/cardinality.tcl
+<<<<
+                        dict set domain same [dict get $first $path]
+====
+                        dict get $first $path
 >>>>
 
 @@ every-domain-per-occurrence a loop over any collection has the length of its own evaluation (precision: two loops over one List or MutableArray, or a lockstep over one and a List collected over it, are unrelated)

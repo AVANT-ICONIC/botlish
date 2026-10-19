@@ -444,13 +444,15 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
 # the binding or the field path, a callee's on its own context parameter --
 # while the binding, path or member stays the same. A domain over a vector
 # has the length of this one evaluation only: the atom {len {o E}}, E the
-# iterable itself, equal to no other occurrence's. Two loops over one vector
-# have unrelated lengths, as do a vector and a List an earlier loop
-# collected over it, whatever runs between them.
-proc hir::cardinality::IterationLength {hir e stepsVar} {
+# iterable itself, equal to no other occurrence's -- or SAME's, the earlier
+# domain of its lockstep loop that evaluated the same place with no code
+# run between them (domains). Two loops over one vector have unrelated
+# lengths, as do a vector and a List an earlier loop collected over it,
+# whatever runs between them.
+proc hir::cardinality::IterationLength {hir e stepsVar {same ""}} {
     upvar 1 $stepsVar steps
     if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
-        return [FormAtom [list len [list o $e]]]
+        return [FormAtom [list len [list o [expr {$same ne "" ? $same : $e}]]]]
     }
     return [ListLength $hir $e steps]
 }
@@ -458,10 +460,16 @@ proc hir::cardinality::IterationLength {hir e stepsVar} {
 # ---- domains -----------------------------------------------------------------
 
 # Loop E's iteration domains, in written order, as dicts
-#   {kind list iterable EXPR}
+#   {kind list iterable EXPR ?same EXPR?}
 #   {kind count start EXPR end EXPR direction D endKind K}
 # (for lockloop, the node's own domains; for a single-domain loop, the one
-# domain its own fields describe).
+# domain its own fields describe). A lockloop evaluates its domains once, in
+# written order, before its first iteration (COLLECTING-LOOPS.md): a list
+# domain whose iterable is the same place (a binding with the same field
+# projections, hir::mutvec::Path) as an earlier domain's, with every domain
+# expression up to it a place or a constant, is evaluated with no code run
+# since that earlier one, so it walks the same collection. `same` names the
+# earlier iterable (IterationLength).
 proc hir::cardinality::domains {hir e} {
     set node [dict get $hir exprs $e]
     switch -- [dict get $node kind] {
@@ -474,10 +482,37 @@ proc hir::cardinality::domains {hir e} {
                 endKind [dict get $node endKind]]]
         }
         lockloop {
-            return [dict get $node domains]
+            set out {}
+            set quiet 1
+            set first [dict create]
+            foreach domain [dict get $node domains] {
+                if {[dict get $domain kind] ne "list"} {
+                    set quiet [expr {$quiet && [Quiet $hir [dict get $domain start]] && [Quiet $hir [dict get $domain end]]}]
+                } else {
+                    set iterable [dict get $domain iterable]
+                    set quiet [expr {$quiet && [Quiet $hir $iterable]}]
+                    set path [expr {$quiet ? [hir::mutvec::Path $hir $iterable] : ""}]
+                    if {$path ne "" && [dict exists $first $path]} {
+                        dict set domain same [dict get $first $path]
+                    } elseif {$path ne ""} {
+                        dict set first $path $iterable
+                    }
+                }
+                lappend out $domain
+            }
+            return $out
         }
     }
     error "hir::cardinality::domains: $e is not a collecting loop"
+}
+
+# 1 if evaluating expression E runs no code: a constant, a reference, or a
+# field projection of one.
+proc hir::cardinality::Quiet {hir e} {
+    while {[dict get $hir exprs $e kind] eq "project"} {
+        set e [dict get $hir exprs $e receiver]
+    }
+    return [expr {[dict get $hir exprs $e kind] in {const ref}}]
 }
 
 # The cardinality FORM of DOMAIN.
@@ -488,7 +523,8 @@ proc hir::cardinality::of_domain {hir domain {stepsVar ""}} {
         upvar 1 $stepsVar steps
     }
     if {[dict get $domain kind] eq "list"} {
-        return [IterationLength $hir [dict get $domain iterable] steps]
+        set same [expr {[dict exists $domain same] ? [dict get $domain same] : ""}]
+        return [IterationLength $hir [dict get $domain iterable] steps $same]
     }
     set start [IntForm $hir [dict get $domain start] steps]
     set end [IntForm $hir [dict get $domain end] steps]

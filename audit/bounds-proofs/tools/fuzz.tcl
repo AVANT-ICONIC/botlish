@@ -61,8 +61,10 @@
 # same program, declaring the error and handling it, does fail with
 # IndexNotFound on the interpreter: the rejection is necessary, not only
 # conservative. A lockstep loop over a vector and a List collected over it
-# before a push must be LOCKSTEP-UNPROVEN, its witness showing the two
-# counts differ. Four CONSERVATIVE shapes (the index written twice inline,
+# before a push, or over a vector and a copy of it (cv = v, v then pushed),
+# must be LOCKSTEP-UNPROVEN, its witness showing the two counts differ; one
+# whose two clauses name the same vector place (a local, a field path) is
+# accepted and agrees on every backend. Four CONSERVATIVE shapes (the index written twice inline,
 # a guard in a loop that runs once with the read after it, the field of
 # one call result written twice, two loops over one vector with nothing
 # between them) are safe but outside every theorem: they must stay
@@ -543,6 +545,30 @@ set lockstepUnsound {
         x
     bx.v.push(h)
     [mutable_vector::length(bx.v), list::length(p)]} {2 3 1}
+    copy-lockstep {v = mutable_vector::from_list(xs)
+    cv = v
+    v.push(h)
+    r = loop a in v and c in cv:
+        a + c
+    list::length(r)} {v = mutable_vector::from_list(xs)
+    cv = v
+    v.push(h)
+    [mutable_vector::length(v), mutable_vector::length(cv)]} {2 3 1}
+}
+# Two clauses of one lockstep loop over the same vector place, nothing but
+# places and constants between them, walk one vector: accepted, and every
+# backend agrees with the interpreter.
+set lockstepSound {
+    same-local {v = vec(xs)
+    v.push(h)
+    r = loop a in v and c in v:
+        a + c
+    list::length(r)}
+    same-field {bx = V {v: vec(xs)}
+    bx.v.push(h)
+    r = loop a in bx.v and c in bx.v:
+        a + c
+    list::length(r)}
 }
 set conservative {
     inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
@@ -619,6 +645,25 @@ if {[dict get $options -unsound]} {
         }
         incr witnessed
         puts "ok   lockstep $name: rejected; witness capacities $ca/$cb, h = $h counts [lindex $got 1]"
+    }
+    foreach {name body} $lockstepSound {
+        set path [writeProgram ls-$name "$header$signature:\n    $body\n\n\[[callOf f 2 3 1], [callOf f 0 3 7]\]\n"]
+        set kind [strict $path hir]
+        if {$kind ne ""} {
+            fail "lockstep $name: a lockstep over one vector place rejected: $kind"
+            continue
+        }
+        set reference ""
+        foreach backend $backends {
+            set got [outcome $hir $backend]
+            if {$backend eq "interp"} {
+                set reference $got
+            }
+            if {[lindex $got 0] ne "value" || $got ne $reference} {
+                fail "lockstep $name on $backend: $got (interp: $reference)"
+            }
+        }
+        puts "ok   lockstep $name: accepted, [lindex $reference 1] on [join $backends {, }]"
     }
 }
 

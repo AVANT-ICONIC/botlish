@@ -146,8 +146,13 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   over a vector has the length of that one evaluation of `v`, an atom equal
   to no other (`hir::cardinality::IterationLength`). Two loops over one
   vector, or a vector and a List an earlier loop collected over it, are
-  unrelated sizes. A List and a MutableArray (whose length is its capacity,
-  fixed at allocation) keep the key of their binding or path.
+  unrelated sizes. The one exception is within a lockstep loop, whose
+  domains are evaluated in written order before its first iteration: a
+  clause over the same vector place as an earlier clause (the same binding
+  and field projections, not a copy of it), with only places and constants
+  between them, walks the same vector (`loop a in v and b in v`). A List and
+  a MutableArray (whose length is its capacity, fixed at allocation) keep
+  the key of their binding or path.
 * **Existing facts reused**, no new List-length inference: exact Ints and exact
   List literals from `hir/exactvalue.tcl` (followed through immutable
   bindings); the `+ - *` and `list_length` natives; `list(...)` literals; and

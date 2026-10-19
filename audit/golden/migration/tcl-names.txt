@@ -5076,6 +5076,7 @@ tests/proven-bounds.test bounds-values-agree-known-error-checked pass
 tests/proven-bounds.test bounds-values-agree-proven pass
 tests/proven-bounds.test bounds-values-agree-reduced pass
 tests/proven-bounds.test bounds-values-agree-unknown pass
+tests/proven-bounds.test bounds-vector-same-place-lockstep pass
 tests/proven-bounds.test bounds-vector-snapshots-fail pass
 tests/proven-bounds.test bounds-vector-snapshots-lockstep pass
 tests/proven-bounds.test bounds-vector-snapshots-rejected pass

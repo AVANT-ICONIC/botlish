@@ -399,6 +399,12 @@ test bounds-vector-snapshots-lockstep {a lockstep clause over a MutableVector an
     set out
 } -result {LOCKSTEP-UNPROVEN {{could not prove length(v at 13:15) == length(v at 10:20)}} LOCKSTEP-UNPROVEN {{could not prove length(b.v at 12:15) == length(b.v at 9:20)}}}
 
+test bounds-vector-same-place-lockstep {a lockstep loop evaluates its domains once, in written order, before its first iteration: two clauses over the same vector place (a local, a field path), with nothing but places and constants between them, walk the same vector and are proven equal (and agree on every backend); a copy of the vector (w = v, then v pushed) is another place and stays unproven} -body {
+    set same "${vectorDecls}fn f(b: Box) -> List\[List\[int\]\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    p = loop a in v and c in v:\n        a + c\n    q = loop a in b.v and c in b.v:\n        a * c\n    \[p, q\]\nf(Box {v: mutable_vector::from_list(\[5, 6\])})"
+    set copy "${vectorDecls}fn f() -> List\[int\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    w = v\n    v.push(4)\n    loop a in v and c in w:\n        a + c\n0"
+    list [strictKind $same] [agreedValue $same] [strictKind $copy]
+} -result {{} {[[2, 4, 6, 8], [25, 36]]} LOCKSTEP-UNPROVEN}
+
 test bounds-fixed-length-snapshots-proven {a List and a MutableArray keep their keyed lengths: two loops over one List or one MutableArray (a parameter, a field path), the array written in place between them, have one length, so a reduction or a counted loop by the later one proves a read of the earlier, and a lockstep over a field's array and a List collected over it is accepted; so does an iterable of no collection type (an untyped parameter), which a loop requires to be a List} -body {
     set decl "struct T:\n    s: MutableArray\[int\]\nfn f(xs: List\[int\], a: MutableArray\[int\], t: T, h: int) -> any:\n    %s\nf(\[1, 2, 3\], mutable_array::create(3, 0), T {s: mutable_array::create(3, 0)}, 7)"
     list \
