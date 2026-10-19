@@ -280,13 +280,13 @@ test bounds-guarded-local-index {a guard on a local bound to a computed index pr
         [verdictOf [format $decl "j = i * 2\n    if j < 0 or j >= str::length(s):\n        return 0\n    str::char_at(s, j)"] str::char_at]
 } -result [lrepeat 5 {{{}} 1}]
 
-test bounds-guarded-local-rejected {a guard on a computed local proves nothing with only its upper half when the local may be negative, against another container's size, written inline (each written `i + 1` is its own expression), or once its scope ended (a guard in a loop body, the read after the loop)} -body {
+test bounds-guarded-local-rejected {a guard on a computed local proves nothing with only its upper half when the local may be negative, against another container's size, written inline (each written `i + 1` is its own expression), or once its scope ended (a guard on a nonnegative local in a loop body that may run zero times, the read after the loop)} -body {
     set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], i: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(5, 0), 1)"
     list \
         [verdictOf [format $decl "j = i + 1\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
         [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(b):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
         [verdictOf [format $decl "if i + 1 < 0 or i + 1 >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, i + 1)"] mutable_array::at] \
-        [verdictOf [format $decl "j = i + 1\n    loop k from 0 to 1:\n        if j < 0 or j >= mutable_array::capacity(a):\n            return k\n    mutable_array::at(a, j)"] mutable_array::at]
+        [verdictOf [format $decl "j = mod(i, 1000)\n    loop k from 0 to i - 500:\n        if j >= mutable_array::capacity(a):\n            return k\n    mutable_array::at(a, j)"] mutable_array::at]
 } -result [lrepeat 4 {IndexNotFound 0}]
 
 test bounds-declared-signature-unchanged {proving a check never changes the native's declared signature: list::at is still errors IndexNotFound, and the call's effective errors are the proof's} -body {

@@ -999,6 +999,15 @@ optimization only. The record below is the census's.
 
 **G12: alias keying differs.**
 
+* **Status: partly repaired.** The relations now use one keying convention,
+  Chase's (`hir::completions::RelationKey`): a guard on a computed local
+  (`j = i + 1`) is recorded under, and read back by, its defining
+  expression, so `if j < 0 or j >= list::length(xs): return ...` proves
+  `list::at(xs, j)`. Still open: the guard's *narrowing* (the index's
+  Range, which the relational rule needs >= 0) applies to the binding the
+  guard names, so a guard on `i` and a read through `j = i` bound before it
+  stays unproven (`guard_i_read_j` of the reproducer).
+
 * **Producer:** narrowing keys on the binding a ref names directly;
   relations chase aliases.
 * **Where it stops:** a guard on `i` with a read through `j = i` is
