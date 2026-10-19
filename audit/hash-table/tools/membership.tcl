@@ -5,6 +5,7 @@
 #   tclsh9.0 audit/hash-table/tools/membership.tcl ?-domains LIST?
 #       ?-strategies LIST? ?-sizes LIST? ?-queries M? ?-runs R? ?-out FILE?
 #       ?-backend B? ?-show DOMAIN/STRATEGY/K? ?-check 1? ?-data-limit N?
+#       ?-max-chain N?
 #
 # -check 1 times nothing: it runs every program's hit and miss modes with 128
 # queries on interp, compile, cranelift and cranelift-generic and requires
@@ -56,7 +57,7 @@ source [file join [file dirname [file normalize [info script]]] lib.tcl]
 set options [dict create -domains {int-dense int-sparse str enum} \
     -strategies {chain list iset table bsearch tree bits direct pmod phash length trie} \
     -sizes {1 2 3 4 6 8 12 16 24 32 48 64 128 256 512 1024} -queries 1000000 -runs 5 \
-    -out "" -backend cranelift -show "" -check 0 -data-limit 16384]
+    -out "" -backend cranelift -show "" -check 0 -data-limit 16384 -max-chain 512]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -553,6 +554,14 @@ try {
         foreach strategy [dict get $options -strategies] {
             foreach k [dict get $options -sizes] {
                 if {$domain eq "enum" && $k > 64} continue
+                # An equality chain (chain, and length's per-length chains)
+                # of more than MAX-CHAIN terms is not measured: the front end
+                # gives up on 1024 (CO-8), and length's 1024 Strings ran a
+                # tclsh out of 15 GB of memory.
+                if {$strategy in {chain length} && $k > [dict get $options -max-chain]} {
+                    puts "SKIP $domain $strategy $k: an equality chain of more than -max-chain [dict get $options -max-chain] terms"
+                    continue
+                }
                 set made [programOf $domain $strategy $k]
                 if {$made eq ""} continue
                 lassign $made text data generateMs

@@ -947,7 +947,11 @@ experiment's tables below it. Moderate cost to fix; not prototyped.
 `x == c1 or x == c2 or ... or x == c1024` does not compile: "too many
 nested evaluations (infinite loop?)". `or` lowers to nested `if`s, and the
 front end's recursive walks hit Tcl's nesting limit somewhere between 512
-terms (which compile) and 1,024 terms (which do not). This matters for
+terms (which compile) and 1,024 terms (which do not). Long chains are
+costly well before the limit. The `length` strategy for 512 String
+literals is a dispatch on the length, then an equality chain per length.
+Its front end took 21.7 s for 25.7 KB of machine code. At 1,024 literals
+the front end's process grew to 14 GB and was killed. This matters for
 constant membership: a compiler that selects an equality chain for small
 sets never generates one this long, but source written that way, or a
 macro-like expansion of a literal set, fails rather than compiling slowly.
