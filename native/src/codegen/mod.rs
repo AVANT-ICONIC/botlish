@@ -919,8 +919,15 @@ mod euclid_mod_tests {
         .collect();
         for x in &wide {
             for y in wide.iter().filter(|y| !y.is_zero()) {
-                let (vx, vy) = (r.vm.new_big(x.clone()), r.vm.new_big(y.clone()));
+                // Under BOTLISH_NATIVE_GC_STRESS every allocation collects:
+                // the first operand must be a root while the second is
+                // allocated, and both while the helper allocates the result.
+                let vx = r.vm.new_big(x.clone());
+                r.vm.temp_roots.push(vx);
+                let vy = r.vm.new_big(y.clone());
+                r.vm.temp_roots.push(vy);
                 let got = call(&mut r, 3, &[vx, vy]);
+                r.vm.temp_roots.truncate(r.vm.temp_roots.len() - 2);
                 assert_ne!(got, NO_VALUE, "mod({x}, {y})");
                 assert_eq!(int_to_big(got), reference(x, y), "mod({x}, {y})");
             }
