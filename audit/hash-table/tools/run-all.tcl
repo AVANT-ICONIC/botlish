@@ -92,7 +92,10 @@ foreach phase [dict get $options -phases] {
             file delete [out sizes]
             foreach impl {lpa lpmono lpfact lpmask rh chain cd ht0 lp lpc} {
                 set modes [expr {$impl eq "cd" ? [lsearch -all -inline -not $allModes drop] : $allModes}]
-                bench sizes -impls $impl -keys {int-dense str-short} -sizes $sizes -modes $modes
+                # lp copies its table on every update (quadratic: a String
+                # build of 16384 keys takes minutes per run): up to 4096.
+                set implSizes [expr {$impl eq "lp" ? [lrange $sizes 0 11] : $sizes}]
+                bench sizes -impls $impl -keys {int-dense str-short} -sizes $implSizes -modes $modes
             }
             bench sizes -impls listmap -keys {int-dense str-short} -sizes [lrange $sizes 0 10] -modes $allModes
             bench sizes -impls chain0 -keys {int-dense str-short} -sizes $sizes -modes {presized hit miss member replace drop}
