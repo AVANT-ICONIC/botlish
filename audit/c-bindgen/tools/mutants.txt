@@ -155,7 +155,7 @@ $ctype eq "char"
 @@ twin-identities-merged two C tags whose identity names collide get one Botlish name
 ## tools/c-bindgen/model.tcl
 <<<<
-    while {$name in $taken} { append name _[lindex $key 0] }
+    while {[dict exists $identityNames $name]} { append name _[lindex $key 0] }
 ====
 >>>>
 
