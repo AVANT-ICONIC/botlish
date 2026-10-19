@@ -20,6 +20,11 @@
 # (T[P passes] - T[1 pass]) / ((P - 1) * M) (member: 2M): everything but
 # the lookups -- the key lists, the build -- cancels exactly, which the
 # build subtraction does not when the build is large or noisy.
+#
+# With -build-passes B > 1, build, presized, bulk and drop likewise run
+# B * REPS repetitions beside REPS, and the per-insert (per-removal) time is
+# (T[B * REPS] - T[REPS]) / ((B - 1) * REPS * N): the key lists cancel
+# exactly, where T[keys] is a separate run with its own noise.
 #   drop               (T - T[build]) / (REPS * N)     per removal
 #   life               (T - T[keys]) / REPS            per build-and-L-lookups
 #
@@ -35,7 +40,7 @@ source [file join [file dirname [file normalize [info script]]] lib.tcl]
 
 set options [dict create -impls {lp} -keys {int-dense} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} \
     -modes {build presized hit miss member replace drop} -ops 200000 -runs 5 -backend cranelift \
-    -out "" -edits {} -tag "" -lower {} -life {1 10 1000} -passes 1]
+    -out "" -edits {} -tag "" -lower {} -life {1 10 1000} -passes 1 -build-passes 1]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
     if {![dict exists $options $arg]} { error "unknown option $arg" }
@@ -108,7 +113,13 @@ try {
                 dict set runs build1 [list build $kind $n $m 1]
                 foreach mode [dict get $options -modes] {
                     switch -- $mode {
-                        build - presized - drop - bulk { dict set runs $mode [list $mode $kind $n $m $reps] }
+                        build - presized - drop - bulk {
+                            dict set runs $mode [list $mode $kind $n $m $reps]
+                            set bp [dict get $::options -build-passes]
+                            if {$bp > 1} {
+                                dict set runs $mode-passes [list $mode $kind $n $m [expr {$bp * $reps}]]
+                            }
+                        }
                         hit - miss - member - replace {
                             dict set runs $mode [list $mode $kind $n $m 1]
                             if {[dict get $::options -passes] > 1} {
@@ -127,6 +138,10 @@ try {
                 if {"drop" in [dict get $options -modes] && ![dict exists $runs build]} {
                     dict set runs build [list build $kind $n $m $reps]
                 }
+                if {"drop" in [dict get $options -modes] && [dict get $options -build-passes] > 1
+                        && ![dict exists $runs build-passes]} {
+                    dict set runs build-passes [list build $kind $n $m [expr {[dict get $options -build-passes] * $reps}]]
+                }
                 set names [dict keys $runs]
                 set times [timeAll $hir [lmap name $names {concat [dict get $runs $name] $pool}]]
                 set t [dict create]
@@ -138,8 +153,21 @@ try {
                     lassign [dict get $runs $name] mode _ _ mm rr
                     switch -glob -- $name {
                         keys* - build1 - *-passes { continue }
-                        build - presized - bulk {
-                            set per [expr {($us - [lindex [dict get $t keys] 0]) * 1000.0 / ($rr * $n)}]
+                        build - presized - bulk - drop {
+                            set bp [dict get $::options -build-passes]
+                            if {$bp > 1} {
+                                set many [lindex [dict get $t $name-passes] 0]
+                                set extra [expr {$many - $us}]
+                                # Each drop repetition builds its table first.
+                                if {$name eq "drop"} {
+                                    set extra [expr {$extra - ([lindex [dict get $t build-passes] 0] - [lindex [dict get $t build] 0])}]
+                                }
+                                set per [expr {$extra * 1000.0 / (($bp - 1) * $rr * $n)}]
+                            } elseif {$name eq "drop"} {
+                                set per [expr {($us - [lindex [dict get $t build] 0]) * 1000.0 / ($rr * $n)}]
+                            } else {
+                                set per [expr {($us - [lindex [dict get $t keys] 0]) * 1000.0 / ($rr * $n)}]
+                            }
                         }
                         hit - miss - replace - member {
                             set queries [expr {$name eq "member" ? 2 * $mm : $mm}]
@@ -150,9 +178,6 @@ try {
                             } else {
                                 set per [expr {($us - [lindex [dict get $t build1] 0]) * 1000.0 / $queries}]
                             }
-                        }
-                        drop {
-                            set per [expr {($us - [lindex [dict get $t build] 0]) * 1000.0 / ($rr * $n)}]
                         }
                         life* {
                             set l [string range $name 4 end]
