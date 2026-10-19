@@ -777,7 +777,10 @@ Totals: **macOS**, run
 [39297872127](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127)
 (e0b04c5, Tier C job 118215508236): 24 mutants, **21 killed, 0
 survived**, 3 skipped (Linux's), in 400 s. **Linux x86-64**, locally on
-the same mutants: @@LINUXMUTANTS@@
+the same mutants and the same tree (e0b04c5): 24 mutants, **17 killed,
+0 survived**, 7 skipped (macOS's six and page-size-4096). On Linux the new
+faults kill `guard-includes-stack` directly (`fault inside-stack`, `fault
+inside-coroutine-stack`), no longer only by address layout.
 
 "Recovery omits necessary runtime cleanup" has a particular meaning here:
 the recovery is termination, so what it must not omit is the report itself
