@@ -28,7 +28,7 @@ violation`; the same recursion inside a coroutine: `... child killed: bus
 error`; stack_overflow.ir on a 4 MiB thread: `thread '<unknown>' has
 overflowed its stack`, SIGABRT.
 **After** (every run from 39293822194 on; the final code in run
-@@FINALMAC@@): the same programs end in `error {NATIVE LIMIT STACK}
+[39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542)): the same programs end in `error {NATIVE LIMIT STACK}
 {native stack exhausted: too many nested calls}`, 18 of 18 tests, on
 cranelift and cranelift-generic.
 
@@ -56,8 +56,8 @@ Gates, all on GitHub Actions runners (no shared Mac):
 | D | a thread-stack overflow is the line | section 11 |
 | E | a coroutine overflow, after yields too | section 12 |
 | F | nested coroutines | section 13 |
-| G | GC stress | section 14, run @@FINALMAC@@ |
-| H | broad acceptance and Linux | macOS acceptance (runs 39297872127 and @@FINALMAC@@), tests.yml and tests-arm64.yml (sections 20-21) |
+| G | GC stress | section 14, run [39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542) |
+| H | broad acceptance and Linux | macOS acceptance (runs 39297872127 and [39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542)), tests.yml and tests-arm64.yml (sections 20-21) |
 
 Mutation testing: no survivor -- 21 of 21 applicable mutants killed on
 macOS, 17 of 17 on Linux x86-64 (section 18). Performance: no regression
@@ -883,7 +883,11 @@ cancelled; each run's results below are from its completed jobs.
 | [39291788199](https://github.com/mwagner-webdev/botlish/actions/runs/39291788199) | 1ba91c7, the mutation harness | smoke | success: the first macOS run of the guard -- every native_stack check (stack facts, guard probes, overflows in every reporting mode, coroutine overflows, faults, publication, sweeps) and native-status's `stack-overflow` and `coroutine-stack-overflow` |
 | [39293822194](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194) | e9bbb03, the benchmark | smoke; Tier C `native-stack-overflow.test native-stack-map.test native-root-storage.test coroutines.test native.test rust native-stack-mutants native-stack-bench` | smoke: success. Tier C (job [118201686534](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194/job/118201686534)): the five Tcl files 208 of 210 on interp and on compile (2 skipped by host constraints, `nativeLinux` and `readelf`), the Rust tests and native_stack pass, the benchmark (section 22); its one failure was the mutation harness's two survivors (section 18) |
 | [39297872127](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127) | e0b04c5, faults inside the running stack | smoke; Tier C (the same items but the benchmark); acceptance | smoke: success, all ten faults of section 17. Tier C (job [118215508236](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508236)): success -- mutants 21 killed of 21, the five Tcl files as above, Rust tests and native_stack. Acceptance: success -- shards [1/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508310) and [2/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508242): 194 Tcl test files on interp (all but tier.tcl's `notYet`, c-bindgen.test and c-ffi.test) and 94 golden suites on interp, compile, cranelift-generic and cranelift (a Linux program's native runs excluded as `NATIVE TARGET`), 0 failed |
-| @@FINALRUNROW@@ |
+| [39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542) | cfdb02d, the final code (a comment in main.rs) | smoke; Tier C `native-stack-overflow.test coroutines.test native-stack-map.test native-root-storage.test native.test rust` with `CI-GC-Stress: 1`; acceptance | **success, every job**: smoke (all native_stack checks, native-status); Tier C under GC stress (job [118237876232](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237876232); section 14); acceptance shards [1/2](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237876112) and [2/2](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237875699): 194 Tcl test files on interp and 94 golden suites on four backends, 0 failed |
+
+cfdb02d is the final code: the commits after it change only this report
+(a Markdown-only push starts no macOS run, and the Linux workflows run on
+dispatch), so every run on cfdb02d is a run of the code as it is merged.
 
 What the runs cover, against the brief's list: native smoke and the
 stack-bound tests (native_stack, in every smoke job since 39291788199);
@@ -902,7 +906,7 @@ limitations -- Mach-O executables, C calls, Linux imports -- unchanged).
 | Run | Head | Result |
 |---|---|---|
 | [39290982366](https://github.com/mwagner-webdev/botlish/actions/runs/39290982366) | 3b3e664, the change | **success**: all 11 jobs that run on a branch -- the Tcl suite on interp and on compile, cranelift and cranelift-generic coverage, the four golden shards beside their Tcl originals, the native Rust unit tests, the stub-linked executables, the warning gate |
-| [39304498347](https://github.com/mwagner-webdev/botlish/actions/runs/39304498347) | cfdb02d, the final code (main merged) | @@X86FINAL@@ |
+| [39304498347](https://github.com/mwagner-webdev/botlish/actions/runs/39304498347) | cfdb02d, the final code (main merged) | **success**: all 12 jobs that run on a branch (the 11 above and, since main's merge, the method-call kind filter's audit) |
 
 The workflow's `native GC-stress` job runs on pushes to main only (it is
 skipped on a dispatch); the GC-stress evidence for Linux x86-64 is local:
