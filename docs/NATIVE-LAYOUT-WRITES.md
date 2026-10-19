@@ -1,5 +1,10 @@
 # NATIVE-LAYOUT-WRITES.md
 
+> Partially superseded by FIXED-LAYOUT-ARRAYS.md: designators name array
+> elements statically (`L.pts[2].x`), `binary::store_element` writes one
+> element of a live array at a dynamic index, and a whole array is written
+> from a List (section 22's "Fixed arrays" item).
+
 Native layout writes: the write half of the native-layout model. Live native
 memory is written through a writable native capability, `NativeEdit[L]`
 (`binary::native::edit`, `binary::store`); byte storage the program owns is
@@ -967,7 +972,8 @@ touch), as input to the C-bindgen layout milestone:
   element designator with a static index (`L.pts[2].x`) or a repetition
   descriptor -- and their writes (store one element, a whole array from a
   List). Until then a generator can only emit arrays of bytes as runs of U8
-  fields or skip the struct.
+  fields or skip the struct. (Done in FIXED-LAYOUT-ARRAYS.md: static element
+  designators, binary::store_element, whole-array writes from a List.)
 * **Bitfields** (`unsigned flags : 3`): not representable. A write of one is
   a read-modify-write of its storage unit, which a store is not; the
   generator must at least emit the storage unit as a scalar field (the

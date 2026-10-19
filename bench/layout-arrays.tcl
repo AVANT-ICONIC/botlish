@@ -1,5 +1,5 @@
 # layout-arrays.tcl -- the performance report of fixed arrays in binary
-# layouts (FIXED-LAYOUT-ARRAYS.md, "Performance").
+# layouts (FIXED-LAYOUT-ARRAYS.md, "Lowering, runtime and performance").
 #
 #   tclsh9.0 bench/layout-arrays.tcl ?-runs N? ?-n N? ?-backends LIST?
 #

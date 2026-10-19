@@ -19,8 +19,8 @@
 #     tests/golden/layout-arrays.bot on every backend (tests/golden/run.tcl):
 #     killed if a test fails, the backends disagree or the suite aborts;
 #   * audit/layout-arrays/tools/fuzz.tcl -n N -seed S (every backend, the
-#     independent byte model, live arrays on the native ones): killed if it reports a disagreement or does
-#     not complete;
+#     independent byte model, live arrays on the native ones): killed if it
+#     reports a disagreement or does not complete;
 #   * for a native mutant (one that edits native/src/ or the crate's
 #     manifest), first a release build of the copy's native backend (a mutant
 #     that does not build is reported NOT-BUILT, never counted as killed),

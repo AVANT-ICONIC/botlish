@@ -1,5 +1,5 @@
 # fuzz.tcl -- random layouts with fixed arrays against an independent byte
-# model (FIXED-LAYOUT-ARRAYS.md, "Fuzzing").
+# model (FIXED-LAYOUT-ARRAYS.md, "Fuzzing and mutation results").
 #
 #   tclsh9.0 audit/layout-arrays/tools/fuzz.tcl ?-n N? ?-seed S? ?-backends LIST?
 #                                               ?-verbose 0|1? ?-gc-stress 0|1?

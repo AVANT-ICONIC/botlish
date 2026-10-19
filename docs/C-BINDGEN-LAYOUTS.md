@@ -1,5 +1,13 @@
 # C-BINDGEN-LAYOUTS.md
 
+> Partially superseded by FIXED-LAYOUT-ARRAYS.md: a fixed array of
+> representable elements is a layout field now, its extents probed per
+> dimension. The blocked counts, pressure tables and sentinel statuses
+> below are this milestone's; with arrays every binding gained exactly the
+> records the "fixed arrays" counterfactual forecast (+3 Tcl, +11 SDL3, +19
+> BoringSSL, +249 Win32), and the pressure report now weighs unions, Bool,
+> floats, bitfields and flexible arrays (FIXED-LAYOUT-ARRAYS.md, section 12).
+
 C binding generation of native record layouts: the binding generator
 (`tools/c-bindgen.tcl`, C-BINDGEN.md) now writes an ordinary Botlish
 `layout` (BINARY-LAYOUT.md) for every complete C record whose every field the

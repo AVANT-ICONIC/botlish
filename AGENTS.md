@@ -1400,9 +1400,9 @@ the leaf's absolute offset and encoding. Keep it so:
   Never add `Ptr -> Int`, `Ptr -> Bytes` or any decoding of a pointer from
   bytes.
 * No native record allocation, `extern c struct`, layout guarantee for an
-  ordinary struct, arrays, unions, bitfields or `ffi::c::Bool` fields here
+  ordinary struct, unions, bitfields or `ffi::c::Bool` fields here
   (NATIVE-LAYOUT-WRITES.md section 22 records what a generated layout will
-  need).
+  need; fixed arrays are FIXED-LAYOUT-ARRAYS.md's, next section).
 * `ffi_fixture::memory_bytes(p, n)` (the oracle of a native write) is a test
   process's own, like `ffi_fixture::memory`.
 
@@ -1420,6 +1420,68 @@ mutates, keeping it a mutant of the same rule) and `cargo test --release
 binary-layout harnesses for a change to code they share (`bin_encode`,
 `ViewBase`, the native types' subtype rule). `bench/native-edit.tcl`
 regenerates the performance report.
+
+## Fixed layout arrays
+
+A layout field may be a fixed array, `field NAME: array N of E at OFFSET`
+(FIXED-LAYOUT-ARRAYS.md): repetition in an external representation, element
+i at the field's offset plus i times E's own width (a scalar's encoding, a
+nested layout's size with its tail padding, a row's whole width), E any
+representation (a scalar, a C scalar, a pointer, a nested layout, another
+array). Its copied value is an ordinary List of exactly N element values;
+read through a view or an edit it is a live array, `NativeView[array N of
+E]` / `NativeEdit[array N of E]` (binary::element, binary::store_element,
+binary::load). Keep it so:
+
+* No new object model: never add a FixedArray type, a runtime array object,
+  a slice, an array value distinct from a List, a String conversion of a
+  character array, or pointer arithmetic. A layout knows no C: no C
+  alignment or padding rule computes a stride or an extent.
+* The extent is part of the representation, not of the List's type: a
+  whole-array write, store or emit checks every List's length before the
+  first byte is written (the declared LayoutExtentMismatch), unless the
+  completion analysis proves it (`-bounds {extents V}`: a literal, a
+  counted loop, a branch on list::length, a copy binary::load or
+  binary::parse made); a proven write has no failure path in native code.
+  An element index is checked the same way (`-bounds {index narray ...}`,
+  IndexNotFound). Never weaken either to a run-time-only check, and never
+  read an extent from a List's type.
+* Read and write authority stay distinct inside arrays: an array read
+  through a view is a view's (store_element through it is BINARY-OPERAND),
+  an element of an array of records is its own view or edit. Pointer
+  authority is recursive: bytes never decode into a pointer inside an
+  array (parse of a layout holding one is LAYOUT-NATIVE-ONLY), and an
+  array of pointers is encoded only by binary::write_foreign.
+* An element access is O(1): one load or store at the array's address plus
+  the index times the stride, never a copy of the array; a copy allocates
+  exactly the List (and records) it returns.
+* No unions here: a union is a separate milestone, which must coexist with
+  arrays orthogonally (an array of a union-bearing record stays blocked by
+  its element).
+
+If you change the array grammar (surface/parser.tcl's `ArrayTypeExpr`, the
+static designator indices), hir/layouts.tcl's representations
+(`ResolveRepr`, `ReprOfTerm`, `ResolveArrayTerm`, `FieldPath`, the array
+problems),
+the extent and index proofs (hir/completions.tcl's `ExtentsVerdict`,
+`ReprValueVerdict`, `ExactCopy`, the narray bounds; hir/cardinality.tcl's
+`extent` result length), core/binary.tcl's array codec, the Tcl compiler's
+`LayoutLeaves`, native lowering (`ElementAccess`, `ArrayRead`,
+`ArrayCheck`, `ReprWrite`) or the row helpers (native/src/runtime/nview.rs),
+run `tests/layout-arrays.test` (its C oracle, tests/cffi/narray-fixture.c,
+needs `cc`), its golden suite (`tclsh9.0 tests/local.tcl
+tests/golden/layout-arrays.bot`), `tests/binary-layout.test`,
+`tests/native-view.test`, `tests/native-edit.test`,
+`audit/layout-arrays/tools/fuzz.tcl` (several seeds, once with `-gc-stress
+1`), `audit/layout-arrays/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule), the
+binary-layout, native-view and native-edit mutation tools (they mutate the
+same code) and `cargo test --release --manifest-path native/Cargo.toml --lib
+nview`. A change to the generator's arrays (tools/c-bindgen/records.tcl's
+`ArrayField`, verify.tcl's array checks, oracle.tcl's array leaves) is a
+change to the generator (next sections' checks; regenerate and commit).
+`bench/layout-arrays.tcl` regenerates the performance report.
 
 ## C ABI types and imprinting
 
@@ -1606,13 +1668,16 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   `layouts-check.c`) are the target C compiler's answers -- sizeof,
   _Alignof, offsetof and each member's type, probed -- never a layout rule
   computed in Tcl or Botlish: no padding, alignment, packing or bitfield
-  rule anywhere in the generator. A field a layout cannot represent (an
-  array, a union or overlay, a bitfield, float, double, `_Bool`) blocks its
-  record and every record holding it by value, with its reason in the
-  manifest: never flatten, approximate or reinterpret it, and never extend
-  the layout language from the generator. A layout and the record's
-  opaque pointee identity stay two declarations; a pointer field keeps its
-  pointee's identity.
+  rule anywhere in the generator. A field a layout cannot represent (a
+  union or overlay, a flexible array member, a bitfield, float, double,
+  `_Bool`, an array of one of those) blocks its record and every record
+  holding it by value, with its reason in the manifest: never flatten,
+  approximate or reinterpret it, and never extend the layout language from
+  the generator. A fixed array of representable elements is a layout field
+  (`array N of E`, FIXED-LAYOUT-ARRAYS.md) whose extents are the
+  compiler's answers (one probe per dimension), never the declaration's
+  expressions. A layout and the record's opaque pointee identity stay two
+  declarations; a pointer field keeps its pointee's identity.
 * A generated layout is its target's and its toolchain's: windows-x86_64-gnu
   is MinGW-w64's (Windows x86-64, the GNU ABI), the Win32 profile's target.
   Never generate, label or check it as MSVC's windows-x86_64, and add no

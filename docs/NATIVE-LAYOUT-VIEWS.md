@@ -1,5 +1,9 @@
 # NATIVE-LAYOUT-VIEWS.md
 
+> Partially superseded by FIXED-LAYOUT-ARRAYS.md: a view reads fixed
+> arrays too -- an array field is a live array, `NativeView[array N of E]`,
+> whose elements `binary::element` reads at a checked index.
+
 Read-only native layout views: an ordinary `layout` read from authorized
 live native memory, through `binary::native::view(L, p)` and
 `NativeView[L]`; and pointer fields in layouts.
@@ -229,7 +233,7 @@ the address space:
 
 Not in this milestone because the existing layout system has none of them
 (BINARY-LAYOUT.md, "The fixed-layout limitation"): fixed arrays and
-repetition, unions or overlapping fields, bitfields, dynamic or trailing
+repetition (since added: FIXED-LAYOUT-ARRAYS.md), unions or overlapping fields, bitfields, dynamic or trailing
 extents, explicit byte order, floating point, `ffi::c::Bool` fields. Each is
 still rejected at the declaration exactly as before (`LAYOUT-FIELD-OVERLAP`,
 `LAYOUT-FIELD-TYPE`). The restriction for dynamic extents is therefore
@@ -282,7 +286,9 @@ What Botlish knows, it enforces, statically:
   the outermost layout's extent;
 * a view is never null (its constructor fails with `NativeViewNull` first),
   so no field read checks again;
-* fixed arrays do not exist, so there is no index to check.
+* fixed arrays do not exist, so there is no index to check (since
+  FIXED-LAYOUT-ARRAYS.md they do: `binary::element` checks its index against
+  the array's static extent, IndexNotFound, unless proven).
 
 What only the foreign interface knows -- that the address is a live
 allocation of at least the layout's size, that it stays alive while the view
