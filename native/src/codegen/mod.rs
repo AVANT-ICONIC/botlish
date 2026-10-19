@@ -14,6 +14,7 @@
 pub mod aot;
 pub mod clif;
 pub mod roots;
+pub mod target;
 
 use crate::nir::{FuncId, Program};
 use crate::runtime::framemap;

@@ -122,6 +122,19 @@ another's could be silently wrong, not just rejected. So:
   (`{HIR INTERCHANGE COMPILER}`). There is no option to skip the check.
 * **The native binaries** consume NIR, not HIR, and are not in the
   fingerprint either.
+* **Target.** A HIR is its target's when its build read the target -- ffi::c's
+  scalars, a platform namespace (`linux::*`), an architecture-specific
+  module -- and records it (`hir::cabi::targetOf`; "" for a HIR that is every
+  target's). The text carries it inside the HIR, and a decoded HIR keeps its
+  own target's facts whoever reads it. `decode -target T` is a compilation
+  for T: it refuses a HIR built for another target (`{HIR INTERCHANGE
+  TARGET}`), however much the two share -- linux-aarch64 and macos-aarch64
+  have one architecture and pointer width, and differently signed plain
+  `char` -- and accepts one that is every target's. `main.tcl` reads a
+  `.hirx` for its `-target`, or the host's; the front-end cache decodes a hit
+  for the compilation's target (MACOS-AARCH64-MILESTONE-2.md). Without
+  `-target` nothing is checked; the native driver still refuses to run a
+  HIR built for another host's target.
 
 ## Using it
 

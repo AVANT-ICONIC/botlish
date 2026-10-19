@@ -45,10 +45,15 @@
 # macos-aarch64, windows-x86_64, windows-aarch64): the widths and signedness
 # of ffi::c's integer scalars follow its data model, and its architecture
 # picks the file of an architecture-specific module (linux::sys: the Linux
-# syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md). The default
-# is the host's. It changes static types and those modules only; the
-# program still runs on the host (where another architecture's syscall
-# transport is NATIVE UNSUPPORTED).
+# syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md), and its
+# operating system which platform namespaces it may import (linux::* only
+# for a Linux target: UNSUPPORTED-PLATFORM otherwise). The default is the
+# host's. A .hirx input is a compilation for that target too: one built for
+# another target is refused (HIR INTERCHANGE TARGET), never reinterpreted.
+# The Tcl backends run a program built for any target; the native backends
+# and -emit-native-executable only one built for the host, or one whose HIR
+# is every target's (anything else is NATIVE TARGET: native code runs where
+# it was built for, and a matching architecture is not a matching target).
 #
 # Runs the given program files and prints each program's value, with runtime evidence shown as "text"#{Type}. On the
 # native backends what a program prints (io::print_line) goes to this
@@ -428,7 +433,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         if {$extension eq ".hir"} {
             set hir [hir::readFile $path]
         } elseif {$extension eq ".hirx"} {
-            if {[catch {hir::interchange::readFile $path} hir options]} {
+            if {[catch {hir::interchange::readFile $path -target [hir::cabi::ResolveTarget $target]} hir options]} {
                 printError stdout "   error: " $hir $options
                 return 1
             }
@@ -579,7 +584,7 @@ proc emitExecutable {path} {
                 warningHints $hir
             }
             .hir { set hir [hir::readFile $path] }
-            .hirx { set hir [hir::interchange::readFile $path] }
+            .hirx { set hir [hir::interchange::readFile $path -target [hir::cabi::ResolveTarget $target]] }
             default { throw {NATIVE AOT INPUT} "expected a .bot, .hir or .hirx input file (native executables are built from HIR, never from core IR text): $path" }
         }
         native::executable $hir [file rootname $path]

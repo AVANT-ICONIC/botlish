@@ -31,6 +31,11 @@
 # linux-x86_64 -- REASON"): elsewhere it is compiled but not run, and its
 # status is host-excluded (golden::host).
 #
+# A suite that imports a platform namespace (linux::*) is that platform's
+# program: on a host of another operating system it is compiled for that
+# platform's target of the host's architecture, and runs on the Tcl backends
+# only, its native backends excluded with the reason (golden::target).
+#
 # -lib DIR compiles against the library directory DIR instead of lib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
 # names with their verdicts ("PASS name"/"FAIL name"), one per line, for
@@ -63,11 +68,11 @@ if {[info commands ::native::evalHir] eq ""} {
 core::useProgramRecursionLimit
 
 
-# Compiles the Botlish program at PATH once: {ok HIR SECONDS} or {error
-# MESSAGE SECONDS}.
+# Compiles the Botlish program at PATH once (for golden::target's target):
+# {ok HIR SECONDS} or {error MESSAGE SECONDS}.
 proc golden::compile {path} {
     set start [clock microseconds]
-    if {[catch {surface::readProgramFile $path -warnings off} hir options]} {
+    if {[catch {surface::readProgramFile $path -warnings off -target [target $path]} hir options]} {
         return [list error "$hir ([dict get $options -errorcode])" \
             [expr {([clock microseconds] - $start) / 1e6}]]
     }
@@ -192,6 +197,18 @@ proc golden::host {path} {
     return $required
 }
 
+# The C ABI target the suite at PATH is compiled for: "" (the host's) unless
+# it is a program of another operating system's platform than this host's --
+# its header imports a platform namespace (linux::io, linux::path,
+# linux::abi::x86_64, ...) -- and then that system's target of this host's
+# architecture (surface::modules::PlatformTarget: linux-aarch64 on an arm64
+# Mac), for which its imports compile. On a Linux host every suite is the
+# host's. The native backends never run a program built for another host's
+# target (golden::suite excludes them, saying so).
+proc golden::target {path} {
+    return [surface::modules::PlatformTarget [core::ReadFile $path]]
+}
+
 # The hosts a suite may require (golden::host).
 proc golden::hosts {} {
     return {linux-x86_64 linux-aarch64}
@@ -213,6 +230,14 @@ proc golden::onHost {host} {
 # compiled, not run, golden::host).
 proc golden::suite {path backends} {
     set excluded [exclusions $path]
+    set target [target $path]
+    if {$target ne ""} {
+        foreach backend {cranelift-generic cranelift} {
+            if {![dict exists $excluded $backend]} {
+                dict set excluded $backend "a [core::cabi::systemName [dict get [core::cabi::target $target] os]] program, compiled for $target on this host ([expr {[core::cabi::hostTarget] eq "" ? "no known target" : [core::cabi::hostTarget]}]): native code runs on its own target's host only (NATIVE TARGET)"
+            }
+        }
+    }
     set result [dict create path $path outcomes {} excluded {}]
     foreach backend $backends {
         if {[dict exists $excluded $backend]} {

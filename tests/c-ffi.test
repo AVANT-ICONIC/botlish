@@ -424,10 +424,14 @@ test cf-wild-address {a returned address the C pointer word cannot hold is a NAT
 # ---------------------------------------------------------------------------
 # The C ABI
 
-test cf-scalar-transport {every C integer scalar crosses both ways at its own width and signedness, at both bounds (plain char's the host target's: signed on x86-64, unsigned on Linux AArch64); 64-bit values beyond the small Int range as BigInts, both ways} -constraints cfFixture -body {
-    lassign [expr {$::tcl_platform(machine) in {aarch64 arm64} ? {0 255} : {-128 127}}] charMin charMax
+# Plain char's range on this host's target: unsigned on Linux AArch64 only
+# (signed on x86-64, and on Apple AArch64, whose C ABI is not Linux's).
+set cfCharRange [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {aarch64 arm64} ? {0 255} : {-128 127}}]
+
+test cf-scalar-transport {every C integer scalar crosses both ways at its own width and signedness, at both bounds (plain char's the host target's: signed on x86-64 and Apple AArch64, unsigned on Linux AArch64); 64-bit values beyond the small Int range as BigInts, both ways} -constraints cfFixture -body {
+    lassign $::cfCharRange charMin charMax
     appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::echo_schar(-128), bcf::echo_schar(127), bcf::echo_uchar(0), bcf::echo_uchar(255), bcf::echo_char($charMin), bcf::echo_char($charMax), bcf::echo_short(-32768), bcf::echo_short(32767), bcf::echo_ushort(65535), bcf::echo_int(-2147483648), bcf::echo_int(2147483647), bcf::echo_uint(4294967295), bcf::echo_long(-9223372036854775808), bcf::echo_long(9223372036854775807), bcf::echo_ulong(18446744073709551615), bcf::echo_ulong(4611686018427387904), bcf::echo_longlong(-4611686018427387905), bcf::echo_ulonglong(18446744073709551615)\]\n"] {cranelift cranelift-generic}
-} -cleanup removeApps -result [lrepeat 2 "\[-128, 127, 0, 255, [expr {$::tcl_platform(machine) in {aarch64 arm64} ? {0, 255} : {-128, 127}}], -32768, 32767, 65535, -2147483648, 2147483647, 4294967295, -9223372036854775808, 9223372036854775807, 18446744073709551615, 4611686018427387904, -4611686018427387905, 18446744073709551615\]"]
+} -cleanup removeApps -result [lrepeat 2 "\[-128, 127, 0, 255, [join $::cfCharRange {, }], -32768, 32767, 65535, -2147483648, 2147483647, 4294967295, -9223372036854775808, 9223372036854775807, 18446744073709551615, 4611686018427387904, -4611686018427387905, 18446744073709551615\]"]
 
 test cf-scalar-extension {C sees a narrow argument sign- or zero-extended by its own type; a narrow result is extended by Botlish from its width, whatever the callee left in the register's other bits (GCC leaves them)} -constraints {cfFixture} -body {
     appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::widen_schar(-1), bcf::widen_uchar(255), bcf::widen_short(-2), bcf::widen_ushort(65535), bcf::widen_int(-3), bcf::widen_uint(4294967295), bcf::dirty_uchar(), bcf::dirty_schar(), bcf::dirty_ushort(), bcf::dirty_short(), bcf::dirty_uint(), bcf::dirty_int()\]\n"] {cranelift}

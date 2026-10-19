@@ -37,8 +37,12 @@ set scratch [makeDirectory linux-syscall-transports-scratch]
 set programCounter 0
 
 # The HIR of source TEXT, compiled as a program file (so lib modules load)
-# for C ABI target TARGET ("" the host's).
+# for C ABI target TARGET ("" a Linux target, linuxTarget: the host's own on
+# Linux -- the transports are the Linux platform's).
 proc transportHir {text {strict 1} {target ""}} {
+    if {$target eq ""} {
+        set target [linuxTarget]
+    }
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
@@ -277,12 +281,16 @@ test lst-aarch64-machine-code-routes-registers {Linux AArch64, a standalone exec
 # ---------------------------------------------------------------------------
 # linux::sys: the architecture-specific module the target selects
 
-test lst-linux-sys-selected-by-target {the compilation target's architecture picks linux::sys's one file, whatever the host: linux-x86_64 and windows-x86_64 read lib/linux/sys.x86_64.bot, linux-aarch64 and macos-aarch64 lib/linux/sys.aarch64.bot; nothing else of the library differs} -body {
-    lmap target {linux-x86_64 windows-x86_64 linux-aarch64 macos-aarch64} {
-        set files [libraryFiles [transportHir "direct module\nimport abi\nimport abi::bytes\nimport linux\nfn w(d: abi::bytes::Bytes) -> int:\n    linux::write(abi::i32(1), d)\n1" 1 $target]]
+test lst-linux-sys-selected-by-target {the compilation target's architecture picks linux::sys's one file, whatever the host: linux-x86_64 reads lib/linux/sys.x86_64.bot, linux-aarch64 lib/linux/sys.aarch64.bot, nothing else of the library differing; for a target of another operating system the Linux platform is unavailable (UNSUPPORTED-PLATFORM at the import of linux), whatever its architecture: macos-aarch64 never gets sys.aarch64.bot, windows-x86_64 never sys.x86_64.bot} -body {
+    set text "direct module\nimport abi\nimport abi::bytes\nimport linux\nfn w(d: abi::bytes::Bytes) -> int:\n    linux::write(abi::i32(1), d)\n1"
+    list {*}[lmap target {linux-x86_64 linux-aarch64} {
+        set files [libraryFiles [transportHir $text 1 $target]]
         list $target [lsearch -all -inline $files linux/*] [expr {[llength $files] - [llength [lsearch -all $files linux/*]]}]
-    }
-} -cleanup {unset -nocomplain files} -result {{linux-x86_64 linux/sys.x86_64.bot 5} {windows-x86_64 linux/sys.x86_64.bot 5} {linux-aarch64 linux/sys.aarch64.bot 5} {macos-aarch64 linux/sys.aarch64.bot 5}}
+    }] {*}[lmap target {macos-aarch64 windows-x86_64} {
+        set error [strictError $text $target]
+        list $target [lrange $error 0 1] [string match "namespace \"linux\" belongs to the Linux platform *unavailable for target $target *" [lindex $error 2]]
+    }]
+} -cleanup {unset -nocomplain text files error} -result {{linux-x86_64 linux/sys.x86_64.bot 5} {linux-aarch64 linux/sys.aarch64.bot 5} {macos-aarch64 {UNSUPPORTED-PLATFORM 4:8} 1} {windows-x86_64 {UNSUPPORTED-PLATFORM 4:8} 1}}
 
 test lst-linux-sys-uses-the-targets-transport {linux::write lowers to the target's own transport: syscall_linux_x86_64 with write's x86-64 number 1 for linux-x86_64, syscall_linux_aarch64 with its AArch64 number 64 for linux-aarch64 -- one op either way, in linux::sys::write} -body {
     lmap target {linux-x86_64 linux-aarch64} {
@@ -343,14 +351,14 @@ test lst-portable-write-runs-natively {linux::write through the host's linux::sy
     agree "direct module\nimport abi\nimport abi::bytes\nimport linux\nimport str\n\[linux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8(\"x\"))), linux::write(abi::i32(1000), abi::bytes::from_list(\[\])), linux::read(abi::i32(1000), abi::bytes::zeroed(abi::usize(4))).result\]" $::nativeBackends
 } -result {[-9, -9, -9]}
 
-test lst-portable-write-other-target {a program compiled for the other architecture's target runs its syscalls through that architecture's transport -- on this host NATIVE UNSUPPORTED natively, NATIVE-ONLY (naming that architecture's bridge) on the Tcl backends: the target, never the host, selects linux::sys} -constraints nativeLinux -body {
+test lst-portable-write-other-target {a program compiled for the other architecture's target runs its syscalls through that architecture's transport -- NATIVE-ONLY (naming that architecture's bridge) on the Tcl backends -- and the native backends refuse to run it on this host at all (NATIVE TARGET: it was built for another target): the target, never the host, selects linux::sys} -constraints nativeLinux -body {
     set other [expr {[testConstraint linuxAarch64] ? "linux-x86_64" : "linux-aarch64"}]
     set text "direct module\nimport abi\nimport abi::bytes\nimport linux\nimport str\nlinux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8(\"x\")))"
     set outcomes [outcomesOf $text $::allBackends $other]
     list [lsort -unique [lmap o [lrange $outcomes 0 1] {lrange $o 0 1}]] \
         [string match "abi::[string range $other 6 end]::from_bytes produces*" [lindex $outcomes 0 2]] \
         [lsort -unique [lmap o [lrange $outcomes 2 3] {lrange $o 0 1}]]
-} -cleanup {unset -nocomplain other text outcomes} -result {{{error {CORE SEMANTIC NATIVE-ONLY}}} 1 {{error {NATIVE UNSUPPORTED value}}}}
+} -cleanup {unset -nocomplain other text outcomes} -result {{{error {CORE SEMANTIC NATIVE-ONLY}}} 1 {{error {NATIVE TARGET}}}}
 
 # ---------------------------------------------------------------------------
 # Architecture-specific modules, in a private library
@@ -378,11 +386,13 @@ proc withModules {files body} {
     }
 }
 
-test lst-arch-module-value-by-target {any namespace can be architecture-specific: a private demo::arch with only demo/arch.x86_64.bot and demo/arch.aarch64.bot has the target's members, on every backend -- one file per namespace per compilation, still no search} -body {
+test lst-arch-module-value-by-target {any namespace can be architecture-specific: a private demo::arch with only demo/arch.x86_64.bot and demo/arch.aarch64.bot has the target's members -- on every backend that runs a program built for that target here -- one file per namespace per compilation, still no search; and a portable architecture-specific namespace is no platform's: macos-aarch64 and windows-x86_64 get their architecture's file too} -body {
     withModules [list demo/arch.x86_64.bot "fn name() -> str:\n    \"x86-64\"\n" demo/arch.aarch64.bot "fn name() -> str:\n    \"AArch64\"\n"] {
-        lmap target {linux-x86_64 linux-aarch64} {agree "import demo::arch\ndemo::arch::name()" {} $target}
+        lmap target {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64} {
+            agree "import demo::arch\ndemo::arch::name()" [backendsFor $target] $target
+        }
     }
-} -result {{"x86-64"} {"AArch64"}}
+} -result {{"x86-64"} {"AArch64"} {"AArch64"} {"x86-64"}}
 
 test lst-arch-module-errors {the selection's diagnostics, at the import: a namespace with both a module file and architecture-specific files is AMBIGUOUS-MODULE; one without a file for the target's architecture is UNSUPPORTED-ARCHITECTURE, naming the files it has; a host that is no known target needs -target (UNKNOWN-TARGET); none at all is UNKNOWN-NAMESPACE} -body {
     withModules [list demo/both.bot "fn f():\n    1\n" demo/both.x86_64.bot "fn f():\n    2\n" demo/armonly.aarch64.bot "fn f():\n    3\n"] {

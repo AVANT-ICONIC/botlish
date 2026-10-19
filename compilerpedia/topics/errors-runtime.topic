@@ -651,6 +651,38 @@ input is refused, for example a core IR file:
 == WHAT TO DO
 Give it the Botlish source (.bot) or HIR text (.hir).
 
+@topic error.hir-interchange-target
+title: HIR INTERCHANGE TARGET: a .hirx file built for another target
+summary: HIR INTERCHANGE TARGET refuses a .hirx file whose HIR was built for another target (another operating system or architecture) than the compilation's; compile the program for the target you want.
+index: errors backends
+alias: hirx for another target
+keywords: hirx, interchange, target, -target, operating system, architecture, C ABI
+related: backend.hir-interchange backend.targets error.hir-interchange-compiler error.native-target cli.options
+docs: HIR-INTERCHANGE.md MACOS-AARCH64-MILESTONE-2.md
+code: HIR INTERCHANGE TARGET
+
+== MEANING
+When a .hirx file is read; not an error of the program. A HIR whose
+build depended on the target (it imports ffi::c, an
+architecture-specific module or a platform namespace) records that
+target, and is valid for it alone: its C integer types have that
+target's sizes, and its modules are that target's. Reading it for
+another target (main.tcl's -target, or the host's default) is refused,
+never reinterpreted:
+
+    HIR interchange text for another target: it was built for target
+    linux-aarch64, not macos-aarch64: a HIR keeps the target it was built
+    for (its C ABI facts and platform modules) and is never
+    reinterpreted as another's; compile the program for macos-aarch64
+
+A HIR that depended on no target is every target's and reads anywhere.
+The front-end cache keeps one entry per target and never reports this.
+
+== WHAT TO DO
+Run the file with the target it was built for (`-target NAME`), or
+regenerate it for this one: `-target NAME -emit-hir-interchange
+FILE.bot`.
+
 @topic error.hir-parse
 title: HIR PARSE: HIR text that is malformed or inconsistent
 summary: HIR PARSE rejects a .hir file (hir::format's notation used as input) that is malformed or internally inconsistent: a bad header, an id declared twice, a reference to an invisible binding.
@@ -1147,6 +1179,45 @@ botlish-aot-stub on a machine other than x86-64 Linux.
 == WHAT TO DO
 Rebuild the executable with -emit-native-executable, and copy it whole
 (never strip or edit it: the image is at its end).
+
+@topic error.native-target
+title: NATIVE TARGET: native code for another target's program
+summary: NATIVE TARGET refuses to run or emit machine code for a program built for another target than the host's; run it on its own target's host or on a Tcl backend.
+index: errors backends
+alias: built for another target; native code for another target
+keywords: target, -target, triple, host, macOS, Linux, aarch64, cross compile, native
+related: backend.targets backend.platforms error.unsupported-platform error.hir-interchange-target backend.interp backend.native-executable
+docs: MACOS-AARCH64-MILESTONE-2.md C-ABI-TYPES.md
+code: NATIVE TARGET
+
+== MEANING
+Before native code runs or is emitted; not an error of the program. A
+program whose build depended on the target (ffi::c, an
+architecture-specific module, a platform namespace) carries that target
+to the native backend. Native code is made for the host's target only:
+the native backends refuse to run another target's program, and
+-emit-native-executable to build it:
+
+    this program was built for target linux-aarch64
+    (aarch64-unknown-linux-gnu), and native code runs only on its own
+    target's host: this host is aarch64-apple-darwin. Both are aarch64,
+    but a matching architecture is not a matching target. Compile the
+    program for this host (main.tcl -target, or the host's default), or
+    run it on a Tcl backend
+
+The Tcl backends (interp, compile) run a program built for any target:
+they execute no target machine code, and refuse C calls and system calls
+themselves.
+
+== LIKELY CAUSES
+  * -target naming another operating system or architecture, with a
+    native backend.
+  * A Linux program compiled for linux-aarch64 on a Mac (the only way to
+    compile one there, error.unsupported-platform), run natively.
+
+== WHAT TO DO
+Drop -target to compile for the host, run the program on interp or
+compile, or run it on a host of its target.
 
 @topic error.native-unsupported
 title: NATIVE UNSUPPORTED: a construct the native backend does not support

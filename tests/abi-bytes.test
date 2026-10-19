@@ -46,7 +46,13 @@ testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace 
 set scratch [makeDirectory abi-bytes-scratch]
 set programCounter 0
 
+# The HIR of source TEXT, a program file, for C ABI target TARGET ("" a
+# Linux target, linuxTarget: the host's own on Linux -- linux::write is the
+# Linux platform's).
 proc bytesHir {text {strict 1} {target ""}} {
+    if {$target eq ""} {
+        set target [linuxTarget]
+    }
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8

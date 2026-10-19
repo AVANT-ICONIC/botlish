@@ -50,14 +50,16 @@ set programCounter 0
 # ---------------------------------------------------------------------------
 # Helpers
 
-# The HIR of source TEXT, compiled as a program file (so lib modules load).
+# The HIR of source TEXT, compiled as a program file (so lib modules load),
+# for a Linux target (linuxTarget: the host's own on Linux): linux::io is
+# the Linux platform's.
 proc ctxHir {text {strict 1}} {
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
     puts -nonewline $channel $text
     close $channel
-    return [surface::readProgramFile $path -strict $strict -warnings off]
+    return [surface::readProgramFile $path -strict $strict -warnings off -target [linuxTarget]]
 }
 
 # The sorted diagnostic kinds of source TEXT.
@@ -79,17 +81,18 @@ proc strictError {text} {
     return [list [lindex [dict get $options -errorcode] end] $location $text]
 }
 
-# The outcome of source TEXT on every backend in BACKENDS.
+# The outcome of source TEXT on every backend in BACKENDS that runs its HIR
+# here (backendsFor: a Linux program runs natively on Linux only).
 proc outcomesOf {text {backends ""}} {
     if {$backends eq ""} {
         set backends $::allBackends
     }
     set hir [ctxHir $text]
-    return [lmap backend $backends {outcomeUnderHir $backend $hir}]
+    return [lmap backend [backendsFor [hir::cabi::targetOf $hir] $backends] {outcomeUnderHir $backend $hir}]
 }
 
-# The one shown value every backend in BACKENDS agrees on for TEXT, or a
-# description of the disagreement or error.
+# The one shown value every backend in BACKENDS (that runs it here) agrees on
+# for TEXT, or a description of the disagreement or error.
 proc agree {text {backends ""}} {
     if {$backends eq ""} {
         set backends $::allBackends

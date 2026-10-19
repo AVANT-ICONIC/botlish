@@ -141,6 +141,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 
 - [COMPILERPEDIA.md](COMPILERPEDIA.md) -- Compilerpedia, `-help`: the topic model, indices, search, help lines, generation, validation and maintenance
 - [COMPILERPEDIA-REPORT.md](COMPILERPEDIA-REPORT.md) -- the Compilerpedia milestone: the CLI changes, coverage, the lint audit and the 15-puzzle assessment
+- [IDIOMATIC-BOTLISH.md](IDIOMATIC-BOTLISH.md) -- the newcomer page of Compilerpedia (`principle.idiomatic-botlish`): its principles, search, the black-box audit and the questions that still need a probe
 
 ## Implementation
 
@@ -152,6 +153,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [SINGLE-EXECUTABLE.md](SINGLE-EXECUTABLE.md) -- the single-file compiler and the stub linker
 - [MACOS-AARCH64-PORT-AUDIT.md](MACOS-AARCH64-PORT-AUDIT.md) -- the macOS Apple Silicon port: every Linux assumption by subsystem, what runs on a real macOS arm64 host today, the macOS CI and its test tiers, and the milestone roadmap
 - [MACOS-AARCH64-MILESTONE-1.md](MACOS-AARCH64-MILESTONE-1.md) -- macOS port milestone 1: the platform audit and the Apple Silicon GitHub Actions infrastructure, with the CI evidence
+- [MACOS-AARCH64-MILESTONE-2.md](MACOS-AARCH64-MILESTONE-2.md) -- macOS port milestone 2: the compilation target as an operating system and an architecture -- target identity, macOS C ABI facts, the Apple AArch64 C convention, platform module resolution, HIR interchange and cache target isolation, and native host/target validation
 - [STRICT-REFERENCE-DETERMINISM.md](STRICT-REFERENCE-DETERMINISM.md) -- strict reference determinism
 - [CANONICAL-SURFACE-BENCHMARKS.md](CANONICAL-SURFACE-BENCHMARKS.md) -- every benchmark as ordinary `.bot` source
 - [COMPILER-BOTTLENECKS.md](COMPILER-BOTTLENECKS.md) -- compiler performance bugs: what to tackle next

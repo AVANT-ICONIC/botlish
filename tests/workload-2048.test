@@ -87,7 +87,8 @@ test workload-2048-golden-suite "golden.bot: compiles once, all 68 tests pass on
 test workload-2048-warning-clean {the engine, the demo, the suite and the benchmark have no warnings of their own (the stdlib's own findings, manifested by the warning gate, are not theirs)} -body {
     set found {}
     foreach name {game2048.bot demo.bot golden.bot bench.bot} {
-        set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel ""]
+        # (For a Linux target: the demo prints through linux::io.)
+        set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel "" -target [linuxTarget]]
         foreach warning [hir::warnings::of $hir] {
             set text [hir::warnings::render $hir $warning]
             if {[string match "$::core::libraryDir/*" $text]} {
@@ -102,7 +103,7 @@ test workload-2048-warning-clean {the engine, the demo, the suite and the benchm
 test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
     set rejected {}
     foreach name {game2048.bot demo.bot golden.bot bench.bot} {
-        if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel ""} message]} {
+        if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel "" -target [linuxTarget]} message]} {
             lappend rejected "$name: [lindex [split $message \n] 0]"
         }
     }
@@ -117,7 +118,7 @@ test workload-2048-bench-checksum "bench.bot's 200-move checksum is the same on 
 } -result [lrepeat [llength $workloadBackends] 2002720]
 
 test workload-2048-application-module {S4: the engine is an application module -- the file beside its programs, one namespace -- and no copy of it is in the standard library} -body {
-    set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off -cache ""]
+    set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off -cache "" -target [linuxTarget]]
     set engine [lmap {id file} [dict get $hir files] {
         expr {[file tail [dict get $file path]] eq "game2048.bot" ? [dict get $file path] : [continue]}
     }]

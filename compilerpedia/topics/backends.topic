@@ -265,33 +265,47 @@ about other platforms.
                              the Tcl backends run coroutines everywhere
     Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
                              AArch64 through linux::abi::aarch64 (one
-                             portable surface: linux, linux::io, io)
+                             portable surface: linux, linux::io, io);
+                             the linux namespaces compile for Linux
+                             targets only (error.unsupported-platform)
     executables              Linux, glibc; rustc linker on x86-64 and
                              AArch64, stub linker x86-64 only
     single executable        Linux x86-64
 
 @topic backend.targets
-title: -target: the C ABI target of a compilation
-summary: -target NAME chooses the target whose C ABI sizes the ffi::c integer types and whose architecture picks architecture-specific modules (linux::sys); the program still runs on the host.
+title: -target: the compilation target, an operating system and an architecture
+summary: -target NAME picks the operating system and architecture a program is built for (C type sizes, modules, platforms); native code runs only for the host's own target.
 index: backends
 alias: target; -target; cross compile; C ABI target
-keywords: target, linux-x86_64, linux-aarch64, macos, windows, ffi, linux::sys, architecture
-related: backend.platforms concept.c-ffi cli.options
-docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md
+keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, ffi, linux::sys, architecture, operating system, triple
+related: backend.platforms concept.c-ffi cli.options error.unsupported-platform error.native-target error.hir-interchange-target
+docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md MACOS-AARCH64-MILESTONE-2.md
 
 == WHAT IT DOES
 The targets are linux-x86_64, linux-aarch64, macos-x86_64, macos-aarch64,
-windows-x86_64 and windows-aarch64; the default is the host's. The target
-decides the widths and signedness of ffi::c's C integer types
-(ffi::c::Long is 64 bits on Linux and macOS, 32 on Windows) and which file
-an architecture-specific module comes from (linux::sys is
-lib/linux/sys.x86_64.bot or lib/linux/sys.aarch64.bot).
+windows-x86_64 and windows-aarch64 (to the native backend, triples:
+x86_64-unknown-linux-gnu, ..., aarch64-apple-darwin); the default is the
+host's. A target is an operating system and an architecture:
+linux-aarch64 and macos-aarch64 share an instruction set, not a target.
+The target decides:
+  * the widths and signedness of ffi::c's C integer types (ffi::c::Long
+    is 64 bits on Linux and macOS, 32 on Windows; plain ffi::c::Char is
+    unsigned on Linux AArch64 only);
+  * which file an architecture-specific module comes from (linux::sys is
+    lib/linux/sys.x86_64.bot or lib/linux/sys.aarch64.bot);
+  * whether a platform namespace is available: linux and everything
+    under it exist for Linux targets only (error.unsupported-platform);
+  * the C calling convention of foreign calls (Apple's on macOS AArch64).
+A HIR built with any of these records its target, and is never taken for
+another's: a .hirx file of another target is refused
+(error.hir-interchange-target), and the front-end cache keeps one entry
+per target.
 
 == WHAT IT DOES NOT DO
-It is not cross-compilation of the running program: the program still
-runs on the host, and an operation of another architecture's system-call
-transport is NATIVE UNSUPPORTED there. An unknown name is a usage error
-listing the targets.
+It is not cross-compilation to machine code: the native backends run and
+emit code only for the host's own target, and refuse another target's
+program (error.native-target). The Tcl backends run a program built for
+any target. An unknown name is a usage error listing the targets.
 
 @topic backend.hir-interchange
 title: HIR interchange (.hirx) and the front-end cache
@@ -377,10 +391,11 @@ docs: README.md
     -warnings MODE    default (print warnings, run), off (no warning
                       pass), error (reject a program that has a warning)
                       (lint.policy)
-    -target NAME      the C ABI target of a .bot compilation: linux-x86_64,
-                      linux-aarch64, macos-x86_64, macos-aarch64,
-                      windows-x86_64, windows-aarch64; default the host's
-                      (backend.targets)
+    -target NAME      the target (operating system and architecture) a
+                      .bot program is compiled, or a .hirx file read, for:
+                      linux-x86_64, linux-aarch64, macos-x86_64,
+                      macos-aarch64, windows-x86_64, windows-aarch64;
+                      default the host's (backend.targets)
     -L DIR            add DIR to the system linker's library search path,
                       for a program that calls C (concept.c-ffi)
 

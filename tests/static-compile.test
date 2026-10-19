@@ -45,14 +45,17 @@ proc scAgree {text} {
     return [sourceAgree [scProgram $text]]
 }
 
-# The HIR of the program TEXT (scProgram), strict, warnings off.
+# The HIR of the program TEXT (scProgram), strict, warnings off, for a Linux
+# target (linuxTarget: the host's own on Linux), where a program may import
+# linux::io; one importing no platform namespace is every target's.
 proc scHir {text} {
-    return [surface::compile [scProgram $text] -warnings off]
+    return [surface::compile [scProgram $text] -warnings off -target [linuxTarget]]
 }
 
-# The error code (last word) of compiling the program TEXT (scProgram), or ok.
+# The error code (last word) of compiling the program TEXT (scProgram, for a
+# Linux target as scHir), or ok.
 proc scCode {text} {
-    if {[catch {surface::compile [scProgram $text] -warnings off} message options]} {
+    if {[catch {surface::compile [scProgram $text] -warnings off -target [linuxTarget]} message options]} {
         set code [dict get $options -errorcode]
         if {[lrange $code 0 1] eq {SURFACE SYNTAX}} {
             set diagnostic [lindex $code 2]
@@ -604,7 +607,8 @@ set scCensus {
     top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
     not-from-source {LISTLOOP-BREAK-VALUE}
     header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL MODULE-COLLISION NOT-A-TYPE SELF-IMPORT
-        TYPE-IMPORT-COLLISION UNKNOWN-TARGET AMBIGUOUS-MODULE UNSUPPORTED-ARCHITECTURE STALE-DIRECT-MODULE}
+        TYPE-IMPORT-COLLISION UNKNOWN-TARGET AMBIGUOUS-MODULE UNSUPPORTED-ARCHITECTURE UNSUPPORTED-PLATFORM
+        STALE-DIRECT-MODULE}
     warning {SAME-RETURN-VALUE METHOD-ELIGIBLE FIXED-ARITY-LIST-RETURN SAME-FAILURE PROVES-NAMING
         ONE-CHAR-STRING-LITERAL MANY-BOOLEAN-ARGUMENTS}
     parser {STATIC-INTRINSIC-FORM STATIC-UNKNOWN-OPERATION COROUTINE-BINDING-FIELD MALFORMED-CONTEXT-SECTION

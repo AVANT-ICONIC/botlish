@@ -62,12 +62,12 @@ proc SdParents {hir} {
     return $parents
 }
 
-proc sdCompile {scheduler source {name <input>}} {
+proc sdCompile {scheduler source {name <input>} {target ""}} {
     set saved $hir::static::scheduler
     set hir::static::scheduler $scheduler
     try {
         set t0 [clock microseconds]
-        if {[catch {surface::compile $source $name -strict 0 -warnings off} hir options]} {
+        if {[catch {surface::compile $source $name -strict 0 -warnings off -target $target} hir options]} {
             return [dict create error [list [dict get $options -errorcode] $hir] us 0]
         }
         return [sdRecord $hir [expr {[clock microseconds] - $t0}]]

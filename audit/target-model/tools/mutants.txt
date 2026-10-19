@@ -1,0 +1,172 @@
+# Mutants of the compilation target boundary (MACOS-AARCH64-MILESTONE-2.md;
+# audit/target-model/tools/mutate.tcl): each a deliberate bug that lets one
+# target's meaning be taken for another's -- the target table
+# (core/cabi.tcl), platform module resolution and the HIR's recorded target
+# (surface/modules.tcl), the interchange check (hir/cabi.tcl,
+# hir/interchange.tcl), the cache (surface/cache.tcl), NIR's target line
+# (native/lower.tcl) and the driver's host check and C convention selection
+# (native/src). None mutates what Cranelift owns (register assignment, stack
+# placement, extension): only the compiler's choice of the convention.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit
+# are comments. A mutant editing native/src rebuilds a private copy of the
+# native backend. Update a mutant's text when the code it mutates changes,
+# keeping it a mutant of the same rule.
+
+@@ macos-plain-char-unsigned macOS AArch64's plain char is unsigned, as Linux AArch64's
+## core/cabi.tcl
+<<<<
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
+====
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 0 triple aarch64-apple-darwin} \
+>>>>
+
+@@ macos-reduced-to-linux-identity the macos-aarch64 row is Linux AArch64's: one identity for one architecture
+## core/cabi.tcl
+<<<<
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
+====
+        macos-aarch64   {os linux arch aarch64 model LP64 charSigned 0 triple aarch64-unknown-linux-gnu} \
+>>>>
+
+@@ host-darwin-is-linux the host's operating system is not read: Darwin is taken for Linux
+## core/cabi.tcl
+<<<<
+        darwin { set os macos }
+====
+        darwin { set os linux }
+>>>>
+
+@@ linux-module-under-macos no platform check: linux::sys resolves for macos-aarch64 to the architecture's file
+## surface/modules.tcl
+<<<<
+    set os [PlatformOf $name]
+    if {$os eq ""} {
+        return
+    }
+====
+    set os [PlatformOf $name]
+    if {1} {
+        return
+    }
+>>>>
+
+@@ platform-by-spelling every standard namespace named like an operating system of the target table is that system's platform, designated or not
+## core/cabi.tcl
+<<<<
+    return [expr {[dict exists $platforms $root] ? [dict get $platforms $root] : ""}]
+====
+    return [expr {$root in [operatingSystems] ? $root : ""}]
+>>>>
+
+@@ platform-by-architecture-only the platform check accepts any target, the architecture deciding alone
+## surface/modules.tcl
+<<<<
+    if {[dict get $meta os] ne $os} {
+====
+    if {0} {
+>>>>
+
+@@ hir-target-not-recorded the HIR never records its target
+## surface/modules.tcl
+<<<<
+    dict set hir target [expr {[dict get $state targetRead] ? [dict get $state target] : ""}]
+====
+    dict set hir target ""
+>>>>
+
+@@ arch-module-target-independent choosing an architecture-specific module's file does not make the build target-dependent
+## surface/modules.tcl
+<<<<
+    } elseif {$path in [dict values [ArchModuleFiles $name]]} {
+        # The target's architecture chose the file (ModuleFile).
+        dict set state targetRead 1
+    }
+====
+    }
+>>>>
+
+@@ unknown-target-after-declarations ffi::c's declarations are made before the target is checked
+## surface/modules.tcl
+<<<<
+    if {[hir::cabi::HasNamespaceTypes $name]} {
+====
+    if {0} {
+>>>>
+
+@@ interchange-architecture-only interchange text of another target is accepted when the architectures match
+## hir/cabi.tcl
+<<<<
+    if {$built eq "" || $built eq $target} {
+====
+    if {$built eq "" || $target eq "" || [dict get [core::cabi::target $built] arch] eq [dict get [core::cabi::target $target] arch]} {
+>>>>
+
+@@ interchange-unchecked decode -target checks nothing
+## hir/interchange.tcl
+<<<<
+    set check [dict exists $args -target]
+====
+    set check 0
+>>>>
+
+@@ cache-key-architecture-only the cache key holds the target's architecture, not the target
+## surface/cache.tcl
+<<<<
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
+====
+        libraries $::core::loadedLibraries strict $strict warnings $mode \
+        target [expr {$target eq "" ? "" : [dict get [core::cabi::target $target] arch]}] \
+>>>>
+
+@@ cache-decode-unchecked a cache hit's HIR is not checked against the compilation's target
+## surface/cache.tcl
+<<<<
+        set hir [hir::interchange::decode [dict get $entry interchange] -target $target]
+====
+        set hir [hir::interchange::decode [dict get $entry interchange]]
+>>>>
+
+@@ nir-target-line-dropped NIR never names the program's target
+## native/lower.tcl
+<<<<
+    if {$built ne ""} {
+        lappend header "target [Quote $built] triple=[Quote [dict get [core::cabi::target $built] triple]]"
+====
+    if {0} {
+        lappend header "target [Quote $built] triple=[Quote [dict get [core::cabi::target $built] triple]]"
+>>>>
+
+@@ driver-runs-any-target the driver runs and emits machine code for a program of any target
+## native/src/main.rs
+<<<<
+    if matches!(command, "run" | "bench" | "batch" | "object" | "executable") {
+====
+    if false {
+>>>>
+
+@@ host-check-architecture-only machine code runs where the architecture matches, whatever the operating system
+## native/src/codegen/target.rs
+<<<<
+    target.architecture == host.architecture
+        && os_family(target.operating_system) == os_family(host.operating_system)
+====
+    target.architecture == host.architecture
+>>>>
+
+@@ foreign-calls-generic-convention a foreign C call uses the generic SystemV convention on every target, Apple AArch64's included
+## native/src/codegen/target.rs
+<<<<
+    CallConv::triple_default(triple)
+====
+    let _ = triple;
+    CallConv::SystemV
+>>>>

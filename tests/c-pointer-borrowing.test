@@ -670,7 +670,8 @@ test cb-namespace-separation {the C ABI and the Linux syscall ABI share internal
             lappend natives [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
         }
     }
-    set write [surface::readProgramFile [file join $::projectRoot examples linux write.bot] -warnings off]
+    # (A Linux program: for a Linux target, linuxTarget.)
+    set write [surface::readProgramFile [file join $::projectRoot examples linux write.bot] -warnings off -target [linuxTarget]]
     set exposures 0
     dict for {e node} [dict get $write exprs] {
         if {[dict exists $node borrows]} {

@@ -43,6 +43,7 @@
 #                                       derived) microseconds, not truncated
 #                                       to a whole number
 #   native::object HIR PATH ?OPTIONS?   writes an object file (AOT smoke test)
+#   native::targetFacts TRIPLE          how the driver reads a target triple
 #   native::executable HIR PATH ?OPTIONS?  links a standalone Linux glibc (x86_64,
 #                                         or aarch64 with the rustc linker)
 #                                         executable; rejects non-closed HIR.
@@ -146,6 +147,23 @@ proc native::binary {} {
         throw {NATIVE NOT-BUILT} "native backend not built: run \"cargo build --release\" in $home"
     }
     return $path
+}
+
+# How the driver reads the target triple TRIPLE (botlish-native target,
+# native/src/codegen/target.rs): a dict {arch A os O pointer BITS format F
+# c-call-conv C host HOST-TRIPLE runs 0|1}, Cranelift's and target-lexicon's
+# reading -- C the calling convention a foreign C call compiled for TRIPLE
+# uses, RUNS whether machine code for it runs on this host. Raises the
+# driver's {NATIVE TARGET} error for a triple it cannot read.
+proc native::targetFacts {triple} {
+    set pipe [open |[list [binary] target $triple 2>@1] r]
+    fconfigure $pipe -encoding utf-8 -translation lf
+    set output [string trimright [read $pipe] \n]
+    catch {close $pipe}
+    if {[lindex $output 0] ne "target"} {
+        Outcome [split $output \n]
+    }
+    return [lrange $output 2 end]
 }
 
 # The NIR text of the program-mode HIR program HIR.

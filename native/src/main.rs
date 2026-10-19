@@ -20,7 +20,20 @@
 //!                                        (BOTLISH_NATIVE_LINKER: rustc, the
 //!                                        default, or stub: codegen/aot.rs)
 //!   botlish-native check FILE.nir        parse and validate only
+//!   botlish-native target TRIPLE         how this driver reads a target
+//!                                        triple: architecture, operating
+//!                                        system, pointer width, object format,
+//!                                        C calling convention, this host's
+//!                                        triple, and whether code for it runs
+//!                                        here (codegen/target.rs)
 //! ```
+//!
+//! A program built for a target (NIR's `target "NAME" triple="TRIPLE"`) is
+//! run (`run`, `bench`, `batch`) or emitted (`object`, `executable`) only on
+//! that target's host: anything else is `error {NATIVE TARGET} ...`, before
+//! any code is made, however much the two targets share (linux-aarch64 code
+//! never runs on macOS arm64). The other commands show this host's view of
+//! any program.
 //!
 //! `run`/`bench`/`batch` accept `--argv ARGS` or `--argv-file PATH` (anywhere
 //! on the line; the file holds ARGS, for vectors too large for one command-line
@@ -250,7 +263,7 @@ fn extract_link_dirs(args: &[String]) -> Option<(Vec<String>, Vec<String>)> {
 
 fn cli(args: &[String]) -> i32 {
     let usage = || {
-        eprintln!("usage: botlish-native run|clif|vcode|size|roots|calls|check FILE.nir [--alloc off|summary|sites] [--argv ARGS|--argv-file PATH] | bench RUNS FILE.nir [--alloc ...] | batch CALLS FILE.nir | object|executable OUT FILE.nir (each also [--result PATH])");
+        eprintln!("usage: botlish-native run|clif|vcode|size|roots|calls|check FILE.nir [--alloc off|summary|sites] [--argv ARGS|--argv-file PATH] | bench RUNS FILE.nir [--alloc ...] | batch CALLS FILE.nir | object|executable OUT FILE.nir | target TRIPLE (each also [--result PATH])");
         2
     };
     let Some((args, link_dirs)) = extract_link_dirs(args) else { return usage() };
@@ -261,6 +274,23 @@ fn cli(args: &[String]) -> i32 {
         Some((c, rest)) => (c.as_str(), rest),
         None => return usage(),
     };
+    if command == "target" {
+        // `target TRIPLE`: how this driver reads a target triple
+        // (codegen::target::describe), for the front end's target table.
+        return match rest {
+            [triple] => match codegen::target::describe(triple) {
+                Ok(words) => {
+                    emit(&tcl_list(&words));
+                    0
+                }
+                Err(e) => {
+                    emit_error(&["NATIVE", "TARGET"], &e);
+                    1
+                }
+            },
+            _ => usage(),
+        };
+    }
     let (runs, file) = match (command, rest) {
         ("bench", [runs, file, ..]) => match runs.parse::<usize>() {
             Ok(n) if n > 0 => (n, file),
@@ -288,6 +318,15 @@ fn cli(args: &[String]) -> i32 {
             return 0;
         }
     };
+    if matches!(command, "run" | "bench" | "batch" | "object" | "executable") {
+        // Machine code to run or to keep is the host's own target's only
+        // (codegen/target.rs). The diagnostic commands (clif, vcode, size,
+        // roots, calls, check) still show this host's view of any program.
+        if let Err(message) = codegen::target::check_host(&program) {
+            emit_error(&["NATIVE", "TARGET"], &message);
+            return 1;
+        }
+    }
     match command {
         "check" => {
             emit("ok");

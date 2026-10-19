@@ -48,9 +48,11 @@ proc removeApps {} {
     }
 }
 
-# The HIR of DIR/MAIN (strict unless STRICT is 0).
+# The HIR of DIR/MAIN (strict unless STRICT is 0), for a Linux target
+# (linuxTarget: the host's own on Linux): these programs use the Linux
+# platform's direct modules.
 proc appHir {dir {main main.bot} {strict 1}} {
-    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -strict $strict]
+    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -strict $strict -target [linuxTarget]]
 }
 
 # "KIND: MESSAGE" of the compilation of DIR/MAIN, with DIR spelled APP and
@@ -224,7 +226,7 @@ test dm-syscall-contextualized {the same raw call from a function requiring Loca
 } -cleanup removeApps -result {{{} contextualized} {{emit linux::write LocalIO}} 0}
 
 test dm-syscall-stdlib-layering {the standard library's own boundary: the transport provided direct, linux::sys (the architecture's syscall numbers and registers) and linux declared direct modules, linux::io contextualized by its LinuxIO, and a program using linux::io ordinary} -body {
-    set hir [surface::readProgramFile [file join $::projectRoot examples linux context-hello.bot] -warnings off -cache ""]
+    set hir [surface::readProgramFile [file join $::projectRoot examples linux context-hello.bot] -warnings off -cache "" -target [linuxTarget]]
     list [statuses $hir {linux::sys linux linux::io ""}] [llength [dict get $hir direct intrinsic]]
 } -result {{linux::sys direct linux direct linux::io contextualized {} ordinary} 1}
 
@@ -338,8 +340,9 @@ test dm-transitive-runs {the contextualized syscall path runs natively (the cont
 
 test dm-tooling-explains {main.tcl -direct explains every unit: declaration, inference, status and each direct edge with what mediates it} -constraints nativeBuilt -body {
     set dir [app $::transitiveApp]
-    # (The run itself is the Tcl backend's NATIVE-ONLY refusal of the syscall.)
-    catch {exec [info nameofexecutable] $::mainScript -backend interp -direct -warnings off [file join $dir main.bot] 2>@1} out
+    # (The run itself is the Tcl backend's NATIVE-ONLY refusal of the syscall;
+    # a Linux program, compiled for a Linux target: linuxTarget.)
+    catch {exec [info nameofexecutable] $::mainScript -backend interp -direct -warnings off -target [linuxTarget] [file join $dir main.bot] 2>@1} out
     set lines [lmap line [split [string map [list $dir/ ""] $out] \n] {
         expr {[regexp {^(module (raw|wrapper|consumer)|entry program|    (raw|wrapper)::|intrinsic)} $line] ? $line : [continue]}
     }]

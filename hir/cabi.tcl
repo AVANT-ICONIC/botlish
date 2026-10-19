@@ -69,6 +69,38 @@ proc hir::cabi::ResolveTarget {target} {
     return $target
 }
 
+# 1 if namespace NS has target-dependent intrinsic type declarations
+# (NamespaceTypeDecls): ffi::c, whose scalars are the target's.
+proc hir::cabi::HasNamespaceTypes {ns} {
+    return [expr {$ns eq $::core::cabi::namespace}]
+}
+
+# The target HIR was built for (surface/modules.tcl, "Target dependence"):
+# the compilation target when the build read it (an architecture-specific
+# module, a platform namespace, ffi::c's scalars), "" for a HIR that is
+# every target's. A HIR from HIR text records the target its C integer
+# scalars name (hir::read); one from core IR text none.
+proc hir::cabi::targetOf {hir} {
+    return [expr {[dict exists $hir target] ? [dict get $hir target] : ""}]
+}
+
+# Why HIR cannot stand for a compilation for TARGET, or "" when it can: a HIR
+# built for another target keeps that target's meaning (its C scalars'
+# widths and signedness, its platform modules), which is never reinterpreted
+# as TARGET's -- not even for a target of the same architecture and pointer
+# width. A HIR that is every target's (targetOf "") stands for any; TARGET ""
+# (a host that is no known target) accepts only such a HIR.
+proc hir::cabi::TargetMismatch {hir target} {
+    set built [targetOf $hir]
+    if {$built eq "" || $built eq $target} {
+        return ""
+    }
+    if {$target eq ""} {
+        return "it was built for target $built, and this host ($::tcl_platform(os) $::tcl_platform(machine)) is none of the known targets: name the target with -target $built"
+    }
+    return "it was built for target $built, not $target: a HIR keeps the target it was built for (its C ABI facts and platform modules) and is never reinterpreted as another's; compile the program for $target"
+}
+
 # The intrinsic type declarations of namespace NS on C TARGET, located at
 # SPAN (the module file's): the C integer scalars for ffi::c, nothing for any
 # other namespace. Shaped like surface/lower.tcl's TypeDeclOf dicts plus

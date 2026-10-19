@@ -150,10 +150,16 @@ ARCH one of the targets' architectures (`core::cabi::architectures`:
   file. The qualified spelling stays the only one: `linux::sys::write` is
   defined by exactly the target's file.
 * **By architecture, never by operating system.** The module's own namespace
-  says which OS it is for. A compilation for `windows-x86_64` (the Windows
-  development machine's host target) loads `sys.x86_64.bot` and runs
-  exactly as before: the Tcl backends refuse the syscall, the native one
-  reports the transport unsupported on that OS.
+  says which OS it is for, and is checked first: the `linux` namespace and
+  everything under it are the Linux platform's, so for a target of another
+  operating system (`macos-aarch64`, `windows-x86_64`) the import is
+  `UNSUPPORTED-PLATFORM` before any file is chosen (surface/modules.tcl's
+  `PlatformCheck`; MACOS-AARCH64-MILESTONE-2.md) -- `sys.aarch64.bot` is
+  Linux AArch64's, never macOS AArch64's. Before milestone 2 of the macOS
+  port, `windows-x86_64` loaded `sys.x86_64.bot` and refused only at run
+  time. An architecture-specific namespace that is no platform's (a
+  `demo::arch`) still goes by architecture alone, on every operating
+  system.
 * **Diagnostics, at the import:** both `P.bot` and `P.ARCH.bot` is
   `AMBIGUOUS-MODULE`; files for other architectures only is
   `UNSUPPORTED-ARCHITECTURE` (naming the files it has and the one it lacks);
@@ -166,10 +172,12 @@ ARCH one of the targets' architectures (`core::cabi::architectures`:
   candidate paths of every imported namespace -- `lib/P.bot` and the target
   architecture's `lib/P.ARCH.bot`, with whether each exists and the text the
   build read -- so a file appearing at either one invalidates the entry.
-* **HIR interchange** is unchanged: a HIR holds the code of the file its
-  build read. A `.hirx` built for one architecture and run on the other
-  runs that architecture's transport, which is `NATIVE UNSUPPORTED` there,
-  as ffi::c's widths are the build's.
+* **HIR interchange**: a HIR holds the code of the file its build read, and
+  records its target. A `.hirx` built for one target is refused as a
+  compilation for another (`HIR INTERCHANGE TARGET`), and the native driver
+  refuses to run a HIR built for another target (`NATIVE TARGET`), so the
+  other architecture's transport is never reached natively; the Tcl
+  backends still run it, and refuse the syscall (NATIVE-ONLY).
 * **Compilation isolation** is unchanged: no registry is added; the
   transport table and the bridges are bootstrap natives, the same in every
   compilation.

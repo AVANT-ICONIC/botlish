@@ -1385,7 +1385,20 @@ pub struct ForeignDecl {
     pub alias: Option<u32>,
 }
 
+/// The compilation target a program was built for (`target "NAME"
+/// triple="TRIPLE"`, core/cabi.tcl's name and its triple): present when the
+/// program's HIR depends on its target (its C scalars, a platform or an
+/// architecture-specific module). The driver makes machine code for it only
+/// on that target's host (codegen::target::check_host).
+pub struct Target {
+    pub name: String,
+    pub triple: String,
+}
+
 pub struct Program {
+    /// The target the program was built for, None for a program that is
+    /// every target's.
+    pub target: Option<Target>,
     pub natives: Vec<NativeDecl>,
     pub shapes: Vec<ShapeDecl>,
     pub enums: Vec<EnumDecl>,
@@ -1554,6 +1567,7 @@ fn word(t: &Token) -> Option<&str> {
 pub fn parse(text: &str) -> Result<Program, NirError> {
     let mut p = Parser { line: 0 };
     let mut program = Program {
+        target: None,
         natives: Vec::new(),
         shapes: Vec::new(),
         enums: Vec::new(),
@@ -1622,6 +1636,18 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
                             program.context_bytes));
                     }
                     program.contexts.push(decl.1);
+                }
+                "target" => {
+                    let triple = pairs(&tokens).get("triple").cloned().unwrap_or_default();
+                    match tokens.get(1) {
+                        Some(Token::Quoted(name)) if !name.is_empty() && !triple.is_empty() && tokens.len() == 3 => {
+                            if program.target.is_some() {
+                                return p.err("a program has one target");
+                            }
+                            program.target = Some(Target { name: name.clone(), triple });
+                        }
+                        _ => return p.err("target needs a quoted target name and triple=TRIPLE"),
+                    }
                 }
                 "link" => match tokens.get(1) {
                     Some(Token::Quoted(name)) if !name.is_empty() && tokens.len() == 2 => {

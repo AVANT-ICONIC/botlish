@@ -93,10 +93,10 @@
 @@ module-abort a strict compilation stops after the first resolution failure: no check of any other function runs
 ## surface/modules.tcl
 <<<<
-    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
+    set hir [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
 ====
-    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
+    set hir [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
         -halt-on-resolution-errors $strict \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
 >>>>

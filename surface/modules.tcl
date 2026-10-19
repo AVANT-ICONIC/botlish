@@ -51,7 +51,32 @@
 # target's architecture is UNSUPPORTED-ARCHITECTURE (and, on a host that is
 # no known target, UNKNOWN-TARGET: compile with -target). The selection is by
 # architecture only, never by operating system: the module's own namespace
-# says which OS it is for.
+# says which OS it is for (below).
+#
+# Platform namespaces. The target table designates the standard namespace
+# trees that are an operating system's platform interface
+# (core::cabi::platformOf): the `linux` namespace and every namespace under
+# it (linux::sys, linux::io, linux::path, the syscall transports
+# linux::abi::x86_64 and linux::abi::aarch64) are Linux's. Nothing is
+# inferred from a spelling: a module that happens to be named like an
+# operating system (a private library's `windows`) is no platform's. Importing one is UNSUPPORTED-PLATFORM
+# when the compilation target's operating system is another one
+# (linux::sys for macos-aarch64 never becomes lib/linux/sys.aarch64.bot just
+# because both are AArch64), and UNKNOWN-TARGET on a host that is no known
+# target (PlatformCheck, before any file is chosen). Nothing is mapped or
+# substituted: a Linux module is never another system's. An architecture-
+# specific namespace outside a platform (abi::aarch64, a demo::arch) stays
+# available to every operating system of its architecture, and an
+# application module is the application's whatever its name.
+#
+# Target dependence. A build reads the target in exactly three places: an
+# architecture-specific module's file (ModuleFile), a platform namespace's
+# check (PlatformCheck) and ffi::c's scalars (hir::cabi::NamespaceTypeDecls).
+# The loader records whether any of them ran (STATE's `targetRead`), and the
+# HIR records the target only then (BuildProgram: its `target`, "" for a
+# program whose HIR is the same for every target), so a HIR built for one
+# target is never taken for another's (hir::cabi::targetOf: the native
+# driver's host check, the interchange's -target check).
 #
 # Reference syntax (needs the file's `import mod`, or `import a::b`): mod::name, or a::b::name for a nested namespace a::b
 # (surface/parser.tcl's qualname primary: every segment but the last is the
@@ -237,6 +262,9 @@ proc surface::modules::ResolveModule {stateVar key name span} {
     set hasStandard [HasModule $name]
     set isStandard [expr {$hasStandard || [IntrinsicMembers $name] ne ""}]
     if {![IsApplicationFile $state $key]} {
+        if {$isStandard} {
+            PlatformCheck state $name $span
+        }
         return [expr {$hasStandard ? [ModuleFile $name [dict get $state target] $span] : ""}]
     }
     set application [ApplicationFile $state $name]
@@ -253,6 +281,9 @@ proc surface::modules::ResolveModule {stateVar key name span} {
     }
     if {$application ne "" && $isStandard} {
         Error MODULE-COLLISION $span "application module $application has the name of the standard namespace \"$name\" ([expr {$hasStandard ? "the standard library's [StandardFiles $name]" : "compiler intrinsics"}]), which `import $name` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module"
+    }
+    if {$isStandard} {
+        PlatformCheck state $name $span
     }
     if {$hasStandard} {
         return [ModuleFile $name [dict get $state target] $span]
@@ -274,6 +305,65 @@ proc surface::modules::NoSuchNamespace {state key ns} {
         return "no such module file [NamespaceFile [dict get $state root] $ns] (an application's own modules are the files beside its entry program), and in the standard library no such module file [ModulePath $ns] and no intrinsics of that namespace"
     }
     return "no such module file [ModulePath $ns] and no intrinsics of that namespace"
+}
+
+# The operating system whose platform the standard namespace NAME belongs
+# to, or "": the target table's designation (core::cabi::platformOf) --
+# `linux`, `linux::sys` and `linux::abi::x86_64` are Linux's (header,
+# "Platform namespaces").
+proc surface::modules::PlatformOf {name} {
+    return [core::cabi::platformOf $name]
+}
+
+# Checks that the standard namespace NAME, imported at SPAN, is available to
+# STATE's compilation target: a platform namespace (PlatformOf) only to a
+# target of its operating system -- UNSUPPORTED-PLATFORM for another
+# system's target, UNKNOWN-TARGET for a host that is no known target. A
+# platform namespace makes the build target-dependent (`targetRead`).
+proc surface::modules::PlatformCheck {stateVar name span} {
+    upvar 1 $stateVar state
+    set os [PlatformOf $name]
+    if {$os eq ""} {
+        return
+    }
+    set target [dict get $state target]
+    set system [core::cabi::systemName $os]
+    if {$target eq ""} {
+        Error UNKNOWN-TARGET $span "namespace \"$name\" belongs to the $system platform, and this host ($::tcl_platform(os) $::tcl_platform(machine)) is none of the known targets; compile with -target ([join [core::cabi::targetNames] {, }])"
+    }
+    set meta [core::cabi::target $target]
+    if {[dict get $meta os] ne $os} {
+        Error UNSUPPORTED-PLATFORM $span "namespace \"$name\" belongs to the $system platform (the standard namespace $os and every namespace under it), which is unavailable for target $target ([core::cabi::systemName [dict get $meta os]] on [dict get $meta arch]): a $system module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a $system target (-target $os-[dict get $meta arch]) or import no $system namespace"
+    }
+    dict set state targetRead 1
+}
+
+# The C ABI target a tool on this host compiles the program text SOURCE for
+# when it runs programs of every platform (the golden runner, the warning
+# gate): "" -- the host's -- unless SOURCE's header imports a platform
+# namespace (PlatformOf) of another operating system than the host's, and
+# then that system's target of this host's architecture
+# (core::cabi::systemTarget: a Linux program on an arm64 Mac is compiled for
+# linux-aarch64, and runs there on the Tcl backends only). A compilation's
+# own target is always its -target or the host's: the compiler never calls
+# this. Text that does not parse is the host's (its compilation reports why).
+proc surface::modules::PlatformTarget {source} {
+    set host [core::cabi::hostTarget]
+    set hostOs [expr {$host eq "" ? "" : [dict get [core::cabi::target $host] os]}]
+    if {[lsort -unique [concat [dict values $::core::cabi::platforms] [list $hostOs]]] eq [list $hostOs]} {
+        # Every platform is the host's own: nothing to read.
+        return ""
+    }
+    if {[catch {surface::parse $source} ast]} {
+        return ""
+    }
+    foreach import [dict get $ast imports] {
+        set os [PlatformOf [dict get $import namespace]]
+        if {$os ne "" && $os ne $hostOs} {
+            return [core::cabi::systemTarget $os]
+        }
+    }
+    return ""
 }
 
 # The path of NAME's architecture-specific module file for architecture
@@ -718,6 +808,9 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     }
     if {![IsStandardFile $name $path]} {
         dict set state application $name 1
+    } elseif {$path in [dict values [ArchModuleFiles $name]]} {
+        # The target's architecture chose the file (ModuleFile).
+        dict set state targetRead 1
     }
     set ast [ParseModule $path]
     foreach statement [dict get $ast body] {
@@ -798,11 +891,15 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     # The namespace's intrinsic types (C-ABI-TYPES.md): ffi::c's C integer
     # scalars, declared for the compilation's C target as if the module
     # declared them itself.
-    set intrinsic [hir::cabi::NamespaceTypeDecls $name [dict get $state target] [dict get $ast span]]
-    if {$intrinsic ne ""} {
+    if {[hir::cabi::HasNamespaceTypes $name]} {
+        # (Checked before the declarations are made: they need the target.)
         if {[dict get $state target] eq ""} {
             Error UNKNOWN-TARGET $usedAtSpan "namespace \"$name\" needs a C ABI target, and this host ($::tcl_platform(os) $::tcl_platform(machine)) is none of the known ones; compile with -target ([join [core::cabi::targetNames] {, }])"
         }
+        dict set state targetRead 1
+    }
+    set intrinsic [hir::cabi::NamespaceTypeDecls $name [dict get $state target] [dict get $ast span]]
+    if {$intrinsic ne ""} {
         set decls [concat $intrinsic $decls]
         dict set state loadedTypes $name [concat [lmap d $intrinsic {dict get $d name}] [dict get $state loadedTypes $name]]
     }
@@ -1370,7 +1467,7 @@ proc surface::modules::NewState {files nextFile} {
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} externDecls {} linkDecls {} \
         staticDeferred [dict create] \
-        target "" root "" entry "" application [dict create] moduleDecls [dict create] \
+        target "" targetRead 0 root "" entry "" application [dict create] moduleDecls [dict create] \
         referenceErrors {}]
 }
 
@@ -1450,13 +1547,17 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
     dict set moduleDecls "" [ModuleDecl $ast f1]
     # A strict compilation goes on past resolution failures: what checking
     # finds independently of them is reported with them (hir/recovery.tcl).
-    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
+    set hir [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
         -files [dict get $state files] -modules [dict get $state sections] \
         -imports [dict get $state imports] -module-decls $moduleDecls \
         -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls -trait-decls $traitDecls \
         -foreign-decls [concat [dict get $state externDecls] $ownExternDecls] \
         -link-decls [concat [dict get $state linkDecls] $ownLinkDecls]]
+    # The target the HIR was built for, when the build read it (header,
+    # "Target dependence"); "" when the HIR is every target's.
+    dict set hir target [expr {[dict get $state targetRead] ? [dict get $state target] : ""}]
+    return $hir
 }
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,
