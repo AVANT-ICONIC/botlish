@@ -610,6 +610,26 @@ test cb-layout-arrays {an array field is recorded, never flattened: its element 
     list $out $bits [regexp -all -line {^\s+field name} [dict get [generation $::fixture linux-x86_64] files bgf/layouts.bot]]
 } -result {{{{struct bgf_chars} {category char element char bounds 16} 16 4} {{struct bgf_wide_text} {category wide-char element wchar_t bounds 8} 8 4} {{struct bgf_points4} {category record element bgf_point bounds 4} 4 0} {{struct bgf_ptrs3} {category pointer element {void *} bounds 3} 3 0} {{struct bgf_matrix} {category scalar element int bounds {2 3}} 2 0} {{struct bgf_flex} {category scalar element int bounds {{}}} - 8}} {{a 3 {}} {b 5 {}} {rest {} 4}} 2}
 
+test cb-layout-array-of-blocked {an array of a record is a by-value dependency like the record itself (FIXED-LAYOUT-ARRAYS.md): an array -- one- or two-dimensional -- of a blocked record blocks its holder, nested-layout-blocked through an array element with the element's root reasons, and the holder is never emitted; an array of a record with a layout is a layout field naming that layout} -constraints clang -body {
+    set copy [scratch]
+    file copy [file join $::fixtureDir include] [file join $copy include]
+    set h [file join $copy include bgf bgf_records.h]
+    set text [::chdr::readFile $h]
+    set end [string last "#endif" $text]
+    writeText $h "[string range $text 0 [expr {$end - 1}]]typedef struct bgf_flags2 { bgf_flag flags\[2\]; int n; } bgf_flags2;\ntypedef struct bgf_flag_rows { int n; bgf_flag rows\[2\]\[3\]; } bgf_flag_rows;\ntypedef struct bgf_rects2 { bgf_rect rects\[2\]; } bgf_rects2;\n\n[string range $text $end end]"
+    set profile [fixtureWith [dict create headers [dict merge [dict get $::fixture headers] [dict create source [list local $copy]]]]]
+    set result [::cbind::generate::run $profile linux-x86_64]
+    set recs [dict get $result model layouts]
+    set layouts [dict get $result files bgf/layouts.bot]
+    set out [lmap key {{struct bgf_flags2} {struct bgf_flag_rows} {struct bgf_rects2}} {
+        set r [dict get $recs $key]
+        list $key [dict get $r status] [lmap b [dict get $r transitive] {lindex $b 1}] [::cbind::records::RootReasons $recs $key] \
+            [string match "*\nlayout [dict get $r layoutName]:\n*" $layouts]
+    }]
+    # (Every array field of either element: the blocked one has none.)
+    list $out [regexp -all -inline -line {^\s+field \S+: (?:array \d+ of )+bgf_(?:flag|rect) .*$} $layouts]
+} -cleanup removeScratch -result {{{{struct bgf_flags2} layout-blocked {{field flags (struct bgf_flag, array-element) -> c-bool}} c-bool 0} {{struct bgf_flag_rows} layout-blocked {{field rows (struct bgf_flag, array-element) -> c-bool}} c-bool 0} {{struct bgf_rects2} layout-direct {} {} 1}} {{    field rects: array 2 of bgf_rect at 0  # bgf_rect rects[2]}}}
+
 test cb-layout-naming {layout names are stable and collision-safe, read from the records only: the first typedef naming a tag, else the tag; a typedef and a tag of one name are two records and two layouts (bgf_coll, bgf_coll_struct); C names Botlish reserves are renamed (loop_, List_; fields fn_, type_, loop_); several typedefs of one record are one layout listing them all; an anonymous record is named by its typedef or by its container's name and member; reversing the header's declarations changes no name} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
     set names [lmap key {{struct bgf_coll_a} {struct bgf_coll} {struct bgf_kw} {struct List} {struct bgf_multi}} {

@@ -16,18 +16,20 @@
 # pointers, earlier records and struct lf_inner, two-dimensional ones) --
 # and, in some records, a field the layout language lacks: a flexible array
 # member, a union by value, a bitfield, a float, a double, a _Bool, an
-# array of one of those, or a record that holds one of those by value. The fuzzer generates its binding for TARGET (the host's by
-# default; any target of the fixture's: the header is freestanding) with an
-# in-memory profile, and checks, each against something other than the
-# generator:
+# array of one of those, or a record that holds one of those by value
+# (directly or as an array's elements). The fuzzer generates its binding
+# for TARGET (the host's by default; any target of the fixture's: the
+# header is freestanding) with an in-memory profile, and checks, each
+# against something other than the generator:
 #
 #   * its own model: which records are layouts and which are blocked, with
 #     which direct blocker and which root reasons (a record holding a
-#     blocked one is nested-layout-blocked, rooted in the inner reason; a
-#     pointer to a blocked record blocks nothing); each emitted layout's
-#     field names, in order, and their Botlish types -- the C scalar its own
-#     table of the target's data model gives each C type and stdint name,
-#     the pointee identity its own naming rule gives each pointer;
+#     blocked one, or an array of it, is nested-layout-blocked, rooted in
+#     the inner reason; a pointer to a blocked record blocks nothing); each
+#     emitted layout's field names, in order, and their Botlish types -- the
+#     C scalar its own table of the target's data model gives each C type
+#     and stdint name, the pointee identity its own naming rule gives each
+#     pointer;
 #   * a second C compiler (GCC: cc on the host, the target's cross gcc
 #     elsewhere, when installed): every size, alignment and offset the
 #     emitted layouts state, and every array's sizeof and its last element's
@@ -265,7 +267,7 @@ proc drawBlocked {r i name earlier last} {
     set blockedEarlier [lmap e $earlier {expr {[dict get $e kind] eq "struct" && ![dict get $e anonymous] && [dict get $e expectStatus] eq "blocked" ? $e : [continue]}}]
     set shapes {union bitfield float double bool floats bools unions}
     if {$last} { lappend shapes flexible }
-    if {[llength $blockedEarlier]} { lappend shapes nestedBlocked nestedBlocked }
+    if {[llength $blockedEarlier]} { lappend shapes nestedBlocked nestedBlocked nestedBlockedArray }
     set shape [pick $shapes]
     switch -- $shape {
         floats { return [dict create c "float $name\[[between 1 4]\]" expect blocked reason float] }
@@ -280,6 +282,12 @@ proc drawBlocked {r i name earlier last} {
         nestedBlocked {
             set e [pick $blockedEarlier]
             return [dict create c "struct [dict get $e tag] $name" expect blocked reason nested roots [dict get $e expectRoots] dep [dict get $e key]]
+        }
+        nestedBlockedArray {
+            # (An array of a blocked record is blocked by its element:
+            # FIXED-LAYOUT-ARRAYS.md.)
+            set e [pick $blockedEarlier]
+            return [dict create c "struct [dict get $e tag] $name\[[between 1 4]\]" expect blocked reason nested roots [dict get $e expectRoots] dep [dict get $e key]]
         }
     }
 }
