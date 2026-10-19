@@ -36,7 +36,11 @@ proc out {phase {ext tsv}} {
 proc step {what args} {
     puts "[clock format [clock seconds] -format %H:%M:%S] $what"
     flush stdout
-    exec {*}$args >@stdout 2>@stderr
+    # A failed step is reported and the plan goes on (its rows are missing).
+    if {[catch {exec {*}$args >@stdout 2>@stderr} message]} {
+        puts "[clock format [clock seconds] -format %H:%M:%S] FAILED: $what: [string range $message 0 300]"
+        flush stdout
+    }
 }
 
 proc bench {phase args} {

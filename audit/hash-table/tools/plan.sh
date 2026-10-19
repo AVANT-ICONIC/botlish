@@ -15,7 +15,7 @@
 #   COMBOPROBE  COMBO plus the probe primitive
 #
 # Writes RESULTS-DIR/*.tsv and *.txt; tools/summarize.tcl makes the tables.
-set -eu
+set -u
 out=$1; base=$2; hash=$3; inline=$4; mod=$5; bounds=$6; vs=$7; combo=$8; probe=$9; shift 9; comboprobe=$1
 here=$(cd "$(dirname "$0")" && pwd)
 tclsh=tclsh9.0
@@ -27,22 +27,23 @@ stamp() { echo "$(date +%H:%M:%S) $*"; }
 #    copies, memory and nir are deterministic and run separately).
 stamp "run-all baseline"
 BOTLISH_HT_ROOT=$base $tclsh "$here/run-all.tcl" -tag baseline -results "$out" \
-    -phases "rust sizes keys typed life policy mixed backends membership"
+    -phases "rust sizes keys typed life policy mixed backends membership" || stamp "FAILED: run-all baseline"
 
 # 2. Each prototype alone and all of them, on the tables they touch
 #    (interleaved per round; summarize.tcl ladder).
 stamp "ladder A: every prototype, lpa and lpmask"
 $tclsh "$here/ladder.tcl" -trees "base $base hash $hash inline $inline mod $mod bounds $bounds combo $combo" \
     -rounds 3 -out "$out/ladder-a.tsv" -impls "lpa lpmask" -keys "int-dense str-short point" \
-    -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5
+    -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5 || stamp "FAILED: ladder A"
 stamp "ladder C: the probe primitive before and after the compiler work"
 $tclsh "$here/ladder.tcl" -trees "probe $probe comboprobe $comboprobe" -rounds 3 -out "$out/ladder-c.tsv" \
-    -impls "lpa lpp lpmask" -keys "int-dense str-short point" -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5
+    -impls "lpa lpp lpmask" -keys "int-dense str-short point" -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5 \
+    || stamp "FAILED: ladder C"
 
 # 3. The prototypes' effect on everything else the baseline measured.
 stamp "run-all combo"
 BOTLISH_HT_ROOT=$combo $tclsh "$here/run-all.tcl" -tag combo -results "$out" \
-    -phases "sizes keys typed life mixed membership"
+    -phases "sizes keys typed life mixed membership" || stamp "FAILED: run-all combo"
 
 # 4. Workloads unrelated to the experiment, baseline against all prototypes.
 for tree in base combo; do

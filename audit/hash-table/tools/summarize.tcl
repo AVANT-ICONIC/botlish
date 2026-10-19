@@ -18,6 +18,11 @@
 #       tools/instructions.tcl's rows, one row per implementation, keys,
 #       size and mode, one column per tag, with the reference's RUST-IMPL
 #       (tag "rust") and the first tag's ratio to it
+#   tclsh9.0 audit/hash-table/tools/summarize.tcl membership FILE.tsv DOMAIN MODE ?COLUMN?
+#       tools/membership.tcl's rows for one domain and mode (hit/miss): one
+#       row per strategy, one column per set size K; COLUMN is ns (default:
+#       ns per query), code (machine-code bytes), data (data elements) or
+#       generate (compile-time milliseconds the generator spent)
 #   tclsh9.0 audit/hash-table/tools/summarize.tcl ladder FILE.tsv TAGS ?RUST.tsv RUST-IMPL?
 #       tools/ladder.tcl's rows: one row per implementation, keys, size and
 #       mode, one column per tag (tree), optionally the Rust reference's
@@ -186,6 +191,20 @@ switch -- $command {
             } else { append row " | | |" }
             puts $row
         }
+    }
+    membership {
+        lassign $argv _ path domain mode column
+        if {$column eq ""} { set column ns }
+        set index [dict get {ns 6 code 7 data 8 generate 9} $column]
+        set cells [dict create]
+        set strategies {}
+        foreach r [readRows $path] {
+            lassign $r d strategy k m
+            if {$d ne $domain || $m ne $mode} continue
+            if {$strategy ni $strategies} { lappend strategies $strategy }
+            dict lappend cells [list $strategy $k] [lindex $r $index]
+        }
+        puts -nonewline [render $cells $strategies]
     }
     instructions {
         lassign $argv _ path tags rimpl
