@@ -67,6 +67,8 @@ mutable contents, or a whole-program analysis.
 | [CO-4](#co-4-hash-and-generic-equality-have-no-total-siblings) | `hash` and `==` have no total siblings | optimization | cheap | no | |
 | [CO-5](#co-5-collecting-loops-and-empty-literals-allocate) | collecting loops and empty literals allocate more than they need | allocation | moderate | no | chain0: 4 objects per lookup |
 | [CO-6](#co-6-struct-keys-are-hashed-and-compared-through-materialized-objects) | struct keys are hashed and compared through materialized objects | allocation | moderate | partly (RO-1) | |
+| [CO-7](#co-7-native-lowering-of-a-large-list-literal-is-quadratic) | native lowering of a large List literal is quadratic in its length | compile cost | moderate | no | 15,531 elements: 173 s; 62,949: out of 15 GB |
+| [CO-8](#co-8-a-long-equality-chain-exceeds-the-front-ends-nesting-limit) | a long `or` chain exceeds the front end's nesting limit | compile limit | cheap | no | 1,024 terms: "too many nested evaluations" |
 | [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (branch `exp-probe-primitive`) | measurement in progress |
 | [RT-2](#rt-2-a-runtime-owned-table) | a runtime-owned table | runtime | -- | no (the Rust reference stands in) | |
 
@@ -915,6 +917,42 @@ GC cycles. RO-1 removes the shape cloning (a two-field struct's hash goes
 from 133.6 to 37.3 ns) but not the materialization. Candidate: a
 field-wise `==` and a field-wise `hash` for a statically known shape.
 Moderate; not prototyped.
+
+### CO-7. Native lowering of a large List literal is quadratic
+
+The constant-membership experiment's tables are module-level List
+literals: the perfect-mod table, the direct table, the sorted array.
+Lowering them natively costs far more than their length:
+
+| strategy, set size | literal elements | front end | native lowering |
+|---|---:|---:|---:|
+| int-dense `list`, 1,024 | 1,024 | 0.6 s | 0.9 s |
+| int-dense `pmod`, 512 | 3,840 | 1.9 s | 7.7 s |
+| int-sparse `pmod`, 256 | 5,218 | 3.0 s | 15.1 s |
+| int-sparse `pmod`, 512 | 15,531 | 8.3 s | 172.8 s |
+| int-dense `pmod`, 1,024 | 17,280 | 7.3 s | 180.3 s |
+| int-sparse `pmod`, 1,024 | 62,949 | -- | killed: 10.5 GB resident, out of the container's memory |
+
+The front end grows about linearly; native lowering about quadratically.
+A threefold longer literal takes 11.5 times as long, and the 62,949-element
+table ended the first membership run. The cause was not investigated
+(NIR lowering, the NIR text, or Cranelift's function size). Any
+compiler-generated constant table depends on it, as would a perfect hash
+of a large literal set, and so does a large literal written by hand.
+`tools/membership.tcl -data-limit` (default 16,384 elements) keeps the
+experiment's tables below it. Moderate cost to fix; not prototyped.
+
+### CO-8. A long equality chain exceeds the front end's nesting limit
+
+`x == c1 or x == c2 or ... or x == c1024` does not compile: "too many
+nested evaluations (infinite loop?)". `or` lowers to nested `if`s, and the
+front end's recursive walks hit Tcl's nesting limit somewhere between 512
+terms (which compile) and 1,024 terms (which do not). This matters for
+constant membership: a compiler that selects an equality chain for small
+sets never generates one this long, but source written that way, or a
+macro-like expansion of a literal set, fails rather than compiling slowly.
+Cheap to fix: an iterative walk, or `or` chains flattened in the lowering.
+Not prototyped.
 
 ---------------------------------------------------------------------------
 
