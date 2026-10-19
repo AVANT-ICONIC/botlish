@@ -49,7 +49,7 @@ on:
         options: [acceptance, full]
         default: acceptance
       tests:
-        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust, native-stack-mutants)"
+        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust, native-stack-mutants, native-stack-bench)"
         required: false
         default: ""
       gc_stress:
