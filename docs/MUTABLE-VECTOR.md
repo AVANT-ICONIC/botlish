@@ -1142,7 +1142,10 @@ operand after it (`NoLaterUse`: the later argument is copied instead of
 moved), and it is copied itself when a later argument of the call mutates
 the same place, or -- a context member, which any function sharing the
 context may mutate -- calls anything that may run code (`WrittenLater`,
-`MayRunCode`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
+`MayRunCode`), a yield included: it suspends the coroutine, and the
+resumer may mutate the installed context before it resumes it
+(`mutable_vector::at(c.values, (yield Ev {...}).i)` read the resumer's
+replacement until `mv-cow-by-reference-yield`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
 + 10)` updates `v`), and later arguments that only read cost nothing
 (`x = v.at(v.length() - 1)` copies nothing). `tests/mutable-vector.test`'s
 `mv-cow-by-reference-arguments` pins the seven cases;

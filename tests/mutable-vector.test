@@ -766,6 +766,72 @@ r
     }
 } -cleanup {unset -nocomplain case text} -result {{{value 23} 1} {{value 9} 1} {{value 22} 1} {{value 9} 1} {{value {[1, 12]}} 0} {{value -1} 2} {{value {[1, 2, 3, 33, 3]}} 0}}
 
+# A yield in a later argument suspends the coroutine, and its resumer runs
+# until it resumes it: it may mutate the installed context in place, as a
+# called function may (hir/mutvec.tcl's MayRunCode).
+set mvYieldDecls {import mutable_vector
+
+struct Ev:
+    n: int
+
+struct Msg:
+    i: int
+
+context struct Counts:
+    values: MutableVector[int]
+
+fn replace(x: int, context c: Counts) -> int:
+    old = c.values.pop():
+        on IndexNotFound:
+            -1
+    c.values.push(x)
+    old
+
+fn id(x: int) -> int:
+    x
+
+}
+
+test mv-cow-by-reference-yield {a context member handed over by reference to a native is read as it was when evaluated although a later argument yields and the resumer replaces the member meanwhile -- the yield bare or inside a call; a local vector, which no resumer can reach, is still handed over uncopied -- on every backend, with the copies the elaboration wrote} -body {
+    lmap case {
+        {fn w(context c: Counts, resume Msg) -> Ev:
+    x = mutable_vector::at(c.values, (yield Ev {n: c.values.length()}).i):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+with context Counts {values: mutable_vector::from_list([5])}
+coroutine {step, first} = w()
+old = replace(9)
+r = step(Msg {i: 0})
+[first.n, old, r.n]
+}
+        {fn w(context c: Counts, resume Msg) -> Ev:
+    x = mutable_vector::at(c.values, id((yield Ev {n: c.values.length()}).i)):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+with context Counts {values: mutable_vector::from_list([5])}
+coroutine {step, first} = w()
+old = replace(9)
+r = step(Msg {i: 0})
+[first.n, old, r.n]
+}
+        {fn w(resume Msg) -> Ev:
+    v = mutable_vector::from_list([5])
+    x = mutable_vector::at(v, (yield Ev {n: v.length()}).i):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+coroutine {step, first} = w()
+r = step(Msg {i: 0})
+[first.n, r.n]
+}
+    } {
+        set text "${::mvYieldDecls}${case}"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value {[1, 5, 5]}} 2} {{value {[1, 5, 5]}} 2} {{value {[1, 5]}} 0}}
+
 # Last uses per path (hir/mutvec.tcl's NoLaterUse and ReadsPath): a read-out
 # of a place path moves its header on when no later use may read a header
 # at that path -- the path itself, a prefix of it (the binding, an

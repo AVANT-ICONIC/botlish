@@ -1198,12 +1198,14 @@ proc hir::mutvec::WrittenLater {hir p a} {
     return 0
 }
 
-# 1 if call E may run Botlish code: a call of anything but a native, or of
-# a native that calls an argument (its ownership role says so: factory,
-# resume) or is given one that may be a callable.
+# 1 if call E may run Botlish code: a call of anything but a native, of a
+# native that calls an argument (its ownership role says so: factory,
+# resume) or is given one that may be a callable, or a yield (one of the
+# coroutine analysis's yield sites): it suspends the coroutine, and its
+# resumer runs until it resumes it.
 proc hir::mutvec::MayRunCode {hir e} {
     set name [hir::affine::NativeName $hir $e]
-    if {$name eq ""} {
+    if {$name eq "" || [dict exists $hir coroutines yields $e]} {
         return 1
     }
     set index 0

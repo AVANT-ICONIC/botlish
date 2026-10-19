@@ -238,6 +238,14 @@ proc hir::mutvec::ShareDescriptor {type} {
             if {0 && $context && [MayRunCode $hir $x]} {
 >>>>
 
+@@ byref-context-yield-ignored a yield in a later argument is taken to run no code: a context member handed over by reference stays uncopied while the coroutine is suspended and its resumer replaces the member, so `at(c.values, (yield ...).i)` reads the replacement
+## hir/mutvec.tcl
+<<<<
+    if {$name eq "" || [dict exists $hir coroutines yields $e]} {
+====
+    if {$name eq ""} {
+>>>>
+
 @@ byref-place-copied a mutating receiver is copied like a read when a later argument mutates the same place: `v.push(v.pop() + 10)` pushes onto a copy, and the update is lost
 ## hir/mutvec.tcl
 <<<<
