@@ -3765,6 +3765,7 @@ tests/mutable-array.test ma-affine-swap pass
 tests/mutable-array.test ma-affine-swap-failure pass
 tests/mutable-array.test ma-affine-whole-moves pass
 tests/mutable-array.test ma-affine-whole-releases pass
+tests/mutable-array.test ma-any-slot-copies pass
 tests/mutable-array.test ma-consuming-exits pass
 tests/mutable-array.test ma-context-member pass
 tests/mutable-array.test ma-cow-counters pass
@@ -3809,6 +3810,7 @@ tests/mutable-vector.test mv-affine-struct-field pass
 tests/mutable-vector.test mv-affine-swap-discarded pass
 tests/mutable-vector.test mv-affine-swap-failure pass
 tests/mutable-vector.test mv-affine-whole-moves pass
+tests/mutable-vector.test mv-any-slot-copies pass
 tests/mutable-vector.test mv-construction pass
 tests/mutable-vector.test mv-context-installed-copy pass
 tests/mutable-vector.test mv-context-member pass

@@ -181,6 +181,14 @@
         if {[OwnResult $hir $parent $e [lindex $path 0]]} {
 >>>>
 
+@@ any-slot-skipped a struct's share descriptor skips its `any` slots (`s1.0.h` for {hashes: MutableArray, slots: any}): a copy of the struct keeps the `any` slot's array on the same header, and moving it into a writing callee at its path's last use writes the copy
+## hir/mutvec.tcl
+<<<<
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+====
+                if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+>>>>
+
 @@ array-always-affine MutableArray is always affine: a copy of an array of Ints moves it
 ## hir/types.tcl
 <<<<

@@ -284,7 +284,14 @@ same list object.
 `mutable_vector#share(v, "h")` (`rt_mv_share`): a new header on
 `Rc::clone` of the backing -- one allocation, no element copied, counted as
 `shares`. Struct-bearing values are shared by descriptor (`s1.0.h`: a new
-struct whose slot 0 is shared). Where the compiler writes shares: item 11.
+struct whose slot 0 is shared). A slot of a type too imprecise to say
+(`any`, a generic position) beside a typed collection slot is listed with
+`d`, a copy of whatever it holds at run time (`W {a: MutableVector[int], d:
+any}` is `s2.0.h1.d`), so every slot of a copy owns its headers; a struct
+whose only such slots are imprecise is copied whole by `d`
+(`mv-any-slot-copies`: the descriptor once skipped those slots, so an
+`any` field kept its source's header, and two `any` fields of one copy
+shared one). Where the compiler writes shares: item 11.
 The descriptor walks struct fields only, so a struct that names itself
 (STRUCTS.md) is met again inside itself only through fields -- a type no
 finite value has -- and shares nothing there: `Chain {items, next: Chain}`
@@ -366,7 +373,10 @@ header is a GC root (`ctxroot`, `vm.context_roots`). A context
 parameter is always a place root for read-outs, so a snapshot
 (`snapshot() -> MutableVector[str]: io.output`) is independent of later
 writes, in any function (`mv-context-member`); installing a context copies
-the installed value logically (`mv-context-installed-copy`).
+the installed value logically (`mv-context-installed-copy`). Both hold for a
+context whose members are all `any` too (a dynamic copy, `d`; on the Tcl
+backends: natively such a context is CONTEXT-NATIVE-LOWERING-UNSUPPORTED),
+`mv-any-slot-copies`.
 
 ### 16. `length`
 
@@ -1169,7 +1179,10 @@ List field) does not count. That omits only copies nothing could observe:
 every struct field of a binding the elaboration holds owns its headers
 alone -- a place root's or demanded local's entry and a consumed
 parameter's argument are exclusive (fresh, moved, or shared slot by slot by
-the descriptor, which gives each slot its own header), and no read-out puts
+the descriptor, which gives each slot its own header -- an `any` slot too,
+by `d`: the rule relies on it, and the first version of this change, when
+the descriptor skipped `any` slots, moved `k = w.d1` while `w.d2` held the
+same header), and no read-out puts
 one field's header into another -- so a sibling holds other headers; an
 Int or List field of an immutable struct cannot change when a header is
 mutated, and a List element or a closure's capture is never a place. A

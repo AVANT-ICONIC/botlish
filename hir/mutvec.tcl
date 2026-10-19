@@ -303,6 +303,14 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
 # array header), "s"N"."(SLOT"."D)*N a struct whose listed layout slots hold
 # collection-bearing values. An affine type is never copied (it moves).
 #
+# A slot whose type is too imprecise to say but may hold a header
+# (MayHoldVector: `any`, a generic position, a struct of such) is listed
+# with "d", a copy of whatever it holds at run time, like a whole value of
+# such a type (HeldDescriptor): a copy gives every slot its own headers,
+# which the last uses per path rely on (ReadsPath). A struct whose only
+# such slots are imprecise has no static descriptor ("": the "d" of the
+# whole value copies the same).
+#
 # A named struct may name itself, directly or through other structs
 # (STRUCTS.md, `struct-named-recursive-declaration`). The walk goes through
 # struct fields only, so a struct it meets again inside itself is one no
@@ -329,9 +337,16 @@ proc hir::mutvec::ShareDescriptor {type} {
         try {
             set parts {}
             set n 0
+            set dynamic 0
             set slot 0
             foreach name [hir::types::StructLayout $type] {
-                set d [ShareDescriptor [hir::types::StructField $type $name]]
+                set field [hir::types::StructField $type $name]
+                set d [ShareDescriptor $field]
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+                        && !([hir::types::IsNamedStruct $field] && [lindex $field 1] in $shareVisiting)} {
+                    set d d
+                    incr dynamic
+                }
                 if {$d ne ""} {
                     append parts "$slot.$d"
                     incr n
@@ -343,7 +358,7 @@ proc hir::mutvec::ShareDescriptor {type} {
                 set shareVisiting [lrange $shareVisiting 0 end-1]
             }
         }
-        if {$n == 0} {
+        if {$n == $dynamic} {
             return ""
         }
         return "s$n.$parts"
@@ -427,7 +442,7 @@ proc hir::mutvec::Elaborate {hirVar} {
     # by copy wherever they are read, mutated here or not.
     dict for {b binding} [dict get $hir bindings] {
         if {[dict get $binding kind] eq "local" && $b ni $roots && [IsContextParam $hir $b]
-                && [ShareDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
+                && [HeldDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
             lappend roots $b
         }
     }
@@ -1266,7 +1281,7 @@ proc hir::mutvec::Installations {hirVar} {
         if {[dict get $node kind] ne "call" || ![hir::contexts::isInstall $hir $e]} continue
         set value [lindex [dict get $node args] 0]
         if {$value eq ""} continue
-        set d [ShareDescriptor [hir::typeOf $hir $value]]
+        set d [HeldDescriptor [hir::typeOf $hir $value]]
         if {$d ne "" && ![Fresh $hir $value]} {
             lappend wraps [list $value [ShareNative] $d]
         }

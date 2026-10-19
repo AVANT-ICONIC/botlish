@@ -421,6 +421,37 @@ proc hir::mutvec::ShareDescriptor {type} {
 >>>>
 
 # ---------------------------------------------------------------------------
+# Imprecise slots (hir/mutvec.tcl's ShareDescriptor, HeldDescriptor): a copy
+# of a struct copies an `any` slot by what it holds at run time (`d`), so
+# every slot of a held binding owns its headers, which the last uses per
+# path rely on; a context of `any` members is copied on installation and
+# read out by copy (tests/mutable-vector.test's mv-any-slot-copies).
+
+@@ any-slot-skipped a struct's share descriptor skips its `any` slots (`s1.0.h` for {a: MutableVector, d: any}): a place's entry leaves the `any` slot on its source's header, and two `any` slots of one copy share one, so moving one at its path's last use writes the other
+## hir/mutvec.tcl
+<<<<
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+====
+                if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+>>>>
+
+@@ installation-any-static a context installation copies by the static descriptor alone: a context whose members are all `any`, installed from a vector, shares its header, and the context's writes reach the vector
+## hir/mutvec.tcl
+<<<<
+        set d [HeldDescriptor [hir::typeOf $hir $value]]
+====
+        set d [ShareDescriptor [hir::typeOf $hir $value]]
+>>>>
+
+@@ context-any-read-aliases a context parameter is read out by copy only when its type has a static descriptor: a vector read out of a context's `any` member aliases the member's later writes
+## hir/mutvec.tcl
+<<<<
+                && [HeldDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
+====
+                && [ShareDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
+>>>>
+
+# ---------------------------------------------------------------------------
 # Moves in and out
 
 @@ push-no-invalidate push of an affine element does not invalidate its source: a later use of the binding is accepted

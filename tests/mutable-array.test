@@ -273,6 +273,13 @@ test ma-generic-place {item 33: a generic function's untyped parameter is a plac
     maRoute "fn fill(x, v) errors IndexNotFound:\n    mutable_array::set(x, 0, v)\n    x\n" "    b = fill(a, 4)\n    c = fill(b, 5)\n    \[a.at(0), b.at(0), c.at(0)\]\n"
 } -result {value {[0, 4, 5]}}
 
+test ma-any-slot-copies {a struct whose `any` slot sits beside a typed array slot is copied slot by slot, the `any` slot by what it holds at run time (`d`): a copy of the struct taken before the `any` slot's array is moved into a generic function that writes it, at its path's last use while the typed sibling is read later, keeps its own array; so does the array a place's `any` slot was entered from -- on every backend} -body {
+    set decls "import mutable_array\nstruct Bucket:\n    hashes: MutableArray\[int\]\n    slots: any\nfn mut(v) errors IndexNotFound:\n    v.set(0, 99)\n    v\n"
+    list \
+        [maAgree "${decls}fn f() errors IndexNotFound:\n    b = Bucket {hashes: mutable_array::create(2, 7), slots: mutable_array::create(2, 0)}\n    saved = b\n    r = mut(b.slots)\n    hs = b.hashes\n    \[mutable_array::at(saved.slots, 0), r.at(0), hs.at(0)\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"] \
+        [maAgree "${decls}fn f() errors IndexNotFound:\n    orig = mutable_array::create(4, 0)\n    p = Bucket {hashes: mutable_array::create(1, 0), slots: orig}\n    p.hashes.set(0, 1)\n    s = mut(p.slots)\n    n = p.hashes.at(0)\n    \[orig.at(0), s.at(0), n\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"]
+} -cleanup {unset -nocomplain decls} -result {{value {[0, 99, 7]}} {value {[0, 99, 1]}}}
+
 test ma-cow-extraction {items 33, 36: an array taken out of a struct field -- a projection, a destructure, an anonymous struct's field, a struct parameter's field -- is a copy, and inside a generic body (where the static type is too imprecise to say, a dynamic copy `d`) so is a local or struct field bound to the untyped parameter: mutating the copy never changes the struct or the argument} -body {
     set box "struct Box:\n    data: MutableArray\[int\]\n    n: int\n"
     list \
