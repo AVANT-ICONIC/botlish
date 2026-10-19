@@ -607,7 +607,7 @@ core::native::register binary::native::view -arity 2 -impl core::binary::nativeV
     -errors {NativeViewNull} -layout {operand 0 pointer 1 op view} -nomethod 1
 core::native::register binary::load -arity 1 -impl {core::binary::Unelaborated binary::load} \
     -param-types {any} -result-type any -result-shape {view-struct 0} -ownership {observe} \
-    -layout {viewed {0 binary#load} arrayed {0 binary#load_array}}
+    -result-length {extent 0} -layout {viewed {0 binary#load} arrayed {0 binary#load_array}}
 core::native::register binary#load -arity 2 -impl core::binary::load \
     -param-types {any str} -result-type struct -result-shape {layout-struct 1} -ownership {observe observe} \
     -layout {operand 1 op load} -nomethod 1
@@ -647,7 +647,7 @@ core::native::register binary#store_element -arity 4 -impl core::binary::storeEl
     -errors {IndexNotFound} -bounds {index narray 0 1} -layout {array 3 index 1 value 2 op store_element} -nomethod 1
 core::native::register binary#load_array -arity 2 -impl core::binary::loadArray \
     -param-types {any str} -result-type any -result-shape {view-struct 0} -ownership {observe observe} \
-    -layout {array 1 op load_array} -nomethod 1
+    -result-length {extent 0} -layout {array 1 op load_array} -nomethod 1
 # Reading live process memory is raw authority (DIRECT-MODULES.md): every
 # call of binary::native::view is a direct edge of the module making it --
 # and so is every call of binary::native::edit, write authority over it

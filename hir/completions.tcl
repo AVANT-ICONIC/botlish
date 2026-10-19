@@ -2913,10 +2913,16 @@ proc hir::completions::ExtentsVerdict {hir ctx name argExprs v} {
 # enclosing branch proved, ctx.sizes) and, if its elements hold arrays
 # themselves, E is a list literal each of whose elements is proven; a layout
 # with arrays when E is (an alias of) a construction of its LayoutStruct
-# each of whose array fields is proven. `out` when one of those lengths is
+# each of whose array fields is proven -- and any representation when E is
+# an exact copy of the same one (ExactCopy: what binary::load or
+# binary::parse made, or a field of it). `out` when one of those lengths is
 # proven to be another. Nothing else: the length of a List is a fact about
 # the List, never about its type.
 proc hir::completions::ReprValueVerdict {hir ctx repr e} {
+    set copy [ExactCopy $hir $e]
+    if {$copy ne "" && [hir::layouts::ReprText $copy] eq [hir::layouts::ReprText $repr]} {
+        return in
+    }
     switch -- [dict get $repr kind] {
         array {
             set steps 0
@@ -2974,6 +2980,66 @@ proc hir::completions::ReprValueVerdict {hir ctx repr e} {
         }
     }
     return in
+}
+
+# The representation the value of expression E is an exact copy of, or "":
+# a List or LayoutStruct binary::load copied out of live memory (its
+# operand's static type says what: NativeView[array N of E] or
+# NativeView[L], an edit alike), a LayoutStruct binary::parse imprinted (its
+# layout operand), or a field of one of those (the field's representation),
+# followed through immutable bindings and handlers that never complete. Every fixed array in such a value has
+# exactly its extent: the copy made it so, and a value never changes.
+proc hir::completions::ExactCopy {hir e} {
+    set steps 0
+    lassign [hir::cardinality::Chase $hir $e steps] kind id
+    if {$kind ne "expr"} {
+        return ""
+    }
+    set node [dict get $hir exprs $id]
+    switch -- [dict get $node kind] {
+        project {
+            set base [ExactCopy $hir [dict get $node receiver]]
+            if {$base eq "" || [dict get $base kind] ne "layout"} {
+                return ""
+            }
+            foreach field [dict get [hir::layouts::entry [dict get $base layout]] fields] {
+                if {[dict get $field name] eq [dict get $node name]} {
+                    return $field
+                }
+            }
+        }
+        handle {
+            # A handled call whose handlers all leave (return, fail, ...)
+            # completes only with the call's own value.
+            foreach body [dict get $node handlerBodies] {
+                if {![hir::types::Halts $hir $body [hir::typeOf $hir $body]]} {
+                    return ""
+                }
+            }
+            return [ExactCopy $hir [dict get $node call]]
+        }
+        call {
+            set role [hir::layouts::Role [hir::cardinality::NativeName $hir $node]]
+            set args [dict get $node args]
+            if {[hir::layouts::RoleOf $role viewed] ne ""} {
+                set type [hir::typeOf $hir [lindex $args 0]]
+                set term [hir::layouts::OfArrayType $type]
+                if {$term ne ""} {
+                    return [hir::layouts::ReprOfTerm $term]
+                }
+                if {[hir::types::IsNativeMemory $type] && [hir::layouts::declared [lindex $type 1]]} {
+                    return [dict create kind layout layout [lindex $type 1]]
+                }
+            } elseif {[hir::layouts::RoleOf $role op] eq "parse"} {
+                set operand [lindex $args [hir::layouts::RoleOf $role operand]]
+                set layout [hir::layouts::DescriptorLayout [hir::layouts::ConstText $hir $operand]]
+                if {$layout ne "" && [hir::layouts::declared $layout]} {
+                    return [dict create kind layout layout $layout]
+                }
+            }
+        }
+    }
+    return ""
 }
 
 # The verdict of several checks that all must hold: `out` if one is, `in`

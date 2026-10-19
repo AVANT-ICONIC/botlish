@@ -68,6 +68,13 @@
 #                   name:
 #                     int K           the Int argument K (allocate's capacity)
 #                     list K          the length of List argument K
+#                     extent K        the extent N of argument K's static
+#                                     type when it is a live fixed array,
+#                                     NativeView[array N of E] or
+#                                     NativeEdit[array N of E] (binary::load
+#                                     copies exactly N elements:
+#                                     FIXED-LAYOUT-ARRAYS.md); nothing for
+#                                     any other argument
 #   dropForm        "" or {NAME AT}: the operation's element-dropping variant
 #                   NAME, which takes the element drop descriptor as an extra
 #                   last argument, so that the elements the operation removes,
@@ -504,7 +511,7 @@ proc core::native::register {name args} {
         error "core::native::register: -errors-from of \"$name\" must be the index of an argument of a -completion native"
     }
     set length [dict get $options -result-length]
-    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list}
+    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list extent}
             || ![string is digit -strict [lindex $length 1]] || $arity eq "*" || [lindex $length 1] >= $arity)} {
         error "core::native::register: bad -result-length \"$length\" for \"$name\""
     }

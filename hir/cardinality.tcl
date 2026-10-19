@@ -355,7 +355,7 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
     if {$name ne ""} {
         set length [dict get [core::native::metadata $name] resultLength]
         set args [dict get $node args]
-        if {$length ne "" && [lindex $length 1] < [llength $args]} {
+        if {[lindex $length 0] in {int list} && [lindex $length 1] < [llength $args]} {
             lassign $length how index
             set arg [lindex $args $index]
             return [expr {$how eq "int" ? [IntForm $hir $arg steps] : [ListLength $hir $arg steps]}]
@@ -384,8 +384,22 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
             }
         }
     }
-    if {[NativeName $hir $node] eq "list"} {
+    set name [NativeName $hir $node]
+    if {$name eq "list"} {
         return [FormConst [llength [dict get $node args]]]
+    }
+    # A List copied from a live fixed array has the array's extent, which
+    # its static type states (-result-length {extent K}: binary::load of a
+    # NativeView[array N of E], FIXED-LAYOUT-ARRAYS.md).
+    if {$name ne ""} {
+        set length [dict get [core::native::metadata $name] resultLength]
+        set args [dict get $node args]
+        if {[lindex $length 0] eq "extent" && [lindex $length 1] < [llength $args]} {
+            set term [hir::layouts::OfArrayType [hir::typeOf $hir [lindex $args [lindex $length 1]]]]
+            if {$term ne "" && [string is entier -strict [lindex $term 1]]} {
+                return [FormConst [lindex $term 1]]
+            }
+        }
     }
     return [FormAtom [list len [list e $id]]]
 }

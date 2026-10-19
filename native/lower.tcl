@@ -317,6 +317,10 @@ namespace eval native::lower {
     # to its check-free sibling opcode (or, for a region, omits `regioncheck`)
     # instead of the checked form.
     variable provenBoundsOpt 1
+    # Fixed layout arrays (FIXED-LAYOUT-ARRAYS.md): the largest extent of an
+    # array of records or rows a copy (ArrayRead) unrolls into one `listnew`
+    # rather than collecting in a loop.
+    variable unrollExtent 8
     # String traversal (see "String traversal" below): the hir::traversal
     # analysis of the program, and whether it is enabled at all.
     variable traversal {}
@@ -5624,11 +5628,14 @@ proc native::lower::DecodeAt {fnVar e mode source descriptor base {fieldsOnly 0}
 # The List the fixed array REPR ({array N STRIDE ELEMENT}) holds at BASE of
 # SOURCE (MODE as ReprRead's), copied: a row of scalars by one helper call
 # (`binloadarray` / `nativeloadarray`: N contiguous scalars, STRIDE their
-# width); any other element in a counted loop, element I read at BASE + I *
-# STRIDE and appended -- O(N), straight from the descriptor's constants, no
-# descriptor read at run time (FIXED-LAYOUT-ARRAYS.md).
+# width); any other element read element by element, element I at BASE + I
+# * STRIDE -- unrolled into one `listnew` of the N values up to
+# UnrollExtent elements (so the List is the one allocation), past it in a
+# counted loop appending each -- O(N), straight from the descriptor's
+# constants, no descriptor read at run time (FIXED-LAYOUT-ARRAYS.md).
 proc native::lower::ArrayRead {fnVar e mode source repr base} {
     upvar 1 $fnVar fn
+    variable unrollExtent
     lassign $repr - extent stride element
     if {[lindex $element 0] in {u i}} {
         lassign $element sign width endian
@@ -5637,6 +5644,13 @@ proc native::lower::ArrayRead {fnVar e mode source repr base} {
         set count [Assign fn "int $extent" $e]
         set op [expr {$mode eq "native" ? "nativeloadarray" : "binloadarray"}]
         return [Assign fn "op $op $source $at $code $count" $e]
+    }
+    if {$extent <= $unrollExtent} {
+        set values {}
+        for {set i 0} {$i < $extent} {incr i} {
+            lappend values [ReprRead fn $e $mode $source $element [BasePlus fn $e $base [expr {$i * $stride}]]]
+        }
+        return [Assign fn "op listnew [join $values { }]" $e]
     }
     set acc [CollectStart fn $e]
     lassign [ArrayLoopStart fn $e $extent] index body exit
@@ -5686,10 +5700,15 @@ proc native::lower::ArrayScaled {fnVar e index stride} {
 # declared LayoutExtentMismatch otherwise (FIXED-LAYOUT-ARRAYS.md). A List's
 # length against its extent (and, when its elements hold arrays, each
 # element in a loop); a LayoutStruct's array fields (`structget`). Emits
-# nothing for a representation without arrays: everything a write writes
-# is checked before the first byte is.
+# nothing for a representation without arrays, nor for a call E whose
+# extents the completion analysis proved (BoundsProven: the call's only
+# bounds check is its `extents` one): everything a write writes is checked
+# before the first byte is, and a proven write has no failure path.
 proc native::lower::ArrayCheck {fnVar e repr value} {
     upvar 1 $fnVar fn
+    if {[BoundsProven $e]} {
+        return
+    }
     switch -- [lindex $repr 0] {
         array {
             lassign $repr - extent stride element
