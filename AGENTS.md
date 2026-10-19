@@ -240,7 +240,16 @@ the test suite, still install the `.deb`s.
 * Standalone executables have two linkers, chosen by `BOTLISH_NATIVE_LINKER`:
   `rustc` (the default) and `stub` (no toolchain: `botlish-aot-stub` with the
   program image appended, `native/src/runtime/aotimage.rs`; the single
-  executable uses it). A test that reads a rustc-linked executable's
+  executable uses it). The stub is Linux x86-64's only; macOS AArch64
+  executables are Mach-O, linked by rustc through Apple's ld
+  (MACOS-AARCH64-MILESTONE-5.md): never extend the stub, or write a linker,
+  loader or signing step, for Mach-O. A program that calls C is linked on
+  Linux only (`codegen/aot.rs`'s `C_CALLS`) until macOS C calls are
+  validated. If you change which hosts link (`EXECUTABLES`, `C_CALLS`), the
+  rustc link, the generated startup or `runtime::aot::run`, also run
+  `tests/native-executable.test`, `tests/platform/aot-facts.tcl` and
+  `audit/native-aot/tools/mutate.tcl` (every mutant in its `mutants.txt`
+  that applies to the host must still apply and be killed). A test that reads a rustc-linked executable's
   `botlish_fn_N` symbols (objdump, `strace -k`) or tests rustc's invocation
   carries the `rustcLinker` constraint (`tests/helpers.tcl`). CI's
   `stub-linker` job runs every executable test file with the stub linker.
@@ -918,7 +927,8 @@ and no acceptance depends on one.
   -- not Homebrew's newer Tcl, whose Unicode 17 case tables break the Tcl
   backends' Unicode 16 semantics -- `tests/platform/cabi-facts.tcl`, the
   native build and its Rust unit tests, `tests/platform/native-status.tcl`,
-  `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
+  `tests/platform/aot-facts.tcl` (the program object and an executable as
+  the host's tools see them), `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
   shards) and the same smoke on ubuntu as a control. Locally, `tclsh9.0
   tests/platform/tier.tcl smoke` takes seconds, and `tier.tcl X.test
   Y.bot` runs any file or suite the way CI does.

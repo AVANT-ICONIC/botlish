@@ -16,8 +16,9 @@
 //!   botlish-native calls FILE.nir        print settled exact-call effects
 //!                                        without compiling
 //!   botlish-native object OUT FILE.nir   write a relocatable program object
-//!   botlish-native executable OUT FILE.nir  link a standalone Linux executable
-//!                                        (BOTLISH_NATIVE_LINKER: rustc, the
+//!   botlish-native executable OUT FILE.nir  link a standalone executable
+//!                                        (Linux ELF, macOS AArch64 Mach-O;
+//!                                        BOTLISH_NATIVE_LINKER: rustc, the
 //!                                        default, or stub: codegen/aot.rs)
 //!   botlish-native check FILE.nir        parse and validate only
 //!   botlish-native target TRIPLE         how this driver reads a target

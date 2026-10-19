@@ -94,7 +94,7 @@ tclsh9.0 tests/all.tcl                         # test suite, interp and compile 
 cargo build --release --manifest-path native/Cargo.toml   # build the native backend (§20)
 tclsh9.0 tests/native-coverage.tcl             # test suite on cranelift, classified (§20; -backend cranelift-generic)
 tclsh9.0 main.tcl -backend cranelift FILE.bot  # run natively: what it prints, then its value
-tclsh9.0 main.tcl -emit-native-executable FILE.bot  # compile to ./FILE (Linux x86_64 glibc)
+tclsh9.0 main.tcl -emit-native-executable FILE.bot  # compile to ./FILE (Linux glibc, macOS arm64)
 tclsh9.0 main.tcl -emit-nir -emit-clif FILE.bot   # show NIR, then Cranelift IR, of every function
 tclsh9.0 main.tcl -emit-hir-interchange FILE.bot   # write the analyzed HIR as FILE.hirx (HIR-INTERCHANGE.md)
 tclsh9.0 main.tcl -backend cranelift FILE.hirx     # run it with no front end (same front end only)
@@ -2372,7 +2372,7 @@ HIR ──native::lower (Tcl)──▶ NIR text ──botlish-native (Rust)─�
   with the runtime and an initializer for constants, module statics, callable
   metadata and relocated GC stack maps.
 
-### Standalone executables (Linux x86_64 glibc)
+### Standalone executables (Linux glibc, macOS AArch64)
 
 ```sh
 export LANG=C.utf8 LC_ALL=C.utf8
@@ -2381,12 +2381,14 @@ tclsh9.0 main.tcl -emit-native-executable examples/stdlib/csv.bot
 ./examples/stdlib/csv
 ```
 
-The output is a native ELF executable beside the source, named by removing
-its extension. It prints the program's final value followed by a newline
+The output is a native executable beside the source, named by removing its
+extension: an ELF executable on Linux (x86-64, AArch64), a Mach-O arm64
+executable on macOS (MACOS-AARCH64-MILESTONE-5.md), for the host's own
+target. It prints the program's final value followed by a newline
 (for example, `42`, `"text"`, or `[1, 2]`). Compilation never executes the
 program. Runtime errors go to stderr and return a nonzero exit status.
 
-The executable's `argv()` is the real Linux argument vector of each run
+The executable's `argv()` is the real process argument vector of each run
 (`./program one two` gives `["./program", "one", "two"]`, argument zero as the
 launcher supplied it), validated as UTF-8 only if and when the program calls
 it; one executable serves any number of different runs. See ARGV.md.
@@ -2403,16 +2405,23 @@ an executable (SINGLE-EXECUTABLE.md):
 
 * `rustc` (the default) needs the built native backend, its adjacent
   `libbotlish_native.rlib` and `deps/`, the matching `rustc` (or the `RUSTC`
-  executable), and the system C linker. rustc compiles only the generated
-  startup metadata and statically links the shared Botlish runtime.
+  executable), and the system C linker (on macOS the Xcode command line
+  tools' `cc` and `ld`). rustc compiles only the generated startup metadata
+  and statically links the shared Botlish runtime; on macOS the linker signs
+  the executable ad hoc, as it signs every arm64 executable.
 * `stub` needs only `botlish-aot-stub` beside the driver (or
   `BOTLISH_NATIVE_AOT_STUB`): the prebuilt runtime with the program's image
   appended, which it maps and relocates at startup. The single-file compiler
   links this way. Its executables have no ELF symbols for Botlish functions.
+  It is Linux x86-64's only: macOS executables are the system linker's.
 
-The executable uses baseline x86-64 instructions and system glibc/libm/libgcc;
-it needs no Tcl, Rust installation, source files, checkout, or JIT at
-execution time. The build host determines the minimum glibc version.
+A program that calls C (C-FFI.md) is linked on Linux only: on macOS its
+link is refused (`NATIVE LINK`) until C calls are validated there.
+
+The executable uses the target's baseline instructions and the system's own
+libraries (glibc, libm and libgcc on Linux; libSystem on macOS); it needs no
+Tcl, Rust installation, source files, checkout, or JIT at execution time. On
+Linux the build host determines the minimum glibc version.
 `BOTLISH_NATIVE_GC_STRESS` and `BOTLISH_NATIVE_STACK_BYTES` also work for
 standalone executables. Failed compilation leaves an existing output intact.
 

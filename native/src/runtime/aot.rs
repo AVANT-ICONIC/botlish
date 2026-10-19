@@ -3,10 +3,11 @@
 //! already machine code in the linked object.
 //!
 //! Process arguments (ARGV.md): the generated `main` collects the real
-//! Linux argument vector -- the `argc`/`argv` glibc hands the process,
-//! which Rust's runtime keeps and `std::env::args_os` returns as raw
-//! `OsString`s, i.e. the exact bytes, never decoded -- into one owned
-//! `Vec<Vec<u8>>` copy (it does not borrow the C startup array) and passes
+//! argument vector -- the `argc`/`argv` the C runtime hands the process
+//! (glibc's on Linux, libSystem's on macOS), which Rust's runtime keeps and
+//! `std::env::args_os` returns as raw `OsString`s, i.e. the exact bytes,
+//! never decoded -- into one owned `Vec<Vec<u8>>` copy (it does not borrow
+//! the C startup array) and passes
 //! it to `run`, which installs it in the Vm as the run's argument snapshot
 //! before the program's entry function executes. Nothing is validated here:
 //! UTF-8 validation belongs to the `argv()` operation (`ops.rs`'s

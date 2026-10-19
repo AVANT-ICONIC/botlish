@@ -89,10 +89,12 @@
 # need no -backend cranelift; with -backend cranelift-generic, or
 # BOTLISH_NATIVE_SPECIALIZE=0, they show the unspecialized code).
 # -emit-native-executable compiles closed specialized workloads to standalone
-# Linux x86_64/glibc executables beside the inputs, removing the extension,
-# linked as BOTLISH_NATIVE_LINKER says (rustc by default; stub needs no
-# toolchain, and is what the single-file compiler uses: SINGLE-EXECUTABLE.md).
-# It does not evaluate the program. Running the executable prints its value.
+# executables beside the inputs, removing the extension: ELF on Linux glibc
+# (x86_64, aarch64), Mach-O on macOS (aarch64), for the host's target only,
+# linked as BOTLISH_NATIVE_LINKER says (rustc, the default, everywhere; stub
+# needs no toolchain, is Linux x86_64's only, and is what the single-file
+# compiler uses: SINGLE-EXECUTABLE.md). It does not evaluate the program.
+# Running the executable prints its value.
 # -emit-hir-interchange writes each .bot or .hir input's analyzed HIR in the
 # HIR interchange format (HIR-INTERCHANGE.md) beside it, as FILE.hirx, without
 # evaluating it; a .hirx input is run like any other, on any backend, with no

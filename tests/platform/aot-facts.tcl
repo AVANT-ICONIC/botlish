@@ -22,7 +22,9 @@
 #               architecture (`lipo -archs`), a valid signature (`codesign
 #               -v`; the linker's ad-hoc one); the dynamic libraries it
 #               loads (`otool -L`, `ldd`), all the system's, none of this
-#               checkout's or toolchain's
+#               checkout's or toolchain's; and the platform linker's command
+#               line as rustc runs it (`rustc --print link-args`, through a
+#               RUSTC wrapper: printed with -verbose 1)
 #   standalone  the executable moved out of its build directory, its source
 #               deleted, run with an empty environment from another
 #               directory: its value, also under BOTLISH_NATIVE_GC_STRESS=1;
@@ -161,6 +163,26 @@ fn worker(depth: int) -> Event:
 coroutine {step, first} = worker(100000000)
 step().value
 }
+
+# What performance-compute runs: fib(25) and a String built by 2000
+# concatenations.
+set benchProgram {import str
+
+fn fib(n):
+    if n <= 1:
+        return n
+
+    fib(n - 1) + fib(n - 2)
+
+fn build(n: int, acc: str) -> int:
+    if n == 0:
+        return acc.length()
+
+    build(n - 1, acc.concat("x"))
+
+[fib(25), build(2000, "")]
+}
+set benchValue {[75025, 2000]}
 
 set errorProgram {import mutable_array
 mutable_array::allocate(0 - 1)
@@ -351,7 +373,11 @@ proc checks {} {
         check executable-link 0 "[dict get $options -errorcode]: [lindex [split $message \n] 0]" $message
         return
     }
-    check executable-link [file executable $executable] "linked in $linkMs ms ([file size $executable] bytes), mode [file attributes $executable -permissions]"
+    if {![file executable $executable]} {
+        check executable-link 0 "linked in $linkMs ms, but no executable at $executable"
+        return
+    }
+    check executable-link 1 "linked in $linkMs ms ([file size $executable] bytes), mode [file attributes $executable -permissions]"
     set executableHeader [binaryHeader $executable]
     set pie ""
     if {[lindex $executableHeader 0] eq "macho"} {
@@ -390,6 +416,37 @@ proc checks {} {
     check executable-symbols [expr {[regexp -line "^${prefix}botlish_fn_0 T " $exeSymbols]}] \
         "${prefix}botlish_fn_0 [expr {[regexp -line "^${prefix}botlish_fn_0 T " $exeSymbols] ? "defined" : "missing"}] in the executable" $::toolError
 
+    # The platform linker's command line, as rustc runs it for this link
+    # (`--print link-args`, through a wrapper given as RUSTC: the link
+    # itself is native::executable's): the linker program and its options,
+    # with this run's temporary paths named.
+    set wrapper [file join $work rustc-print-link-args]
+    set printed [file join $work link-args.txt]
+    writeText $wrapper "#!/bin/sh\nexec \"\$REAL_RUSTC\" --print link-args \"\$@\" > \"$printed\"\n"
+    file attributes $wrapper -permissions 0755
+    set saved [array get ::env RUSTC]
+    set ::env(REAL_RUSTC) [expr {$saved ne {} ? [lindex $saved 1] : "rustc"}]
+    set ::env(RUSTC) $wrapper
+    try {
+        set relinked [catch {native::executable $hir [file join $buildDir relinked]} message]
+    } finally {
+        unset ::env(RUSTC) ::env(REAL_RUSTC)
+        if {$saved ne {}} { set ::env(RUSTC) [lindex $saved 1] }
+    }
+    set command [expr {[file exists $printed] ? [string trim [readText $printed]] : ""}]
+    set release [file dirname [native::binary]]
+    # rustc prints the linker's environment first (NAME="VALUE" ...).
+    regsub {^(\w+="[^"]*"\s+)*} $command {} command
+    set sysroot [string trim [lindex [run rustc --print sysroot] 1]]
+    set named [string map [list $buildDir BUILD $release RELEASE $work WORK] $command]
+    if {$sysroot ne ""} { set named [string map [list $sysroot SYSROOT] $named] }
+    regsub -all {"[^"]*/\.botlish-aot-[^/"]*/} $named {"LINKDIR/} named
+    set linker [lindex [regexp -inline {^"?([^" ]+)} $named] 1]
+    check executable-link-command [expr {!$relinked && $command ne "" && [string first program.o $command] >= 0
+        && [string first libbotlish_native.rlib $command] >= 0}] \
+        "linker [file tail $linker], [llength [regexp -all -inline {"[^"]*"|\S+} $named]] arguments, program.o and libbotlish_native.rlib among them" \
+        [expr {$relinked ? $message : $named}]
+
     # ---- Standalone: moved, source deleted, empty environment, another
     # working directory.
     set moved [file join $runDir "moved program"]
@@ -420,6 +477,36 @@ proc checks {} {
     check standalone-overflow-default [expr {$outcome eq [list 1 "" "$overflowLine\n"]}] "1 GiB stack: [shown $outcome]"
     set outcome [standalone co-overflow $coroutineOverflowProgram {}]
     check standalone-co-overflow [expr {$outcome eq [list 1 "" "$overflowLine\n"]}] [shown $outcome]
+
+    # ---- Observations, not limits: the same program's best run in the JIT
+    # (native::measure) and inside its executable (the driver protocol's
+    # BOTLISH_NATIVE_RUNS, timed by the executable itself), and an
+    # executable's whole process (startup included) for a trivial program,
+    # the median of five. Checked only for the right value.
+    global benchProgram benchValue
+    set runs 20
+    set hir [surface::compile $benchProgram bench.bot -warnings off]
+    lassign [native::measure $hir $runs] - - jitBest - jitValue
+    set path [file join $runDir bench]
+    native::executable $hir $path
+    set result [file join $work result.txt]
+    lassign [run env BOTLISH_NATIVE_RESULT=$result BOTLISH_NATIVE_RUNS=$runs $path] status
+    set lines [split [string trim [readText $result]] \n]
+    set times [lrange [lsearch -inline $lines {times *}] 1 end]
+    set aotBest [expr {[llength $times] ? [tcl::mathfunc::min {*}$times] / 1000.0 : 0}]
+    set aotValue [lindex [lsearch -inline $lines {value *}] 1]
+    check performance-compute [expr {$status eq "0" && [core::formatValue $jitValue] eq $benchValue && $aotValue ne "" && [core::formatValue $aotValue] eq $benchValue && $aotBest > 0}] \
+        [format "best of %d runs: JIT %.0f us, executable %.0f us (ratio %.2f)" $runs $jitBest $aotBest [expr {$aotBest / max($jitBest, 1)}]]
+    native::executable [surface::compile 42 trivial.bot] [file join $runDir trivial]
+    set walls {}
+    for {set i 0} {$i < 5} {incr i} {
+        set started [clock microseconds]
+        lassign [run [file join $runDir trivial]] status stdout
+        lappend walls [expr {([clock microseconds] - $started) / 1000.0}]
+    }
+    set median [lindex [lsort -real $walls] 2]
+    check performance-startup [expr {$status eq "0" && $stdout eq "42\n"}] \
+        [format "a trivial executable's whole process: median %.1f ms of five (%s)" $median [join [lmap w $walls {format %.1f $w}] {, }]]
 }
 
 puts "aot facts on $host ($::tcl_platform(os) $::tcl_platform(machine)), driver [native::binary]"

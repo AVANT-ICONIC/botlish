@@ -11,9 +11,10 @@
 # (tests/platform/cabi-facts.tcl), `rust` (the native crate's Rust tests),
 # `native-stack-mutants` (audit/native-stack/tools/mutate.tcl: the stack
 # guard's mutants for this host, each rebuilding a private copy of native/;
-# about two minutes a mutant) or `native-stack-bench`
-# (bench/native-stack-guard.tcl against origin's main, built here); the last
-# two are never part of a tier.
+# about two minutes a mutant), `native-aot-mutants`
+# (audit/native-aot/tools/mutate.tcl: executable emission's mutants, the
+# same way) or `native-stack-bench` (bench/native-stack-guard.tcl against
+# origin's main, built here); the last three are never part of a tier.
 #
 #   smoke       cabi, examples and a dozen front-end test files that never
 #               reach the native backend: about 15 seconds
@@ -38,12 +39,13 @@
 #   cabi            tests/platform/cabi-facts.tcl
 #   rust            cargo test --release --manifest-path native/Cargo.toml
 #   native-stack-mutants  tclsh9.0 audit/native-stack/tools/mutate.tcl
+#   native-aot-mutants    tclsh9.0 audit/native-aot/tools/mutate.tcl
 #   native-stack-bench    tclsh9.0 bench/native-stack-guard.tcl -baseline-rev main
 #
 # -gc-stress 1 runs everything with BOTLISH_NATIVE_GC_STRESS=1. -shard I/N
 # (1 <= I <= N) keeps the Ith of every N test files and of every N suites,
-# for parallel CI jobs; examples, cabi, rust, native-stack-mutants and
-# native-stack-bench run in shard 1 only. -list 1
+# for parallel CI jobs; examples, cabi, rust, native-stack-mutants,
+# native-aot-mutants and native-stack-bench run in shard 1 only. -list 1
 # prints the commands and runs nothing. Each command is printed before it
 # runs and streams its output; at the end a summary lists every failure with
 # the command that reruns it alone. Exits 1 on any failure. It never uses
@@ -73,7 +75,7 @@ set notYet {
 
 proc usage {} {
     puts stderr "usage: tclsh9.0 tests/platform/tier.tcl ?-backends LIST? ?-golden-backends LIST? ?-example-backends LIST? ?-gc-stress 0|1? ?-shard I/N? ?-list 0|1? ITEM ..."
-    puts stderr "  ITEM: smoke | acceptance | all | tests/X.test | X.test | tests/golden/X.bot | X.bot | examples | cabi | rust | native-stack-mutants | native-stack-bench"
+    puts stderr "  ITEM: smoke | acceptance | all | tests/X.test | X.test | tests/golden/X.bot | X.bot | examples | cabi | rust | native-stack-mutants | native-aot-mutants | native-stack-bench"
     exit 2
 }
 
@@ -164,14 +166,14 @@ proc addTier {name} {
 foreach item $items {
     if {$item in {smoke acceptance all}} {
         addTier $item
-    } elseif {$item in {examples cabi rust native-stack-mutants native-stack-bench}} {
+    } elseif {$item in {examples cabi rust native-stack-mutants native-aot-mutants native-stack-bench}} {
         addCheck $item
     } elseif {[string match *.test $item]} {
         addFile $item
     } elseif {[string match *.bot $item]} {
         addSuite $item $goldenBackends
     } else {
-        puts stderr "not a tier, test file, golden suite, examples, cabi, rust, native-stack-mutants or native-stack-bench: $item"
+        puts stderr "not a tier, test file, golden suite, examples, cabi, rust, native-stack-mutants, native-aot-mutants or native-stack-bench: $item"
         usage
     }
 }
@@ -241,6 +243,10 @@ foreach check $checks {
         native-stack-mutants {
             lappend commands [list "native stack guard mutants" {} \
                 [list $tclsh [file join $root audit native-stack tools mutate.tcl]] plain]
+        }
+        native-aot-mutants {
+            lappend commands [list "native executable mutants" {} \
+                [list $tclsh [file join $root audit native-aot tools mutate.tcl]] plain]
         }
         native-stack-bench {
             lappend commands [list "native stack guard overhead" {} \
