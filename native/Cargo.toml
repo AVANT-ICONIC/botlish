@@ -22,3 +22,11 @@ target-lexicon = "0.13"
 
 [profile.release]
 debug = 1
+
+# The host's native stack bounds and guards, and the runtime's overflow
+# handling (MACOS-AARCH64-MILESTONE-4.md): its own main runs on the process's
+# main thread, and every check that faults on purpose runs in a child
+# process.
+[[test]]
+name = "native_stack"
+harness = false

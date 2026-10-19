@@ -24,10 +24,10 @@ source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 100000
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
+# Linux on x86-64 or AArch64: syscalls through the portable wrappers
+# (linux::write, linux::read, linux::io: each architecture's own transport,
+# LINUX-SYSCALL-TRANSPORTS.md). Native coroutines and the stack guard are the
+# capabilities nativeCoroutines and nativeStackGuard (helpers.tcl).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -573,7 +573,7 @@ test co-errors-internal {a failure handled inside the coroutine never reaches th
     coAgree "${errorDecls}fn handled(n: int, resume Msg) -> Ev:\n    v = deep(n):\n        on Broken:\n            42\n    m = yield Ev {v: v}\n    return Ev {v: m.v + 1}\ncoroutine {step, first} = handled(0 - 5)\nsecond = step(Msg {v: 10})\n\[first.v, second.v\]\n"
 } -result {value {[42, 11]}}
 
-test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints nativeLinux -body {
+test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints nativeStackGuard -body {
     set hir [surface::compile "struct V:\n    n: int\nfn down(n: int) -> int:\n    if n == 0:\n        yield V {n: 0}\n        return 0\n    1 + down(n - 1)\nfn worker(n: int) -> V:\n    return V {n: down(n)}\ncoroutine {step, first} = worker(100000000)\nfirst.n\n" -warnings off]
     catch {native::evalHir $hir} message options
     dict get $options -errorcode
