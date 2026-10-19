@@ -2403,6 +2403,7 @@ tests/hir-range.test range-lattice-4 pass
 tests/hir-range.test range-lattice-5 pass
 tests/hir-range.test range-lattice-6 pass
 tests/hir-range.test range-lattice-7 pass
+tests/hir-range.test range-lattice-8 pass
 tests/hir-range.test range-narrow-param-1 pass
 tests/hir-range.test range-narrow-param-2 pass
 tests/hir-range.test range-narrow-param-3 pass

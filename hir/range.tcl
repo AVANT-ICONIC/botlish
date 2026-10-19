@@ -335,7 +335,12 @@ proc hir::range::Mod {x d} {
     set dmn [dict get $d min]
     set dmx [dict get $d max]
     if {$dmn ne "-inf" && $dmx ne "+inf"} {
-        set m [expr {max(abs($dmn), abs($dmx))}]
+        # Not max(abs($dmn), abs($dmx)): Tcl 9.0.1's max() and min() abort
+        # the process (an invalid free) when an argument is a BigInt the
+        # expression computed, such as abs() of a bound below -2^63.
+        set lo [expr {abs($dmn)}]
+        set hi [expr {abs($dmx)}]
+        set m [expr {$lo > $hi ? $lo : $hi}]
         if {$m > 0} {
             return [dict create min 0 max [expr {$m - 1}]]
         }
