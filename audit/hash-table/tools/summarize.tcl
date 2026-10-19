@@ -14,6 +14,10 @@
 #       the reference's probe lengths (mean, p99, max) per key kind and size at
 #       maximum load LOAD, and Botlish's hash against the splitmix64 control
 #       (chi-squared over the slots, and empty slots)
+#   tclsh9.0 audit/hash-table/tools/summarize.tcl instructions FILE.tsv TAGS ?RUST-IMPL?
+#       tools/instructions.tcl's rows, one row per implementation, keys,
+#       size and mode, one column per tag, with the reference's RUST-IMPL
+#       (tag "rust") and the first tag's ratio to it
 #   tclsh9.0 audit/hash-table/tools/summarize.tcl ladder FILE.tsv TAGS ?RUST.tsv RUST-IMPL?
 #       tools/ladder.tcl's rows: one row per implementation, keys, size and
 #       mode, one column per tag (tree), optionally the Rust reference's
@@ -180,6 +184,46 @@ switch -- $command {
                 lassign [dict get $dist [list $kind $n $slots]] chi empty mchi mempty khit kmiss
                 append row " [format %.0f $chi] ([format %.0f $mchi]) | $empty ($mempty) | [fmt $khit] / [fmt $kmiss] |"
             } else { append row " | | |" }
+            puts $row
+        }
+    }
+    instructions {
+        lassign $argv _ path tags rimpl
+        set cells [dict create]
+        set configs {}
+        foreach r [readRows $path] {
+            lassign $r tag impl k n m per
+            if {$tag eq "rust"} { dict set cells [list rust $impl $k $n $m] $per; continue }
+            set config [list $impl $k $n $m]
+            if {$config ni $configs} { lappend configs $config }
+            dict set cells [list $tag {*}$config] $per
+        }
+        set head "| impl | keys | n | mode | [join $tags { | }] |"
+        set rule "|---|---|---:|---|[string repeat ---:| [llength $tags]]"
+        if {$rimpl ne ""} {
+            append head " Rust $rimpl | [lindex $tags 0] / Rust | [lindex $tags end] / Rust |"
+            append rule ---:|---:|---:|
+        }
+        puts $head
+        puts $rule
+        foreach config [lsort -index 2 -integer [lsort -index 1 [lsort -index 0 $configs]]] {
+            lassign $config impl k n m
+            set row "| $impl | $k | $n | $m |"
+            foreach tag $tags {
+                set key [list $tag {*}$config]
+                append row " [expr {[dict exists $cells $key] ? [format %.0f [dict get $cells $key]] : {}}] |"
+            }
+            if {$rimpl ne ""} {
+                set rkey [list rust $rimpl $k $n $m]
+                if {[dict exists $cells $rkey]} {
+                    set rv [dict get $cells $rkey]
+                    append row " [format %.0f $rv] |"
+                    foreach tag [list [lindex $tags 0] [lindex $tags end]] {
+                        set key [list $tag {*}$config]
+                        append row " [expr {[dict exists $cells $key] && $rv > 0 ? [format %.1f [expr {[dict get $cells $key] / $rv}]] : {}}] |"
+                    }
+                } else { append row " | | |" }
+            }
             puts $row
         }
     }

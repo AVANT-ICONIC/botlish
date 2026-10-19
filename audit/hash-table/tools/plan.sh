@@ -23,9 +23,11 @@ export LANG=C.utf8 LC_ALL=C.utf8
 mkdir -p "$out"
 stamp() { echo "$(date +%H:%M:%S) $*"; }
 
-# 1. Every phase of the baseline (the reference's sweeps included).
+# 1. Every timing phase of the baseline (the reference's sweeps included;
+#    copies, memory and nir are deterministic and run separately).
 stamp "run-all baseline"
-BOTLISH_HT_ROOT=$base $tclsh "$here/run-all.tcl" -tag baseline -results "$out"
+BOTLISH_HT_ROOT=$base $tclsh "$here/run-all.tcl" -tag baseline -results "$out" \
+    -phases "rust sizes keys typed life policy mixed backends membership"
 
 # 2. Each prototype alone and all of them, on the tables they touch
 #    (interleaved per round; summarize.tcl ladder).
@@ -33,12 +35,6 @@ stamp "ladder A: every prototype, lpa and lpmask"
 $tclsh "$here/ladder.tcl" -trees "base $base hash $hash inline $inline mod $mod bounds $bounds combo $combo" \
     -rounds 3 -out "$out/ladder-a.tsv" -impls "lpa lpmask" -keys "int-dense str-short point" \
     -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5
-stamp "ladder B: baseline against all prototypes, every table"
-$tclsh "$here/ladder.tcl" -trees "base $base combo $combo" -rounds 2 -out "$out/ladder-b.tsv" \
-    -impls "lpa lpmono lpfact lpint lpstr lpmask rh chain sorted chain0 ht0 lp lpc listmap" -keys "int-dense str-short" \
-    -sizes "16 1024 16384" -modes "build presized hit miss replace drop" -runs 5
-$tclsh "$here/ladder.tcl" -trees "base $base combo $combo" -rounds 2 -out "$out/ladder-b.tsv" \
-    -impls "cd" -keys "int-dense str-short" -sizes "16 1024 16384" -modes "build presized hit miss replace" -runs 5
 stamp "ladder C: the probe primitive before and after the compiler work"
 $tclsh "$here/ladder.tcl" -trees "probe $probe comboprobe $comboprobe" -rounds 3 -out "$out/ladder-c.tsv" \
     -impls "lpa lpp lpmask" -keys "int-dense str-short point" -sizes "1024 16384" -modes "build presized hit miss replace" -runs 5
@@ -46,7 +42,7 @@ $tclsh "$here/ladder.tcl" -trees "probe $probe comboprobe $comboprobe" -rounds 3
 # 3. The prototypes' effect on everything else the baseline measured.
 stamp "run-all combo"
 BOTLISH_HT_ROOT=$combo $tclsh "$here/run-all.tcl" -tag combo -results "$out" \
-    -phases "copies memory nir sizes keys typed life mixed membership"
+    -phases "sizes keys typed life mixed membership"
 
 # 4. Workloads unrelated to the experiment, baseline against all prototypes.
 for tree in base combo; do
