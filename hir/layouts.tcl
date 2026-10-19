@@ -1410,10 +1410,19 @@ proc hir::layouts::ArgumentKind {arg ns} {
 #                   "Field designators" section above)
 #   value K         argument K is the value written: proven admissible for
 #                   the designated field's type (VerifyWriteValue)
+#   arrayed AT FORM argument AT's static type is a live fixed array,
+#                   NativeView[array N of E] or NativeEdit[array N of E];
+#                   once types are known the call becomes a call of FORM
+#                   with the array's descriptor words appended (Elaborate)
+#   array K         argument K is a live fixed array's descriptor words,
+#                   {array N STRIDE ELEMENT}
+#   index K         argument K is the element index, IndexNotFound unless
+#                   it designates an element (the narray bounds family)
 #
 # and `op` the operation a backend performs (parse, emit; view, load,
 # field: NATIVE-LAYOUT-VIEWS.md; edit, store, write, write_foreign:
-# NATIVE-LAYOUT-WRITES.md).
+# NATIVE-LAYOUT-WRITES.md; element, store_element, load_array:
+# FIXED-LAYOUT-ARRAYS.md).
 
 # The -layout role of native NAME, or "".
 proc hir::layouts::Role {name} {

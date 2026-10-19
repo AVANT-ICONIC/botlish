@@ -782,9 +782,12 @@ proc core::native::ValidShape {shape count} {
         # {native-view I}: the result is a NativeView[L] whose layout L is
         # described by argument I's descriptor constant
         # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the
-        # layout of argument I's static NativeView[L] type (binary::load);
+        # layout of argument I's static NativeView[L] type (binary::load),
+        # or of a live fixed array's the List its copy is;
         # {native-edit I}: a NativeEdit[L] likewise (binary::native::edit,
-        # NATIVE-LAYOUT-WRITES.md). All resolved by hir::types::ShapeResult
+        # NATIVE-LAYOUT-WRITES.md); {native-element I}: the element of
+        # argument I's static live fixed array type (binary::element,
+        # FIXED-LAYOUT-ARRAYS.md). All resolved by hir::types::ShapeResult
         # (NATIVE-LAYOUT-VIEWS.md).
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
             && ($count eq "" || [lindex $shape 1] < $count)}]

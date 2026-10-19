@@ -423,7 +423,7 @@ $ctype eq "char"
             return [list ok pointer [lindex $m 1]]
 >>>>
 
-@@ layout-array-flattened an array of a fixed extent is flattened into one field per element (name[0], name[1], ...), never blocked
+@@ layout-array-flattened an array of a fixed extent is flattened into one field per element (name[0], name[1], ...), never a layout array (FIXED-LAYOUT-ARRAYS.md)
 ## tools/c-bindgen/records.tcl
 <<<<
         lappend out [dict create cname $cname path $cname ctype $ctype bits $bits attrs $attrs via $via]
@@ -575,4 +575,35 @@ $ctype eq "char"
 ====
         if {0} {
             foreach d [dict get $rec deps] {
+>>>>
+
+@@ layout-array-inner-dimension-dropped the layout probe asks only an array's outermost extent: a two-dimensional array has no inner extent to emit (FIXED-LAYOUT-ARRAYS.md)
+## tools/c-bindgen/records.tcl
+<<<<
+                        foreach b $bounds {
+                            lappend questions "sizeof($at) / sizeof($at\[0\])"
+                            append at "\[0\]"
+                        }
+====
+                        foreach b [lrange $bounds 0 0] {
+                            lappend questions "sizeof($at) / sizeof($at\[0\])"
+                            append at "\[0\]"
+                        }
+>>>>
+
+@@ layout-array-of-blocked-emitted an array of a blocked record is no by-value dependency: its record is emitted although its element has no layout (FIXED-LAYOUT-ARRAYS.md)
+## tools/c-bindgen/records.tcl
+<<<<
+            lappend deps [list $text array-element]
+            if {[dict exists $facts rec:$text] && [lindex [dict get $facts rec:$text] 0] eq "ok"} {
+====
+            if {[dict exists $facts rec:$text] && [lindex [dict get $facts rec:$text] 0] eq "ok"} {
+>>>>
+
+@@ layout-array-last-element-off-by-one layouts-check.c places an array's last element one element past its end (FIXED-LAYOUT-ARRAYS.md): the check rejects every correct array layout
+## tools/c-bindgen/verify.tcl
+<<<<
+                append text "BOTLISH_OFFSET($c, $last, [expr {$offset + ($count - 1) * $width}], \"$name.$fname, its last element\");\n"
+====
+                append text "BOTLISH_OFFSET($c, $last, [expr {$offset + $count * $width}], \"$name.$fname, its last element\");\n"
 >>>>

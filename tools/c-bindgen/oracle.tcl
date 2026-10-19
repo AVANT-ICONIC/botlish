@@ -113,7 +113,9 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
     append c "/* The runtime oracle of ${ns}::layouts (tools/c-bindgen/oracle.tcl): test tooling. */\n"
     append c "static char orc_anchor\[256\];\n"
     append c "#define ORC_ANCHOR(T, k) ((T)(__UINTPTR_TYPE__)&orc_anchor\[(k)\])\n"
-    set ext "# The C oracle's functions (tools/c-bindgen/oracle.tcl): test tooling.\nimport ffi::c\nimport ${ns}::ctypes\n\nextern c library \"botlish_layout_oracle\"\n"
+    # (A binding whose layouts name no pointee identity has no ctypes module.)
+    set ctypes [expr {[file exists [file join $dir $ns ctypes.bot]] ? "import ${ns}::ctypes\n" : ""}]
+    set ext "# The C oracle's functions (tools/c-bindgen/oracle.tcl): test tooling.\nimport ffi::c\n$ctypes\nextern c library \"botlish_layout_oracle\"\n"
     set bot "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport list\nimport ${ns}::layouts\nimport orc\n"
     set calls {}
     set n 0
