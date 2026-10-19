@@ -1026,6 +1026,22 @@ test cb-sdl3-layouts {every layout the SDL3 binding emits agrees with C at run t
     }]
 } -cleanup removeScratch -result {1 {} {} {{{struct SDL_Rect} layout-direct {}} {{struct SDL_Surface} layout-direct {}} {{struct SDL_IOStreamInterface} layout-direct {}} {{struct SDL_FRect} layout-blocked float} {{union SDL_Event} layout-blocked {c-bool fixed-array float union}} {{struct SDL_KeyboardEvent} layout-blocked c-bool}}}
 
+test cb-layout-gcc-bindings {GCC agrees with clang on every layout of the Tcl, Tcl stubs, SDL3 and BoringSSL bindings for the host: each committed layouts-check.c compiles with the host's cc, the profile's include directories, defines and flags} -constraints {tclSources sdl3Sources boringsslSources linuxNative} -body {
+    lmap p {tcl tclstubs sdl3 boringssl} {
+        set profile [::cbind::profile::load $p]
+        if {$::hostTarget ni [dict get $profile targets]} continue
+        set tool [::cbind::generate::ToolProfile [::cbind::profile::headersFor $profile $::hostTarget] \
+            [::cbind::profile::sourceRoot $profile 0 $::hostTarget]]
+        set args {}
+        foreach d [dict get $tool includeDirs] { lappend args -I$d }
+        foreach d [dict get $tool defines] { lappend args -D$d }
+        foreach f [dict get $tool flags] { if {$f ne "-nostdlibinc"} { lappend args $f } }
+        set dir [scratch]
+        set status [catch {exec cc -std=gnu11 -w {*}$args -c [file join [generatedDir $profile $::hostTarget] layouts-check.c] -o [file join $dir check.o] 2>@1} out]
+        list $p [expr {$status ? $out : "ok"}]
+    }
+} -cleanup removeScratch -match glob -result {{tcl ok} * {sdl3 ok} {boringssl ok}}
+
 # ---------------------------------------------------------------------------
 # Win32: MinGW-w64's headers for Windows x86-64 with the GNU ABI, from Linux
 

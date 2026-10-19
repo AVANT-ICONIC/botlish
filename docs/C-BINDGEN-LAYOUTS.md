@@ -626,7 +626,10 @@ field's width and class and expects each to fail.
 **A second compiler.** GCC compiles the same file: the host's `cc` for the
 host target, `x86_64-w64-mingw32-gcc` for windows-x86_64-gnu (all 564 Win32
 layouts and the fixture's), `aarch64-linux-gnu-gcc` for linux-aarch64
-(`cb-layout-second-compiler`, `cb-win32-verified-gcc`).
+(`cb-layout-second-compiler`, `cb-win32-verified-gcc`), and the host's `cc`
+for every layout of the Tcl, Tcl stubs, SDL3 and BoringSSL bindings
+(`cb-layout-gcc-bindings`); `aarch64-linux-gnu-gcc` agrees on their
+linux-aarch64 layouts too (29, 70 and 52; checked by hand).
 
 **The runtime oracle** (`tools/c-bindgen/oracle.tcl`, test tooling: nothing
 the generator or the compiler loads) builds, for every emitted layout of a
@@ -790,7 +793,7 @@ imports.
 
 ## 20. Regression and CI
 
-Run for this milestone, all passing: `tests/c-bindgen.test` (67 tests, none
+Run for this milestone, all passing: `tests/c-bindgen.test` (68 tests, none
 skipped with the pinned sources, libraries and MinGW-w64 installed),
 `tools/c-bindgen.tcl check` for fixture, tcl, tclstubs, boringssl, sdl3 and
 win32, `audit/c-bindgen/tools/fuzz.tcl` and `layout-fuzz.tcl` (section 16),
