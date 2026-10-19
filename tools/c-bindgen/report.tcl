@@ -35,14 +35,15 @@ proc ::cbind::report::rows {model} {
             set types [lmap q [dict get $e params] {ReportType $ids [dict get $q type]}]
             set sig "; ([join $types {, }]) -> [ReportType $ids [dict get $e result type]]"
         }
+        set lib [expr {[dict exists $e library] ? "; library [dict get $e library]" : ""}]
         switch -- $k {
             direct {
                 set reason direct
-                set detail "symbol [dict get $e symbol]$sig"
+                set detail "symbol [dict get $e symbol]$lib$sig"
             }
             alias {
                 set reason "alias of [dict get $e targetName]"
-                set detail "symbol [dict get $e symbol]$sig"
+                set detail "symbol [dict get $e symbol]$lib$sig"
             }
             thunk {
                 set reason "thunk ([dict get $e via][expr {[dict exists $e shadowedBy] ? ": [dict get $e shadowedBy]" : ""}])"
@@ -89,7 +90,144 @@ proc ::cbind::report::rows {model} {
             lappend rows [list tag $key unused "" [expr {$complete ? "complete" : "incomplete"}] "no bound signature points to it"]
         }
     }
+    # Records: one row each, what its layout became (records.tcl).
+    if {[dict exists $model layouts]} {
+        dict for {key rec} [dict get $model layouts] {
+            if {[dict get $rec status] eq "promoted"} continue
+            lappend rows [RecordRow $ns $rec]
+        }
+    }
     return $rows
+}
+
+# The report row of record REC: {record KEY STATUS MODULE REASON DETAIL},
+# REASON the layout's name or the blockers' reasons, DETAIL the sizes or
+# every blocker, located.
+proc ::cbind::report::RecordRow {ns rec} {
+    set key [dict get $rec key]
+    switch -- [dict get $rec status] {
+        layout-direct {
+            return [list record $key layout-direct "${ns}::layouts" [dict get $rec layoutName] \
+                "sizeof [dict get $rec size], _Alignof [dict get $rec align], [llength [dict get $rec fields]] fields"]
+        }
+        opaque-only {
+            return [list record $key opaque-only "" incomplete "no definition: a pointee identity only"]
+        }
+        default {
+            set reasons [lsort -unique [concat [lmap b [dict get $rec direct] {lindex $b 0}] \
+                [lmap b [dict get $rec transitive] {lindex $b 0}]]]
+            set details [concat [lmap b [dict get $rec direct] {lindex $b 1}] [lmap b [dict get $rec transitive] {lindex $b 1}]]
+            return [list record $key layout-blocked "" [join $reasons ,] [join $details "; "]]
+        }
+    }
+}
+
+# The layout manifest (layouts.tsv) of MODEL: every record the generation
+# considered, one `record` row each and one `field` row per member, so that
+# what a feature would unlock can be computed without the headers. Columns:
+#
+#   record KEY - LAYOUT STATUS - SIZE ALIGN CNAME - DETAIL
+#   field  KEY INDEX NAME CATEGORY OFFSET SIZE - CDECL TYPE DETAIL
+#
+# KEY the C tag ("struct T"; an anonymous record's anon@FILE:LINE), LAYOUT
+# the emitted layout's name ("-" when none), STATUS layout-direct,
+# layout-blocked, opaque-only; CNAME the C type the probes named it by;
+# DETAIL key=value items: typedefs, identity, header, blockers (direct),
+# nested (transitive: the chain to the first direct blocker), roots (every
+# direct reason it waits for), deps, pointed-by (bound APIs pointing to
+# it). A field's NAME is its Botlish name ("-" for an unnamed member),
+# CATEGORY scalar, pointer, function-pointer, nested, or its first
+# blocker's reason; TYPE its Botlish type when representable; DETAIL its C
+# name, its array element and extent, its bitfield width, its blockers.
+proc ::cbind::report::layoutsTsv {model} {
+    set p [dict get $model profile]
+    set ns [dict get $p name]
+    set tc [dict get $model toolchain]
+    set recs [dict get $model layouts]
+    set ids [dict get $model identities]
+    set users [dict get [::cbind::pressure::api $model] users]
+    set out "# c-bindgen layout manifest: profile [dict get $p name], target [dict get $model target], toolchain [dict get $tc family] [dict get $tc target] ([dict get $tc version]) (C-BINDGEN-LAYOUTS.md)\n"
+    append out "kind\trecord\tindex\tname\tstatus\toffset\tsize\talign\tc\ttype\tdetail\n"
+    dict for {key rec} $recs {
+        if {[dict get $rec status] eq "promoted"} continue
+        set detail {}
+        if {[llength [dict get $rec typedefs]]} { lappend detail "typedefs=[join [dict get $rec typedefs] ,]" }
+        lappend detail "identity=[expr {[dict exists $ids $key] ? "${ns}::ctypes::[dict get $ids $key name]" : "-"}]"
+        lappend detail "header=[expr {[dict get $rec origin] in {public bundled internal} ? "[dict get $rec header]:[dict get $rec line]" : "(a system header)"}]"
+        if {[dict get $rec status] eq "layout-blocked"} {
+            set direct [lmap b [dict get $rec direct] {string cat [lindex $b 0] ": " [lindex $b 1]}]
+            if {[llength $direct]} { lappend detail "blockers=[join $direct { | }]" }
+            set trans [lmap b [dict get $rec transitive] {lindex $b 1}]
+            if {[llength $trans]} { lappend detail "nested=[join $trans { | }]" }
+            lappend detail "roots=[join [::cbind::records::RootReasons $recs $key] ,]"
+        }
+        if {[llength [dict get $rec deps]]} {
+            lappend detail "deps=[join [lsort -unique [lmap d [dict get $rec deps] {lindex $d 0}]] ,]"
+        }
+        if {[dict exists $users $key]} { lappend detail "pointed-by=[llength [dict get $users $key]]" }
+        set name [expr {[dict get $rec status] eq "layout-direct" ? [dict get $rec layoutName] : "-"}]
+        append out [join [lmap c [list record $key - $name [dict get $rec status] - \
+            [Dash [dict get $rec size]] [Dash [dict get $rec align]] [Dash [dict get $rec cname]] - [join $detail {; }]] {Clean $c}] \t]\n
+        foreach f [dict get $rec fields] {
+            set cat [dict get $f kind]
+            if {$cat eq "pointer" && [string match ffi::c::FnPtr* [dict get $f type]]} { set cat function-pointer }
+            if {$cat eq "blocked"} { set cat [lindex [dict get $f blockers] 0 0] }
+            set type [dict get $f type]
+            if {$cat eq "nested"} { set type [dict get $recs $type layoutName] }
+            set fd [list "c=[Dash [dict get $f cname]]"]
+            if {[llength [dict get $f via]]} { lappend fd "promoted-from=[join [dict get $f via] ,]" }
+            if {[dict exists $f array]} {
+                set a [dict get $f array]
+                lappend fd "element=[dict get $a category] [dict get $a element]" "bounds=[join [dict get $a bounds] ,]"
+                if {[dict exists $f extent]} { lappend fd "extent=[dict get $f extent]" }
+            }
+            if {[dict get $f bits] ne ""} { lappend fd "bits=[::cir::BoundText [dict get $f bits]]" }
+            if {[llength [dict get $f blockers]]} {
+                lappend fd "blockers=[join [lmap b [dict get $f blockers] {string cat [lindex $b 0] ": " [lindex $b 1]}] { | }]"
+            }
+            set cdecl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname]] " "]
+            append out [join [lmap c [list field $key [dict get $f index] [Dash [dict get $f name]] $cat \
+                [Dash [dict get $f offset]] [Dash [dict get $f size]] - $cdecl [Dash [::cbind::report::ReportType $ids $type]] [join $fd {; }]] {Clean $c}] \t]\n
+        }
+    }
+    return $out
+}
+
+proc ::cbind::report::Dash {v} {
+    return [expr {$v eq "" ? "-" : $v}]
+}
+
+# The layout counts of MODEL (report.txt's and the manifest's).
+proc ::cbind::report::layoutCounts {model} {
+    set c [dict create structs 0 unions 0 incomplete 0 emitted 0 blocked 0 blockedStructs 0 \
+        blockedUnions 0 blockedDirect 0 blockedTransitive 0 public 0 system 0 anonymous 0 promoted 0]
+    set reasons [dict create]
+    set transitiveRoots [dict create]
+    if {![dict exists $model layouts]} { dict set c reasons {}; dict set c roots {}; return $c }
+    set recs [dict get $model layouts]
+    dict for {key rec} $recs {
+        set st [dict get $rec status]
+        if {$st eq "promoted"} { dict incr c promoted; continue }
+        if {$st eq "opaque-only"} { dict incr c incomplete; continue }
+        dict incr c [expr {[dict get $rec kind] eq "union" ? "unions" : "structs"}]
+        dict incr c [expr {[dict get $rec origin] eq "public" ? "public" : "system"}]
+        if {[dict get $rec anonymous]} { dict incr c anonymous }
+        if {$st eq "layout-direct"} {
+            dict incr c emitted
+            continue
+        }
+        dict incr c blocked
+        dict incr c [expr {[dict get $rec kind] eq "union" ? "blockedUnions" : "blockedStructs"}]
+        dict incr c [expr {[llength [dict get $rec direct]] ? "blockedDirect" : "blockedTransitive"}]
+        foreach r [lsort -unique [lmap b [dict get $rec direct] {lindex $b 0}]] { dict incr reasons $r }
+        if {[llength [dict get $rec transitive]]} { dict incr reasons nested-layout-blocked }
+        if {![llength [dict get $rec direct]]} {
+            foreach r [::cbind::records::RootReasons $recs $key] { dict incr transitiveRoots $r }
+        }
+    }
+    dict set c reasons $reasons
+    dict set c roots $transitiveRoots
+    return $c
 }
 
 proc ::cbind::report::TypedefRow {model ix ids name body} {
@@ -355,7 +493,7 @@ proc ::cbind::report::text {model} {
         "aggregates by value (struct, union)" {by-value-aggregate union-by-value}
         "varargs (..., va_list)" {variadic va-list}
         "callback signature outside the ABI universe" {unsupported-callback-signature}
-        "explicit calling convention" {unsupported-calling-convention}
+        "explicit calling convention (one the target does not take as its default)" {unsupported-calling-convention}
         "macro without a signature" {macro-needs-signature unsupported-macro}
     } {
         set n 0
@@ -367,9 +505,16 @@ proc ::cbind::report::text {model} {
         }
         lappend out [Line $label $n $apis]
     }
+    set ccBound 0
+    foreach e [dict get $model apis] {
+        if {[dict get $e kind] in {direct alias thunk} && [dict exists $e conventions]} { incr ccBound }
+    }
+    lappend out [Line "bound, declaring a convention the target takes as its default" $ccBound $apis]
     lappend out [Line "bound, taking a callback (no Botlish function can be one yet)" [dict get $c callbacks] $apis]
     lappend out [Line "bound, pointing to a complete C struct (needs memory views)" [dict get $c views] $apis]
     lappend out [Line "bound, a pointer parameter that may be retained (direct)" [dict get $c unknownRetention] $apis]
+    lappend out ""
+    lappend out {*}[RecordSections $model $apis]
     lappend out ""
     lappend out "Macro APIs (apparent callables that are macros, and what each became)"
     set m [dict create shadowedDirect 0 selfAlias 0 objectAlias 0 rename 0 stubThunk 0 stubUnsupported 0 macroThunk 0 noSignature 0 otherMacro 0]
@@ -420,8 +565,73 @@ proc ::cbind::report::text {model} {
     lappend out [Line "extern c fn declarations" $externs]
     lappend out [Line "opaque types" $opaques]
     lappend out [Line "constants" $constants]
+    lappend out [Line "layouts" [regexp -all -line {^layout } [expr {[dict exists $model files ${::cbind::emit::ns}/layouts.bot] ? [dict get $model files ${::cbind::emit::ns}/layouts.bot] : ""}]]]
     lappend out [Line "shim thunks" $shim]
     return [join $out \n]\n
+}
+
+# The report.txt sections of MODEL's records: the inventory and what became
+# of it, every blocker, the pressure of each missing feature, the API
+# pressure (C-BINDGEN-LAYOUTS.md).
+proc ::cbind::report::RecordSections {model apis} {
+    set c [layoutCounts $model]
+    set complete [expr {[dict get $c structs] + [dict get $c unions]}]
+    set out {}
+    lappend out "Records and layouts (complete C records of the public headers and every record they hold by value)"
+    lappend out [Line "complete structs" [dict get $c structs]]
+    lappend out [Line "complete unions" [dict get $c unions]]
+    lappend out [Line "  of them in a system header (held by value by a public record)" [dict get $c system]]
+    lappend out [Line "  of them anonymous" [dict get $c anonymous]]
+    lappend out [Line "incomplete struct and union tags (pointee identities only)" [dict get $c incomplete]]
+    lappend out [Line "anonymous struct members promoted into their record" [dict get $c promoted]]
+    lappend out [Line "layouts emitted" [dict get $c emitted] $complete]
+    lappend out [Line "records whose layout is blocked" [dict get $c blocked] $complete]
+    lappend out [Line "  structs" [dict get $c blockedStructs] $complete]
+    lappend out [Line "  unions" [dict get $c blockedUnions] $complete]
+    lappend out [Line "  with a direct blocker of their own" [dict get $c blockedDirect] $complete]
+    lappend out [Line "  only through a record they hold by value" [dict get $c blockedTransitive] $complete]
+    lappend out ""
+    lappend out "Layout blockers (records blocked; a record may have several)"
+    set r [dict get $c reasons]
+    foreach {reason n} [lsort -stride 2 -index 1 -integer -decreasing [lsort -stride 2 $r]] {
+        lappend out [Line $reason $n $complete]
+    }
+    if {![dict size $r]} { lappend out "  (none)" }
+    lappend out "  records blocked only transitively, by the direct reasons below them:"
+    set r [dict get $c roots]
+    foreach {reason n} [lsort -stride 2 -index 1 -integer -decreasing [lsort -stride 2 $r]] {
+        lappend out [Line "    $reason" $n $complete]
+    }
+    lappend out ""
+    lappend out "Layout pressure (blocked records a missing feature would make layouts: directly + transitively)"
+    if {[dict exists $model layouts]} {
+        set recs [dict get $model layouts]
+        foreach {label lift} [::cbind::pressure::features] {
+            lassign [::cbind::pressure::recovered $recs $lift] d t
+            lappend out [Line "$label" [expr {[llength $d] + [llength $t]}] $complete "[llength $d] + [llength $t]"]
+        }
+    }
+    lappend out ""
+    lappend out "API pressure (bound APIs pointing to C records)"
+    if {[dict exists $model layouts]} {
+        set a [::cbind::pressure::api $model]
+        lappend out [Line "bound APIs with a pointer to a C record (parameter or result)" [dict get $a functions] $apis]
+        lappend out [Line "  to a record with an emitted layout" [dict get $a functions_layout] [dict get $a functions]]
+        lappend out [Line "  to a complete record whose layout is blocked" [dict get $a functions_blocked] [dict get $a functions]]
+        lappend out [Line "  only to incomplete records (or complete ones outside the headers)" [dict get $a functions_opaque] [dict get $a functions]]
+        lappend out "  pointers by shape and record (layout / blocked / incomplete / outside):"
+        foreach shape {{param T *} {param const T *} {param T **} {result T *} {result T **}} {
+            set ns [lmap st {layout blocked opaque outside} {expr {[dict exists $a "$shape $st"] ? [dict get $a "$shape $st"] : 0}}]
+            lappend out [format "    %-24s %s" $shape [join $ns " / "]]
+        }
+        lappend out [Line "records bound signatures point to" [dict get $a identities]]
+        lappend out [Line "  complete" [dict get $a complete] [dict get $a identities]]
+        lappend out [Line "    with an emitted layout" [dict get $a layout] [dict get $a identities]]
+        lappend out [Line "    whose layout is blocked" [dict get $a blocked] [dict get $a identities]]
+        lappend out [Line "    outside the profile's records (a system header's)" [dict get $a outside] [dict get $a identities]]
+        lappend out [Line "  incomplete (opaque only)" [dict get $a incomplete] [dict get $a identities]]
+    }
+    return $out
 }
 
 # The manifest of MODEL and its generated FILES.
@@ -477,12 +687,52 @@ proc ::cbind::report::manifest {model files} {
         }
     }
     dict for {path libs} $mods { lappend lines "libraries [list $path] [list $libs]" }
+    # Libraries found by symbol: each library's file and how many bound
+    # functions it gives, every symbol more than one of them defines (the
+    # first won), and the shim's references none of them define.
+    if {[dict exists $model symbolLibraries] && [llength [dict get $model symbolLibraries]]} {
+        set per [dict create]
+        set multiple {}
+        foreach e [dict get $model apis] {
+            if {![dict exists $e library]} continue
+            dict incr per [dict get $e library]
+            if {[llength [dict get $e libraryAlso]]} {
+                lappend multiple "import_multiple [dict get $e symbol] [dict get $e library] [list [dict get $e libraryAlso]]"
+            }
+        }
+        foreach l [dict get $model symbolLibraries] {
+            lappend lines "import_library $l [dict get $model libraryFiles $l] [expr {[dict exists $per $l] ? [dict get $per $l] : 0}]"
+        }
+        lappend lines {*}[lsort -unique $multiple]
+        if {[dict exists $model shimUnresolved]} {
+            foreach sym [dict get $model shimUnresolved] { lappend lines "shim_unresolved $sym" }
+        }
+    }
     set c [counts $model]
     foreach k [lsort [dict keys $c]] {
         if {$k eq "blockers"} continue
         lappend lines "count $k [dict get $c $k]"
     }
     foreach {reason n} [lsort -stride 2 [dict get $c blockers]] { lappend lines "blocked $reason $n" }
+    # Explicit calling conventions the compiler takes as the target's
+    # default (the cc: probe): how many bound APIs declare each.
+    set ccs [dict create]
+    foreach e [dict get $model apis] {
+        if {[dict get $e kind] in {direct alias thunk} && [dict exists $e conventions]} {
+            foreach cc [dict get $e conventions] { dict incr ccs $cc }
+        }
+    }
+    foreach cc [lsort [dict keys $ccs]] {
+        lappend lines "convention_default $cc [dict get $ccs $cc]"
+    }
+    # The records: the ABI identity their layouts are facts of, the counts.
+    lappend lines "layout_abi [dict get $model target] [list [dict get $tc family] [dict get $tc target] [dict get $tc version]]"
+    set lc [layoutCounts $model]
+    foreach k [lsort [dict keys $lc]] {
+        if {$k in {reasons roots}} continue
+        lappend lines "layout_count $k [dict get $lc $k]"
+    }
+    foreach {reason n} [lsort -stride 2 [dict get $lc reasons]] { lappend lines "layout_blocked $reason $n" }
     # Every favorable contract fact, with its source.
     foreach e [dict get $model apis] {
         if {[dict get $e kind] ni {direct alias thunk}} continue

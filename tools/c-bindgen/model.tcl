@@ -42,8 +42,11 @@ namespace eval ::cbind::model {
     variable keywords {fn if elif else loop return break continue true false unit and or not type
         struct error errors fail on yield}
     # Explicit calling conventions (attribute names): the FFI calls with the
-    # platform default only, so a declaration carrying one is not bound.
-    # `cdecl` is the default on every 64-bit target this generator knows.
+    # platform default only, so a declaration carrying one is bound only
+    # when the compiler says its type is the plain one's -- the convention
+    # is this target's default or ignored on it (__stdcall, MinGW's WINAPI
+    # and CALLBACK, on x86-64: Conventions, the cc: probe). `cdecl` is the
+    # default on every 64-bit target this generator knows.
     variable conventions {stdcall fastcall thiscall vectorcall regcall ms_abi sysv_abi
         pcs aarch64_vector_pcs aarch64_sve_pcs preserve_most preserve_all swiftcall
         regparm __stdcall __fastcall __thiscall __vectorcall __regcall _stdcall _fastcall
@@ -103,11 +106,44 @@ proc ::cbind::model::Resolve {type} {
 }
 
 # The stripped identity of a function type for redeclaration checks:
-# parameter names and attributes dropped.
+# parameter names and attributes dropped, every typedef replaced by what it
+# names (C's redeclaration rule is type compatibility: MinGW-w64 declares
+# VerSetConditionMask with DWORD in winnt.h and ULONG in sysinfoapi.h, both
+# unsigned long), a parameter's own qualifiers dropped.
 proc ::cbind::model::TypeIdentity {type} {
-    if {[lindex $type 0] ne "fn"} { return $type }
+    if {[lindex $type 0] ne "fn"} { return [Canonical $type] }
     lassign $type _ result params flags
-    return [list fn $result [lmap p $params {lindex $p 1}] $flags]
+    return [list fn [Canonical $result] [lmap p $params {Canonical [Unq [lindex $p 1]]}] $flags]
+}
+
+# TYPE with every typedef reference replaced by the type it names, at every
+# depth (qualifiers kept, sorted).
+proc ::cbind::model::Canonical {type {seen {}}} {
+    variable ix
+    switch -- [lindex $type 0] {
+        q {
+            set inner [Canonical [lindex $type 2] $seen]
+            set quals [lindex $type 1]
+            while {[lindex $inner 0] eq "q"} {
+                lappend quals {*}[lindex $inner 1]
+                set inner [lindex $inner 2]
+            }
+            return [list q [lsort -unique $quals] $inner]
+        }
+        typedef {
+            set name [lindex $type 1]
+            if {$name in $seen || ![dict exists $ix typedef $name]} { return $type }
+            return [Canonical [dict get $ix typedef $name type] [concat $seen [list $name]]]
+        }
+        ptr - block { return [list [lindex $type 0] [Canonical [lindex $type 1] $seen]] }
+        array { return [lreplace $type 1 1 [Canonical [lindex $type 1] $seen]] }
+        atomic { return [list atomic [Canonical [lindex $type 1] $seen]] }
+        fn {
+            lassign $type _ result params flags
+            return [list fn [Canonical $result $seen] [lmap p $params {Canonical [Unq [lindex $p 1]] $seen}] $flags]
+        }
+    }
+    return $type
 }
 
 # ---------------------------------------------------------------------------
@@ -250,6 +286,8 @@ proc ::cbind::model::Value {type role {via ""}} {
             if {![dict exists $::cbind::model::ix typedef $name]} {
                 return [Blocked unresolved-typedef "$name (no declaration of it in the translation unit)"]
             }
+            set problem [TypedefConventionProblem $t]
+            if {$problem ne ""} { return [Blocked unsupported-calling-convention $problem] }
             lassign [Resolve $t] chain final
             if {[lindex $final 0] eq "int"} {
                 set problem [TypedefAbiProblem $name [lindex $final 1]]
@@ -295,6 +333,8 @@ proc ::cbind::model::Pointer {pointee} {
         if {![dict exists $::cbind::model::ix typedef $name]} {
             return [Blocked unresolved-typedef "$name (no declaration of it in the translation unit)"]
         }
+        set problem [TypedefConventionProblem $t]
+        if {$problem ne ""} { return [Blocked unsupported-calling-convention $problem] }
         lassign [Resolve $t] chain final
         if {[lindex $final 0] eq "int"} {
             set problem [TypedefAbiProblem $name [lindex $final 1]]
@@ -395,15 +435,14 @@ proc ::cbind::model::FnPtr {fn} {
 # PARAMS {{cname NAME name BOTLISH type TEXT features F} ...} and RESULT
 # {type TEXT features F}, or {no BLOCKERS} (every blocker, each located:
 # "parameter 2 (x): double").
-proc ::cbind::model::Signature {type attrs} {
-    variable conventions
+proc ::cbind::model::Signature {type attrs {ccKey ""}} {
     lassign $type _ result params flags
     set blockers {}
     if {"variadic" in $flags} { lappend blockers [list variadic "a variadic function (...)"] }
     if {"noproto" in $flags} { lappend blockers [list no-prototype "declared without a prototype: ()"] }
-    foreach a [concat $attrs [concat {*}[lmap p $params {lindex $p 2}]]] {
-        set name [expr {[lindex $a 0] eq "cc" ? [lindex $a end] : [lindex $a 2]}]
-        if {[lindex $a 0] in {cc gnu std declspec} && $name in $conventions} {
+    set ccs [Conventions [concat $attrs [concat {*}[lmap p $params {lindex $p 2}]]]]
+    if {[llength $ccs] && ![DefaultConvention $ccKey]} {
+        foreach name $ccs {
             lappend blockers [list unsupported-calling-convention "an explicit calling convention: $name"]
         }
     }
@@ -435,6 +474,66 @@ proc ::cbind::model::Signature {type attrs} {
     }
     if {$blockers ne ""} { return [list no $blockers] }
     return [list ok $out $res]
+}
+
+# The explicit calling conventions ATTRS (records' attribute lists) name.
+proc ::cbind::model::Conventions {attrs} {
+    variable conventions
+    set out {}
+    foreach a $attrs {
+        set name [expr {[lindex $a 0] eq "cc" ? [lindex $a end] : [lindex $a 2]}]
+        if {[lindex $a 0] in {cc gnu std declspec} && $name in $conventions && $name ni $out} {
+            lappend out $name
+        }
+    }
+    return $out
+}
+
+# 1 if the convention probe KEY (cc:API, cctd:TYPEDEF, ccfld:...) says the
+# declared type is the plain type, its explicit conventions dropped: the
+# compiler's __builtin_types_compatible_p, so that a convention this target
+# ignores or has as its default (__stdcall on x86-64, ms_abi on Windows
+# x86-64) is no blocker and one that changes the call (ms_abi or sysv_abi
+# on a target whose default is the other) is. A rejected probe is no.
+proc ::cbind::model::DefaultConvention {key} {
+    variable facts
+    if {$key eq "" || ![dict exists $facts values $key]} { return 0 }
+    lassign [dict get $facts values $key] status data
+    return [expr {$status eq "ok" && [lindex $data 0] == 1}]
+}
+
+# The convention probe entry of DECL's type for the expression EXPR (the
+# API name, or a member access), or "" when DECL names no convention.
+proc ::cbind::model::ConventionEntry {key expr type attrs} {
+    if {![llength $attrs]} { return "" }
+    return [list $key [list "__builtin_types_compatible_p(__typeof__($expr), [::cir::render $type {}])"]]
+}
+
+# The convention probe entry of typedef NAME (cctd:NAME), or "" when its
+# declaration names no convention.
+proc ::cbind::model::TypedefConventionEntry {name} {
+    variable ix
+    if {![llength [Conventions [dict get $ix typedef $name attrs]]]} { return "" }
+    return [list cctd:$name [list "__builtin_types_compatible_p($name, [::cir::render [dict get $ix typedef $name type] {}])"]]
+}
+
+# "" if no typedef on TYPE's typedef chain names an explicit calling
+# convention the compiler does not take as the plain type's (cctd:NAME),
+# else the blocker detail.
+proc ::cbind::model::TypedefConventionProblem {type} {
+    variable ix
+    set t [Unq $type]
+    set seen {}
+    while {[lindex $t 0] eq "typedef" && [dict exists $ix typedef [lindex $t 1]] && [lindex $t 1] ni $seen} {
+        set name [lindex $t 1]
+        lappend seen $name
+        set ccs [Conventions [dict get $ix typedef $name attrs]]
+        if {[llength $ccs] && ![DefaultConvention cctd:$name]} {
+            return "typedef $name: an explicit calling convention: [join $ccs {, }]"
+        }
+        set t [Unq [dict get $ix typedef $name type]]
+    }
+    return ""
 }
 
 # ---------------------------------------------------------------------------
@@ -804,6 +903,11 @@ proc ::cbind::model::ProbeRequests {model} {
     set typedefs {}
     foreach entry [dict get $model apis] {
         if {[dict get $entry kind] in {excluded unsupported} || ![dict exists $entry decl]} continue
+        set decl [dict get $entry decl]
+        lassign [dict get $decl type] _ _ dparams
+        set ccs [Conventions [concat [dict get $decl attrs] [concat {*}[lmap p $dparams {lindex $p 2}]]]]
+        set e [ConventionEntry cc:[dict get $entry name] [ConventionSubject $entry] [dict get $decl type] $ccs]
+        if {$e ne ""} { lappend values $e }
         foreach ref [TypeNames [dict get $entry decl type]] {
             # A typedef's chain: every typedef on the way can carry an
             # attribute, so each one an API reaches is asked about.
@@ -816,6 +920,8 @@ proc ::cbind::model::ProbeRequests {model} {
                 if {$what eq "typedef" && [dict exists $ix typedef $name]} {
                     lappend typedefs $name
                     lappend queue {*}[TypeNames [dict get $ix typedef $name type]]
+                    set e [TypedefConventionEntry $name]
+                    if {$e ne ""} { lappend values $e }
                 } elseif {$what eq "enum" && ![string match anon@* $name]} {
                     lappend values [list enum:$name [list "sizeof(enum $name)" [::cbind::probe::typeCodeOf "enum $name"]]]
                 }
@@ -875,6 +981,13 @@ proc ::cbind::model::ProbeRequests {model} {
     return [dict create values $values symbols [lsort -unique $symbols]]
 }
 
+# The C expression naming ENTRY's function for its convention probe: an
+# alias's target, any other API's own name.
+proc ::cbind::model::ConventionSubject {entry} {
+    if {[dict get $entry kind] eq "alias" && [dict exists $entry targetName]} { return [dict get $entry targetName] }
+    return [dict get $entry name]
+}
+
 # ---------------------------------------------------------------------------
 # Phase 2: signatures, link symbols, contracts, constants.
 
@@ -905,7 +1018,7 @@ proc ::cbind::model::resolve {model theFacts} {
             continue
         }
         set decl [dict get $entry decl]
-        set sig [Signature [dict get $decl type] [dict get $decl attrs]]
+        set sig [Signature [dict get $decl type] [dict get $decl attrs] cc:$name]
         set uses [UsesBool [dict get $decl type]]
         dict set entry usesBool $uses
         if {[lindex $sig 0] ne "ok"} {
@@ -917,6 +1030,11 @@ proc ::cbind::model::resolve {model theFacts} {
         lassign $sig _ params result
         dict set entry params $params
         dict set entry result $result
+        # Explicit conventions the compiler took as the plain type's (the
+        # target's default, or ignored on it): recorded, never a blocker.
+        lassign [dict get $decl type] _ _ dparams
+        set ccs [Conventions [concat [dict get $decl attrs] [concat {*}[lmap q $dparams {lindex $q 2}]]]]
+        if {[llength $ccs]} { dict set entry conventions $ccs }
         switch -- $kind {
             direct - alias {
                 set probeName [expr {$kind eq "alias" && [dict exists $entry rename] ? [dict get $entry target] : $name}]

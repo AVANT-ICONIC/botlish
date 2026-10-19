@@ -18,6 +18,9 @@
 #   archive OBJECTS OUT   a static library of objects
 #   searchDirs            the directories the compiler searches for
 #                         <...> includes, in order
+#   libraryFile NAME      the library file -lNAME names (an import library)
+#   symbolsOf PATH        the symbols an object or archive defines (or
+#                         references)
 #
 # configFor TARGET is the configuration for a Botlish C target
 # (core/cabi.tcl's names): a clang-family compiler with --target, so that
@@ -64,12 +67,16 @@ namespace eval ::chdr::toolchain {
         }
     }
     # Botlish C targets (core/cabi.tcl) -> the clang target triple configFor
-    # gives them. Windows is MSVC's ABI and toolchain: not implemented.
+    # gives them. windows-x86_64-gnu is MinGW-w64's GNU ABI (clang's
+    # x86_64-w64-mingw32, with the MinGW-w64 headers and import libraries a
+    # cross installation provides); windows-x86_64 and windows-aarch64 are
+    # MSVC's ABI and toolchain: not implemented.
     variable triples {
         linux-x86_64 x86_64-linux-gnu
         linux-aarch64 aarch64-linux-gnu
         macos-x86_64 x86_64-apple-macos10.15
         macos-aarch64 arm64-apple-macos11
+        windows-x86_64-gnu x86_64-w64-mingw32
     }
 }
 
@@ -146,6 +153,10 @@ proc ::chdr::toolchain::configFor {target} {
         if {$saved eq ""} { unset ::env(BOTLISH_C_CC) } else { set ::env(BOTLISH_C_CC) [lindex $saved 0] }
         if {$savedTarget ne ""} { set ::env(BOTLISH_C_TARGET) [lindex $savedTarget 0] }
     }
+    # A binding's configuration is its profile's and its target's: the
+    # archaeology's extra-word knobs (BOTLISH_C_INCLUDE, _DEFINES,
+    # _UNDEFINES, _FLAGS) never reach a generated binding from a shell.
+    foreach k {include defines undefines flags} { dict set config $k {} }
     set triple [dict get $triples $target]
     if {[dict get $config family] eq "clang"} {
         dict set config target $triple
@@ -360,6 +371,39 @@ proc ::chdr::toolchain::searchDirs {config profile} {
         if {$inside} { lappend dirs [file normalize [string trim [regsub { \(framework directory\)$} $line ""]]] }
     }
     return [list $ok $dirs $stderr $command]
+}
+
+# The library file the configuration's linker would use for -lNAME (its
+# -print-file-name=libNAME.a), or "" when it has none.
+proc ::chdr::toolchain::libraryFile {config profile name} {
+    set command [concat [dict get $config cc] [CommonWords $config $profile] [list -print-file-name=lib$name.a]]
+    lassign [Exec $command] ok out stderr
+    set path [string trim $out]
+    if {!$ok || $path eq "" || $path eq "lib$name.a" || ![file exists $path]} { return "" }
+    return [file normalize $path]
+}
+
+# The external symbols the object or archive PATH defines (WHICH defined)
+# or references undefined (WHICH undefined), sorted: BOTLISH_C_NM, else
+# llvm-nm for a clang-family configuration when installed, else nm.
+# {OK SYMBOLS STDERR COMMAND}.
+proc ::chdr::toolchain::symbolsOf {config path {which defined}} {
+    set nm [Words BOTLISH_C_NM]
+    if {$nm eq ""} {
+        set nm [expr {[dict get $config family] eq "clang" && [auto_execok llvm-nm] ne "" ? "llvm-nm" : "nm"}]
+    }
+    set flag [expr {$which eq "defined" ? "--defined-only" : "--undefined-only"}]
+    set command [concat $nm [list -g $flag --format=posix $path]]
+    lassign [Exec $command] ok out stderr
+    set symbols {}
+    foreach line [split $out \n] {
+        # posix format: NAME TYPE [VALUE [SIZE]]; an archive's member lines
+        # (NAME[member]:) and blank lines carry no symbol.
+        if {[regexp {^(\S+) ([A-Za-z]) ?} $line -> sym type] && ![string match *: $sym]} {
+            lappend symbols $sym
+        }
+    }
+    return [list $ok [lsort -unique $symbols] $stderr $command]
 }
 
 # A description of the configuration for the import profile record.

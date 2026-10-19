@@ -24,7 +24,15 @@
 # macos-aarch64 share an instruction set, a pointer width and a data model,
 # and are still two targets (plain char differs, and so do the C calling
 # convention, the object format and every platform interface). Nothing
-# reads an operating system from an architecture, or the reverse.
+# reads an operating system from an architecture, or the reverse. On
+# Windows the C toolchain's ABI family is part of the target too:
+# windows-x86_64 is MSVC's (x86_64-pc-windows-msvc), windows-x86_64-gnu
+# MinGW-w64's (x86_64-pc-windows-gnu). Their rows agree today (LLP64, signed
+# char, the Microsoft x64 convention), and they are still two targets: C
+# facts a generator probed with one toolchain (C-BINDGEN-LAYOUTS.md: record
+# layouts) are that toolchain's, never taken for the other's, and the two
+# differ beyond this table (long double, bitfield allocation, the C
+# runtime, import libraries).
 #
 # TRIPLE is the target's LLVM/Cranelift target triple (aarch64-apple-darwin),
 # the one name the native backend knows it by: the driver compares it with
@@ -76,6 +84,7 @@ namespace eval core::cabi {
         macos-x86_64    {os macos arch x86_64 model LP64 charSigned 1 triple x86_64-apple-darwin} \
         macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
         windows-x86_64  {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-msvc} \
+        windows-x86_64-gnu {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-gnu} \
         windows-aarch64 {os windows arch aarch64 model LLP64 charSigned 1 triple aarch64-pc-windows-msvc}]
     variable systems [dict create linux Linux macos macOS windows Windows]
     # The standard namespace trees that are an operating system's platform

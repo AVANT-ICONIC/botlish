@@ -6,219 +6,235 @@
 # "Constants").
 import ffi::c
 
-# struct SDL_AssertData (include/SDL3/SDL_assert.h), a complete C type seen through pointers only
+# struct SDL_AssertData (include/SDL3/SDL_assert.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_AssertData:
     tag: unit
 
-# struct SDL_AsyncIOOutcome (include/SDL3/SDL_asyncio.h), a complete C type seen through pointers only
+# struct SDL_AsyncIOOutcome (include/SDL3/SDL_asyncio.h), a complete C type: its layout is sdl3::layouts::SDL_AsyncIOOutcome
 opaque struct SDL_AsyncIOOutcome:
     tag: unit
 
-# struct SDL_AtomicInt (include/SDL3/SDL_atomic.h), a complete C type seen through pointers only
+# struct SDL_AtomicInt (include/SDL3/SDL_atomic.h), a complete C type: its layout is sdl3::layouts::SDL_AtomicInt
 opaque struct SDL_AtomicInt:
     tag: unit
 
-# struct SDL_AtomicU32 (include/SDL3/SDL_atomic.h), a complete C type seen through pointers only
+# struct SDL_AtomicU32 (include/SDL3/SDL_atomic.h), a complete C type: its layout is sdl3::layouts::SDL_AtomicU32
 opaque struct SDL_AtomicU32:
     tag: unit
 
-# struct SDL_InitState (include/SDL3/SDL_mutex.h), a complete C type seen through pointers only
+# struct SDL_InitState (include/SDL3/SDL_mutex.h), a complete C type: its layout is sdl3::layouts::SDL_InitState
 opaque struct SDL_InitState:
     tag: unit
 
-# struct SDL_IOStreamInterface (include/SDL3/SDL_iostream.h), a complete C type seen through pointers only
+# struct SDL_IOStreamInterface (include/SDL3/SDL_iostream.h), a complete C type: its layout is sdl3::layouts::SDL_IOStreamInterface
 opaque struct SDL_IOStreamInterface:
     tag: unit
 
-# struct SDL_AudioSpec (include/SDL3/SDL_audio.h), a complete C type seen through pointers only
+# struct SDL_AudioSpec (include/SDL3/SDL_audio.h), a complete C type: its layout is sdl3::layouts::SDL_AudioSpec
 opaque struct SDL_AudioSpec:
     tag: unit
 
-# struct SDL_Color (include/SDL3/SDL_pixels.h), a complete C type seen through pointers only
+# struct SDL_Color (include/SDL3/SDL_pixels.h), a complete C type: its layout is sdl3::layouts::SDL_Color
 opaque struct SDL_Color:
     tag: unit
 
-# struct SDL_Palette (include/SDL3/SDL_pixels.h), a complete C type seen through pointers only
+# struct SDL_Palette (include/SDL3/SDL_pixels.h), a complete C type: its layout is sdl3::layouts::SDL_Palette
 opaque struct SDL_Palette:
     tag: unit
 
-# struct SDL_PixelFormatDetails (include/SDL3/SDL_pixels.h), a complete C type seen through pointers only
+# struct SDL_PixelFormatDetails (include/SDL3/SDL_pixels.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_PixelFormatDetails:
     tag: unit
 
-# struct SDL_Point (include/SDL3/SDL_rect.h), a complete C type seen through pointers only
+# struct SDL_Point (include/SDL3/SDL_rect.h), a complete C type: its layout is sdl3::layouts::SDL_Point
 opaque struct SDL_Point:
     tag: unit
 
-# struct SDL_FPoint (include/SDL3/SDL_rect.h), a complete C type seen through pointers only
+# struct SDL_FPoint (include/SDL3/SDL_rect.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_FPoint:
     tag: unit
 
-# struct SDL_Rect (include/SDL3/SDL_rect.h), a complete C type seen through pointers only
+# struct SDL_Rect (include/SDL3/SDL_rect.h), a complete C type: its layout is sdl3::layouts::SDL_Rect
 opaque struct SDL_Rect:
     tag: unit
 
-# struct SDL_FRect (include/SDL3/SDL_rect.h), a complete C type seen through pointers only
+# struct SDL_FRect (include/SDL3/SDL_rect.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_FRect:
     tag: unit
 
-# struct SDL_Surface (include/SDL3/SDL_surface.h), a complete C type seen through pointers only
+# struct SDL_Surface (include/SDL3/SDL_surface.h), a complete C type: its layout is sdl3::layouts::SDL_Surface
 opaque struct SDL_Surface:
     tag: unit
 
-# struct SDL_CameraSpec (include/SDL3/SDL_camera.h), a complete C type seen through pointers only
+# struct SDL_CameraSpec (include/SDL3/SDL_camera.h), a complete C type: its layout is sdl3::layouts::SDL_CameraSpec
 opaque struct SDL_CameraSpec:
     tag: unit
 
-# struct SDL_DisplayMode (include/SDL3/SDL_video.h), a complete C type seen through pointers only
+# struct SDL_DisplayMode (include/SDL3/SDL_video.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_DisplayMode:
     tag: unit
 
-# struct SDL_DialogFileFilter (include/SDL3/SDL_dialog.h), a complete C type seen through pointers only
+# struct SDL_DialogFileFilter (include/SDL3/SDL_dialog.h), a complete C type: its layout is sdl3::layouts::SDL_DialogFileFilter
 opaque struct SDL_DialogFileFilter:
     tag: unit
 
-# struct SDL_VirtualJoystickDesc (include/SDL3/SDL_joystick.h), a complete C type seen through pointers only
+# struct SDL_VirtualJoystickDesc (include/SDL3/SDL_joystick.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_VirtualJoystickDesc:
     tag: unit
 
-# struct SDL_GamepadBinding (include/SDL3/SDL_gamepad.h), a complete C type seen through pointers only
+# struct SDL_GamepadBinding (include/SDL3/SDL_gamepad.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GamepadBinding:
     tag: unit
 
-# struct SDL_CursorFrameInfo (include/SDL3/SDL_mouse.h), a complete C type seen through pointers only
+# struct SDL_CursorFrameInfo (include/SDL3/SDL_mouse.h), a complete C type: its layout is sdl3::layouts::SDL_CursorFrameInfo
 opaque struct SDL_CursorFrameInfo:
     tag: unit
 
-# struct SDL_Finger (include/SDL3/SDL_touch.h), a complete C type seen through pointers only
+# struct SDL_Finger (include/SDL3/SDL_touch.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_Finger:
     tag: unit
 
-# union SDL_Event (include/SDL3/SDL_events.h), a complete C type seen through pointers only
+# union SDL_Event (include/SDL3/SDL_events.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_Event:
     tag: unit
 
-# struct SDL_PathInfo (include/SDL3/SDL_filesystem.h), a complete C type seen through pointers only
+# struct SDL_PathInfo (include/SDL3/SDL_filesystem.h), a complete C type: its layout is sdl3::layouts::SDL_PathInfo
 opaque struct SDL_PathInfo:
     tag: unit
 
-# struct SDL_GPUViewport (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUViewport (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUViewport:
     tag: unit
 
-# struct SDL_GPUTextureTransferInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTextureTransferInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTextureTransferInfo
 opaque struct SDL_GPUTextureTransferInfo:
     tag: unit
 
-# struct SDL_GPUTransferBufferLocation (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTransferBufferLocation (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTransferBufferLocation
 opaque struct SDL_GPUTransferBufferLocation:
     tag: unit
 
-# struct SDL_GPUTextureLocation (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTextureLocation (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTextureLocation
 opaque struct SDL_GPUTextureLocation:
     tag: unit
 
-# struct SDL_GPUTextureRegion (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTextureRegion (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTextureRegion
 opaque struct SDL_GPUTextureRegion:
     tag: unit
 
-# struct SDL_GPUBufferLocation (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUBufferLocation (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUBufferLocation
 opaque struct SDL_GPUBufferLocation:
     tag: unit
 
-# struct SDL_GPUBufferRegion (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUBufferRegion (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUBufferRegion
 opaque struct SDL_GPUBufferRegion:
     tag: unit
 
-# struct SDL_GPUSamplerCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUSamplerCreateInfo (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUSamplerCreateInfo:
     tag: unit
 
-# struct SDL_GPUShaderCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUVertexBufferDescription (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUVertexBufferDescription
+opaque struct SDL_GPUVertexBufferDescription:
+    tag: unit
+
+# struct SDL_GPUVertexAttribute (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUVertexAttribute
+opaque struct SDL_GPUVertexAttribute:
+    tag: unit
+
+# struct SDL_GPUShaderCreateInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUShaderCreateInfo
 opaque struct SDL_GPUShaderCreateInfo:
     tag: unit
 
-# struct SDL_GPUTextureCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTextureCreateInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTextureCreateInfo
 opaque struct SDL_GPUTextureCreateInfo:
     tag: unit
 
-# struct SDL_GPUBufferCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUBufferCreateInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUBufferCreateInfo
 opaque struct SDL_GPUBufferCreateInfo:
     tag: unit
 
-# struct SDL_GPUTransferBufferCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTransferBufferCreateInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTransferBufferCreateInfo
 opaque struct SDL_GPUTransferBufferCreateInfo:
     tag: unit
 
-# struct SDL_GPUGraphicsPipelineCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUGraphicsPipelineCreateInfo (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUGraphicsPipelineCreateInfo:
     tag: unit
 
-# struct SDL_GPUComputePipelineCreateInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUComputePipelineCreateInfo (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUComputePipelineCreateInfo
 opaque struct SDL_GPUComputePipelineCreateInfo:
     tag: unit
 
-# struct SDL_GPUColorTargetInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUColorTargetInfo (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUColorTargetInfo:
     tag: unit
 
-# struct SDL_GPUDepthStencilTargetInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUDepthStencilTargetInfo (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUDepthStencilTargetInfo:
     tag: unit
 
-# struct SDL_GPUBlitInfo (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUBlitInfo (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUBlitInfo:
     tag: unit
 
-# struct SDL_GPUBufferBinding (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUBufferBinding (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUBufferBinding
 opaque struct SDL_GPUBufferBinding:
     tag: unit
 
-# struct SDL_GPUTextureSamplerBinding (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUTextureSamplerBinding (include/SDL3/SDL_gpu.h), a complete C type: its layout is sdl3::layouts::SDL_GPUTextureSamplerBinding
 opaque struct SDL_GPUTextureSamplerBinding:
     tag: unit
 
-# struct SDL_GPUStorageBufferReadWriteBinding (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUStorageBufferReadWriteBinding (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUStorageBufferReadWriteBinding:
     tag: unit
 
-# struct SDL_GPUStorageTextureReadWriteBinding (include/SDL3/SDL_gpu.h), a complete C type seen through pointers only
+# struct SDL_GPUStorageTextureReadWriteBinding (include/SDL3/SDL_gpu.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_GPUStorageTextureReadWriteBinding:
     tag: unit
 
-# union SDL_HapticEffect (include/SDL3/SDL_haptic.h), a complete C type seen through pointers only
+# union SDL_HapticEffect (include/SDL3/SDL_haptic.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_HapticEffect:
     tag: unit
 
-# struct SDL_hid_device_info (include/SDL3/SDL_hidapi.h), a complete C type seen through pointers only
+# struct SDL_hid_device_info (include/SDL3/SDL_hidapi.h), a complete C type: its layout is sdl3::layouts::SDL_hid_device_info
 opaque struct SDL_hid_device_info:
     tag: unit
 
-# struct SDL_Locale (include/SDL3/SDL_locale.h), a complete C type seen through pointers only
+# struct SDL_Locale (include/SDL3/SDL_locale.h), a complete C type: its layout is sdl3::layouts::SDL_Locale
 opaque struct SDL_Locale:
     tag: unit
 
-# struct SDL_MessageBoxData (include/SDL3/SDL_messagebox.h), a complete C type seen through pointers only
+# struct SDL_MessageBoxButtonData (include/SDL3/SDL_messagebox.h), a complete C type: its layout is sdl3::layouts::SDL_MessageBoxButtonData
+opaque struct SDL_MessageBoxButtonData:
+    tag: unit
+
+# struct SDL_MessageBoxColorScheme (include/SDL3/SDL_messagebox.h), a complete C type whose layout is blocked (layouts.tsv)
+opaque struct SDL_MessageBoxColorScheme:
+    tag: unit
+
+# struct SDL_MessageBoxData (include/SDL3/SDL_messagebox.h), a complete C type: its layout is sdl3::layouts::SDL_MessageBoxData
 opaque struct SDL_MessageBoxData:
     tag: unit
 
-# struct SDL_Vertex (include/SDL3/SDL_render.h), a complete C type seen through pointers only
+# struct SDL_Vertex (include/SDL3/SDL_render.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_Vertex:
     tag: unit
 
-# struct SDL_Texture (include/SDL3/SDL_render.h), a complete C type seen through pointers only
+# struct SDL_Texture (include/SDL3/SDL_render.h), a complete C type: its layout is sdl3::layouts::SDL_Texture
 opaque struct SDL_Texture:
     tag: unit
 
-# struct SDL_GPURenderStateCreateInfo (include/SDL3/SDL_render.h), a complete C type seen through pointers only
+# struct SDL_GPURenderStateCreateInfo (include/SDL3/SDL_render.h), a complete C type: its layout is sdl3::layouts::SDL_GPURenderStateCreateInfo
 opaque struct SDL_GPURenderStateCreateInfo:
     tag: unit
 
-# struct SDL_StorageInterface (include/SDL3/SDL_storage.h), a complete C type seen through pointers only
+# struct SDL_StorageInterface (include/SDL3/SDL_storage.h), a complete C type: its layout is sdl3::layouts::SDL_StorageInterface
 opaque struct SDL_StorageInterface:
     tag: unit
 
-# struct SDL_DateTime (include/SDL3/SDL_time.h), a complete C type seen through pointers only
+# struct SDL_DateTime (include/SDL3/SDL_time.h), a complete C type: its layout is sdl3::layouts::SDL_DateTime
 opaque struct SDL_DateTime:
     tag: unit
 

@@ -1,7 +1,9 @@
 # fixture.tcl -- the binding generator's synthetic fixture profile
 # (C-BINDGEN.md, "The synthetic fixture"): include/bgf/bgf.h of
 # tools/c-bindgen/fixture, freestanding (clang's own headers only, never a
-# host's: -nostdlibinc), for three targets. Its generated
+# host's: -nostdlibinc), for four targets: Linux x86-64 and AArch64, macOS
+# AArch64, and Windows x86-64 with MinGW-w64's GNU ABI (LLP64: its records
+# place long otherwise, C-BINDGEN-LAYOUTS.md). Its generated
 # output is pinned in tools/c-bindgen/fixture/expected/TARGET and checked by
 # tests/c-bindgen.test.
 dict create \
@@ -15,7 +17,7 @@ dict create \
         public {include/bgf/*}
         entry {bgf/bgf.h}
     } \
-    targets {linux-x86_64 linux-aarch64 macos-aarch64} \
+    targets {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64-gnu} \
     modules {stripPrefix bgf_} \
     libraries {
         {headers * targets * names {bgf}}

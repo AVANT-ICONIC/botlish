@@ -51,7 +51,8 @@ proc ::chdr::fetch {name source {dir ""}} {
 }
 
 # The origin of a file named by a line marker, given the library source root:
-# public, bundled, internal (in the library tree but not public), system,
+# public, bundled, internal (in the library tree but not public, or matching
+# the profile's private globs), system,
 # builtin (<built-in>, <command-line>) or entry (the generated TU).
 proc ::chdr::origin {profile sourceRoot entryFile file} {
     if {$file in {<built-in> <command-line> <unknown>}} { return builtin }
@@ -60,6 +61,9 @@ proc ::chdr::origin {profile sourceRoot entryFile file} {
     set rootPrefix "[file normalize $sourceRoot]/"
     if {[string first $rootPrefix $norm] == 0} {
         set rel [string range $norm [string length $rootPrefix] end]
+        if {[dict exists $profile private]} {
+            foreach g [dict get $profile private] { if {[string match $g $rel]} { return internal } }
+        }
         foreach g [dict get $profile public] { if {[string match $g $rel]} { return public } }
         if {[dict exists $profile bundled]} {
             foreach g [dict get $profile bundled] { if {[string match $g $rel]} { return bundled } }

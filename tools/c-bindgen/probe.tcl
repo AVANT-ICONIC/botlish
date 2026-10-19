@@ -113,8 +113,8 @@ proc ::cbind::probe::Blame {stderr lines} {
 # The values of ENTRIES (a list of {KEY {EXPR ...}}): a dict KEY -> {ok
 # {VALUE ...}} (each a 64-bit word as an unsigned decimal) or {error
 # MESSAGE}.
-proc ::cbind::probe::values {config hprofile entries} {
-    set prelude [Prelude $hprofile]
+proc ::cbind::probe::values {config hprofile entries {extra ""}} {
+    set prelude [Prelude $hprofile]$extra
     set make [list ::cbind::probe::ValueSource $prelude $entries]
     set live [lsearch -all [lmap e $entries {expr 1}] 1]
     lassign [Assemble $config $hprofile $make $live] asm rejected command
