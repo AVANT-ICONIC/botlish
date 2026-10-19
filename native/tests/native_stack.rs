@@ -405,6 +405,34 @@ extern "C" fn touch_address(_: *mut Vm, _: Value, _: *const Value) -> Value {
     UNIT
 }
 
+/// Makes the page 256 KiB above this coroutine stack's low end (far below
+/// the body's own frames) inaccessible, and reads it: a fault inside the
+/// running stack's usable range, which is not its guard.
+extern "C" fn touch_inside_own_stack(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    touch(protected_page(running_bounds(p).low_bound + (256 << 10)));
+    UNIT
+}
+
+/// Starts a sibling coroutine (it stays suspended, its stack mapped after
+/// this one's), then reads the sibling's guard from this running one.
+extern "C" fn touch_sibling_guard(p: *mut Vm, _: Value, _: *const Value) -> Value {
+    let sibling = coroutine(p, yield_forever);
+    rt_co_start(p, sibling);
+    // SAFETY: SIBLING is a live suspended coroutine with a stack.
+    touch(unsafe { (*(sibling as *mut CoroutineObj)).stack.as_ref().unwrap().bounds().guard_low });
+    UNIT
+}
+
+/// The page containing ADDRESS rounded up to a page boundary, made
+/// PROT_NONE; returns an address inside it.
+fn protected_page(address: usize) -> usize {
+    let page = page_size();
+    let start = (address + page - 1) & !(page - 1);
+    // SAFETY: a page of the running stack far below every live frame.
+    assert_eq!(unsafe { libc::mprotect(start as *mut libc::c_void, page, libc::PROT_NONE) }, 0);
+    start + 64
+}
+
 extern "C" fn resume_handle(_: usize) {
     rt_co_resume(vm_ptr(), HANDLE.load(Ordering::Relaxed) as Value, UNIT);
 }
@@ -479,13 +507,20 @@ extern "C" fn publication_a(p: *mut Vm, _: Value, _: *const Value) -> Value {
 ///                         `executable`, `result-file`; `wide`: driver, with
 ///                         64 KiB frames; `dropped`: installs and drops one
 ///                         first, then exhausts with none; `reinstalled`:
-///                         installs a second after dropping one) and
-///                         exhausts the stack; prints
+///                         installs a second after dropping one;
+///                         `touch-guard-bottom`: reads the guard's lowest
+///                         byte instead) and exhausts the stack; prints
 ///                         `refused: ...` when the stack has no confirmed
 ///                         guard, `returned` if the recursion ever returns
 ///   co:SHAPE              a coroutine's stack exhausted: `fresh`, `after-
 ///                         yields`, `nested` (main -> a -> b -> c)
-///   fault:KIND            a fault that is not an overflow, guard installed
+///   fault:KIND            a fault that is not an overflow, guard installed:
+///                         `null`, `elsewhere`, `read-only`, `inside-stack`
+///                         and `inside-coroutine-stack` (a page of the running
+///                         stack's usable range made inaccessible),
+///                         `suspended-guard`, `sibling-guard-from-coroutine`,
+///                         `thread-guard-from-coroutine`, `other-thread`,
+///                         `sent`
 ///   fault:KIND:unguarded  the same without the guard
 ///   sweep:DIRECTION:X     a coroutine switch made X bytes above the low end
 ///                         of the stack it leaves; prints `completed`
@@ -525,6 +560,15 @@ fn child(scenario: &str) -> ! {
                     let file = std::fs::File::create(path).expect("the result file");
                     platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
                     std::mem::forget(file);
+                }
+                if mode == "touch-guard-bottom" {
+                    // The lowest byte of the confirmed guard, read with the
+                    // guard installed: inside the running stack's guard, so
+                    // the guard reports it, however far below the stack.
+                    let _guard = OverflowGuard::install(&stack).expect("the guard installs");
+                    touch(stack.guard_low);
+                    println!("returned");
+                    return;
                 }
                 if mode == "unguarded" {
                     println!("returned {}", exhaust(0));
@@ -597,6 +641,18 @@ fn child(scenario: &str) -> ! {
                         ADDRESS.store(stack.low_bound - 1, Ordering::Relaxed);
                         let handle = coroutine(p, touch_address);
                         rt_co_start(p, handle);
+                    }
+                    // A page inside the thread's usable stack, made
+                    // inaccessible: a fault in the running stack that is not
+                    // its guard.
+                    "inside-stack" => touch(protected_page(stack.low_bound + (1 << 20))),
+                    // The same inside a running coroutine's stack.
+                    "inside-coroutine-stack" => {
+                        rt_co_start(p, coroutine(p, touch_inside_own_stack));
+                    }
+                    // A suspended sibling's guard, from a running coroutine.
+                    "sibling-guard-from-coroutine" => {
+                        rt_co_start(p, coroutine(p, touch_sibling_guard));
                     }
                     // The guarded stack's guard, read by another thread.
                     "other-thread" => {
@@ -857,6 +913,13 @@ fn guard_checks(report: &mut Report, guarded: &[(&'static str, bool)]) {
         let outcome = run_child(&format!("guard:{thread}:driver"));
         let ok = if has_guard { outcome.is_overflow_line() } else { outcome.status.success() && outcome.stdout.starts_with("refused:") };
         report.check(&format!("guard {thread} driver"), ok, outcome.brief());
+        // The whole confirmed guard is the guard: its lowest byte too (16
+        // KiB below a created thread's stack on macOS, 56 MiB below the
+        // main thread's).
+        if has_guard {
+            let outcome = run_child(&format!("guard:{thread}:touch-guard-bottom"));
+            report.check(&format!("guard {thread} guard bottom"), outcome.is_overflow_line(), outcome.brief());
+        }
     }
     let outcome = run_child("guard:std-1MiB:executable");
     report.check("guard std-1MiB executable", outcome.signal().is_none() && outcome.status.code() == Some(1)
@@ -895,7 +958,8 @@ fn coroutine_checks(report: &mut Report) {
 /// raised by a fault -- what the previous disposition does with it). Every
 /// memory fault kills the process.
 fn fault_checks(report: &mut Report) {
-    for kind in ["null", "elsewhere", "read-only", "suspended-guard", "thread-guard-from-coroutine", "other-thread", "sent"] {
+    for kind in ["null", "elsewhere", "read-only", "inside-stack", "inside-coroutine-stack", "suspended-guard",
+        "sibling-guard-from-coroutine", "thread-guard-from-coroutine", "other-thread", "sent"] {
         let with = run_child(&format!("fault:{kind}"));
         let without = run_child(&format!("fault:{kind}:unguarded"));
         let relabelled = with.stdout.contains("NATIVE LIMIT STACK") || with.stderr.contains("NATIVE LIMIT STACK");

@@ -109,15 +109,19 @@
 
 # ---------------------------------------------------------------------------
 # Page size
+#
+# (Rounding coroutine stacks to a 4 KiB page instead of the host's is no
+# mutant: the kernel rounds mapping lengths up, so it changes nothing a
+# program or the guard can observe -- it survived on macOS, run 39293822194,
+# MACOS-AARCH64-MILESTONE-4.md section 18.)
 
-@@ page-size-4096 coroutine stacks rounded to a 4 KiB page, whatever the host's (16 KiB on Apple Silicon)
-# Equivalent where the page is 4 KiB (Linux x86-64): macOS only.
+@@ page-size-4096 the guard taken as one 4 KiB page below the stack, a page size Apple Silicon does not have (macOS)
 %% macos-aarch64
-## native/src/runtime/coroutine.rs
+## native/src/runtime/platform/macos.rs
 <<<<
-    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    let guard_low = confirmed_guard_low(low_bound);
 ====
-    let page: libc::c_long = 4096;
+    let guard_low = if confirmed_guard_low(low_bound) < low_bound { low_bound - 4096 } else { low_bound };
 >>>>
 
 # ---------------------------------------------------------------------------

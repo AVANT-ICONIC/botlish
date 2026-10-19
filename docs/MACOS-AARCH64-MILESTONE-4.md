@@ -523,26 +523,35 @@ SIGABRT runs did).
 
 ## 17. Fault-classification negative tests
 
-Seven faults that are not the running stack's exhaustion, each in a child
+Ten faults that are not the running stack's exhaustion, each in a child
 process with the guard installed, and again without it (native_stack's
-`fault:*`):
+`fault:*`; the macOS column is run 39293822194's for the seven it had, the
+three added after it are in the later runs of section 19):
 
-| Fault | With the guard (macOS / Linux) | Without | 
+| Fault | With the guard (macOS / Linux) | Without |
 |---|---|---|
 | a read near address 0 | SIGSEGV / SIGSEGV | the same |
 | a read of an inaccessible page that is no stack's | SIGBUS / SIGSEGV | the same |
 | a write to a read-only page | SIGBUS / SIGSEGV | the same |
-| a read of a *suspended* coroutine's guard | SIGBUS / SIGSEGV | the same |
+| a page *inside* the running thread stack's usable range, made inaccessible | (section 19) / SIGSEGV | the same |
+| the same inside a running coroutine's stack | (section 19) / SIGSEGV | the same |
+| a read of a *suspended* coroutine's guard from the thread's stack | SIGBUS / SIGSEGV | the same |
+| a read of a suspended sibling's guard from a *running* coroutine | (section 19) / SIGSEGV | the same |
 | a read of the thread stack's guard while a coroutine runs | SIGABRT (Rust's own guard report) / SIGABRT | the same |
 | a read of the guarded stack's guard by *another thread* | SIGBUS / SIGSEGV | the same |
 | a SIGSEGV sent with `raise` | survives (Rust's handler ignores a sent one) / survives | the same |
 
 None prints the overflow line, and each ends exactly as it does without the
 guard: the guard defers every unrelated fault to the disposition before it
-(section 9). The fourth and fifth are "a fault outside the identified active
-stack is not its guard overflow": a guard, but not the running stack's.
-The fifth shows the deferral is exact: Rust's std handler, restored and
-given the re-executed fault, reports its own guard page as it would have.
+(section 9). Rows four and five are faults *in* the running stack that are
+not its guard (the classification's upper bound is the stack's low bound,
+exactly); rows six to nine are guards, but not the running stack's guard
+on this thread. Row eight shows the deferral is exact: Rust's std handler,
+restored and given the re-executed fault, reports its own guard page as it
+would have. The positive side is checked too: a read of the lowest byte of
+a confirmed guard, with the guard installed, is reported as an overflow
+(`guard * guard bottom`: 16 KiB below a created thread's stack on macOS, the
+whole 56 MiB reservation of the main thread's).
 
 The mutants `every-fault-overflows`, `any-thread-overflows`,
 `guard-includes-stack` and `defer-exits-quietly` are killed by these
