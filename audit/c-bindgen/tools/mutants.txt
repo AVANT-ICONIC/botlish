@@ -203,10 +203,10 @@ $ctype eq "char"
 ## tools/c-bindgen/generate.tcl
 <<<<
     set config [::chdr::toolchain::configFor $target]
-    set tool [ToolProfile $hprofile $sourceRoot]
+    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch] $target]
 ====
     set config [::chdr::toolchain::configFor [core::cabi::hostTarget]]
-    set tool [ToolProfile $hprofile $sourceRoot]
+    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch] $target]
 >>>>
 
 # --- further mutants ----------------------------------------------------------
@@ -303,9 +303,9 @@ $ctype eq "char"
 @@ calling-convention-ignored an explicit calling convention attribute is ignored
 ## tools/c-bindgen/model.tcl
 <<<<
-        if {[lindex $a 0] in {cc gnu std declspec} && $name in $conventions} {
+    if {[llength $ccs] && ![DefaultConvention $ccKey]} {
 ====
-        if {0} {
+    if {0} {
 >>>>
 
 @@ variadic-ignored a variadic function is bound by its fixed parameters

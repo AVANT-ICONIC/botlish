@@ -17,6 +17,7 @@ source [file join $::projectRoot native native.tcl]
 source [file join $::projectRoot tests cffi boringssl.tcl]
 source [file join $::projectRoot tests cffi sdl3.tcl]
 source [file join $::projectRoot tools c-bindgen lib.tcl]
+source [file join $::projectRoot tools c-bindgen oracle.tcl]
 
 testConstraint clang [expr {[auto_execok clang] ne ""}]
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
@@ -240,7 +241,7 @@ test cb-fixture-current {the fixture's committed generated bindings, for every t
     lmap target [dict get $::fixture targets] {
         staleFiles [generation $::fixture $target] [::cbind::profile::outputDir $::fixture $target] bgf
     }
-} -result {{} {} {}}
+} -result {{} {} {} {}}
 
 test cb-fixture-deterministic {generation is byte-for-byte deterministic: two runs, another working directory, another time zone and locale give the same files; no time, temporary path or host path is in them} -constraints clang -body {
     set first [dict get [::cbind::generate::run $::fixture linux-x86_64] files]
@@ -261,7 +262,7 @@ test cb-fixture-deterministic {generation is byte-for-byte deterministic: two ru
         if {[regexp {/tmp/|/home/|/root/|/usr/|[0-9]{4}-[0-9]{2}-[0-9]{2}} $text]} { lappend leaks $path }
     }
     list [expr {$first eq $second}] [lsort [dict keys $first]] $leaks
-} -result {1 {bgf/bgf.bot bgf/ctypes.bot bgf/thunks/bgf.bot bgf/types.bot manifest.txt report.tsv report.txt shim.c} {}}
+} -result {1 {bgf/bgf.bot bgf/ctypes.bot bgf/layouts.bot bgf/records.bot bgf/thunks/bgf.bot bgf/types.bot layouts-check.c layouts.tsv manifest.txt report.tsv report.txt shim.c} {}}
 
 test cb-fixture-mapping {the declaration mapping: integer typedefs resolve to the target's C scalars (no nominal type per typedef), enums to the compiler's integer type, a pointer to an incomplete or complete tag to one opaque identity per C tag (never Ptr[Void]; two tags whose names collide stay two identities), callbacks to FnPtr, arrays and function types of parameters to pointers, C names that are Botlish keywords renamed, unnamed parameters numbered} -constraints clang -body {
     set text [dict get [generation $::fixture linux-x86_64] files bgf/bgf.bot]
@@ -328,7 +329,7 @@ test cb-fixture-targets {generation is target-aware: the target's preprocessing 
             [regexp -inline -line {^target .*$} [dict get [generation $::fixture $target] files manifest.txt]]
     }
     set out
-} -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}}}
+} -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}} windows-x86_64-gnu {absent absent absent direct} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target windows-x86_64-gnu}}}
 
 test cb-fixture-cross-headers {a Linux target that is not the host is preprocessed with its own C library headers or not at all: when clang searches no directory of the target's (no GCC cross installation it finds, no sysroot), generation that uses the system headers stops with the remedy instead of reading the host's /usr/include as the target's; a freestanding profile (-nostdlibinc) needs none} -constraints {clang linuxNative} -body {
     set other [expr {$::hostTarget eq "linux-aarch64" ? "linux-x86_64" : "linux-aarch64"}]
@@ -343,18 +344,18 @@ test cb-fixture-cross-headers {a Linux target that is not the host is preprocess
         array set ::env $savedEnv
     }
     list [string match "c-bindgen: $other is not this host's target: clang --target=* searches no directory of $other's C library headers *, so it would read the host's as the target's. Install the target's cross C library where clang finds it (Debian and Ubuntu: gcc-*), or set BOTLISH_C_SYSROOT_[string map {- _} $other] (or BOTLISH_C_SYSROOT) to a sysroot" $message] $freestanding
-} -result {1 8}
+} -result {1 12}
 
 test cb-fixture-compiles {every target's generated modules are ordinary Botlish: they compile, warning-free (warnings error), with the ordinary front end for that target, and generated modules of declarations only are ordinary modules (unknown escapes designate nothing)} -constraints clang -body {
     lmap target [dict get $::fixture targets] {
         set dir [scratch]
         ::cbind::generate::stage $::fixture $target "" $dir [generatedDir $::fixture $target]
-        writeText [file join $dir main.bot] "import bgf::bgf\nimport bgf::thunks::bgf\nimport bgf::types\nimport bgf::ctypes\n\nbgf::bgf::BGF_FLAG_ALL\n"
+        writeText [file join $dir main.bot] "import bgf::bgf\nimport bgf::thunks::bgf\nimport bgf::types\nimport bgf::ctypes\nimport bgf::records\nimport bgf::layouts\n\nbgf::bgf::BGF_FLAG_ALL\n"
         set hir [stagedHir $dir main.bot $target error]
         set units [dict get $hir direct units]
-        list $target {*}[lmap unit {bgf::bgf bgf::thunks::bgf bgf::types bgf::ctypes} {dict get $units $unit status}]
+        list $target {*}[lmap unit {bgf::bgf bgf::thunks::bgf bgf::types bgf::ctypes bgf::records bgf::layouts} {dict get $units $unit status}]
     }
-} -cleanup removeScratch -result {{linux-x86_64 ordinary ordinary ordinary ordinary} {linux-aarch64 ordinary ordinary ordinary ordinary} {macos-aarch64 ordinary ordinary ordinary ordinary}}
+} -cleanup removeScratch -result {{linux-x86_64 ordinary ordinary ordinary ordinary ordinary ordinary} {linux-aarch64 ordinary ordinary ordinary ordinary ordinary ordinary} {macos-aarch64 ordinary ordinary ordinary ordinary ordinary ordinary} {windows-x86_64-gnu ordinary ordinary ordinary ordinary ordinary ordinary}}
 
 test cb-fixture-run {the generated binding links and runs: demo.bot (a Botlish caller) and caller.c (a C caller of the header's own API) compute the same values -- direct calls, aliases, link names, a stub-table thunk, inline and macro thunks, a declared function its macro shadows, typed constants, C _Bool, opaque handles, byte borrowing and write-back -- on both native backends} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
@@ -493,7 +494,275 @@ test cb-version-drift {a changed header is a generated diff the check reports wi
     set dir [::cbind::profile::outputDir $::fixture linux-x86_64]
     list [lsort [lmap d [::cbind::generate::compare [dict get $result files] $dir bgf] {lindex $d 0}]] \
         [lsort [::cbind::generate::coverageChange $dir $result]]
-} -cleanup removeScratch -result {{bgf/bgf.bot manifest.txt report.tsv report.txt} {{+ function bgf_added: direct direct} {+ function bgf_floaty: unsupported float} {- function bgf_plain_char: was direct direct} {~ function bgf_add: direct direct -> direct direct} {~ macro BGF_VERSION_MAJOR: constant ffi::c::Int -> constant ffi::c::Int} {~ macro bgf_call_add: alias alias of bgf_add -> alias alias of bgf_add}}}
+} -cleanup removeScratch -result {{bgf/bgf.bot bgf/layouts.bot layouts.tsv manifest.txt report.tsv report.txt} {{+ function bgf_added: direct direct} {+ function bgf_floaty: unsupported float} {- function bgf_plain_char: was direct direct} {~ function bgf_add: direct direct -> direct direct} {~ macro BGF_VERSION_MAJOR: constant ffi::c::Int -> constant ffi::c::Int} {~ macro bgf_call_add: alias alias of bgf_add -> alias alias of bgf_add}}}
+
+# ---------------------------------------------------------------------------
+# Records and layouts (C-BINDGEN-LAYOUTS.md)
+
+# The record of KEY ("struct bgf_point") in PROFILE/TARGET's generation.
+proc record {profile target key} {
+    return [dict get [generation $profile $target] model layouts $key]
+}
+
+# The layouts generation RESULT declares: name -> {size align fields}.
+proc layoutsOf {result ns} {
+    set out [dict create]
+    foreach l [::cbind::verify::ParseLayouts [dict get $result files $ns/layouts.bot]] {
+        dict set out [lindex $l 0] [lrange $l 1 end]
+    }
+    return $out
+}
+
+# Layout NAME of PROFILE/TARGET as {size align {{field type offset} ...}}.
+proc layout {profile target name} {
+    return [dict get [layoutsOf [generation $profile $target] [dict get $profile name]] $name]
+}
+
+# The runtime oracle (tools/c-bindgen/oracle.tcl) over layouts NAMES ("all":
+# every emitted one) of PROFILE's generation for the host, on both native
+# backends: {CHECKS FAILURES-ON-CRANELIFT FAILURES-ON-CRANELIFT-GENERIC}.
+proc layoutOracle {profile names {seed 1}} {
+    set target $::hostTarget
+    set dir [generatedDir $profile $target]
+    set ns [dict get $profile name]
+    set r [::cbind::oracle::build $ns $dir $names $seed]
+    set app [scratch]
+    file copy [file join $dir $ns] [file join $app $ns]
+    set hprofile [::cbind::profile::headersFor $profile $target]
+    set tool [::cbind::generate::ToolProfile $hprofile [::cbind::profile::sourceRoot $profile 0 $target]]
+    set lib [::cbind::oracle::install $r $app [::chdr::toolchain::configFor $target] $tool [file join $app .oracle]]
+    set hir [stagedHir $app main.bot "" off]
+    set out [list [llength [concat {*}[dict get $r expected]]]]
+    native::withLinkDirs [list $lib] {
+        foreach backend {cranelift cranelift-generic} {
+            lassign [outcomeUnderHir $backend $hir] tag value message
+            lappend out [expr {$tag eq "value" ? [::cbind::oracle::failures $r $value] : [list $tag $value $message]}]
+        }
+    }
+    return $out
+}
+
+# Compiles the C text SOURCE with the command COMPILER (a word list) and the
+# include directory INCLUDE: "" when it compiles, else the diagnostics.
+proc compileWith {compiler source include {flags {}}} {
+    set dir [scratch]
+    set path [file join $dir check.c]
+    writeText $path $source
+    if {[catch {exec {*}$compiler {*}$flags -w -I$include -c $path -o [file join $dir check.o] 2>@1} out]} {
+        return $out
+    }
+    return ""
+}
+
+test cb-layout-records {every complete C record is classified: layout-direct when every field is a C integer scalar (typedefs and enums resolved), a pointer or a record emitted by value, layout-blocked with its blockers otherwise, opaque-only when incomplete; anonymous struct members are promoted into their record, not records of their own} -constraints clang -body {
+    set recs [dict get [generation $::fixture linux-x86_64] model layouts]
+    set out {}
+    foreach key {{struct bgf_scalars} {struct bgf_typed} {struct bgf_node} {struct bgf_rect} {struct bgf_frame} {struct bgf_promoted} {struct bgf_chars} {union bgf_value} {struct bgf_tagged} {struct bgf_secret} {struct bgf_handle}} {
+        set r [dict get $recs $key]
+        lappend out [list $key [dict get $r status] [expr {[dict get $r status] eq "layout-direct" ? [dict get $r layoutName] : "-"}]]
+    }
+    set promoted [lmap {k r} $recs {expr {[dict get $r status] eq "promoted" ? $k : [continue]}}]
+    list $out [llength $promoted] [lmap f [dict get $recs {struct bgf_promoted} fields] {dict get $f name}]
+} -result {{{{struct bgf_scalars} layout-direct bgf_scalars} {{struct bgf_typed} layout-direct bgf_typed} {{struct bgf_node} layout-direct bgf_node} {{struct bgf_rect} layout-direct bgf_rect} {{struct bgf_frame} layout-direct bgf_frame} {{struct bgf_promoted} layout-direct bgf_promoted} {{struct bgf_chars} layout-blocked -} {{union bgf_value} layout-blocked -} {{struct bgf_tagged} layout-blocked -} {{struct bgf_secret} opaque-only -} {{struct bgf_handle} opaque-only -}} 1 {kind left right tail}}
+
+test cb-layout-packing {packing and alignment need no C layout rule: #pragma pack(1) and (2), the packed attribute, an aligned record, an aligned member, a packed record nested in an unpacked one and an unpacked one in a packed one are layouts of exactly the sizes, alignments and offsets the compiler gives} -constraints clang -body {
+    lmap name {bgf_packed1 bgf_packed2 bgf_packed_attr bgf_aligned bgf_aligned_field bgf_nested_packed bgf_packed_outer} {
+        lassign [layout $::fixture linux-x86_64 $name] size align fields
+        list $name $size $align [lmap f $fields {lindex $f 2}]
+    }
+} -result {{bgf_packed1 7 1 {0 1 5}} {bgf_packed2 14 2 {0 2 6}} {bgf_packed_attr 11 1 {0 1 9}} {bgf_aligned 16 16 0} {bgf_aligned_field 32 16 {0 8 16}} {bgf_nested_packed 12 4 {0 1 8}} {bgf_packed_outer 11 1 {0 1 9}}}
+
+test cb-layout-llp64 {the target compiler decides where long lives: on LP64 (Linux x86-64 and AArch64, macOS AArch64) long is 8 bytes and bgf_longs 56 bytes, on Windows x86-64 with MinGW-w64's GNU ABI (LLP64) long is 4 bytes and bgf_longs 48 -- no data model rule in the generator; the layouts' scalars are each target's own (the verifier holds their widths to the compiler's)} -constraints clang -body {
+    lmap target [dict get $::fixture targets] {
+        lassign [layout $::fixture $target bgf_longs] size align fields
+        lassign [layout $::fixture $target bgf_long_pair] psize palign pfields
+        list $target $size [lmap f $fields {lindex $f 2}] $psize [lmap f $pfields {lindex $f 2}] \
+            [dict get [core::cabi::scalarInfo Long $target] bits]
+    }
+} -result {{linux-x86_64 56 {0 8 16 24 32 40 48} 72 {0 8 64} 64} {linux-aarch64 56 {0 8 16 24 32 40 48} 72 {0 8 64} 64} {macos-aarch64 56 {0 8 16 24 32 40 48} 72 {0 8 64} 64} {windows-x86_64-gnu 48 {0 4 8 16 24 32 40} 64 {0 8 56} 32}}
+
+test cb-layout-pointers {pointer fields keep their nominal pointee identities (never collapsed to Ptr[Void]): itself, an incomplete handle, void, char, a pointer to a pointer, a callback typedef, an inline function pointer, a record whose own layout is blocked -- which the ctypes module declares; a pointer to a blocked record blocks nothing} -constraints clang -body {
+    lassign [layout $::fixture linux-x86_64 bgf_node] size align fields
+    set ctypes [dict get [generation $::fixture linux-x86_64] files bgf/ctypes.bot]
+    list [lmap f $fields {list [lindex $f 0] [lindex $f 1]}] \
+        [dict get [record $::fixture linux-x86_64 {struct bgf_points_ref}] status] \
+        [regexp -all -line {^opaque struct (bgf_chars|bgf_points4|bgf_node):$} $ctypes] \
+        [regexp -inline -line {^# struct bgf_node .*$} $ctypes]
+} -result {{{next {ffi::c::Ptr[bgf::ctypes::bgf_node]}} {handle {ffi::c::Ptr[bgf::ctypes::bgf_handle]}} {data {ffi::c::Ptr[ffi::c::Void]}} {name {ffi::c::Ptr[ffi::c::Char]}} {slot {ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_node]]}} {visit {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}]}} {compare {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[bgf::ctypes::bgf_node], ffi::c::Ptr[bgf::ctypes::bgf_node]], return: ffi::c::Int}]}} {label {ffi::c::Ptr[bgf::ctypes::bgf_chars]}} {id ffi::c::UInt}} layout-direct 3 {{# struct bgf_node (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_node}}}
+
+test cb-layout-blockers {every representation the layout language lacks is a blocker, never approximated: arrays (with their element's category: char, wide-char, record, pointer, scalar), flexible array members, unions (records of their own), anonymous union members, bitfields, float, double, long double, C _Bool, volatile, a typedef an attribute widens, a pointer to float, a callback with a double, an explicit calling convention; a record holding a blocked one by value is nested-layout-blocked with the chain to its first direct blocker} -constraints clang -body {
+    set recs [dict get [generation $::fixture linux-x86_64] model layouts]
+    lmap key {{struct bgf_chars} {struct bgf_wide_text} {struct bgf_points4} {struct bgf_ptrs3} {struct bgf_matrix} {struct bgf_flex} {union bgf_value} {struct bgf_tagged} {struct bgf_overlay} {struct bgf_bits} {struct bgf_real} {struct bgf_ld} {struct bgf_flag} {struct bgf_vol} {struct bgf_wide_field} {struct bgf_float_ptr} {struct bgf_bad_callback} {struct bgf_ms_field} {struct bgf_outer_blocked} {struct bgf_chain2} {struct bgf_mixed} {struct bgf_flagged_rect}} {
+        set r [dict get $recs $key]
+        list $key [lsort -unique [lmap b [dict get $r direct] {lindex $b 0}]] [lmap b [dict get $r transitive] {lindex $b 1}] \
+            [::cbind::records::RootReasons $recs $key]
+    }
+} -result {{{struct bgf_chars} fixed-array {} fixed-array} {{struct bgf_wide_text} fixed-array {} fixed-array} {{struct bgf_points4} fixed-array {} fixed-array} {{struct bgf_ptrs3} fixed-array {} fixed-array} {{struct bgf_matrix} fixed-array {} fixed-array} {{struct bgf_flex} flexible-array {} flexible-array} {{union bgf_value} union {} union} {{struct bgf_tagged} {} {{field value (union bgf_value, field) -> union}} union} {{struct bgf_overlay} anonymous-overlay {{member 2 (union anon@bgf_records.h:183, anonymous-member) -> union}} {anonymous-overlay union}} {{struct bgf_bits} bitfield {} bitfield} {{struct bgf_real} {double float} {} {double float}} {{struct bgf_ld} long-double {} long-double} {{struct bgf_flag} c-bool {} c-bool} {{struct bgf_vol} volatile {} volatile} {{struct bgf_wide_field} typedef-abi-mismatch {} typedef-abi-mismatch} {{struct bgf_float_ptr} unsupported-pointer {} unsupported-pointer} {{struct bgf_bad_callback} unsupported-pointer {} unsupported-pointer} {{struct bgf_ms_field} unsupported-calling-convention {} unsupported-calling-convention} {{struct bgf_outer_blocked} {} {{field chars (struct bgf_chars, field) -> fixed-array}} fixed-array} {{struct bgf_chain2} {} {{field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}} fixed-array} {{struct bgf_mixed} fixed-array {{field u (union bgf_value, field) -> union}} {fixed-array union}} {{struct bgf_flagged_rect} {} {{field flag (struct bgf_flag, field) -> c-bool}} c-bool}}
+
+test cb-layout-arrays {an array field is recorded for the pressure analysis, never flattened: its element type and category, its bounds and the compiler's element count; a bitfield its declared type and width} -constraints clang -body {
+    set recs [dict get [generation $::fixture linux-x86_64] model layouts]
+    set out {}
+    foreach {key i} {{struct bgf_chars} 1 {struct bgf_wide_text} 1 {struct bgf_points4} 0 {struct bgf_ptrs3} 0 {struct bgf_matrix} 0 {struct bgf_flex} 1} {
+        set f [lindex [dict get $recs $key fields] $i]
+        lappend out [list $key [dict get $f array] [expr {[dict exists $f extent] ? [dict get $f extent] : "-"}] [dict get $f offset]]
+    }
+    set bits [lmap f [dict get $recs {struct bgf_bits} fields] {list [dict get $f cname] [::cir::BoundText [dict get $f bits]] [dict get $f offset]}]
+    list $out $bits [regexp -all -line {^\s+field name} [dict get [generation $::fixture linux-x86_64] files bgf/layouts.bot]]
+} -result {{{{struct bgf_chars} {category char element char bounds 16} 16 4} {{struct bgf_wide_text} {category wide-char element wchar_t bounds 8} 8 4} {{struct bgf_points4} {category record element bgf_point bounds 4} 4 0} {{struct bgf_ptrs3} {category pointer element {void *} bounds 3} 3 0} {{struct bgf_matrix} {category scalar element int bounds {2 3}} 2 0} {{struct bgf_flex} {category scalar element int bounds {{}}} - 8}} {{a 3 {}} {b 5 {}} {rest {} 4}} 1}
+
+test cb-layout-naming {layout names are stable and collision-safe, read from the records only: the first typedef naming a tag, else the tag; a typedef and a tag of one name are two records and two layouts (bgf_coll, bgf_coll_struct); C names Botlish reserves are renamed (loop_, List_; fields fn_, type_, loop_); several typedefs of one record are one layout listing them all; an anonymous record is named by its typedef or by its container's name and member; reversing the header's declarations changes no name} -constraints clang -body {
+    set recs [dict get [generation $::fixture linux-x86_64] model layouts]
+    set names [lmap key {{struct bgf_coll_a} {struct bgf_coll} {struct bgf_kw} {struct List} {struct bgf_multi}} {
+        list $key [dict get $recs $key layoutName] [dict get $recs $key typedefs]
+    }]
+    set anon [lsort [lmap {k r} $recs {expr {[dict get $r anonymous] && [dict get $r status] eq "layout-direct" ? [dict get $r layoutName] : [continue]}}]]
+    set kw [lmap f [dict get $recs {struct bgf_kw} fields] {dict get $f name}]
+    # The same records, declared in the reverse order of their groups.
+    set copy [scratch]
+    file copy [file join $::fixtureDir include] [file join $copy include]
+    set h [file join $copy include bgf bgf_records.h]
+    set text [::chdr::readFile $h]
+    set a [string first "/* Names:" $text]
+    set b [string first "/* Blocked records:" $text]
+    writeText $h "[string range $text 0 [expr {$a - 1}]][string range $text $b end]\n[string range $text $a [expr {$b - 1}]]"
+    set profile [fixtureWith [dict create headers [dict merge [dict get $::fixture headers] [dict create source [list local $copy]]]]]
+    set moved [dict get [::cbind::generate::run $profile linux-x86_64] model layouts]
+    # Anonymous records are keyed by their position (anon@FILE:LINE): they
+    # are compared by name.
+    set namesOf {recs {
+        lsort [lmap {k r} $recs {expr {[dict get $r anonymous] ? [list - [dict get $r layoutName]] : [list $k [dict get $r layoutName]]}}]
+    }}
+    set same [expr {[apply $namesOf $recs] eq [apply $namesOf $moved]}]
+    list $names $anon $kw $same
+} -cleanup removeScratch -result {{{{struct bgf_coll_a} bgf_coll bgf_coll} {{struct bgf_coll} bgf_coll_struct {}} {{struct bgf_kw} loop_ loop} {{struct List} List_ {}} {{struct bgf_multi} bgf_multi {bgf_multi bgf_multi_alias bgf_multi2}}} {bgf_anon_point bgf_member_anon_range} {fn_ type_ loop_} 1}
+
+test cb-layout-verified {every emitted layout is the compiler's: layouts-check.c, read back from the generated Botlish text, compiles for every committed target, and a layout corrupted in any number -- a size, an alignment, an offset off by one, a field's scalar width or class -- fails it, naming the layout and the field} -constraints clang -body {
+    set ok [lmap target [dict get $::fixture targets] {
+        set result [generation $::fixture $target]
+        set config [::chdr::toolchain::configFor $target]
+        set tool [::cbind::generate::ToolProfile [::cbind::profile::headersFor $::fixture $target] $::fixtureDir]
+        lindex [::chdr::toolchain::compile $config $tool [dict get $result files layouts-check.c] {-w}] 0
+    }]
+    set files [dict get [generation $::fixture linux-x86_64] files]
+    set config [::chdr::toolchain::configFor linux-x86_64]
+    set tool [::cbind::generate::ToolProfile [::cbind::profile::headersFor $::fixture linux-x86_64] $::fixtureDir]
+    set caught {}
+    foreach {old new} {
+        "layout bgf_point:\n    size 8" "layout bgf_point:\n    size 12"
+        "layout bgf_packed1:\n    size 7\n    align 1" "layout bgf_packed1:\n    size 7\n    align 4"
+        "field length: ffi::c::UInt at 1" "field length: ffi::c::UInt at 2"
+        "field l: ffi::c::Long at 8" "field l: ffi::c::Int at 8"
+        "field next: ffi::c::Ptr\[bgf::ctypes::bgf_node\] at 0" "field next: ffi::c::ULong at 0"
+    } {
+        set bad [dict replace $files bgf/layouts.bot [string map [list $old $new] [dict get $files bgf/layouts.bot]]]
+        set check [::cbind::verify::source $bad $::fixture linux-x86_64 {}]
+        lassign [::chdr::toolchain::compile $config $tool $check {-w}] good stderr
+        lappend caught [expr {$good ? "missed" : [lindex [regexp -inline {static assertion failed[^"]*"([^"]*)"} $stderr] 1]}]
+    }
+    list $ok $caught
+} -result {{1 1 1 1} {bgf_point bgf_packed1 bgf_packed1.length bgf_longs.l bgf_node.next}}
+
+test cb-layout-second-compiler {GCC agrees with clang on every emitted fixture layout: layouts-check.c compiles with the host's cc for the host target and, where installed, with the MinGW-w64 and AArch64 cross gcc for theirs} -constraints {clang linuxNative} -body {
+    set out {}
+    foreach {target cc} [list $::hostTarget cc windows-x86_64-gnu x86_64-w64-mingw32-gcc linux-aarch64 aarch64-linux-gnu-gcc linux-x86_64 x86_64-linux-gnu-gcc] {
+        if {[auto_execok $cc] eq "" || $target ni [dict get $::fixture targets]} continue
+        if {$target ne $::hostTarget && $cc eq "cc"} continue
+        if {[dict exists $out $target]} continue
+        dict set out $target [compileWith $cc [dict get [generation $::fixture $target] files layouts-check.c] [file join $::fixtureDir include] -ffreestanding]
+    }
+    dict map {t v} $out {expr {$v eq "" ? "agrees" : $v}}
+} -match glob -result {*agrees*}
+
+test cb-layout-oracle-fixture {every emitted fixture layout agrees with C at run time, on both native backends: C writes every field with its own typed stores and Botlish reads them through binary::native::view; Botlish writes every field through binary::native::edit and C reads them, the padding untouched; Botlish builds the record in MutableBytes with binary::write and binary::write_foreign and C reads that image, its padding zero; binary::parse reads it back; layout_length and layout_alignment are C's sizeof and _Alignof} -constraints nativeRun -body {
+    lassign [layoutOracle $::fixture all] checks a b
+    list [expr {$checks > 250}] $a $b
+} -cleanup removeScratch -result {1 {} {}}
+
+test cb-layout-ordinary {a generated layout is an ordinary layout: a program over one (bytes in, a LayoutStruct out, bytes back) runs on all four backends, through HIR interchange in a fresh process, and through the front-end cache, with no C compiler at compile time} -constraints clang -body {
+    set dir [scratch]
+    ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
+    writeText [file join $dir main.bot] "import abi\nimport abi::bytes\nimport binary\nimport bgf::layouts\n\nfn run() -> List\[int\] errors LayoutLengthMismatch:\n    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_packed_outer)))\n    d1 = binary::write(d0, bgf::layouts::bgf_packed_outer.inner.y, -9)\n    d2 = binary::write(d1, bgf::layouts::bgf_packed_outer.tail, 513)\n    v = binary::parse(bgf::layouts::bgf_packed_outer, abi::bytes::freeze(d2))\n    \[binary::layout_length(bgf::layouts::bgf_packed_outer), binary::layout_alignment(bgf::layouts::bgf_packed_outer), v.inner.y, v.tail, v.lead\]\n\nr = run():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    set hir [stagedHir $dir main.bot]
+    set values [lmap backend [backendsFor $::hostTarget] {lindex [outcomeUnderHir $backend $hir] 1}]
+    set text [hir::interchange::encode $hir]
+    set script [file join $dir fresh.tcl]
+    writeText $script "source [list [file join $::projectRoot surface surface.tcl]]\nset hir \[hir::interchange::decode [list $text]\]\nputs \[core::value::show \[core::evalProgram \[hir::lower \$hir\]\] 1 1\]\n"
+    set fresh [exec [info nameofexecutable] $script]
+    set cache [scratch]
+    set first [surface::readProgramFile [file join $dir main.bot] -warnings error -cache $cache]
+    set second [surface::readProgramFile [file join $dir main.bot] -warnings error -cache $cache]
+    list [lsort -unique $values] $fresh [expr {[hir::interchange::encode $first] eq [hir::interchange::encode $second]}]
+} -cleanup removeScratch -result {{{[11, 1, -9, 513, 0]}} {[11, 1, -9, 513, 0]} 1}
+
+test cb-layout-pressure {the report weighs every missing feature on the dependency graph, transitively: a record is recovered only when every direct blocker is lifted and everything it holds by value is recovered (bgf_mixed needs both arrays and unions); the API pressure counts bound functions pointing to records with layouts, blocked ones and opaque ones by pointer shape} -constraints clang -body {
+    set text [dict get [generation $::fixture linux-x86_64] files report.txt]
+    set a [string first "Layout pressure" $text]
+    set b [string first "Macro APIs" $text]
+    string trim [string range $text $a [expr {$b - 1}]]
+} -result {Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
+  fixed arrays                                                                 7    14.0%  5 + 2
+  unions and anonymous overlays                                                4     8.0%  3 + 1
+  ffi::c::Bool fields                                                          2     4.0%  1 + 1
+  float fields                                                                 0     0.0%  0 + 0
+  double fields                                                                0     0.0%  0 + 0
+  float and double fields                                                      1     2.0%  1 + 0
+  long double fields                                                           1     2.0%  1 + 0
+  bitfields                                                                    1     2.0%  1 + 0
+  flexible array members                                                       1     2.0%  1 + 0
+  fixed arrays and unions                                                     12    24.0%  9 + 3
+  fixed arrays, unions and Bool                                               14    28.0%  10 + 4
+  all of the above                                                            18    36.0%  14 + 4
+
+API pressure (bound APIs pointing to C records)
+  bound APIs with a pointer to a C record (parameter or result)               15    29.4%
+    to a record with an emitted layout                                         6    40.0%
+    to a complete record whose layout is blocked                               1     6.7%
+    only to incomplete records (or complete ones outside the headers)          8    53.3%
+  pointers by shape and record (layout / blocked / incomplete / outside):
+    param T *                2 / 0 / 6 / 0
+    param const T *          3 / 1 / 0 / 0
+    param T **               1 / 0 / 0 / 0
+    result T *               1 / 0 / 3 / 0
+    result T **              0 / 0 / 1 / 0
+  records bound signatures point to                                           10
+    complete                                                                   5    50.0%
+      with an emitted layout                                                   4    40.0%
+      whose layout is blocked                                                  1    10.0%
+      outside the profile's records (a system header's)                        0     0.0%
+    incomplete (opaque only)                                                   5    50.0%}
+
+test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record and every member for later pressure analysis, with sizes, offsets, C types, categories, element counts and blockers; the manifest names the ABI identity of the layouts (target and toolchain) and counts them; report.tsv has a row per record and `report -why` explains one} -constraints clang -body {
+    set files [dict get [generation $::fixture linux-x86_64] files]
+    set tsv [split [dict get $files layouts.tsv] \n]
+    set rows [lmap line $tsv {expr {[string match "*\tstruct bgf_chars\t*" $line] ? [string map {\t " | "} $line] : [continue]}}]
+    list [string match "# c-bindgen layout manifest: profile bgf, target linux-x86_64, toolchain clang x86_64-linux-gnu (*) (C-BINDGEN-LAYOUTS.md)" [lindex $tsv 0]] \
+        [string map {\t " | "} [lindex $tsv 1]] $rows \
+        [regsub -all {\{[^{}]*clang version[^{}]*\}} [regexp -all -inline -line {^layout_(?:abi|count emitted|count blocked) .*$} [dict get $files manifest.txt]] VERSION] \
+        [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}]
+} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | - | layout-blocked | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:175; blockers=fixed-array: field name: char elements, char [16]; roots=fixed-array; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | fixed-array | 4 | 16 | - | char name[16] | - | c=name; element=char char; bounds=16; extent=16; blockers=fixed-array: char elements, char [16]}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 23} {layout_count emitted 27}} {tag struct bgf_chain2: not generated (unused): complete
+  no bound signature points to it
+record struct bgf_chain2: not generated (layout-blocked): nested-layout-blocked
+  field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array}}
+
+test cb-layout-conventions {an explicit calling convention is a blocker only where the compiler says the declared type is not the plain one (__builtin_types_compatible_p): __stdcall is ignored on every 64-bit target, so bgf_stdcall binds everywhere; ms_abi is Windows x86-64's default and another convention on Linux x86-64, for a function, a callback typedef and a record's field alike; the manifest counts the conventions taken as the default} -constraints clang -body {
+    lmap target [dict get $::fixture targets] {
+        set rows [::cbind::generate::readTsv [dict get [generation $::fixture $target] files report.tsv]]
+        list $target [lmap name {bgf_stdcall bgf_ms bgf_take_ms} {
+            expr {[dict exists $rows "function $name"] ? [lindex [dict get $rows "function $name"] 2] : "absent"}
+        }] [dict get [record $::fixture $target {struct bgf_ms_field}] status] \
+            [regexp -all -inline -line {^convention_default .*$} [dict get [generation $::fixture $target] files manifest.txt]]
+    }
+} -result {{linux-x86_64 {direct unsupported unsupported} layout-blocked {{convention_default stdcall 1}}} {linux-aarch64 {direct absent absent} layout-blocked {{convention_default stdcall 1}}} {macos-aarch64 {direct absent absent} layout-blocked {{convention_default stdcall 1}}} {windows-x86_64-gnu {direct direct direct} layout-direct {{convention_default ms_abi 1} {convention_default stdcall 1}}}}
+
+test cb-policy-libraries {a library rule names its libraries by header or by symbol, never both; a symbol rule applies to every header; a library the target toolchain has no file for is the profile's error} -constraints clang -body {
+    set out {}
+    foreach rule {{names {bgf} symbols {bgf}} {headers * symbols {bgf}}} {
+        catch {fixtureWith [dict create libraries [list $rule]]} message
+        lappend out $message
+    }
+    catch {::cbind::generate::run [fixtureWith [dict create libraries {{symbols {botlish_no_such_library}}}]] linux-x86_64} message
+    lappend out $message
+} -result {{c-bindgen: profile bgf: a library rule names its libraries by header (names) or by symbol (symbols), one of the two} {c-bindgen: profile bgf: a symbol library rule applies to every header (no headers key)} {c-bindgen: the linux-x86_64 toolchain has no library file for -lbotlish_no_such_library (its -print-file-name=libbotlish_no_such_library.a): install the target's import libraries}}
 
 # ---------------------------------------------------------------------------
 # The acceptance corpora
@@ -714,5 +983,112 @@ int main(void) {
 } [join [lmap x $xs {string cat ${x}u}] {, }] [llength $xs]]
     list [expr {$botlish eq [cCaller $profile $c]}] $botlish
 } -cleanup removeScratch -result {1 {[-1, false, 0, true, 1, true, 1, false, 5, true, 10, true, 10, false, 31, true, 31, false]}}
+
+test cb-tcl-layouts {every layout the Tcl binding emits agrees with C at run time on both native backends (the runtime oracle: view reads of C's stores, native edit stores and byte-storage writes C reads back, padding, sizes and alignments): Tcl_Time, Tcl_ObjType, Tcl_Token, the channel and filesystem type tables of function pointers, ...; Tcl_Obj stays blocked by its internalRep union, Tcl_DString by its static buffer} -constraints {tclSources nativeRun} -body {
+    set profile [::cbind::profile::load tcl]
+    set recs [dict get [generation $profile $::hostTarget] model layouts]
+    lassign [layoutOracle $profile all] checks a b
+    list [expr {$checks > 300}] $a $b [lmap key {{struct Tcl_Time} {struct Tcl_ObjType} {struct Tcl_Token} {struct Tcl_ChannelType} {struct Tcl_Obj} {struct Tcl_DString}} {
+        list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
+    }]
+} -cleanup removeScratch -result {1 {} {} {{{struct Tcl_Time} layout-direct {}} {{struct Tcl_ObjType} layout-direct {}} {{struct Tcl_Token} layout-direct {}} {{struct Tcl_ChannelType} layout-direct {}} {{struct Tcl_Obj} layout-blocked {double union}} {{struct Tcl_DString} layout-blocked fixed-array}}}
+
+test cb-boringssl-layouts {every layout the BoringSSL binding emits agrees with C at run time on both native backends (the runtime oracle); CBS and the method tables are layouts, CBB is blocked through a union holding a bitfield record, SHA256_CTX by its arrays} -constraints {boringsslSources nativeRun} -body {
+    set profile [::cbind::profile::load boringssl]
+    set recs [dict get [generation $profile $::hostTarget] model layouts]
+    lassign [layoutOracle $profile all] checks a b
+    list [expr {$checks > 300}] $a $b [lmap key {{struct cbs_st} {struct ssl_quic_method_st} {struct cbb_st} {struct sha256_state_st}} {
+        list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
+    }]
+} -cleanup removeScratch -result {1 {} {} {{{struct cbs_st} layout-direct {}} {{struct ssl_quic_method_st} layout-direct {}} {{struct cbb_st} layout-blocked {bitfield union}} {{struct sha256_state_st} layout-blocked fixed-array}}}
+
+test cb-sdl3-layouts {every layout the SDL3 binding emits agrees with C at run time on both native backends (the runtime oracle): SDL_Rect, SDL_Point, SDL_Color, SDL_Surface, SDL_AudioSpec, the SDL_IOStreamInterface table, ...; SDL_FRect waits for floats, SDL_Event (a union) for unions, floats, arrays and Bool fields} -constraints {sdl3Sources nativeRun} -body {
+    set profile [::cbind::profile::load sdl3]
+    set recs [dict get [generation $profile $::hostTarget] model layouts]
+    lassign [layoutOracle $profile all] checks a b
+    list [expr {$checks > 700}] $a $b [lmap key {{struct SDL_Rect} {struct SDL_Surface} {struct SDL_IOStreamInterface} {struct SDL_FRect} {union SDL_Event} {struct SDL_KeyboardEvent}} {
+        list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
+    }]
+} -cleanup removeScratch -result {1 {} {} {{{struct SDL_Rect} layout-direct {}} {{struct SDL_Surface} layout-direct {}} {{struct SDL_IOStreamInterface} layout-direct {}} {{struct SDL_FRect} layout-blocked float} {{union SDL_Event} layout-blocked {c-bool fixed-array float union}} {{struct SDL_KeyboardEvent} layout-blocked c-bool}}}
+
+# ---------------------------------------------------------------------------
+# Win32: MinGW-w64's headers for Windows x86-64 with the GNU ABI, from Linux
+
+# 1 when clang can preprocess for windows-x86_64-gnu with MinGW-w64's headers.
+proc mingwReady {} {
+    if {[auto_execok clang] eq ""} { return 0 }
+    return [expr {![catch {::cbind::profile::sourceRoot [::cbind::profile::load win32] 0 windows-x86_64-gnu}]}]
+}
+testConstraint mingw [mingwReady]
+testConstraint mingwGcc [expr {[testConstraint mingw] && [auto_execok x86_64-w64-mingw32-gcc] ne ""}]
+set ::win32 [::cbind::profile::load win32]
+
+test cb-win32-current {the committed Win32 binding (windows-x86_64-gnu) is what generation produces from the installed MinGW-w64 headers and import libraries, byte for byte} -constraints mingw -body {
+    staleBindings {win32 windows-x86_64-gnu}
+} -result {}
+
+test cb-win32-identity {the Win32 binding is Windows x86-64 with MinGW-w64's GNU ABI and says so everywhere: its target is windows-x86_64-gnu (x86_64-pc-windows-gnu, never MSVC's windows-x86_64), its toolchain clang's x86_64-w64-mingw32 with MinGW-w64's own headers, every module's banner names the target; no MSVC toolchain exists to generate for windows-x86_64} -constraints mingw -body {
+    set files [dict get [generation $::win32 windows-x86_64-gnu] files]
+    set manifest [dict get $files manifest.txt]
+    catch {::chdr::toolchain::configFor windows-x86_64} msvc
+    list [regexp -all -inline -line {^(?:target|toolchain_target|revision|defines|source) .*$} $manifest] \
+        [regexp -inline -line {^layout_abi \S+ clang x86_64-w64-mingw32 } $manifest] \
+        [lindex [split [dict get $files win32/layouts.bot] \n] 0] \
+        [dict get [core::cabi::target windows-x86_64-gnu] triple] \
+        [string match {toolchain: no C toolchain configuration for target "windows-x86_64"*} $msvc]
+} -result {{{target windows-x86_64-gnu} {source {toolchain windows.h}} {revision unversioned} {defines {WIN32_LEAN_AND_MEAN UNICODE _UNICODE _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000000 STRICT NOMINMAX}} {toolchain_target x86_64-w64-mingw32}} {{layout_abi windows-x86_64-gnu clang x86_64-w64-mingw32 }} {# win32::layouts -- GENERATED by tools/c-bindgen.tcl (profile win32, target windows-x86_64-gnu):} x86_64-pc-windows-gnu 1}
+
+test cb-win32-sentinels {the familiar Win32 records are the compiler's: POINT, RECT, FILETIME, SYSTEMTIME, SECURITY_ATTRIBUTES, PROCESS_INFORMATION, STARTUPINFOW, BY_HANDLE_FILE_INFORMATION and OVERLAPPED_ENTRY are layouts of MinGW-w64's sizes; OVERLAPPED is blocked by its anonymous union (union pressure), WIN32_FIND_DATAW by its WCHAR arrays (array pressure)} -constraints mingw -body {
+    set recs [dict get [generation $::win32 windows-x86_64-gnu] model layouts]
+    set byTypedef [dict create]
+    dict for {k r} $recs { foreach t [dict get $r typedefs] { dict set byTypedef $t $k } }
+    lmap name {POINT RECT FILETIME SYSTEMTIME SECURITY_ATTRIBUTES PROCESS_INFORMATION STARTUPINFOW BY_HANDLE_FILE_INFORMATION OVERLAPPED_ENTRY OVERLAPPED WIN32_FIND_DATAW} {
+        set r [dict get $recs [dict get $byTypedef $name]]
+        list $name [dict get $r status] [dict get $r size] [dict get $r align] [::cbind::records::RootReasons $recs [dict get $byTypedef $name]]
+    }
+} -result {{POINT layout-direct 8 4 {}} {RECT layout-direct 16 4 {}} {FILETIME layout-direct 8 4 {}} {SYSTEMTIME layout-direct 16 2 {}} {SECURITY_ATTRIBUTES layout-direct 24 8 {}} {PROCESS_INFORMATION layout-direct 24 8 {}} {STARTUPINFOW layout-direct 104 8 {}} {BY_HANDLE_FILE_INFORMATION layout-direct 52 4 {}} {OVERLAPPED_ENTRY layout-direct 32 8 {}} {OVERLAPPED layout-blocked 32 8 {anonymous-overlay union}} {WIN32_FIND_DATAW layout-blocked 592 4 fixed-array}}
+
+test cb-win32-layouts-compile {the Win32 layouts are ordinary Botlish for windows-x86_64-gnu: a program over them compiles warning-free, its HIR records the GNU target, the native driver refuses to run it on this host (NATIVE TARGET), and the Tcl backends run it} -constraints mingw -body {
+    set dir [scratch]
+    ::cbind::generate::stage $::win32 windows-x86_64-gnu "" $dir [generatedDir $::win32 windows-x86_64-gnu]
+    writeText [file join $dir main.bot] "import binary\nimport win32::layouts\n\n\[binary::layout_length(win32::layouts::SYSTEMTIME), binary::layout_length(win32::layouts::STARTUPINFOW), binary::layout_alignment(win32::layouts::SECURITY_ATTRIBUTES)\]\n"
+    set hir [stagedHir $dir main.bot windows-x86_64-gnu]
+    list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1] [lrange [lindex [outcomeUnderHir cranelift $hir] 1] end-1 end]
+} -cleanup removeScratch -result {windows-x86_64-gnu {[16, 104, 8]} {NATIVE TARGET}}
+
+test cb-win32-verified-gcc {MinGW-w64's GCC agrees with clang on every Win32 layout: layouts-check.c compiles with x86_64-w64-mingw32-gcc} -constraints mingwGcc -body {
+    set files [dict get [generation $::win32 windows-x86_64-gnu] files]
+    list [regexp -all -line {^BOTLISH_RECORD\(} [dict get $files layouts-check.c]] \
+        [compileWith x86_64-w64-mingw32-gcc [dict get $files layouts-check.c] [::cbind::profile::sourceRoot $::win32 0 windows-x86_64-gnu]]
+} -cleanup removeScratch -match glob -result {5* {}}
+
+test cb-win32-libraries {each Win32 function's import library is the toolchain's answer -- the first of the profile's libraries whose MinGW-w64 import library defines its symbol: CreateFileW kernel32, MessageBoxW user32, RegOpenKeyExW advapi32, GetFileVersionInfoW version, wglCreateContext opengl32; a module declares the libraries of its functions; a symbol several define takes the first (Sleep: kernel32, also synchronization); WinMain, which no library defines, is unsupported} -constraints mingw -body {
+    set result [generation $::win32 windows-x86_64-gnu]
+    set rows [::cbind::generate::readTsv [dict get $result files report.tsv]]
+    list [lmap name {CreateFileW MessageBoxW RegOpenKeyExW GetFileVersionInfoW wglCreateContext WinMain} {
+            set row [dict get $rows "function $name"]
+            list $name [lindex $row 2] [lindex [regexp -inline {library (\S+);} [lindex $row 5]] 1] [lindex $row 4]
+        }] \
+        [regexp -all -inline -line {^extern c library .*$} [dict get $result files win32/winbase.bot]] \
+        [regexp -inline -line {^import_multiple Sleep .*$} [dict get $result files manifest.txt]]
+} -result {{{CreateFileW direct kernel32 direct} {MessageBoxW direct user32 direct} {RegOpenKeyExW direct advapi32 direct} {GetFileVersionInfoW direct version direct} {wglCreateContext direct opengl32 direct} {WinMain unsupported {} no-import-library}} {{extern c library "kernel32"} {extern c library "advapi32"}} {{import_multiple Sleep kernel32 synchronization}}}
+
+test cb-win32-unicode {the raw profile is UNICODE's: FooA and FooW are both bound as declared, the generic macro Foo is an alias of FooW's symbol, and a generic typedef (STARTUPINFO, WIN32_FIND_DATA) names the W record} -constraints mingw -body {
+    set result [generation $::win32 windows-x86_64-gnu]
+    set rows [::cbind::generate::readTsv [dict get $result files report.tsv]]
+    set recs [dict get $result model layouts]
+    list [lmap key {{function CreateFileA} {function CreateFileW} {macro CreateFile} {macro FindFirstFile} {macro GetModuleFileName}} {
+            set row [dict get $rows $key]
+            list $key [lindex $row 2] [lindex $row 4] [lindex [split [lindex $row 5] ";"] 0]
+        }] \
+        [dict get $recs {struct _STARTUPINFOW} typedefs] [dict get $recs {struct _WIN32_FIND_DATAW} typedefs]
+} -result {{{{function CreateFileA} direct direct {symbol CreateFileA}} {{function CreateFileW} direct direct {symbol CreateFileW}} {{macro CreateFile} alias {alias of CreateFileW} {symbol CreateFileW}} {{macro FindFirstFile} alias {alias of FindFirstFileW} {symbol FindFirstFileW}} {{macro GetModuleFileName} alias {alias of GetModuleFileNameW} {symbol GetModuleFileNameW}}} {STARTUPINFOW STARTUPINFO} {WIN32_FIND_DATAW WIN32_FIND_DATA}}
+
+test cb-win32-conventions {WINAPI and CALLBACK are __stdcall, which the compiler ignores on x86-64: no Win32 function is blocked by its convention, and the manifest counts the functions whose declared convention the compiler took as the default} -constraints mingw -body {
+    set result [generation $::win32 windows-x86_64-gnu]
+    set c [::cbind::report::counts [dict get $result model]]
+    set stdcall [lindex [regexp -inline -line {^convention_default stdcall ([0-9]+)$} [dict get $result files manifest.txt]] 1]
+    list [expr {[dict exists $c blockers unsupported-calling-convention] ? [dict get $c blockers unsupported-calling-convention] : 0}] [expr {$stdcall > 2500}]
+} -result {0 1}
 
 cleanupTests

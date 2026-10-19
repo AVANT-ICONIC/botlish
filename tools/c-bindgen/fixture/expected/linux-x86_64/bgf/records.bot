@@ -10,6 +10,9 @@ extern c library "bgf"
 BGF_MODE_OFF = bgf::ctypes::c_uint(0)
 BGF_MODE_ON = bgf::ctypes::c_uint(200)
 
+# C: int bgf_stdcall(int x)
+extern c fn bgf_stdcall(x: ffi::c::Int) -> ffi::c::Int
+
 # C: int bgf_rect_area(const bgf_rect *r)
 extern c fn bgf_rect_area(r: ffi::c::Ptr[bgf::ctypes::bgf_rect]) -> ffi::c::Int
 

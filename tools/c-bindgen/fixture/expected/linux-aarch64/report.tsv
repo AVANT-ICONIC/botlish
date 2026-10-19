@@ -38,6 +38,7 @@ macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get; (f
 function	bgf_shadowed	thunk	bgf::thunks::bgf	thunk (macro-shadow: call wrapper: computed arguments)	symbol botlish_bgf_bgf_shadowed; (ffi::c::Int) -> ffi::c::Int
 function	bgf_linux_only	direct	bgf::bgf	direct	symbol bgf_linux_only; () -> ffi::c::Int
 function	bgf_arm_only	direct	bgf::bgf	direct	symbol bgf_arm_only; () -> ffi::c::Int
+function	bgf_stdcall	direct	bgf::records	direct	symbol bgf_stdcall; (ffi::c::Int) -> ffi::c::Int
 function	bgf_rect_area	direct	bgf::records	direct	symbol bgf_rect_area; (ffi::c::Ptr[bgf_rect]) -> ffi::c::Int
 function	bgf_node_link	direct	bgf::records	direct	symbol bgf_node_link; (ffi::c::Ptr[bgf_node], ffi::c::Ptr[bgf_node]) -> unit
 function	bgf_frames	direct	bgf::records	direct	symbol bgf_frames; (ffi::c::Ptr[ffi::c::Ptr[bgf_frame]]) -> ffi::c::Int

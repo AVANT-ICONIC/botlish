@@ -202,6 +202,16 @@ typedef struct bgf_flagged_rect { bgf_flag flag; bgf_rect rect; } bgf_flagged_re
 /* An incomplete record: a pointee identity, never a layout. */
 typedef struct bgf_secret bgf_secret;
 
+/* Explicit calling conventions are the compiler's to judge
+ * (__builtin_types_compatible_p): __stdcall is ignored on every 64-bit
+ * target (MinGW's WINAPI); ms_abi is Windows x86-64's own convention and
+ * another one on Linux x86-64, also through a typedef. */
+extern int __attribute__((stdcall)) bgf_stdcall(int x);
+#if defined(__x86_64__)
+typedef int (__attribute__((ms_abi)) *bgf_ms_callback)(int);
+extern int bgf_take_ms(bgf_ms_callback cb);
+#endif
+
 /* Functions pointing to records (the API pressure the report counts). */
 extern int bgf_rect_area(const bgf_rect *r);
 extern void bgf_node_link(bgf_node *a, bgf_node *b);

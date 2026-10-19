@@ -18,21 +18,21 @@ toolchain_target arm64-apple-macos11
 toolchain_sysroot none
 user_label_prefix _
 evidence llvm {Ubuntu clang version 18.1.3 (1ubuntu1)}
-preprocessed_tokens 1664
+preprocessed_tokens 1678
 header include/bgf/bgf.h 49359c5b
-header include/bgf/bgf_records.h ba1c9104
+header include/bgf/bgf_records.h 99c37199
 header include/bgf/bgf_types.h 7f558d1b
 shim_library botlish_shim_bgf_bb8d1d47
 file bgf/bgf.bot 148 c56f39dc
 file bgf/ctypes.bot 71 3472835f
 file bgf/layouts.bot 230 a23f4a17
-file bgf/records.bot 32 fd775da9
+file bgf/records.bot 35 48e900d2
 file bgf/thunks/bgf.bot 27 9797eb8c
 file bgf/types.bot 10 c0c0dda1
 file layouts-check.c 166 dd25b29d
 file layouts.tsv 187 6e64ebe5
-file report.tsv 247 727829d3
-file report.txt 160 5d71ad84
+file report.tsv 248 b110524e
+file report.txt 160 4af6bb6d
 file shim.c 26 bb8d1d47
 libraries bgf/bgf.bot bgf
 libraries bgf/records.bot bgf
@@ -46,8 +46,8 @@ count callbacks 2
 count complete 47
 count constants 16
 count constantsSeen 13
-count declared 41
-count direct 32
+count declared 42
+count direct 33
 count enumerators 7
 count excluded 0
 count fnmacros 3
@@ -76,6 +76,7 @@ blocked typedef-abi-mismatch 1
 blocked unsupported-callback-signature 1
 blocked va-list 1
 blocked variadic 1
+convention_default stdcall 1
 layout_abi macos-aarch64 clang arm64-apple-macos11 {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 3
 layout_count blocked 23

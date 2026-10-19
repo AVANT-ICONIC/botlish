@@ -140,7 +140,7 @@ proc Report {name args} {
             if {$n ne [dict get $o -why]} continue
             set found 1
             switch -- $status {
-                direct - alias - thunk - constant - scalar - opaque - callback - pointer {
+                direct - alias - thunk - constant - scalar - opaque - callback - pointer - layout-direct {
                     puts "$kind $n: generated ($status[expr {$module ne "" ? " in $module" : ""}]): $reason; $detail"
                 }
                 default {

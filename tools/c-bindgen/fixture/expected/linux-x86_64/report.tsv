@@ -38,6 +38,8 @@ function	bgf_half	unsupported		double	parameter 1 (x): double; result: double
 macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get; (ffi::c::Int) -> ffi::c::Int
 function	bgf_shadowed	thunk	bgf::thunks::bgf	thunk (macro-shadow: call wrapper: computed arguments)	symbol botlish_bgf_bgf_shadowed; (ffi::c::Int) -> ffi::c::Int
 function	bgf_linux_only	direct	bgf::bgf	direct	symbol bgf_linux_only; () -> ffi::c::Int
+function	bgf_stdcall	direct	bgf::records	direct	symbol bgf_stdcall; (ffi::c::Int) -> ffi::c::Int
+function	bgf_take_ms	unsupported		unsupported-calling-convention	parameter 1 (cb): typedef bgf_ms_callback: an explicit calling convention: ms_abi
 function	bgf_rect_area	direct	bgf::records	direct	symbol bgf_rect_area; (ffi::c::Ptr[bgf_rect]) -> ffi::c::Int
 function	bgf_node_link	direct	bgf::records	direct	symbol bgf_node_link; (ffi::c::Ptr[bgf_node], ffi::c::Ptr[bgf_node]) -> unit
 function	bgf_frames	direct	bgf::records	direct	symbol bgf_frames; (ffi::c::Ptr[ffi::c::Ptr[bgf_frame]]) -> ffi::c::Int
@@ -138,6 +140,7 @@ typedef	bgf_points_ref	unused		struct bgf_points_ref	no bound signature points t
 typedef	bgf_mixed	unused		struct bgf_mixed	no bound signature points to it
 typedef	bgf_flagged_rect	unused		struct bgf_flagged_rect	no bound signature points to it
 typedef	bgf_secret	opaque	bgf::ctypes	identity bgf_secret	struct bgf_secret
+typedef	bgf_ms_callback	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]	int (*)(int)
 tag	struct List	unused		complete	no bound signature points to it
 tag	struct bgf_aligned	unused		complete	no bound signature points to it
 tag	struct bgf_aligned_field	unused		complete	no bound signature points to it
