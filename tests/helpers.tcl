@@ -116,6 +116,13 @@ testConstraint coreScoping [expr {[core::useBackend] eq "interp"}]
 testConstraint rustcLinker [expr {![info exists ::env(BOTLISH_NATIVE_LINKER)] ||
     $::env(BOTLISH_NATIVE_LINKER) in {"" rustc}}]
 
+# Native coroutines (runtime/coroutine.rs, MACOS-AARCH64-MILESTONE-3.md): the
+# native backend switches stacks on Linux x86-64 and AArch64 and on macOS
+# AArch64. A capability, not an operating system: a test that needs coroutines
+# or the native collector and runtime evidence around them carries this one;
+# a test that needs Linux syscalls or the Linux stack guard keeps nativeLinux.
+testConstraint nativeCoroutines [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
 # Native coverage (tests/native-coverage.tcl): NATIVE_COVERAGE=FILE appends
 # one line per test: {NAME PASSED NATIVE-RUNS UNSUPPORTED-ERRORS}.
 if {[info exists ::env(NATIVE_COVERAGE)] && [info commands ::CoverageTest] eq ""} {

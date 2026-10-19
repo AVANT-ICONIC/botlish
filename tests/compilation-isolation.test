@@ -309,11 +309,16 @@ test ci-hir-format {hir::format of an earlier HIR prints its own declarations an
 } -cleanup {unset -nocomplain hA before} -result 1
 
 test ci-golden-pair {two golden suites in one process: traits-path.bot's HIR, lowered natively after contexts.bot was compiled, failed (its struct WindowsPath was no longer registered)} -body {
-    set hA [surface::readProgramFile [file join $::projectRoot tests golden traits-path.bot] -warnings off]
-    set alone [lmap backend {interp cranelift cranelift-generic} {ciRun $hA $backend}]
-    surface::readProgramFile [file join $::projectRoot tests golden contexts.bot] -warnings off
-    list [expr {[lmap backend {interp cranelift cranelift-generic} {ciRun $hA $backend}] eq $alone}] [lindex $alone 1]
-} -cleanup {unset -nocomplain hA alone} -result {1 {ok {["PASS trait-import-type/imported", "PASS trait-future-path-shape", "2 passed, 0 failed"]}}}
+    # traits-path.bot imports a Linux namespace: it is built for the Linux
+    # target and runs on the backends that run that target (the host's own
+    # on Linux; the Tcl backends alone on macOS, tests/helpers.tcl).
+    set target [linuxTarget]
+    set backends [backendsFor $target {interp cranelift cranelift-generic}]
+    set hA [surface::readProgramFile [file join $::projectRoot tests golden traits-path.bot] -warnings off -target $target]
+    set alone [lmap backend $backends {ciRun $hA $backend}]
+    surface::readProgramFile [file join $::projectRoot tests golden contexts.bot] -warnings off -target $target
+    list [expr {[lmap backend $backends {ciRun $hA $backend}] eq $alone}] [lindex $alone end]
+} -cleanup {unset -nocomplain hA alone target backends} -result {1 {ok {["PASS trait-import-type/imported", "PASS trait-future-path-shape", "2 passed, 0 failed"]}}}
 
 test ci-executable {a standalone executable of an earlier HIR built after a later compilation (native::executable, the stub linker): it linked, then trapped at run time} -constraints stubLinker -setup {
     set dir [file join [temporaryDirectory] ci-executable-[pid]]

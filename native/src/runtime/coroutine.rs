@@ -55,7 +55,7 @@
 //! stack's chain) and calls `co_body`: the thunk's generic entry, then the
 //! terminal state, then a final switch back that never returns.
 //!
-//! # AArch64 Linux
+//! # AArch64 (Linux and macOS)
 //!
 //! The same design with the AAPCS64 callee-saved state: `bl_co_switch` opens
 //! a frame record (`stp x29, x30, [sp, #-16]!; mov x29, sp`), saves x19-x28,
@@ -65,6 +65,16 @@
 //! x30 = `bl_co_trampoline`, whose `ret` therefore enters the trampoline; it
 //! opens a record with a zero frame pointer (the end of the chain) and calls
 //! `co_body`.
+//!
+//! macOS on Apple Silicon (MACOS-AARCH64-MILESTONE-3.md) uses the same
+//! instructions (`aarch64_switch!`, `aarch64_trampoline!`) under Mach-O
+//! spelling: Apple's AAPCS64 variant adds the reserved x18 (never touched),
+//! a mandatory frame-pointer chain (kept: the record is the first thing the
+//! switch opens) and a 128-byte red zone below sp (never written: every store
+//! below sp is a pre-indexed one that moves sp first, and a fresh stack's
+//! context lies wholly above its initial sp). A stack is a plain anonymous
+//! mapping (no MAP_STACK on Darwin) whose guard and size are multiples of the
+//! host page size (16 KiB there).
 //!
 //! # GC
 //!
@@ -164,16 +174,37 @@ thread_local! {
 }
 
 /// The usable size of every coroutine stack: BOTLISH_NATIVE_COROUTINE_STACK_BYTES
-/// (at least 64 KiB) or 8 MiB. Address space only: pages are committed as
+/// (at least 64 KiB, rounded up to a page) or 8 MiB. Address space only: pages are committed as
 /// they are touched.
+#[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
 fn stack_bytes() -> usize {
     std::env::var("BOTLISH_NATIVE_COROUTINE_STACK_BYTES")
         .ok()
         .and_then(|text| text.parse::<usize>().ok())
         .filter(|&size| size >= 64 * 1024)
-        .map(|size| (size + 4095) & !4095)
+        .map(round_to_page)
         .unwrap_or(DEFAULT_STACK_BYTES)
 }
+
+/// SIZE rounded up to a multiple of the host's page size, which is not 4 KiB
+/// everywhere (16 KiB on Apple Silicon). Read once per call: it is a few
+/// instructions, and a stack is mapped rarely.
+#[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
+fn round_to_page(size: usize) -> usize {
+    // SAFETY: sysconf has no preconditions.
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    let page = if page > 0 { page as usize } else { 4096 };
+    (size + page - 1) & !(page - 1)
+}
+
+/// How a coroutine stack is mapped: Linux marks it MAP_STACK and reserves no
+/// swap; Darwin has no MAP_STACK (its stack-ness is only in the thread
+/// library) and MAP_NORESERVE is a no-op there, so a stack is a plain private
+/// anonymous mapping. Both commit pages as they are touched.
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+const MAP_FLAGS: libc::c_int = libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_STACK;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const MAP_FLAGS: libc::c_int = libc::MAP_PRIVATE | libc::MAP_ANONYMOUS;
 
 impl CoStack {
     pub fn bounds(&self) -> NativeStack {
@@ -192,7 +223,7 @@ impl CoStack {
 
     /// A stack, and whether it came from the pool (rather than a fresh
     /// mapping).
-    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
     fn new() -> Result<(CoStack, bool), RtError> {
         let usable = stack_bytes();
         if let Some(stack) = POOL.with(|pool| {
@@ -202,35 +233,29 @@ impl CoStack {
         }) {
             return Ok((stack, true));
         }
-        let size = usable + GUARD_BYTES;
+        let guard = round_to_page(GUARD_BYTES);
+        let size = usable + guard;
         // SAFETY: a fresh private anonymous mapping; nothing else refers to it.
         unsafe {
-            let base = libc::mmap(
-                std::ptr::null_mut(),
-                size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_STACK,
-                -1,
-                0,
-            );
+            let base = libc::mmap(std::ptr::null_mut(), size, libc::PROT_READ | libc::PROT_WRITE, MAP_FLAGS, -1, 0);
             if base == libc::MAP_FAILED {
                 return Err(RtError::Semantic {
                     kind: "COROUTINE-STATE",
                     message: format!("cannot map a {size}-byte coroutine stack: {}", std::io::Error::last_os_error()),
                 });
             }
-            if libc::mprotect(base, GUARD_BYTES, libc::PROT_NONE) != 0 {
+            if libc::mprotect(base, guard, libc::PROT_NONE) != 0 {
                 libc::munmap(base, size);
                 return Err(RtError::Bug(format!("cannot protect a coroutine stack guard: {}", std::io::Error::last_os_error())));
             }
-            Ok((CoStack { base: base as usize, size, guard: GUARD_BYTES }, false))
+            Ok((CoStack { base: base as usize, size, guard }, false))
         }
     }
 
-    #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+    #[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
     fn new() -> Result<(CoStack, bool), RtError> {
         Err(RtError::Unsupported(
-            "native coroutines need stack switching, implemented for x86-64 Linux only (COROUTINES.md)".to_string(),
+            "native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only (COROUTINES.md)".to_string(),
         ))
     }
 }
@@ -247,7 +272,7 @@ impl Drop for CoStack {
             }
         });
         if returned != Ok(true) {
-            #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+            #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
             // SAFETY: the mapping this stack owns; no frame on it is live.
             unsafe {
                 libc::munmap(self.base as *mut libc::c_void, self.size);
@@ -311,6 +336,64 @@ std::arch::global_asm!(
     body = sym co_body,
 );
 
+/// The AArch64 switch and trampoline instructions, shared by the ELF and
+/// Mach-O spellings below: only the symbol directives differ between them.
+/// The register contract is AAPCS64 and Apple's variant of it: x19-x28, the
+/// low halves of v8-v15 and the frame record are saved, FPCR is carried with
+/// the context, and x18 (reserved by Apple platforms) is never touched.
+#[cfg(target_arch = "aarch64")]
+macro_rules! aarch64_switch {
+    () => {
+        concat!(
+            "stp x29, x30, [sp, #-16]!\n",
+            "mov x29, sp\n",
+            "stp x19, x20, [sp, #-16]!\n",
+            "stp x21, x22, [sp, #-16]!\n",
+            "stp x23, x24, [sp, #-16]!\n",
+            "stp x25, x26, [sp, #-16]!\n",
+            "stp x27, x28, [sp, #-16]!\n",
+            "stp d8, d9, [sp, #-16]!\n",
+            "stp d10, d11, [sp, #-16]!\n",
+            "stp d12, d13, [sp, #-16]!\n",
+            "stp d14, d15, [sp, #-16]!\n",
+            "mrs x9, fpcr\n",
+            "str x9, [sp, #-16]!\n",
+            "mov x9, sp\n",
+            "str x9, [x0]\n",
+            "mov sp, x1\n",
+            "ldr x9, [sp], #16\n",
+            "msr fpcr, x9\n",
+            "ldp d14, d15, [sp], #16\n",
+            "ldp d12, d13, [sp], #16\n",
+            "ldp d10, d11, [sp], #16\n",
+            "ldp d8, d9, [sp], #16\n",
+            "ldp x27, x28, [sp], #16\n",
+            "ldp x25, x26, [sp], #16\n",
+            "ldp x23, x24, [sp], #16\n",
+            "ldp x21, x22, [sp], #16\n",
+            "ldp x19, x20, [sp], #16\n",
+            "ldp x29, x30, [sp], #16\n",
+            "mov x0, x2\n",
+            "ret\n",
+        )
+    };
+}
+
+#[cfg(target_arch = "aarch64")]
+macro_rules! aarch64_trampoline {
+    () => {
+        concat!(
+            "mov x30, xzr\n",
+            "stp x29, x30, [sp, #-16]!\n",
+            "mov x29, sp\n",
+            "mov x0, x19\n",
+            "mov x1, x20\n",
+            "bl {body}\n",
+            "brk #1\n",
+        )
+    };
+}
+
 #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
 std::arch::global_asm!(
     ".text",
@@ -318,53 +401,34 @@ std::arch::global_asm!(
     ".globl bl_co_switch",
     ".type bl_co_switch,%function",
     "bl_co_switch:",
-    "stp x29, x30, [sp, #-16]!",
-    "mov x29, sp",
-    "stp x19, x20, [sp, #-16]!",
-    "stp x21, x22, [sp, #-16]!",
-    "stp x23, x24, [sp, #-16]!",
-    "stp x25, x26, [sp, #-16]!",
-    "stp x27, x28, [sp, #-16]!",
-    "stp d8, d9, [sp, #-16]!",
-    "stp d10, d11, [sp, #-16]!",
-    "stp d12, d13, [sp, #-16]!",
-    "stp d14, d15, [sp, #-16]!",
-    "mrs x9, fpcr",
-    "str x9, [sp, #-16]!",
-    "mov x9, sp",
-    "str x9, [x0]",
-    "mov sp, x1",
-    "ldr x9, [sp], #16",
-    "msr fpcr, x9",
-    "ldp d14, d15, [sp], #16",
-    "ldp d12, d13, [sp], #16",
-    "ldp d10, d11, [sp], #16",
-    "ldp d8, d9, [sp], #16",
-    "ldp x27, x28, [sp], #16",
-    "ldp x25, x26, [sp], #16",
-    "ldp x23, x24, [sp], #16",
-    "ldp x21, x22, [sp], #16",
-    "ldp x19, x20, [sp], #16",
-    "ldp x29, x30, [sp], #16",
-    "mov x0, x2",
-    "ret",
+    aarch64_switch!(),
     ".size bl_co_switch, .-bl_co_switch",
     ".p2align 4",
     ".globl bl_co_trampoline",
     ".type bl_co_trampoline,%function",
     "bl_co_trampoline:",
-    "mov x30, xzr",
-    "stp x29, x30, [sp, #-16]!",
-    "mov x29, sp",
-    "mov x0, x19",
-    "mov x1, x20",
-    "bl {body}",
-    "brk #1",
+    aarch64_trampoline!(),
     ".size bl_co_trampoline, .-bl_co_trampoline",
     body = sym co_body,
 );
 
-#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+// Mach-O: C symbols carry a leading underscore and there is no `.type` or
+// `.size`. Nothing else differs from the ELF text above.
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+std::arch::global_asm!(
+    ".text",
+    ".p2align 4",
+    ".globl _bl_co_switch",
+    "_bl_co_switch:",
+    aarch64_switch!(),
+    ".p2align 4",
+    ".globl _bl_co_trampoline",
+    "_bl_co_trampoline:",
+    aarch64_trampoline!(),
+    body = sym co_body,
+);
+
+#[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
 unsafe extern "C" {
     /// Saves the current context, storing its stack pointer through SAVE,
     /// and continues the context whose stack pointer is LOAD, which sees
@@ -373,7 +437,7 @@ unsafe extern "C" {
     fn bl_co_trampoline();
 }
 
-#[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+#[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
 unsafe fn bl_co_switch(_save: *mut usize, _load: usize, _transfer: usize) -> usize {
     unreachable!("no coroutine stack exists on this host")
 }
@@ -495,11 +559,13 @@ unsafe fn prepare(stack: &CoStack, p: *mut Vm, co: *mut CoroutineObj) -> usize {
 
 /// AArch64: the same contract; the first switch restores x19 = P, x20 = CO,
 /// x29 = 0 (the end of the chain) and returns to x30 = bl_co_trampoline.
-#[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+#[cfg(target_arch = "aarch64")]
 unsafe fn prepare(stack: &CoStack, p: *mut Vm, co: *mut CoroutineObj) -> usize {
     let top = stack.top() & !15;
-    // In bl_co_switch's restore order, lowest address first: FPCR (0: the
-    // Linux default, round to nearest, no traps) and its pad, d14/d15 ...
+    // In bl_co_switch's restore order, lowest address first: FPCR (0: round
+    // to nearest, no traps, the default of a new thread on Linux and Darwin
+    // alike; `a_new_context_starts_with_the_threads_fpcr` pins it) and its
+    // pad, d14/d15 ...
     // d8/d9 (zero), x27/x28 ... x21/x22 (zero), x19/x20, then the frame
     // record x29/x30.
     let mut words = [0usize; 22];
@@ -515,7 +581,7 @@ unsafe fn prepare(stack: &CoStack, p: *mut Vm, co: *mut CoroutineObj) -> usize {
     sp
 }
 
-#[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+#[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
 unsafe fn prepare(_stack: &CoStack, _p: *mut Vm, _co: *mut CoroutineObj) -> usize {
     0
 }
@@ -665,7 +731,7 @@ pub fn suspended_rbp(saved_sp: usize) -> usize {
     saved_sp + SWITCH_FRAME_OFFSET
 }
 
-#[cfg(all(test, target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(all(test, any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
 mod tests {
     use super::*;
     use crate::runtime::metrics::{AllocMode, GcReason};
@@ -906,5 +972,411 @@ mod tests {
             vm.error.take().map(|e| e.error_code()),
             Some(vec!["CORE", "SEMANTIC", "YIELD-OUTSIDE-COROUTINE"])
         );
+    }
+
+    // -- Machine-boundary tests (MACOS-AARCH64-MILESTONE-3.md): the switch's
+    // ABI contract, observed through running code rather than read off the
+    // assembly. They run on every host that has native coroutines.
+
+    /// Calls F(P, A, B) with every callee-saved general-purpose register
+    /// (and, on AArch64, d8-d15) loaded with a pattern derived from SEED, and
+    /// returns how many of them differ afterwards. A call that suspends and
+    /// resumes inside F, or a switch that forgets one of them, shows as a
+    /// count -- provided the context the switch lands in used another seed
+    /// (the resumer's and the coroutine's do), or a register left as it was
+    /// would look restored.
+    #[cfg(target_arch = "aarch64")]
+    #[unsafe(naked)]
+    extern "C" fn pattern_call(_f: usize, _p: *mut Vm, _a: Value, _b: Value, _seed: usize) -> usize {
+        std::arch::naked_asm!(
+            "stp x29, x30, [sp, #-16]!",
+            "mov x29, sp",
+            "stp x19, x20, [sp, #-16]!",
+            "stp x21, x22, [sp, #-16]!",
+            "stp x23, x24, [sp, #-16]!",
+            "stp x25, x26, [sp, #-16]!",
+            "stp x27, x28, [sp, #-16]!",
+            "stp d8, d9, [sp, #-16]!",
+            "stp d10, d11, [sp, #-16]!",
+            "stp d12, d13, [sp, #-16]!",
+            "stp d14, d15, [sp, #-16]!",
+            "str x4, [sp, #-16]!",
+            "mov x16, x0",
+            "mov x0, x1",
+            "mov x1, x2",
+            "mov x2, x3",
+            "add x19, x4, #0x13",
+            "add x20, x4, #0x14",
+            "add x21, x4, #0x15",
+            "add x22, x4, #0x16",
+            "add x23, x4, #0x17",
+            "add x24, x4, #0x18",
+            "add x25, x4, #0x19",
+            "add x26, x4, #0x1a",
+            "add x27, x4, #0x1b",
+            "add x28, x4, #0x1c",
+            "add x9, x4, #0x8",
+            "fmov d8, x9",
+            "add x9, x4, #0x9",
+            "fmov d9, x9",
+            "add x9, x4, #0xa",
+            "fmov d10, x9",
+            "add x9, x4, #0xb",
+            "fmov d11, x9",
+            "add x9, x4, #0xc",
+            "fmov d12, x9",
+            "add x9, x4, #0xd",
+            "fmov d13, x9",
+            "add x9, x4, #0xe",
+            "fmov d14, x9",
+            "add x9, x4, #0xf",
+            "fmov d15, x9",
+            "blr x16",
+            "ldr x4, [sp], #16",
+            "mov x9, xzr",
+            "add x10, x4, #0x13",
+            "cmp x19, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x14",
+            "cmp x20, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x15",
+            "cmp x21, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x16",
+            "cmp x22, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x17",
+            "cmp x23, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x18",
+            "cmp x24, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x19",
+            "cmp x25, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x1a",
+            "cmp x26, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x1b",
+            "cmp x27, x10",
+            "cinc x9, x9, ne",
+            "add x10, x4, #0x1c",
+            "cmp x28, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d8",
+            "add x10, x4, #0x8",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d9",
+            "add x10, x4, #0x9",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d10",
+            "add x10, x4, #0xa",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d11",
+            "add x10, x4, #0xb",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d12",
+            "add x10, x4, #0xc",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d13",
+            "add x10, x4, #0xd",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d14",
+            "add x10, x4, #0xe",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "fmov x11, d15",
+            "add x10, x4, #0xf",
+            "cmp x11, x10",
+            "cinc x9, x9, ne",
+            "mov x0, x9",
+            "ldp d14, d15, [sp], #16",
+            "ldp d12, d13, [sp], #16",
+            "ldp d10, d11, [sp], #16",
+            "ldp d8, d9, [sp], #16",
+            "ldp x27, x28, [sp], #16",
+            "ldp x25, x26, [sp], #16",
+            "ldp x23, x24, [sp], #16",
+            "ldp x21, x22, [sp], #16",
+            "ldp x19, x20, [sp], #16",
+            "ldp x29, x30, [sp], #16",
+            "ret",
+        )
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[unsafe(naked)]
+    extern "C" fn pattern_call(_f: usize, _p: *mut Vm, _a: Value, _b: Value, _seed: usize) -> usize {
+        std::arch::naked_asm!(
+            "push rbp",
+            "mov rbp, rsp",
+            "push rbx",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "sub rsp, 8",
+            "mov [rsp], r8",
+            "mov rax, rdi",
+            "mov rdi, rsi",
+            "mov rsi, rdx",
+            "mov rdx, rcx",
+            "lea rbx, [r8 + 1]",
+            "lea r12, [r8 + 2]",
+            "lea r13, [r8 + 3]",
+            "lea r14, [r8 + 4]",
+            "lea r15, [r8 + 5]",
+            "call rax",
+            "mov r9, [rsp]",
+            "xor r8d, r8d",
+            "lea r10, [r9 + 1]",
+            "cmp rbx, r10",
+            "setne r10b",
+            "movzx r10d, r10b",
+            "add r8, r10",
+            "lea r10, [r9 + 2]",
+            "cmp r12, r10",
+            "setne r10b",
+            "movzx r10d, r10b",
+            "add r8, r10",
+            "lea r10, [r9 + 3]",
+            "cmp r13, r10",
+            "setne r10b",
+            "movzx r10d, r10b",
+            "add r8, r10",
+            "lea r10, [r9 + 4]",
+            "cmp r14, r10",
+            "setne r10b",
+            "movzx r10d, r10b",
+            "add r8, r10",
+            "lea r10, [r9 + 5]",
+            "cmp r15, r10",
+            "setne r10b",
+            "movzx r10d, r10b",
+            "add r8, r10",
+            "mov rax, r8",
+            "add rsp, 8",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop rbx",
+            "pop rbp",
+            "ret",
+        )
+    }
+
+    /// Yields from inside pattern_call; its result is how many registers
+    /// the yield (the switch away and back) changed.
+    extern "C" fn clobbering_body(p: *mut Vm, _closure: Value, _args: *const Value) -> Value {
+        let changed = pattern_call(rt_co_yield as *const () as usize, p, make_small(1), 0, 0x2000);
+        make_small(changed as i64)
+    }
+
+    #[test]
+    fn callee_saved_registers_survive_every_switch() {
+        let mut vm = new_vm();
+        let t = thunk(&mut vm, clobbering_body);
+        vm.temp_roots.push(t);
+        let co = rt_co_create(&mut *vm, t);
+        vm.temp_roots.push(co);
+        let vm_ptr: *mut Vm = &mut *vm;
+        // The resumer's side: the switch into a fresh stack and back from the
+        // yield, then the resume of the suspended context.
+        assert_eq!(pattern_call(rt_co_start as *const () as usize, vm_ptr, co, 0, 0x1000), 0);
+        assert_eq!(rt_co_done(vm_ptr, co), FALSE);
+        assert_eq!(pattern_call(rt_co_resume as *const () as usize, vm_ptr, co, UNIT, 0x1000), 0);
+        // The coroutine's side: its own registers across the yield.
+        assert_eq!(rt_co_done(vm_ptr, co), TRUE);
+        assert_eq!(rt_co_resume0(vm_ptr, co), make_small(0));
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn read_fpcr() -> u64 {
+        let v: u64;
+        // SAFETY: reads the thread's floating-point control register.
+        unsafe { std::arch::asm!("mrs {}, fpcr", out(reg) v, options(nomem, nostack)) };
+        v
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn write_fpcr(v: u64) {
+        // SAFETY: sets the thread's rounding mode; tests restore it.
+        unsafe { std::arch::asm!("msr fpcr, {}", in(reg) v, options(nomem, nostack)) };
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn read_sp() -> u64 {
+        let v: u64;
+        // SAFETY: reads sp.
+        unsafe { std::arch::asm!("mov {}, sp", out(reg) v, options(nomem, nostack)) };
+        v
+    }
+
+    /// FPCR travels with a context: the body changes its rounding mode and
+    /// yields; the resumer must see its own mode, and the body its own again.
+    #[cfg(target_arch = "aarch64")]
+    extern "C" fn fpcr_body(p: *mut Vm, _closure: Value, _args: *const Value) -> Value {
+        let before = read_fpcr();
+        write_fpcr(before | (3 << 22));
+        rt_co_yield(p, make_small(1));
+        let kept = read_fpcr() == before | (3 << 22);
+        write_fpcr(before);
+        make_small(if kept && before == 0 { 1 } else { 0 })
+    }
+
+    /// The initial context's FPCR is 0, the default of a new thread on Linux
+    /// and Darwin alike (`prepare` writes the constant).
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn a_new_context_starts_with_the_threads_fpcr() {
+        assert_eq!(read_fpcr(), 0, "a thread's default FPCR is not the 0 prepare() installs");
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn fpcr_is_part_of_the_context() {
+        let mut vm = new_vm();
+        let t = thunk(&mut vm, fpcr_body);
+        vm.temp_roots.push(t);
+        let co = rt_co_create(&mut *vm, t);
+        vm.temp_roots.push(co);
+        assert_eq!(rt_co_start(&mut *vm, co), make_small(1));
+        assert_eq!(read_fpcr(), 0, "the coroutine's rounding mode leaked into its resumer");
+        assert_eq!(rt_co_resume0(&mut *vm, co), make_small(1));
+        assert_eq!(read_fpcr(), 0);
+    }
+
+    thread_local! {
+        static SP_SEEN: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// Records the stack pointer at the body, across a yield, and at the end.
+    #[cfg(target_arch = "aarch64")]
+    extern "C" fn sp_body(p: *mut Vm, _closure: Value, _args: *const Value) -> Value {
+        SP_SEEN.with(|seen| seen.borrow_mut().push(read_sp()));
+        rt_co_yield(p, make_small(1));
+        SP_SEEN.with(|seen| seen.borrow_mut().push(read_sp()));
+        rt_co_yield(p, make_small(2));
+        SP_SEEN.with(|seen| seen.borrow_mut().push(read_sp()));
+        make_small(3)
+    }
+
+    /// AArch64 faults on a misaligned sp-based access, so a wrong initial or
+    /// restored sp would be a crash; this pins the value itself (the
+    /// published ABI keeps sp 16-byte aligned at every call boundary) and
+    /// that it lies on the coroutine's own mapping.
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn the_stack_pointer_is_aligned_and_on_the_coroutines_stack() {
+        let mut vm = new_vm();
+        let t = thunk(&mut vm, sp_body);
+        vm.temp_roots.push(t);
+        let co = rt_co_create(&mut *vm, t);
+        vm.temp_roots.push(co);
+        SP_SEEN.with(|seen| seen.borrow_mut().clear());
+        assert_eq!(rt_co_start(&mut *vm, co), make_small(1));
+        let bounds = coroutine_of(co).stack.as_ref().unwrap().bounds();
+        assert_eq!(rt_co_resume0(&mut *vm, co), make_small(2));
+        assert_eq!(rt_co_resume0(&mut *vm, co), make_small(3));
+        let seen = SP_SEEN.with(|seen| seen.borrow().clone());
+        assert_eq!(seen.len(), 3);
+        for sp in seen {
+            assert_eq!(sp % 16, 0, "sp {sp:#x} is not 16-byte aligned");
+            assert!(bounds.contains(sp as usize, 0), "sp {sp:#x} is outside the coroutine stack");
+        }
+    }
+
+    /// The frame-record chain of a suspended coroutine, from the record
+    /// `bl_co_switch` opened: each (frame pointer, return address) pair up
+    /// to the zero record the trampoline opened.
+    fn chain_of(co: Value) -> Vec<(usize, usize)> {
+        let co = coroutine_of(co);
+        let bounds = co.stack.as_ref().unwrap().bounds();
+        let mut record = suspended_rbp(co.saved_sp);
+        let mut chain = Vec::new();
+        loop {
+            // AArch64 keeps every record 16-byte aligned; x86-64's trampoline
+            // record sits at 8 mod 16 (its call is aligned by its own sub).
+            let alignment = if cfg!(target_arch = "aarch64") { 16 } else { 8 };
+            assert_eq!(record % alignment, 0, "frame record {record:#x} is misaligned");
+            assert!(bounds.contains(record, 16), "frame record {record:#x} is outside the coroutine stack");
+            let (fp, ra) = unsafe { (*(record as *const usize), *((record + 8) as *const usize)) };
+            chain.push((fp, ra));
+            if fp == 0 {
+                return chain;
+            }
+            assert!(fp > record, "the chain does not ascend: {fp:#x} after {record:#x}");
+            assert!(chain.len() < 64, "the chain does not end");
+            record = fp;
+        }
+    }
+
+    #[test]
+    fn a_suspended_stacks_frame_chain_ends_in_the_trampolines_zero_record() {
+        let mut vm = new_vm();
+        let t = thunk(&mut vm, counting);
+        vm.temp_roots.push(t);
+        let co = rt_co_create(&mut *vm, t);
+        vm.temp_roots.push(co);
+        assert_eq!(rt_co_start(&mut *vm, co), make_small(1));
+        // switch -> rt_co_yield -> counting -> co_body -> trampoline.
+        let chain = chain_of(co);
+        assert!(chain.len() >= 3, "{chain:x?}");
+        assert_eq!(*chain.last().unwrap(), (0, 0));
+        // Every earlier record returns into code (a nonzero address).
+        assert!(chain[..chain.len() - 1].iter().all(|&(_, ra)| ra != 0), "{chain:x?}");
+        assert_eq!(rt_co_resume(&mut *vm, co, make_small(0)), make_small(10));
+    }
+
+    #[test]
+    fn repeated_lifecycles_map_one_stack_and_reuse_it() {
+        let mut vm = new_vm();
+        let before = vm.metrics.coroutines.stacks_mapped;
+        let reused_before = vm.metrics.coroutines.stacks_reused;
+        let pooled = pooled_stacks();
+        for i in 0..300 {
+            let t = thunk(&mut vm, counting);
+            vm.temp_roots.push(t);
+            let co = rt_co_create(&mut *vm, t);
+            vm.temp_roots.push(co);
+            assert_eq!(rt_co_start(&mut *vm, co), make_small(1));
+            match i % 3 {
+                // Completed.
+                0 => {
+                    assert_eq!(rt_co_resume(&mut *vm, co, make_small(5)), make_small(15));
+                    assert_eq!(rt_co_resume(&mut *vm, co, make_small(21)), make_small(42));
+                    assert!(coroutine_of(co).stack.is_none());
+                }
+                // Released while suspended.
+                1 => {
+                    rt_co_release(&mut *vm, co);
+                    assert!(coroutine_of(co).stack.is_none());
+                }
+                // Abandoned: left for the collector.
+                _ => {}
+            }
+            vm.temp_roots.clear();
+            if i % 50 == 49 {
+                vm.collect_for_test(GcReason::Explicit);
+            }
+        }
+        vm.collect_for_test(GcReason::Explicit);
+        let mapped = vm.metrics.coroutines.stacks_mapped - before;
+        let reused = vm.metrics.coroutines.stacks_reused - reused_before;
+        assert_eq!(mapped + reused, 300);
+        // Stacks go back to the pool as their coroutines end, so the number
+        // of mappings stays far below the number of starts (abandoned ones
+        // wait for a collection, at most 50 at a time here).
+        assert!(mapped <= 52, "{mapped} stacks mapped for 300 sequential coroutines");
+        assert!(pooled_stacks() >= pooled);
+        assert!(pooled_stacks() <= POOL_LIMIT);
     }
 }

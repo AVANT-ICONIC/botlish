@@ -13,7 +13,8 @@
 #   smoke       cabi, examples and a dozen front-end test files that never
 #               reach the native backend: about 15 seconds
 #   acceptance  smoke, every Tcl test file except the ones `notYet` lists
-#               below, and every golden suite on the Tcl backends: what
+#               below, and every golden suite on -golden-backends (all four:
+#               native coroutines run on macOS since milestone 3): what
 #               passes on a macOS arm64 host today
 #   all         every Tcl test file and every golden suite (on
 #               -golden-backends), and rust: the census, which on macOS
@@ -24,9 +25,9 @@
 #   Tcl test files  tests/all.tcl -tmpdir PRIVATE -file "FILES", once per
 #                   backend of -backends (CORE_BACKEND; default interp,compile)
 #   golden suites   tests/golden/run.tcl -quiet -backends B, B the
-#                   -golden-backends (default all four; acceptance keeps only
-#                   interp and compile: the golden runner, lib/test.bot, is a
-#                   coroutine, and native coroutines are not ported yet)
+#                   -golden-backends (default all four; the golden runner,
+#                   lib/test.bot, is a coroutine, which the native backends
+#                   run on macOS since milestone 3)
 #   examples        main.tcl -backend B on the sample programs CI runs, for
 #                   every B of -example-backends (default all four)
 #   cabi            tests/platform/cabi-facts.tcl
@@ -58,22 +59,8 @@ set smokeFiles {
 # milestone that makes one pass removes it here; a new test file that fails
 # on macOS for a capability not ported yet is added with its cause.
 set notYet {
-    affine.test                            {4 native coroutines}
-    branch-form-boolean.test               {4 native coroutines}
-    c-abi-types.test                       {4 native coroutines}
     c-bindgen.test                         {7 the fixture's manifest records Ubuntu's clang, not Apple's}
     c-ffi.test                             {7 C calls are refused before the linker runs}
-    compilation-isolation.test             {4 native coroutines, the golden runner's too}
-    coroutines.test                        {4 native coroutines}
-    enums.test                             {4 native coroutines}
-    error-payloads.test                    {4 native coroutines}
-    hir-interchange.test                   {4 native coroutines}
-    mutable-array.test                     {4 native coroutines}
-    mutable-vector.test                    {4 native coroutines}
-    namespaced-errors.test                 {4 native coroutines}
-    native-listloop.test                   {4 native coroutines}
-    static-compile.test                    {4 native coroutines}
-    structural-contract-completions.test   {4 native coroutines}
 }
 
 proc usage {} {
@@ -155,10 +142,7 @@ proc addTier {name} {
             foreach f [allFiles] {
                 if {![dict exists $notYet $f]} { addFile $f }
             }
-            set tclOnly [lmap b $goldenBackends {expr {$b in {interp compile} ? $b : [continue]}}]
-            if {$tclOnly ne {}} {
-                foreach s [allSuites] { addSuite $s $tclOnly }
-            }
+            foreach s [allSuites] { addSuite $s $goldenBackends }
         }
         all {
             addCheck cabi

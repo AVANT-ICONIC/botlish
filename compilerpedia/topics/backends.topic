@@ -242,7 +242,7 @@ A program cannot set its process exit status
 
 @topic backend.platforms
 title: Platforms and what runs where
-summary: The Tcl backends need only Tcl 9; the native backend is tested on Linux x86-64 and AArch64; native coroutines, syscalls and executables are Linux-only; stub linking is x86-64 only.
+summary: The Tcl backends need only Tcl 9; the native backend is tested on Linux x86-64 and AArch64 (coroutines also on macOS AArch64); syscalls and executables are Linux-only; stub linking is x86-64 only.
 index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, Tcl 9, coroutines, stub
@@ -252,17 +252,20 @@ docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md
 == WHAT IS TESTED
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
-and builds the single executable on Linux x86-64. Nothing here is a promise
-about other platforms.
+and builds the single executable on Linux x86-64. A separate workflow runs
+the native JIT and native coroutines on Apple Silicon macOS. Nothing here is
+a promise about other platforms.
 
 == PER COMPONENT
     interp, compile          Tcl 9.0 or newer (Unicode-correct strings);
                              no machine-specific code
     cranelift(-generic)      the native executables (Rust, Cranelift);
-                             Linux x86-64 and AArch64
-    native coroutines        Linux x86-64 and AArch64 only (hand-written
-                             stack switching); elsewhere NATIVE UNSUPPORTED;
-                             the Tcl backends run coroutines everywhere
+                             Linux x86-64 and AArch64; the in-process
+                             native run also on macOS AArch64
+    native coroutines        Linux x86-64 and AArch64 and macOS AArch64
+                             (hand-written stack switching); elsewhere
+                             NATIVE UNSUPPORTED; the Tcl backends run
+                             coroutines everywhere
     Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
                              AArch64 through linux::abi::aarch64 (one
                              portable surface: linux, linux::io, io);

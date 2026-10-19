@@ -2,8 +2,10 @@ name: tests (macos arm64)
 
 # The macOS Apple Silicon port's CI (MACOS-AARCH64-PORT-AUDIT.md, section
 # 16): real arm64 macOS runners for an agent that develops on Linux. The
-# native backend is not ported yet; these jobs test what runs on macOS today
-# and check that what does not is refused the way the audit records.
+# native backend is being ported milestone by milestone; these jobs test what
+# runs on macOS today (the JIT and, since milestone 3, native coroutines and
+# the native golden runner) and check that what does not is refused the way
+# the audit records.
 #
 #   smoke          Tier A, every push: the host and its C and Rust
 #                  toolchains (not Botlish), Tcl 9.0.1, core::cabi's macOS row,
@@ -16,7 +18,8 @@ name: tests (macos arm64)
 #                  a Linux one at the same commit
 #   full           Tier C, opt-in: "[ci-full]" in the pushed head commit's
 #                  message, or a manual run with tier "full". By default
-#                  three shards of the acceptance tier on both Tcl backends
+#                  three shards of the acceptance tier (Tcl test files on both Tcl
+#                  backends, golden suites on all four)
 #                  under BOTLISH_NATIVE_GC_STRESS=1; with a "CI-Tests:"
 #                  trailer in that commit message (or the "tests" input)
 #                  exactly the tier.tcl items it names -- "CI-Tests:
