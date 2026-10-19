@@ -10720,7 +10720,7 @@ typedef	OSSL_LIB_CTX	opaque	boringssl::ctypes	identity OSSL_LIB_CTX	struct ossl_
 typedef	OSSL_PARAM	opaque	boringssl::ctypes	identity OSSL_PARAM	struct ossl_param_st
 typedef	PKCS12	opaque	boringssl::ctypes	identity PKCS12	struct pkcs12_st
 typedef	PKCS8_PRIV_KEY_INFO	opaque	boringssl::ctypes	identity PKCS8_PRIV_KEY_INFO	struct pkcs8_priv_key_info_st
-typedef	X509_PKEY	unused		struct private_key_st	no bound signature points to it
+typedef	X509_PKEY	opaque	boringssl::ctypes	identity X509_PKEY	struct private_key_st
 typedef	RAND_METHOD	opaque	boringssl::ctypes	identity RAND_METHOD	struct rand_meth_st
 typedef	RC4_KEY	opaque	boringssl::ctypes	identity RC4_KEY	struct rc4_key_st
 typedef	RSA_METHOD	opaque	boringssl::ctypes	identity RSA_METHOD	struct rsa_meth_st
@@ -10808,9 +10808,9 @@ typedef	sk_ASN1_TYPE_copy_func	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ASN
 typedef	sk_ASN1_TYPE_cmp_func	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ASN1_TYPE]], ffi::c::Ptr[ffi::c::Ptr[ASN1_TYPE]]], return: ffi::c::Int}]	int (*)(const ASN1_TYPE *const *, const ASN1_TYPE *const *)
 typedef	sk_ASN1_TYPE_delete_if_func	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ASN1_TYPE], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]	int (*)(ASN1_TYPE *, void *)
 typedef	ASN1_SEQUENCE_ANY	opaque	boringssl::ctypes	identity ASN1_SEQUENCE_ANY	struct stack_st_ASN1_TYPE
-typedef	ASN1_TEMPLATE	unused		struct ASN1_TEMPLATE_st	no bound signature points to it
+typedef	ASN1_TEMPLATE	opaque	boringssl::ctypes	identity ASN1_TEMPLATE	struct ASN1_TEMPLATE_st
 typedef	ASN1_TLC	unused		struct ASN1_TLC_st	no bound signature points to it
-typedef	ASN1_ADB_TABLE	unused		struct ASN1_ADB_TABLE_st	no bound signature points to it
+typedef	ASN1_ADB_TABLE	opaque	boringssl::ctypes	identity ASN1_ADB_TABLE	struct ASN1_ADB_TABLE_st
 typedef	ASN1_ADB	unused		struct ASN1_ADB_st	no bound signature points to it
 typedef	ASN1_aux_cb	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Ptr[ffi::c::Ptr[ASN1_VALUE]], ffi::c::Ptr[ASN1_ITEM], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]	int (int operation, ASN1_VALUE **in, const ASN1_ITEM *it, void *exarg)
 typedef	ASN1_AUX	unused		struct ASN1_AUX_st	no bound signature points to it
@@ -10832,8 +10832,8 @@ typedef	point_conversion_form_t	scalar		ffi::c::UInt	enum anon@ec.h:31, C unsign
 typedef	EC_METHOD	opaque	boringssl::ctypes	identity EC_METHOD	struct ec_method_st
 typedef	EC_builtin_curve	opaque	boringssl::ctypes	identity EC_builtin_curve	struct anon@ec.h:457
 typedef	OBJ_NAME	opaque	boringssl::ctypes	identity OBJ_NAME	struct obj_name_st
-typedef	PKCS7_SIGNED	unused		struct anon@pkcs7.h:111	no bound signature points to it
-typedef	PKCS7_SIGN_ENVELOPE	unused		struct anon@pkcs7.h:116	no bound signature points to it
+typedef	PKCS7_SIGNED	opaque	boringssl::ctypes	identity PKCS7_SIGNED	struct anon@pkcs7.h:111
+typedef	PKCS7_SIGN_ENVELOPE	opaque	boringssl::ctypes	identity PKCS7_SIGN_ENVELOPE	struct anon@pkcs7.h:116
 typedef	PKCS7_ENVELOPE	unsupported		unsupported-type	void as a parameter
 typedef	PKCS7_DIGEST	unsupported		unsupported-type	void as a parameter
 typedef	PKCS7_ENCRYPT	unsupported		unsupported-type	void as a parameter
@@ -10967,11 +10967,11 @@ typedef	sk_SSL_COMP_cmp_func	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::
 typedef	sk_SSL_COMP_delete_if_func	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL_COMP], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]	int (*)(SSL_COMP *, void *)
 typedef	SSL_CONF_CTX	unused		struct ssl_conf_ctx_st	no bound signature points to it
 tag	struct ACCESS_DESCRIPTION_st	opaque	boringssl::ctypes	complete, behind pointers	identity ACCESS_DESCRIPTION
-tag	struct ASN1_ADB_TABLE_st	unused		complete	no bound signature points to it
+tag	struct ASN1_ADB_TABLE_st	opaque	boringssl::ctypes	complete, behind pointers	identity ASN1_ADB_TABLE
 tag	struct ASN1_ADB_st	unused		complete	no bound signature points to it
 tag	struct ASN1_AUX_st	unused		complete	no bound signature points to it
 tag	struct ASN1_ITEM_st	opaque	boringssl::ctypes	complete, behind pointers	identity ASN1_ITEM
-tag	struct ASN1_TEMPLATE_st	unused		complete	no bound signature points to it
+tag	struct ASN1_TEMPLATE_st	opaque	boringssl::ctypes	complete, behind pointers	identity ASN1_TEMPLATE
 tag	struct ASN1_TLC_st	unused		incomplete	no bound signature points to it
 tag	struct ASN1_VALUE_st	opaque	boringssl::ctypes	incomplete	identity ASN1_VALUE
 tag	struct AUTHORITY_KEYID_st	opaque	boringssl::ctypes	complete, behind pointers	identity AUTHORITY_KEYID
@@ -11039,7 +11039,7 @@ tag	struct bn_gencb_st	opaque	boringssl::ctypes	complete, behind pointers	identi
 tag	struct bn_mont_ctx_st	opaque	boringssl::ctypes	incomplete	identity BN_MONT_CTX
 tag	struct buf_mem_st	opaque	boringssl::ctypes	complete, behind pointers	identity BUF_MEM
 tag	struct cast_key_st	opaque	boringssl::ctypes	complete, behind pointers	identity CAST_KEY
-tag	struct cbb_buffer_st	unused		complete	no bound signature points to it
+tag	struct cbb_buffer_st	opaque	boringssl::ctypes	complete, behind pointers	identity cbb_buffer_st
 tag	struct cbb_child_st	unused		complete	no bound signature points to it
 tag	struct cbb_st	opaque	boringssl::ctypes	complete, behind pointers	identity CBB
 tag	struct cbs_st	opaque	boringssl::ctypes	complete, behind pointers	identity CBS
@@ -11076,7 +11076,7 @@ tag	struct evp_hpke_kdf_st	opaque	boringssl::ctypes	incomplete	identity EVP_HPKE
 tag	struct evp_hpke_kem_st	opaque	boringssl::ctypes	incomplete	identity EVP_HPKE_KEM
 tag	struct evp_hpke_key_st	opaque	boringssl::ctypes	complete, behind pointers	identity EVP_HPKE_KEY
 tag	struct evp_kem_st	opaque	boringssl::ctypes	incomplete	identity EVP_KEM
-tag	struct evp_md_pctx_ops	unused		incomplete	no bound signature points to it
+tag	struct evp_md_pctx_ops	opaque	boringssl::ctypes	incomplete	identity evp_md_pctx_ops
 tag	struct evp_pkey_alg_st	opaque	boringssl::ctypes	incomplete	identity EVP_PKEY_ALG
 tag	struct evp_pkey_ctx_st	opaque	boringssl::ctypes	incomplete	identity EVP_PKEY_CTX
 tag	struct evp_pkey_st	opaque	boringssl::ctypes	incomplete	identity EVP_PKEY
@@ -11091,7 +11091,7 @@ tag	struct ossl_param_st	opaque	boringssl::ctypes	complete, behind pointers	iden
 tag	struct otherName_st	opaque	boringssl::ctypes	complete, behind pointers	identity OTHERNAME
 tag	struct pkcs12_st	opaque	boringssl::ctypes	incomplete	identity PKCS12
 tag	struct pkcs8_priv_key_info_st	opaque	boringssl::ctypes	incomplete	identity PKCS8_PRIV_KEY_INFO
-tag	struct private_key_st	unused		complete	no bound signature points to it
+tag	struct private_key_st	opaque	boringssl::ctypes	complete, behind pointers	identity X509_PKEY
 tag	struct rand_meth_st	opaque	boringssl::ctypes	complete, behind pointers	identity RAND_METHOD
 tag	struct rc4_key_st	opaque	boringssl::ctypes	complete, behind pointers	identity RC4_KEY
 tag	struct rsa_meth_st	opaque	boringssl::ctypes	complete, behind pointers	identity RSA_METHOD
@@ -11163,3 +11163,227 @@ tag	struct x509_st	opaque	boringssl::ctypes	incomplete	identity X509
 tag	struct x509_store_ctx_st	opaque	boringssl::ctypes	incomplete	identity X509_STORE_CTX
 tag	struct x509_store_st	opaque	boringssl::ctypes	incomplete	identity X509_STORE
 tag	union evp_aead_ctx_st_state	unused		complete	no bound signature points to it
+record	union evp_aead_ctx_st_state	layout-blocked		fixed-array,union	a union: its members overlap; field opaque: char elements, uint8_t [560]
+record	struct evp_aead_ctx_st	layout-blocked		nested-layout-blocked	field state (union evp_aead_ctx_st_state, field) -> union
+record	struct crypto_ivec_st	layout-direct	boringssl::layouts	CRYPTO_IVEC	sizeof 16, _Alignof 8, 2 fields
+record	struct crypto_iovec_st	layout-direct	boringssl::layouts	CRYPTO_IOVEC	sizeof 24, _Alignof 8, 3 fields
+record	struct aes_key_st	layout-blocked		fixed-array	field rd_key: scalar elements, uint32_t [4 * (14 + 1)]
+record	struct buf_mem_st	layout-direct	boringssl::layouts	BUF_MEM	sizeof 24, _Alignof 8, 3 fields
+record	struct bn_gencb_st	layout-direct	boringssl::layouts	BN_GENCB	sizeof 16, _Alignof 8, 2 fields
+record	struct bignum_st	layout-direct	boringssl::layouts	BIGNUM	sizeof 24, _Alignof 8, 5 fields
+record	struct asn1_string_st	layout-direct	boringssl::layouts	ASN1_BIT_STRING	sizeof 24, _Alignof 8, 4 fields
+record	union anon@asn1.h:1449	layout-blocked		union	a union: its members overlap
+record	struct asn1_type_st	layout-blocked		nested-layout-blocked	field value (union anon@asn1.h:1449, field) -> union
+record	struct ASN1_TEMPLATE_st	layout-direct	boringssl::layouts	ASN1_TEMPLATE	sizeof 32, _Alignof 8, 5 fields
+record	struct ASN1_ADB_st	layout-direct	boringssl::layouts	ASN1_ADB	sizeof 56, _Alignof 8, 7 fields
+record	struct ASN1_ADB_TABLE_st	layout-direct	boringssl::layouts	ASN1_ADB_TABLE	sizeof 40, _Alignof 8, 2 fields
+record	struct ASN1_ITEM_st	layout-direct	boringssl::layouts	ASN1_ITEM	sizeof 48, _Alignof 8, 7 fields
+record	struct ASN1_AUX_st	layout-direct	boringssl::layouts	ASN1_AUX	sizeof 32, _Alignof 8, 5 fields
+record	struct evp_encode_ctx_st	layout-blocked		fixed-array	field data: char elements, uint8_t [48]
+record	struct blake2b_state_st	layout-blocked		fixed-array	field h: scalar elements, uint64_t [8]; field block: char elements, uint8_t [128]
+record	struct bf_key_st	layout-blocked		fixed-array	field P: scalar elements, uint32_t [16 + 2]; field S: scalar elements, uint32_t [4 *256]
+record	struct cbs_st	layout-direct	boringssl::layouts	CBS	sizeof 16, _Alignof 8, 2 fields
+record	struct cbb_buffer_st	layout-blocked		bitfield	field can_resize: bitfield can_resize: unsigned int : 1; field error: bitfield error: unsigned int : 1
+record	struct cbb_child_st	layout-blocked		bitfield	field pending_is_asn1: bitfield pending_is_asn1: unsigned int : 1
+record	union anon@bytestring.h:510	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field base (struct cbb_buffer_st, union-member) -> bitfield; field child (struct cbb_child_st, union-member) -> bitfield
+record	struct cbb_st	layout-blocked		nested-layout-blocked	field u (union anon@bytestring.h:510, field) -> union
+record	struct cast_key_st	layout-blocked		fixed-array	field data: scalar elements, uint32_t [32]
+record	struct evp_cipher_ctx_st	layout-blocked		fixed-array	field oiv: char elements, uint8_t [16]; field iv: char elements, uint8_t [16]; field buf: char elements, uint8_t [32]; field final: char elements, uint8_t [32]
+record	struct evp_cipher_info_st	layout-blocked		fixed-array	field iv: char elements, unsigned char [16]
+record	struct conf_value_st	layout-direct	boringssl::layouts	CONF_VALUE	sizeof 24, _Alignof 8, 3 fields
+record	struct sha256_state_st	layout-blocked		fixed-array	field h: scalar elements, uint32_t [8]; field data: char elements, uint8_t [64]
+record	struct sha512_state_st	layout-blocked		fixed-array	field h: scalar elements, uint64_t [8]; field p: char elements, uint8_t [128]
+record	union anon@sha.h:71	layout-blocked		fixed-array,union	a union: its members overlap; field h: scalar elements, uint32_t [5]
+record	struct sha_state_st	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 1: an anonymous union member (union anon@sha.h:71): its members overlap the record's; field data: char elements, uint8_t [64]; member 1 (union anon@sha.h:71, anonymous-member) -> union
+record	struct anon@thread.h:78	layout-direct	boringssl::layouts	CRYPTO_dynlock	sizeof 16, _Alignof 8, 2 fields
+record	struct DES_cblock_st	layout-blocked		fixed-array	field bytes: char elements, uint8_t [8]
+record	struct DES_ks	layout-blocked		fixed-array	field subkeys: scalar elements, uint32_t [16][2]
+record	union anon@digest.h:356	layout-blocked		fixed-array,union	a union: its members overlap; field md_data: char elements, uint8_t [208]
+record	struct env_md_ctx_st	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@digest.h:356): its members overlap the record's; member 1 (union anon@digest.h:356, anonymous-member) -> union
+record	struct DSA_SIG_st	layout-direct	boringssl::layouts	DSA_SIG	sizeof 16, _Alignof 8, 2 fields
+record	struct anon@ec.h:457	layout-direct	boringssl::layouts	EC_builtin_curve	sizeof 16, _Alignof 8, 2 fields
+record	struct openssl_method_common_st	layout-direct	boringssl::layouts	openssl_method_common_st	sizeof 8, _Alignof 4, 2 fields
+record	struct ecdsa_method_st	layout-direct	boringssl::layouts	ECDSA_METHOD	sizeof 48, _Alignof 8, 6 fields
+record	struct ecdsa_sig_st	layout-direct	boringssl::layouts	ECDSA_SIG	sizeof 16, _Alignof 8, 2 fields
+record	struct hmac_ctx_st	layout-blocked		nested-layout-blocked	field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay; field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay; field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay
+record	struct evp_hpke_ctx_st	layout-blocked		fixed-array,nested-layout-blocked	field base_nonce: char elements, uint8_t [24]; field exporter_secret: char elements, uint8_t [64]; field aead_ctx (struct evp_aead_ctx_st, field) -> union evp_aead_ctx_st_state -> union
+record	struct evp_hpke_key_st	layout-blocked		fixed-array	field private_key: char elements, uint8_t [64]; field public_key: char elements, uint8_t [1568]
+record	struct HRSS_private_key	layout-blocked		fixed-array	field opaque: char elements, uint8_t [1808]
+record	struct HRSS_public_key	layout-blocked		fixed-array	field opaque: char elements, uint8_t [1424]
+record	struct md4_state_st	layout-blocked		fixed-array	field h: scalar elements, uint32_t [4]; field data: char elements, uint8_t [64]
+record	struct md5_state_st	layout-blocked		fixed-array	field h: scalar elements, uint32_t [4]; field data: char elements, uint8_t [64]
+record	union anon@mldsa.h:43	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6)]
+record	struct MLDSA65_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:43, field) -> union
+record	union anon@mldsa.h:52	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [32 + 64 + 256 *4 *6]
+record	struct MLDSA65_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:52, field) -> union
+record	union anon@mldsa.h:62	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [200 + 4 + 4 + 4 *sizeof (size_t)]
+record	struct MLDSA65_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:62, field) -> union
+record	union anon@mldsa.h:193	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8)]
+record	struct MLDSA87_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:193, field) -> union
+record	union anon@mldsa.h:202	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [32 + 64 + 256 *4 *8]
+record	struct MLDSA87_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:202, field) -> union
+record	union anon@mldsa.h:212	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [200 + 4 + 4 + 4 *sizeof (size_t)]
+record	struct MLDSA87_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:212, field) -> union
+record	union anon@mldsa.h:340	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4)]
+record	struct MLDSA44_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:340, field) -> union
+record	union anon@mldsa.h:349	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [32 + 64 + 256 *4 *4]
+record	struct MLDSA44_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:349, field) -> union
+record	union anon@mldsa.h:359	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [200 + 4 + 4 + 4 *sizeof (size_t)]
+record	struct MLDSA44_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:359, field) -> union
+record	union anon@mlkem.h:34	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [512 * (3 + 9) + 32 + 32]
+record	struct MLKEM768_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:34, field) -> union
+record	union anon@mlkem.h:43	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [512 * (3 + 3 + 9) + 32 + 32 + 32]
+record	struct MLKEM768_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:43, field) -> union
+record	union anon@mlkem.h:132	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [512 * (4 + 16) + 32 + 32]
+record	struct MLKEM1024_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:132, field) -> union
+record	union anon@mlkem.h:142	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [512 * (4 + 4 + 16) + 32 + 32 + 32]
+record	struct MLKEM1024_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:142, field) -> union
+record	struct obj_name_st	layout-direct	boringssl::layouts	OBJ_NAME	sizeof 24, _Alignof 8, 4 fields
+record	struct ossl_param_st	layout-direct	boringssl::layouts	OSSL_PARAM	sizeof 40, _Alignof 8, 5 fields
+record	struct anon@pkcs7.h:111	layout-direct	boringssl::layouts	PKCS7_SIGNED	sizeof 16, _Alignof 8, 2 fields
+record	struct anon@pkcs7.h:116	layout-direct	boringssl::layouts	PKCS7_SIGN_ENVELOPE	sizeof 16, _Alignof 8, 2 fields
+record	union anon@pkcs7.h:133	layout-blocked		union	a union: its members overlap
+record	struct anon@pkcs7.h:126	layout-blocked		nested-layout-blocked	field d (union anon@pkcs7.h:133, field) -> union
+record	struct rsa_meth_st	layout-direct	boringssl::layouts	RSA_METHOD	sizeof 72, _Alignof 8, 9 fields
+record	struct BASIC_CONSTRAINTS_st	layout-direct	boringssl::layouts	BASIC_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
+record	struct otherName_st	layout-direct	boringssl::layouts	OTHERNAME	sizeof 16, _Alignof 8, 2 fields
+record	struct EDIPartyName_st	layout-direct	boringssl::layouts	EDIPARTYNAME	sizeof 16, _Alignof 8, 2 fields
+record	union anon@x509.h:2043	layout-blocked		union	a union: its members overlap
+record	struct GENERAL_NAME_st	layout-blocked		nested-layout-blocked	field d (union anon@x509.h:2043, field) -> union
+record	struct AUTHORITY_KEYID_st	layout-direct	boringssl::layouts	AUTHORITY_KEYID	sizeof 24, _Alignof 8, 3 fields
+record	struct GENERAL_SUBTREE_st	layout-direct	boringssl::layouts	GENERAL_SUBTREE	sizeof 24, _Alignof 8, 3 fields
+record	struct NAME_CONSTRAINTS_st	layout-direct	boringssl::layouts	NAME_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
+record	struct ACCESS_DESCRIPTION_st	layout-direct	boringssl::layouts	ACCESS_DESCRIPTION	sizeof 16, _Alignof 8, 2 fields
+record	union anon@x509.h:2310	layout-blocked		union	a union: its members overlap
+record	struct DIST_POINT_NAME_st	layout-blocked		nested-layout-blocked	field name (union anon@x509.h:2310, field) -> union
+record	struct DIST_POINT_st	layout-direct	boringssl::layouts	DIST_POINT	sizeof 24, _Alignof 8, 3 fields
+record	struct ISSUING_DIST_POINT_st	layout-direct	boringssl::layouts	ISSUING_DIST_POINT	sizeof 32, _Alignof 8, 6 fields
+record	struct NOTICEREF_st	layout-direct	boringssl::layouts	NOTICEREF	sizeof 16, _Alignof 8, 2 fields
+record	struct USERNOTICE_st	layout-direct	boringssl::layouts	USERNOTICE	sizeof 16, _Alignof 8, 2 fields
+record	union anon@x509.h:2443	layout-blocked		union	a union: its members overlap
+record	struct POLICYQUALINFO_st	layout-blocked		nested-layout-blocked	field d (union anon@x509.h:2443, field) -> union
+record	struct POLICYINFO_st	layout-direct	boringssl::layouts	POLICYINFO	sizeof 16, _Alignof 8, 2 fields
+record	struct POLICY_MAPPING_st	layout-direct	boringssl::layouts	POLICY_MAPPING	sizeof 16, _Alignof 8, 2 fields
+record	struct POLICY_CONSTRAINTS_st	layout-direct	boringssl::layouts	POLICY_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
+record	struct Netscape_spki_st	layout-direct	boringssl::layouts	NETSCAPE_SPKI	sizeof 24, _Alignof 8, 3 fields
+record	struct Netscape_spkac_st	layout-direct	boringssl::layouts	NETSCAPE_SPKAC	sizeof 16, _Alignof 8, 2 fields
+record	struct rsa_pss_params_st	layout-direct	boringssl::layouts	RSA_PSS_PARAMS	sizeof 40, _Alignof 8, 5 fields
+record	struct private_key_st	layout-direct	boringssl::layouts	X509_PKEY	sizeof 8, _Alignof 8, 1 fields
+record	struct X509_info_st	layout-blocked		nested-layout-blocked	field enc_cipher (struct evp_cipher_info_st, field) -> fixed-array
+record	struct v3_ext_method	layout-direct	boringssl::layouts	X509V3_EXT_METHOD	sizeof 104, _Alignof 8, 14 fields
+record	struct v3_ext_ctx	layout-direct	boringssl::layouts	X509V3_CTX	sizeof 48, _Alignof 8, 6 fields
+record	struct X509_algor_st	layout-direct	boringssl::layouts	X509_ALGOR	sizeof 16, _Alignof 8, 2 fields
+record	struct rand_meth_st	layout-blocked		unsupported-pointer	field add: callback argument 3: double (double) (unsupported-callback-signature)
+record	struct rc4_key_st	layout-blocked		fixed-array	field data: scalar elements, uint32_t [256]
+record	struct RIPEMD160state_st	layout-blocked		fixed-array	field h: scalar elements, uint32_t [5]; field data: char elements, uint8_t [64]
+record	struct trust_token_st	layout-direct	boringssl::layouts	TRUST_TOKEN	sizeof 16, _Alignof 8, 2 fields
+record	union anon@xwing.h:35	layout-blocked		fixed-array,union	a union: its members overlap; field bytes: char elements, uint8_t [512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32]
+record	struct XWING_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@xwing.h:35, field) -> union
+record	struct ssl_private_key_method_st	layout-direct	boringssl::layouts	SSL_PRIVATE_KEY_METHOD	sizeof 24, _Alignof 8, 3 fields
+record	struct ssl_ticket_aead_method_st	layout-direct	boringssl::layouts	SSL_TICKET_AEAD_METHOD	sizeof 24, _Alignof 8, 3 fields
+record	struct srtp_protection_profile_st	layout-direct	boringssl::layouts	SRTP_PROTECTION_PROFILE	sizeof 16, _Alignof 8, 2 fields
+record	struct ssl_quic_method_st	layout-direct	boringssl::layouts	SSL_QUIC_METHOD	sizeof 40, _Alignof 8, 5 fields
+record	struct ssl_early_callback_ctx	layout-direct	boringssl::layouts	SSL_CLIENT_HELLO	sizeof 128, _Alignof 8, 16 fields
+record	struct ssl_comp_st	layout-direct	boringssl::layouts	SSL_COMP	sizeof 24, _Alignof 8, 3 fields
+record	struct ASN1_TLC_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ASN1_VALUE_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct CMS_ContentInfo_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct CMS_SignerInfo_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_VERIFY_PARAM_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_crl_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_extension_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_name_entry_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_name_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_pubkey_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_req_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct X509_sig_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct asn1_null_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct asn1_object_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct asn1_pctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bignum_ctx	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bio_method_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bio_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bn_mont_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct cmac_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct conf_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct crypto_buffer_pool_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct crypto_buffer_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct crypto_ex_data_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct crypto_must_be_null_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ctr_drbg_state_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct dh_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct dsa_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ec_group_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ec_key_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ec_method_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ec_point_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct engine_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct env_md_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_aead_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_cipher_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_hpke_aead_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_hpke_kdf_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_hpke_kem_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_kem_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_md_pctx_ops	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_pkey_alg_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_pkey_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct evp_pkey_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ossl_init_settings_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ossl_lib_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct pkcs12_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct pkcs8_priv_key_info_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct rsa_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct spake2_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_cipher_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_conf_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_credential_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_ech_keys_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_method_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_session_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct ssl_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct st_ERR_FNS	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_ACCESS_DESCRIPTION	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_ASN1_INTEGER	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_ASN1_OBJECT	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_ASN1_TYPE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_ASN1_VALUE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_BIO	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_CONF_VALUE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_CRYPTO_BUFFER	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_DIST_POINT	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_GENERAL_NAME	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_GENERAL_SUBTREE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_OPENSSL_STRING	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_POLICYINFO	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_POLICYQUALINFO	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_POLICY_MAPPING	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_SRTP_PROTECTION_PROFILE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_SSL_CIPHER	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_SSL_COMP	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_TRUST_TOKEN	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_ALGOR	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_ATTRIBUTE	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_CRL	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_EXTENSION	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_INFO	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_NAME	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_NAME_ENTRY	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_OBJECT	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_X509_REVOKED	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stack_st_void	opaque-only		incomplete	no definition: a pointee identity only
+record	struct trust_token_client_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct trust_token_issuer_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct trust_token_method_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_attributes_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_lookup_method_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_lookup_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_object_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_purpose_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_revoked_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_store_ctx_st	opaque-only		incomplete	no definition: a pointee identity only
+record	struct x509_store_st	opaque-only		incomplete	no definition: a pointee identity only

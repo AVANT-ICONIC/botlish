@@ -1204,7 +1204,7 @@ typedef	Tcl_Channel	pointer		ffi::c::Ptr[Tcl_Channel_]	struct Tcl_Channel_ *
 typedef	Tcl_ChannelTypeVersion	pointer		ffi::c::Ptr[Tcl_ChannelTypeVersion_]	struct Tcl_ChannelTypeVersion_ *
 typedef	Tcl_Command	pointer		ffi::c::Ptr[Tcl_Command_]	struct Tcl_Command_ *
 typedef	Tcl_Condition	pointer		ffi::c::Ptr[Tcl_Condition_]	struct Tcl_Condition_ *
-typedef	Tcl_Dict	pointer		ffi::c::Ptr[<struct Tcl_Dict_>]	struct Tcl_Dict_ *
+typedef	Tcl_Dict	pointer		ffi::c::Ptr[Tcl_Dict_]	struct Tcl_Dict_ *
 typedef	Tcl_EncodingState	pointer		ffi::c::Ptr[Tcl_EncodingState_]	struct Tcl_EncodingState_ *
 typedef	Tcl_Encoding	pointer		ffi::c::Ptr[Tcl_Encoding_]	struct Tcl_Encoding_ *
 typedef	Tcl_Event	opaque	tclstubs::ctypes	identity Tcl_Event	struct Tcl_Event
@@ -1221,7 +1221,7 @@ typedef	Tcl_Trace	pointer		ffi::c::Ptr[Tcl_Trace_]	struct Tcl_Trace_ *
 typedef	Tcl_Var	pointer		ffi::c::Ptr[<struct Tcl_Var_>]	struct Tcl_Var_ *
 typedef	Tcl_ZlibStream	pointer		ffi::c::Ptr[Tcl_ZLibStream_]	struct Tcl_ZLibStream_ *
 typedef	Tcl_ThreadCreateProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]	void (void *clientData)
-typedef	Tcl_RegExpIndices	unused		struct Tcl_RegExpIndices	no bound signature points to it
+typedef	Tcl_RegExpIndices	opaque	tclstubs::ctypes	identity Tcl_RegExpIndices	struct Tcl_RegExpIndices
 typedef	Tcl_RegExpInfo	opaque	tclstubs::ctypes	identity Tcl_RegExpInfo	struct Tcl_RegExpInfo
 typedef	Tcl_Stat_	pointer		ffi::c::Ptr[Tcl_StatBuf]	Tcl_StatBuf *
 typedef	Tcl_OldStat_	pointer		ffi::c::Ptr[Tcl_StatBuf]	struct stat *
@@ -1344,7 +1344,7 @@ typedef	Tcl_FSFilesystemSeparatorProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::
 typedef	Tcl_FSDupInternalRepProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Void]}]	void *(void *clientData)
 typedef	Tcl_FSInternalToNormalizedProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[Tcl_Obj]}]	Tcl_Obj *(void *clientData)
 typedef	Tcl_FSCreateInternalRepProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[Tcl_Obj]], return: ffi::c::Ptr[ffi::c::Void]}]	void *(Tcl_Obj *pathPtr)
-typedef	Tcl_FSVersion	pointer		ffi::c::Ptr[<struct Tcl_FSVersion_>]	struct Tcl_FSVersion_ *
+typedef	Tcl_FSVersion	pointer		ffi::c::Ptr[Tcl_FSVersion_]	struct Tcl_FSVersion_ *
 typedef	Tcl_Filesystem	opaque	tclstubs::ctypes	identity Tcl_Filesystem	struct Tcl_Filesystem
 typedef	Tcl_NotifierProcs	opaque	tclstubs::ctypes	identity Tcl_NotifierProcs	struct Tcl_NotifierProcs
 typedef	Tcl_Token	opaque	tclstubs::ctypes	identity Tcl_Token	struct Tcl_Token
@@ -1357,9 +1357,9 @@ typedef	Tcl_ArgvInfo	opaque	tclstubs::ctypes	identity Tcl_ArgvInfo	struct anon@t
 typedef	Tcl_ArgvFuncProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]	int (void *clientData, Tcl_Obj *objPtr, void *dstPtr)
 typedef	Tcl_ArgvGenFuncProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Long}]	Tcl_Size (void *clientData, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const *objv, void *dstPtr)
 typedef	Tcl_NRPostProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[Tcl_Interp], ffi::c::Int], return: ffi::c::Int}]	int (void *data[], Tcl_Interp *interp, int result)
-typedef	TclStubHooks	unused		struct anon@tclDecls.h:1879	no bound signature points to it
+typedef	TclStubHooks	opaque	tclstubs::ctypes	identity TclStubHooks	struct anon@tclDecls.h:1879
 typedef	TclStubs	unused		struct TclStubs	no bound signature points to it
-typedef	TclPlatStubs	unused		struct TclPlatStubs	no bound signature points to it
+typedef	TclPlatStubs	opaque	tclstubs::ctypes	identity TclPlatStubs	struct TclPlatStubs
 typedef	Tcl_Class	pointer		ffi::c::Ptr[Tcl_Class_]	struct Tcl_Class_ *
 typedef	Tcl_Method	pointer		ffi::c::Ptr[Tcl_Method_]	struct Tcl_Method_ *
 typedef	Tcl_Object	pointer		ffi::c::Ptr[Tcl_Object_]	struct Tcl_Object_ *
@@ -1373,11 +1373,11 @@ typedef	Tcl_ObjectMapMethodNameProc	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Pt
 typedef	Tcl_MethodType	opaque	tclstubs::ctypes	identity Tcl_MethodType	struct Tcl_MethodType
 typedef	Tcl_MethodType2	opaque	tclstubs::ctypes	identity Tcl_MethodType2	struct Tcl_MethodType2
 typedef	Tcl_ObjectMetadataType	opaque	tclstubs::ctypes	identity Tcl_ObjectMetadataType	struct Tcl_ObjectMetadataType
-typedef	TclOOStubHooks	unused		struct anon@tclOODecls.h:141	no bound signature points to it
+typedef	TclOOStubHooks	opaque	tclstubs::ctypes	identity TclOOStubHooks	struct anon@tclOODecls.h:141
 typedef	TclOOStubs	unused		struct TclOOStubs	no bound signature points to it
 typedef	TclTomMathStubs	unused		struct TclTomMathStubs	no bound signature points to it
 tag	struct TclOOStubs	unused		complete	no bound signature points to it
-tag	struct TclPlatStubs	unused		complete	no bound signature points to it
+tag	struct TclPlatStubs	opaque	tclstubs::ctypes	complete, behind pointers	identity TclPlatStubs
 tag	struct TclStubs	unused		complete	no bound signature points to it
 tag	struct TclTomMathStubs	unused		complete	no bound signature points to it
 tag	struct Tcl_AsyncHandler_	opaque	tclstubs::ctypes	incomplete	identity Tcl_AsyncHandler_
@@ -1390,12 +1390,12 @@ tag	struct Tcl_Command_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Command_
 tag	struct Tcl_Condition_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Condition_
 tag	struct Tcl_Config	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_Config
 tag	struct Tcl_DString	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_DString
-tag	struct Tcl_Dict_	unused		incomplete	no bound signature points to it
+tag	struct Tcl_Dict_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Dict_
 tag	struct Tcl_EncodingState_	opaque	tclstubs::ctypes	incomplete	identity Tcl_EncodingState_
 tag	struct Tcl_EncodingType	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_EncodingType
 tag	struct Tcl_Encoding_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Encoding_
 tag	struct Tcl_Event	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_Event
-tag	struct Tcl_FSVersion_	unused		incomplete	no bound signature points to it
+tag	struct Tcl_FSVersion_	opaque	tclstubs::ctypes	incomplete	identity Tcl_FSVersion_
 tag	struct Tcl_Filesystem	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_Filesystem
 tag	struct Tcl_GlobTypeData	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_GlobTypeData
 tag	struct Tcl_HashEntry	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_HashEntry
@@ -1418,7 +1418,7 @@ tag	struct Tcl_ObjectMetadataType	opaque	tclstubs::ctypes	complete, behind point
 tag	struct Tcl_Object_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Object_
 tag	struct Tcl_Parse	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_Parse
 tag	struct Tcl_Pid_	opaque	tclstubs::ctypes	incomplete	identity Tcl_Pid_
-tag	struct Tcl_RegExpIndices	unused		complete	no bound signature points to it
+tag	struct Tcl_RegExpIndices	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_RegExpIndices
 tag	struct Tcl_RegExpInfo	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_RegExpInfo
 tag	struct Tcl_RegExp_	opaque	tclstubs::ctypes	incomplete	identity Tcl_RegExp_
 tag	struct Tcl_ThreadDataKey_	opaque	tclstubs::ctypes	incomplete	identity Tcl_ThreadDataKey_
@@ -1432,3 +1432,68 @@ tag	struct Tcl_ZLibStream_	opaque	tclstubs::ctypes	incomplete	identity Tcl_ZLibS
 tag	struct stat	opaque	tclstubs::ctypes	incomplete	identity Tcl_StatBuf
 tag	struct utimbuf	opaque	tclstubs::ctypes	incomplete	identity utimbuf
 tag	union Tcl_ObjInternalRep	opaque	tclstubs::ctypes	complete, behind pointers	identity Tcl_ObjInternalRep
+record	struct Tcl_RegExpIndices	layout-direct	tclstubs::layouts	Tcl_RegExpIndices	sizeof 16, _Alignof 8, 2 fields
+record	struct Tcl_RegExpInfo	layout-direct	tclstubs::layouts	Tcl_RegExpInfo	sizeof 24, _Alignof 8, 3 fields
+record	struct Tcl_ObjType	layout-direct	tclstubs::layouts	Tcl_ObjType	sizeof 112, _Alignof 8, 14 fields
+record	struct anon@tcl.h:723	layout-direct	tclstubs::layouts	Tcl_ObjInternalRep_twoPtrValue	sizeof 16, _Alignof 8, 2 fields
+record	struct anon@tcl.h:727	layout-direct	tclstubs::layouts	Tcl_ObjInternalRep_ptrAndLongRep	sizeof 16, _Alignof 8, 2 fields
+record	struct anon@tcl.h:731	layout-direct	tclstubs::layouts	Tcl_ObjInternalRep_ptrAndSize	sizeof 16, _Alignof 8, 2 fields
+record	union Tcl_ObjInternalRep	layout-blocked		double,union	a union: its members overlap; field doubleValue: double (double)
+record	struct Tcl_Obj	layout-blocked		nested-layout-blocked	field internalRep (union Tcl_ObjInternalRep, field) -> union
+record	struct Tcl_Namespace	layout-direct	tclstubs::layouts	Tcl_Namespace	sizeof 40, _Alignof 8, 5 fields
+record	struct Tcl_CallFrame	layout-direct	tclstubs::layouts	Tcl_CallFrame	sizeof 112, _Alignof 8, 14 fields
+record	struct anon@tcl.h:846	layout-direct	tclstubs::layouts	Tcl_CmdInfo	sizeof 80, _Alignof 8, 10 fields
+record	struct Tcl_DString	layout-blocked		fixed-array	field staticSpace: char elements, char [200]
+record	union anon@tcl.h:1092	layout-blocked		fixed-array,union	a union: its members overlap; field words: scalar elements, int [1]; field string: char elements, char [1]
+record	struct Tcl_HashEntry	layout-blocked		nested-layout-blocked	field key (union anon@tcl.h:1092, field) -> union
+record	struct Tcl_HashKeyType	layout-direct	tclstubs::layouts	Tcl_HashKeyType	sizeof 40, _Alignof 8, 6 fields
+record	struct Tcl_HashTable	layout-blocked		fixed-array	field staticBuckets: pointer elements, Tcl_HashEntry *[4]
+record	struct Tcl_HashSearch	layout-direct	tclstubs::layouts	Tcl_HashSearch	sizeof 24, _Alignof 8, 3 fields
+record	struct anon@tcl.h:1259	layout-direct	tclstubs::layouts	Tcl_DictSearch	sizeof 24, _Alignof 8, 3 fields
+record	struct Tcl_Event	layout-direct	tclstubs::layouts	Tcl_Event	sizeof 16, _Alignof 8, 2 fields
+record	struct Tcl_Time	layout-direct	tclstubs::layouts	Tcl_Time	sizeof 16, _Alignof 8, 2 fields
+record	struct Tcl_ChannelType	layout-direct	tclstubs::layouts	Tcl_ChannelType	sizeof 136, _Alignof 8, 17 fields
+record	struct Tcl_GlobTypeData	layout-direct	tclstubs::layouts	Tcl_GlobTypeData	sizeof 24, _Alignof 8, 4 fields
+record	struct Tcl_Filesystem	layout-direct	tclstubs::layouts	Tcl_Filesystem	sizeof 248, _Alignof 8, 31 fields
+record	struct Tcl_NotifierProcs	layout-direct	tclstubs::layouts	Tcl_NotifierProcs	sizeof 64, _Alignof 8, 8 fields
+record	struct Tcl_Token	layout-direct	tclstubs::layouts	Tcl_Token	sizeof 32, _Alignof 8, 4 fields
+record	struct Tcl_Parse	layout-blocked		fixed-array	field staticTokens: record elements, Tcl_Token [20]
+record	struct Tcl_EncodingType	layout-direct	tclstubs::layouts	Tcl_EncodingType	sizeof 48, _Alignof 8, 6 fields
+record	struct Tcl_Config	layout-direct	tclstubs::layouts	Tcl_Config	sizeof 16, _Alignof 8, 2 fields
+record	struct anon@tcl.h:2175	layout-direct	tclstubs::layouts	Tcl_ArgvInfo	sizeof 48, _Alignof 8, 6 fields
+record	struct anon@tclDecls.h:1879	layout-direct	tclstubs::layouts	TclStubHooks	sizeof 24, _Alignof 8, 3 fields
+record	struct TclStubs	layout-blocked		unsupported-pointer	field tcl_Panic: a variadic callback (void (const char *format, ...)) (unsupported-callback-signature); field tcl_AppendStringsToObj: a variadic callback (void (Tcl_Obj *objPtr, ...)) (unsupported-callback-signature); field tcl_DbNewDoubleObj: callback argument 1: double (double) (unsupported-callback-signature); field tcl_GetDouble: callback argument 3: a pointer to double (double) (unsupported-callback-signature); field tcl_GetDoubleFromObj: callback argument 3: a pointer to double (double) (unsupported-callback-signature); field tcl_NewDoubleObj: callback argument 1: double (double) (unsupported-callback-signature); field tcl_SetDoubleObj: callback argument 2: double (double) (unsupported-callback-signature); field tcl_AppendResult: a variadic callback (void (Tcl_Interp *interp, ...)) (unsupported-callback-signature); field tcl_ExprDouble: callback argument 3: a pointer to double (double) (unsupported-callback-signature); field tcl_ExprDoubleObj: callback argument 3: a pointer to double (double) (unsupported-callback-signature); field tcl_PrintDouble: callback argument 2: double (double) (unsupported-callback-signature); field tcl_SetErrorCode: a variadic callback (void (Tcl_Interp *interp, ...)) (unsupported-callback-signature); field tcl_VarEval: a variadic callback (int (Tcl_Interp *interp, ...)) (unsupported-callback-signature); field tcl_InitBignumFromDouble: callback argument 2: double (double) (unsupported-callback-signature); field tcl_ObjPrintf: a variadic callback (Tcl_Obj *(const char *format, ...)) (unsupported-callback-signature); field tcl_AppendPrintfToObj: a variadic callback (void (Tcl_Obj *objPtr, const char *format, ...)) (unsupported-callback-signature)
+record	struct TclPlatStubs	layout-direct	tclstubs::layouts	TclPlatStubs	sizeof 48, _Alignof 8, 6 fields
+record	struct Tcl_MethodType	layout-direct	tclstubs::layouts	Tcl_MethodType	sizeof 40, _Alignof 8, 5 fields
+record	struct Tcl_MethodType2	layout-direct	tclstubs::layouts	Tcl_MethodType2	sizeof 40, _Alignof 8, 5 fields
+record	struct Tcl_ObjectMetadataType	layout-direct	tclstubs::layouts	Tcl_ObjectMetadataType	sizeof 32, _Alignof 8, 4 fields
+record	struct anon@tclOODecls.h:141	layout-direct	tclstubs::layouts	TclOOStubHooks	sizeof 8, _Alignof 8, 1 fields
+record	struct TclOOStubs	layout-direct	tclstubs::layouts	TclOOStubs	sizeof 296, _Alignof 8, 37 fields
+record	struct TclTomMathStubs	layout-blocked		unsupported-pointer	field tclBN_mp_clear_multi: a variadic callback (void (mp_int *a, ...)) (unsupported-callback-signature); field tclBN_mp_init_multi: a variadic callback (mp_err (mp_int *a, ...)) (unsupported-callback-signature)
+record	struct Tcl_AsyncHandler_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_ChannelTypeVersion_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Channel_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Class_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Command_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Condition_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Dict_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_EncodingState_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Encoding_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_FSVersion_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Interp	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_InterpState_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_LoadHandle_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Method_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Mutex_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_ObjectContext_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Object_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Pid_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_RegExp_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_ThreadDataKey_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_ThreadId_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_TimerToken_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Trace_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_Var_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct Tcl_ZLibStream_	opaque-only		incomplete	no definition: a pointee identity only
+record	struct stat	opaque-only		incomplete	no definition: a pointee identity only
+record	struct utimbuf	opaque-only		incomplete	no definition: a pointee identity only

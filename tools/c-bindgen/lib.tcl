@@ -14,6 +14,6 @@ foreach f {common.tcl toolchain.tcl cdecl.tcl ir.tcl macros.tcl macrocat.tcl pip
 if {[info commands ::core::cabi::targetNames] eq ""} {
     source [file join $::cbind::repo surface surface.tcl]
 }
-foreach f {profile.tcl probe.tcl model.tcl emit.tcl report.tcl generate.tcl} {
+foreach f {profile.tcl probe.tcl model.tcl records.tcl pressure.tcl emit.tcl report.tcl verify.tcl generate.tcl} {
     source [file join $::cbind::libDir $f]
 }

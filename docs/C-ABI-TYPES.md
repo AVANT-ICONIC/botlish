@@ -171,13 +171,19 @@ a C compiler:
 | macos-x86_64 | LP64 | 64 | 64 | signed | 64 | x86_64-apple-darwin |
 | macos-aarch64 | LP64 | 64 | 64 | signed | 64 | aarch64-apple-darwin |
 | windows-x86_64 | LLP64 | **32** | 64 | signed | 64 | x86_64-pc-windows-msvc |
+| windows-x86_64-gnu | LLP64 | **32** | 64 | signed | 64 | x86_64-pc-windows-gnu |
 | windows-aarch64 | LLP64 | **32** | 64 | signed | 64 | aarch64-pc-windows-msvc |
 
 A target is an operating system and an architecture: linux-aarch64 and
 macos-aarch64 share an instruction set, a data model and a pointer width,
 and are two targets (plain `char`, the C calling convention, the object
 format and every platform interface differ). The triple is the name the
-native backend knows a target by (MACOS-AARCH64-MILESTONE-2.md).
+native backend knows a target by (MACOS-AARCH64-MILESTONE-2.md). On Windows
+the C toolchain's ABI family is part of the target: windows-x86_64 is MSVC's,
+windows-x86_64-gnu MinGW-w64's (C-BINDGEN-LAYOUTS.md added it for the Win32
+bindings, whose record layouts MinGW-w64's compiler decided). Their rows agree;
+they are two targets because C facts probed with one toolchain are that
+toolchain's, never the other's.
 
 `char` is 8 bits, `short` 16 and `int` 32 on all of them. A compilation's
 target is `-target NAME` (main.tcl; `surface::compile`, `surface::

@@ -1000,6 +1000,16 @@ proc ::cdecl::Declarator {abstract} {
     variable ccWords
     set pointers {}
     set attrs {}
+    # Attributes and calling conventions written before the pointers of a
+    # (parenthesized) declarator: `int (__attribute__((__stdcall__)) *f)(int)`,
+    # what MinGW's CALLBACK and WINAPI become.
+    while {[Peek] in $ccWords || [IsAttributeStart]} {
+        if {[Peek] in $ccWords} {
+            lappend attrs [list cc inner [Next]]
+        } else {
+            lappend attrs {*}[Tagged inner [Attribute]]
+        }
+    }
     while {[Peek] in {* ^}} {
         set star [Next]
         set quals {}

@@ -124,7 +124,7 @@ mod tests {
         c_call_conv(&parse_triple(text).unwrap())
     }
 
-    // The triples of core/cabi.tcl's six targets (tests/target-model.test
+    // The triples of core/cabi.tcl's seven targets (tests/target-model.test
     // checks the table's triples against this driver's `target` report).
     #[test]
     fn c_call_conv_is_the_platform_c_convention_of_each_target() {
@@ -133,6 +133,7 @@ mod tests {
         assert_eq!(conv("x86_64-unknown-linux-gnu"), CallConv::SystemV);
         assert_eq!(conv("x86_64-apple-darwin"), CallConv::SystemV);
         assert_eq!(conv("x86_64-pc-windows-msvc"), CallConv::WindowsFastcall);
+        assert_eq!(conv("x86_64-pc-windows-gnu"), CallConv::WindowsFastcall);
         assert_eq!(conv("aarch64-pc-windows-msvc"), CallConv::WindowsFastcall);
     }
 

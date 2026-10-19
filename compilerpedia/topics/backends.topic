@@ -280,16 +280,20 @@ title: -target: the compilation target, an operating system and an architecture
 summary: -target NAME picks the operating system and architecture a program is built for (C type sizes, modules, platforms); native code runs only for the host's own target.
 index: backends
 alias: target; -target; cross compile; C ABI target
-keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, ffi, linux::sys, architecture, operating system, triple
+keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, windows-x86_64-gnu, mingw, ffi, linux::sys, architecture, operating system, triple
 related: backend.platforms concept.c-ffi cli.options error.unsupported-platform error.native-target error.hir-interchange-target
 docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md MACOS-AARCH64-MILESTONE-2.md
 
 == WHAT IT DOES
 The targets are linux-x86_64, linux-aarch64, macos-x86_64, macos-aarch64,
-windows-x86_64 and windows-aarch64 (to the native backend, triples:
-x86_64-unknown-linux-gnu, ..., aarch64-apple-darwin); the default is the
-host's. A target is an operating system and an architecture:
-linux-aarch64 and macos-aarch64 share an instruction set, not a target.
+windows-x86_64, windows-x86_64-gnu and windows-aarch64 (to the native
+backend, triples: x86_64-unknown-linux-gnu, ..., aarch64-apple-darwin); the
+default is the host's. A target is an operating system and an architecture:
+linux-aarch64 and macos-aarch64 share an instruction set, not a target. On
+Windows the C toolchain's ABI family is part of the target too:
+windows-x86_64 is MSVC's (x86_64-pc-windows-msvc), windows-x86_64-gnu
+MinGW-w64's (x86_64-pc-windows-gnu), the target of the generated Win32
+bindings (concept.c-bindgen-layouts).
 The target decides:
   * the widths and signedness of ffi::c's C integer types (ffi::c::Long
     is 64 bits on Linux and macOS, 32 on Windows; plain ffi::c::Char is
@@ -397,8 +401,9 @@ docs: README.md
     -target NAME      the target (operating system and architecture) a
                       .bot program is compiled, or a .hirx file read, for:
                       linux-x86_64, linux-aarch64, macos-x86_64,
-                      macos-aarch64, windows-x86_64, windows-aarch64;
-                      default the host's (backend.targets)
+                      macos-aarch64, windows-x86_64, windows-x86_64-gnu,
+                      windows-aarch64; default the host's
+                      (backend.targets)
     -L DIR            add DIR to the system linker's library search path,
                       for a program that calls C (concept.c-ffi)
 

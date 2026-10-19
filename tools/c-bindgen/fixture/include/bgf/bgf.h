@@ -139,4 +139,8 @@ extern BGF_EXPORT int bgf_apple_only(void);
 extern BGF_EXPORT int bgf_arm_only(void);
 #endif
 
+/* The records (C-BINDGEN-LAYOUTS.md), in a header of their own: they use
+ * the types above. */
+#include "bgf/bgf_records.h"
+
 #endif

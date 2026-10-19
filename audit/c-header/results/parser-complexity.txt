@@ -1,4 +1,4 @@
-cdecl.tcl lines: code 1024, comment 124, blank 56
+cdecl.tcl lines: code 1031, comment 127, blank 56
 cdecl.tcl procedures: 46
   tokenizer (2): Lex FileIndex
   token-access (8): Peek Kind Next Expect Fail TextOf IsKeyword Loc
@@ -33,10 +33,10 @@ tool query.tcl: code 161, comment 26, blank 6
 tool run.tcl: code 86, comment 26, blank 6
 tool thunks.tcl: code 105, comment 19, blank 5
 tool variants.tcl: code 50, comment 11, blank 7
-tool cdecl.tcl: code 1024, comment 124, blank 56
-tool common.tcl: code 78, comment 21, blank 11
+tool cdecl.tcl: code 1031, comment 127, blank 56
+tool common.tcl: code 81, comment 22, blank 11
 tool ir.tcl: code 183, comment 33, blank 19
 tool macrocat.tcl: code 229, comment 30, blank 14
 tool macros.tcl: code 39, comment 12, blank 3
 tool pipeline.tcl: code 274, comment 53, blank 12
-tool toolchain.tcl: code 275, comment 76, blank 23
+tool toolchain.tcl: code 300, comment 93, blank 25

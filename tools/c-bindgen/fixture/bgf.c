@@ -127,3 +127,15 @@ int bgf_apple_only(void) { return 1; }
 #if defined(__aarch64__)
 int bgf_arm_only(void) { return 1; }
 #endif
+
+/* bgf_records.h's functions. */
+int bgf_rect_area(const bgf_rect *r) { return r->extent.x * r->extent.y; }
+void bgf_node_link(bgf_node *a, bgf_node *b) { a->next = b; }
+int bgf_frames(bgf_frame **out) { *out = 0; return 0; }
+bgf_node *bgf_node_first(void) { return 0; }
+int bgf_chars_length(const bgf_chars *c) { return c->len; }
+bgf_secret *bgf_secret_open(void) { return 0; }
+int __attribute__((stdcall)) bgf_stdcall(int x) { return x + 1; }
+#if defined(__x86_64__)
+int bgf_take_ms(bgf_ms_callback cb) { return cb == 0; }
+#endif

@@ -53,6 +53,7 @@ set modelWidths {
     linux-aarch64   {Char {8 0} Long 64}
     macos-aarch64   {Char {8 1} Long 64}
     windows-x86_64  {Char {8 1} Long 32}
+    windows-x86_64-gnu {Char {8 1} Long 32}
     windows-aarch64 {Char {8 1} Long 32}
 }
 proc modelRange {target name} {

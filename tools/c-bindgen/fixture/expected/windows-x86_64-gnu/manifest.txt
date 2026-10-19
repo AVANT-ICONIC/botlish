@@ -1,0 +1,119 @@
+c-bindgen manifest (C-BINDGEN.md, "Manifest")
+generator_version 2
+profile bgf
+profile_file tools/c-bindgen/profiles/fixture.tcl 17ec5b10
+target windows-x86_64-gnu
+library bgf
+source {local tools/c-bindgen/fixture}
+revision unversioned
+entry bgf/bgf.h
+include include
+defines {}
+undefines {}
+flags {-ffreestanding -nostdlibinc}
+command {clang -E -x c --target=x86_64-w64-mingw32 -ffreestanding -nostdlibinc -I$SRC/include $TU/entry.c}
+toolchain_family clang
+toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}
+toolchain_target x86_64-w64-mingw32
+toolchain_sysroot none
+user_label_prefix {}
+evidence llvm {Ubuntu clang version 18.1.3 (1ubuntu1)}
+preprocessed_tokens 1757
+header include/bgf/bgf.h 49359c5b
+header include/bgf/bgf_records.h dbe615db
+header include/bgf/bgf_types.h 7f558d1b
+shim_library botlish_shim_bgf_1ca27e51
+file bgf/bgf.bot 145 78933b29
+file bgf/ctypes.bot 71 1c828aa1
+file bgf/layouts.bot 244 a87b0b5d
+file bgf/records.bot 40 ef98ed2c
+file bgf/thunks/bgf.bot 27 6d0b9688
+file bgf/types.bot 10 e2b19f32
+file layouts-check.c 175 50187f57
+file layouts.tsv 190 3aab67df
+file report.tsv 253 3a2e8fcf
+file report.txt 173 cb852269
+file shim.c 26 1ca27e51
+libraries bgf/bgf.bot bgf
+libraries bgf/records.bot bgf
+libraries bgf/thunks/bgf.bot {botlish_shim_bgf_1ca27e51 bgf}
+libraries bgf/types.bot bgf
+count alias 2
+count aliases 2
+count bool 2
+count boolOnly 2
+count callbacks 3
+count complete 48
+count constants 16
+count constantsSeen 13
+count declared 42
+count direct 33
+count enumerators 7
+count excluded 0
+count fnmacros 3
+count fnptrTypedefs 4
+count inline 3
+count manual 9
+count opaque 5
+count proven 1
+count ptrParams 23
+count ptrResults 6
+count resultAlias 1
+count resultIndependent 1
+count resultUnknown 4
+count tablestubs 1
+count thunk 5
+count unknownParams 13
+count unknownRetention 10
+count unsupported 10
+count views 7
+blocked by-value-aggregate 1
+blocked double 2
+blocked float 2
+blocked macro-needs-signature 1
+blocked no-prototype 1
+blocked typedef-abi-mismatch 1
+blocked unsupported-callback-signature 1
+blocked va-list 1
+blocked variadic 1
+convention_default ms_abi 1
+convention_default stdcall 1
+layout_abi windows-x86_64-gnu clang x86_64-w64-mingw32 {Ubuntu clang version 18.1.3 (1ubuntu1)}
+layout_count anonymous 3
+layout_count blocked 22
+layout_count blockedDirect 18
+layout_count blockedStructs 20
+layout_count blockedTransitive 4
+layout_count blockedUnions 2
+layout_count emitted 29
+layout_count incomplete 5
+layout_count promoted 1
+layout_count public 51
+layout_count structs 49
+layout_count system 0
+layout_count unions 2
+layout_blocked anonymous-overlay 1
+layout_blocked bitfield 1
+layout_blocked c-bool 1
+layout_blocked double 1
+layout_blocked fixed-array 6
+layout_blocked flexible-array 1
+layout_blocked float 1
+layout_blocked long-double 1
+layout_blocked nested-layout-blocked 6
+layout_blocked typedef-abi-mismatch 1
+layout_blocked union 2
+layout_blocked unsupported-pointer 2
+layout_blocked volatile 1
+contract bgf_handle_id handle {escape declared-noescape} manual {group handles}
+contract bgf_length text {access read escape declared-noescape} manual {contract bgf_length}
+contract bgf_open name {access read escape declared-noescape} manual {contract bgf_open}
+contract bgf_open result independent manual {contract bgf_open}
+contract bgf_close handle {escape declared-noescape} manual {group handles}
+contract bgf_window_of handle {escape declared-noescape} manual {group handles}
+contract bgf_walk handle {escape declared-noescape} manual {group handles}
+contract bgf_fill out {access write escape declared-noescape} manual {contract bgf_fill}
+contract bgf_digest data {access read escape declared-noescape} manual {contract bgf_digest}
+contract bgf_digest out {access write escape declared-noescape} manual {contract bgf_digest}
+contract bgf_digest result {alias out} manual {contract bgf_digest}
+contract bgf_point_x p {escape proven-noescape access read} compiler {nocapture readonly}

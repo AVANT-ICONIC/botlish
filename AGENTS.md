@@ -899,7 +899,9 @@ and no acceptance depends on one.
 A compilation target (core/cabi.tcl's table; MACOS-AARCH64-MILESTONE-2.md)
 is an operating system *and* an architecture, named to the native backend
 by its triple: linux-aarch64 and macos-aarch64 share an instruction set, not
-a target. Keep it so:
+a target. On Windows the C toolchain's ABI family is part of it too:
+windows-x86_64 (MSVC's) and windows-x86_64-gnu (MinGW-w64's,
+C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
 
 * Never read an operating system from an architecture, a pointer width or a
   data model, and never take a matching architecture for a matching target
@@ -1600,11 +1602,30 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   produces: after changing the generator, a profile or a pinned source,
   regenerate (`tools/c-bindgen.tcl generate PROFILE -target T`) and commit
   the diff.
+* Record layouts (C-BINDGEN-LAYOUTS.md: `NS/layouts.bot`, `layouts.tsv`,
+  `layouts-check.c`) are the target C compiler's answers -- sizeof,
+  _Alignof, offsetof and each member's type, probed -- never a layout rule
+  computed in Tcl or Botlish: no padding, alignment, packing or bitfield
+  rule anywhere in the generator. A field a layout cannot represent (an
+  array, a union or overlay, a bitfield, float, double, `_Bool`) blocks its
+  record and every record holding it by value, with its reason in the
+  manifest: never flatten, approximate or reinterpret it, and never extend
+  the layout language from the generator. A layout and the record's
+  opaque pointee identity stay two declarations; a pointer field keeps its
+  pointee's identity.
+* A generated layout is its target's and its toolchain's: windows-x86_64-gnu
+  is MinGW-w64's (Windows x86-64, the GNU ABI), the Win32 profile's target.
+  Never generate, label or check it as MSVC's windows-x86_64, and add no
+  MSVC header, tool or comparison (a separate milestone); nothing runs a
+  Windows binary.
 
 If you change `tools/c-bindgen/`, `tools/cheader/`, a profile or the
 fixture, run `tclsh9.0 tests/c-bindgen.test`, `tools/c-bindgen.tcl check
 PROFILE -target committed` for every profile (fixture, tcl, tclstubs,
-boringssl, sdl3), `audit/c-bindgen/tools/fuzz.tcl` (several seeds) and
+boringssl, sdl3, win32), `audit/c-bindgen/tools/fuzz.tcl` (several seeds),
+`audit/c-bindgen/tools/layout-fuzz.tcl` (several seeds, for the host and
+with `-target` for each cross target), `audit/c-bindgen/tools/layout-scale.tcl`
+for a change to the layout pass (linear in the records) and
 `audit/c-bindgen/tools/mutate.tcl` (every mutant in
 `audit/c-bindgen/tools/mutants.txt` must still apply and be killed by a test
 of behavior or the fuzzer, not only by the pinned comparison: update a
@@ -1616,6 +1637,10 @@ skipped without them; their `linux-aarch64` generation on an x86-64 host
 needs the arm64 cross C library where clang finds it (`gcc-aarch64-linux-gnu`,
 which brings `libc6-dev-arm64-cross`; the headers package alone is not
 enough, and generation then stops rather than read the host's headers). The
+Win32 binding and the fixture's windows-x86_64-gnu target need MinGW-w64's
+cross headers and import libraries (`mingw-w64-x86-64-dev`, version 11.0.1:
+the profile pins its version macros), `llvm-nm` and, for the second
+compiler, `gcc-mingw-w64-x86-64`. The
 `c-bindgen` workflow
 (`.github/workflows/c-bindgen.yml`) runs all of it. macOS bindings of real
 libraries need the macOS SDK (`BOTLISH_C_SYSROOT_macos_aarch64`, or a Mac).
