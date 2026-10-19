@@ -367,7 +367,9 @@ coroutine tests built for `aarch64-unknown-linux-gnu` and run under
 qemu-user (14 tests, including the register, FPCR, alignment and chain tests)
 all pass. In CI: `tests-arm64.yml` run
 [39157574996](https://github.com/mwagner-webdev/botlish/actions/runs/39157574996):
-success (native AArch64 runner, same commit as above).
+success (native AArch64 runner, same commit as above), and again on the final head f2e2059, run
+[39173141444](https://github.com/mwagner-webdev/botlish/actions/runs/39173141444):
+success.
 
 ## 17. macOS GitHub Actions runs
 
