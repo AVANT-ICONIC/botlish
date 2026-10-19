@@ -489,7 +489,40 @@ when it exists (a tool bug, not a layout one); the rerun agrees.
 2000, 4000 records of each shape: about 1.4, 2.6 and 5.4 s for the mixed
 shape, the layout pass about half of it).
 
-Mutation: MUTATION-RESULTS
+Mutation (each mutant a deliberate bug in a private copy of the tree; every
+mutant of every harness still applies):
+
+* **audit/layout-arrays/tools/mutate.tcl**: 24 mutants -- declaration
+  checks, strides, designators, pointer authority, view authority, the
+  index and extent proofs, the exact-copy and loaded-length facts, the
+  reference codec, the Tcl compiler's rows, native element access and
+  checks, the unrolled copy, and two of the Rust row helpers -- **24
+  killed**. tests/layout-arrays.test kills 23; the golden suite 17; the
+  fuzzer 12; the Rust tests both runtime mutants. The one the Tcl tests
+  miss, `native-store-row-written-while-encoding` (a row stored element by
+  element, so an out-of-range value leaves the elements before it
+  written), only the Rust test kills: a checked program proves every value
+  in its encoding before the store, so only the runtime's own test can
+  present it one that is not. The first version of `tcl-compiler-rows-
+  flattened` survived every detector because it was equivalent: it
+  flattened the dimensions LayoutLeaves passes on, of which only the
+  product (a `binary scan` count) is used; retargeted at LayoutValueText,
+  which shapes the rows, `la-three-dimensions` and the golden suite's
+  backend comparison kill it.
+* The mutants of the code arrays refactored, their texts updated to the
+  new code and still mutants of the same rule: binary-layout 6, native-view
+  7, native-edit 12 -- **all 25 killed** by their own harnesses.
+* **audit/c-bindgen/tools/mutate.tcl**, the 22 layout mutants (the three new
+  array ones among them: an inner dimension dropped, an array of a blocked
+  element emitted, the last element's check off by one): CBINDGEN-RESULTS.
+
+Static decisions: the batched scheduler and the sequential reference agree
+on both layout suites (`static-decisions.yml` on the branch:
+layout-arrays.bot 3 builds against 35, binary-layout.bot 3 against 15).
+Compilation isolation (`interleave.tcl`: 11 suites, 88 artifacts and
+outcomes) and HIR interchange (`roundtrip.tcl -via interchange`: 99;
+`-via cache`: 110) show no difference with layout-arrays.bot among the
+suites.
 
 ## 15. Exclusions
 
