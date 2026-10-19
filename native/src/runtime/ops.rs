@@ -2042,7 +2042,10 @@ pub extern "C" fn rt_set_contains(p: *mut Vm, s: Value, v: Value) -> Value {
 // The writes (set, swap, copy, and their affine `_drop` forms) are the only
 // places a slot's value ever changes after construction: a future write
 // barrier (e.g. for a generational collector) has exactly these call sites
-// to instrument.
+// to instrument -- and codegen::clif's inline `mutable_array::set` fast
+// path (`mutarray_set`), the one store generated code makes to a slot,
+// through the header's PTR word when its UNIQUE word says the backing is
+// this header's alone (value.rs's MutArrayObj).
 //
 // "No misleading copy accounting": record_mutarray_copy is called only for
 // movement of *existing* values -- bulk copy and finalization -- never for a
@@ -2055,7 +2058,7 @@ pub extern "C" fn rt_set_contains(p: *mut Vm, s: Value, v: Value) -> Value {
 /// with the heap: a new backing's, or 0 for a share (counted when it was
 /// made; a detach counts its own copy).
 pub fn new_mutarray_header(p: *mut Vm, start: usize, backing: Rc<[Value]>, bytes: usize) -> Value {
-    vm(p).alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), start, backing }, bytes)
+    vm(p).alloc(MutArrayObj::new(start, backing), bytes)
 }
 
 /// The elements of array ARR, unique to its header: a shared backing is
@@ -2063,25 +2066,21 @@ pub fn new_mutarray_header(p: *mut Vm, start: usize, backing: Rc<[Value]>, bytes
 /// backing of exactly their length), a unique one returned as is.
 fn array_writable<'a>(p: *mut Vm, arr: Value) -> &'a mut [Value] {
     let obj = mutarray_of_mut(arr);
-    if Rc::strong_count(&obj.backing) > 1 {
-        let n = obj.items().len();
+    if obj.backing_extent().1 > 1 {
+        let n = obj.len();
         let vm = vm(p);
         vm.metrics.record_mutarray_detach(n);
         vm.heap.note_growth(n * 8);
-        obj.backing = backing_of(obj.items());
-        obj.start = 0;
+        obj.replace_backing(backing_of(obj.items()));
     }
-    let start = obj.start;
-    &mut Rc::get_mut(&mut obj.backing).expect("a detached backing is unique")[start..]
+    obj.items_mut().expect("a detached backing is unique")
 }
 
 /// The elements of affine array ARR: its backing is never shared (an affine
 /// array is moved, never copied), so this never copies an element.
 pub fn array_owned<'a>(arr: Value, what: &str) -> &'a mut [Value] {
-    let obj = mutarray_of_mut(arr);
-    let start = obj.start;
-    match Rc::get_mut(&mut obj.backing) {
-        Some(slots) => &mut slots[start..],
+    match mutarray_of_mut(arr).items_mut() {
+        Some(slots) => slots,
         None => panic!("{what}: an affine MutableArray's backing is shared (an ownership invariant violation)"),
     }
 }
@@ -2092,9 +2091,7 @@ pub fn array_owned<'a>(arr: Value, what: &str) -> &'a mut [Value] {
 /// element is copied.
 fn take_elements<'a>(arr: Value, what: &str) -> &'a [Value] {
     let n = array_owned(arr, what).len();
-    let obj = mutarray_of_mut(arr);
-    obj.start += n;
-    &obj.backing[obj.start - n..]
+    mutarray_of_mut(arr).advance(n)
 }
 
 /// The checked capacity of a new array for operation NAME: an Int in
@@ -2196,7 +2193,7 @@ fn generate(p: *mut Vm, capacity: Value, factory: Value, d: Option<Value>, name:
         }
         // No safepoint between the call's return and the store: X is in
         // the (rooted) array before anything can collect again.
-        Rc::get_mut(&mut mutarray_of_mut(arr).backing).expect("a unique backing under construction")[i] = x;
+        mutarray_of_mut(arr).items_mut().expect("a unique backing under construction")[i] = x;
     }
     vm(p).temp_roots.truncate(rooted);
     arr
@@ -2412,9 +2409,8 @@ pub extern "C" fn rt_mutarray_empty(_p: *mut Vm, arr: Value) -> Value {
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_take_front(_p: *mut Vm, arr: Value) -> Value {
     let obj = mutarray_of_mut(arr);
-    let x = *obj.items().first().expect("mutable_array#take_front: no element left");
-    obj.start += 1;
-    x
+    assert!(obj.len() > 0, "mutable_array#take_front: no element left");
+    obj.advance(1)[0]
 }
 
 /// The `a` drop of affine.rs: every element of array ARR by the element
@@ -2435,8 +2431,7 @@ pub fn drop_array_elements(p: *mut Vm, arr: Value, d: &[u8], pos: &mut usize) {
 /// A logical copy of array ARR (`mvshare`'s `h` of an array header): a new
 /// header on the same backing (and the same elements of it), O(1).
 pub fn share_array(p: *mut Vm, arr: Value) -> Value {
-    let obj = mutarray_of(arr);
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     new_mutarray_header(p, start, backing, 0)
 }
@@ -2449,8 +2444,8 @@ pub fn array_elements(arr: Value) -> impl Iterator<Item = Value> {
 /// Approximate bytes array ARR owns (heap.rs's object_size): its header and
 /// its share of the backing.
 pub fn array_object_size(arr: Value) -> usize {
-    let obj = mutarray_of(arr);
-    std::mem::size_of::<MutArrayObj>() + obj.backing.len() * 8 / Rc::strong_count(&obj.backing)
+    let (slots, holders) = mutarray_of(arr).backing_extent();
+    std::mem::size_of::<MutArrayObj>() + slots * 8 / holders
 }
 
 // ---------------------------------------------------------------------------
@@ -4547,7 +4542,7 @@ mod tests {
         let b = rooted!(vm, share_array(p, a));
         // A new header on the same backing: no element copied.
         assert_ne!(a, b);
-        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(b).backing));
+        assert!(mutarray_of(a).same_backing(mutarray_of(b)));
         assert_eq!((vm.metrics.mutarray.shares, vm.metrics.mutarray.detaches), (1, 0));
         // The first write through either detaches it, once.
         rt_mutarray_set(p, b, small(0), small(9));
@@ -4593,7 +4588,7 @@ mod tests {
         // A failed write neither changes the array nor detaches its backing.
         assert_eq!(mutarray_contents(a), vec![5, 6]);
         assert_eq!(vm.metrics.mutarray.detaches, 0);
-        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(copy).backing));
+        assert!(mutarray_of(a).same_backing(mutarray_of(copy)));
         vm.temp_roots.clear();
     }
 
@@ -4693,6 +4688,81 @@ mod tests {
         assert_eq!(small_of(rt_mutarray_take_front(p, after)), 20);
         assert_eq!(mutarray_contents(after), vec![3, 4]);
         assert_eq!(mutarray_contents(a), vec![2, 3, 4]);
+        vm.temp_roots.clear();
+    }
+
+    /// The three header words generated code reads (codegen::clif's inline
+    /// capacity/at/set), read the way it reads them -- raw loads at
+    /// MUTARRAY_LEN/PTR/UNIQUE_OFFSET -- after every operation that changes
+    /// a header's backing, its start or its backing's holders: LEN and PTR
+    /// always designate exactly `items()`, and UNIQUE is nonzero only for a
+    /// backing no other header holds (stale only towards 0, and refreshed
+    /// by the next runtime write).
+    #[test]
+    fn mutarray_header_words_track_the_backing() {
+        fn words(arr: Value) -> (usize, *const Value, u64) {
+            let at = |offset: i32| unsafe { *((arr as usize + offset as usize) as *const u64) };
+            (at(MUTARRAY_LEN_OFFSET) as usize, at(MUTARRAY_PTR_OFFSET) as *const Value, at(MUTARRAY_UNIQUE_OFFSET))
+        }
+        fn exact(arr: Value) -> u64 {
+            let (len, ptr, unique) = words(arr);
+            let items = mutarray_of(arr).items();
+            assert_eq!((len, ptr), (items.len(), items.as_ptr()), "LEN/PTR are the elements");
+            for (i, &item) in items.iter().enumerate() {
+                assert_eq!(unsafe { *ptr.add(i) }, item, "PTR + 8i is element i");
+            }
+            let (_, holders) = mutarray_of(arr).backing_extent();
+            assert!(unique == 0 || holders == 1, "UNIQUE only for a backing one header holds");
+            unique
+        }
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[1, 2, 3, 4]);
+        assert_eq!(exact(a), 1, "a new array is unique");
+        let empty = rooted!(vm, rt_mutarray_allocate(p, small(0)));
+        assert_eq!(exact(empty), 1);
+        // A share: both headers on one backing, neither unique.
+        let b = rooted!(vm, share_array(p, a));
+        assert_eq!((exact(a), exact(b)), (0, 0));
+        assert_eq!(words(a).1, words(b).1);
+        // B's first write detaches B (a new, unique backing); A's backing is
+        // A's alone again but A still says shared, until A's next write.
+        rt_mutarray_set(p, b, small(0), small(9));
+        assert_eq!((exact(a), exact(b)), (0, 1));
+        assert_ne!(words(a).1, words(b).1);
+        rt_mutarray_set_proven(p, a, small(1), small(8));
+        assert_eq!(exact(a), 1);
+        assert_eq!(vm.metrics.mutarray.detaches, 1);
+        assert_eq!((mutarray_contents(a), mutarray_contents(b)), (vec![1, 8, 3, 4], vec![9, 2, 3, 4]));
+        // A copy the collector frees leaves A stale-shared; A's next write
+        // finds its backing unique (no detach) and re-enables UNIQUE.
+        let roots = vm.temp_roots.len();
+        let c = share_array(p, a);
+        assert_eq!((exact(a), exact(c)), (0, 0));
+        vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        assert_eq!(mutarray_of(a).backing_extent().1, 1);
+        assert_eq!(exact(a), 0);
+        rt_mutarray_set(p, a, small(2), small(7));
+        assert_eq!((exact(a), vm.metrics.mutarray.detaches), (1, 1));
+        assert_eq!(vm.temp_roots.len(), roots);
+        // A consuming loop's step advances PTR past the element and LEN.
+        let (len, ptr, _) = words(a);
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 1);
+        assert_eq!(words(a), (len - 1, unsafe { ptr.add(1) }, 1));
+        exact(a);
+        for _ in 0..3 {
+            rt_mutarray_take_front(p, a);
+        }
+        assert_eq!(words(a).0, 0);
+        exact(a);
+        // A detach of a drained-then-shared header copies only its elements:
+        // PTR moves to the new backing's first slot.
+        let d = mutarray_of_ints(&mut vm, &[5, 6, 7]);
+        rt_mutarray_take_front(p, d);
+        let e = rooted!(vm, share_array(p, d));
+        rt_mutarray_set(p, e, small(0), small(60));
+        assert_eq!((exact(d), exact(e)), (0, 1));
+        assert_eq!((mutarray_contents(d), mutarray_contents(e)), (vec![6, 7], vec![60, 7]));
         vm.temp_roots.clear();
     }
 }

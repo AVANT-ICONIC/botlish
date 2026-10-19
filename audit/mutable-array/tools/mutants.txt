@@ -36,11 +36,11 @@
 @@ copy-aliases-native an unrestricted copy aliases writes (native): a logical copy of an array is the same header
 ## native/src/runtime/ops.rs
 <<<<
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     new_mutarray_header(p, start, backing, 0)
 ====
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     drop((start, backing));
     arr
@@ -65,11 +65,32 @@
 @@ copy-eager-deep-native an unrestricted copy eagerly copies every element (native): no backing is ever shared, the first write never detaches
 ## native/src/runtime/ops.rs
 <<<<
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
 ====
-    let (start, backing) = (obj.start, Rc::from(&obj.backing[..]));
+    let (start, backing): (usize, Rc<[Value]>) = (0, Rc::from(mutarray_of(arr).items()));
     vm(p).metrics.record_mutarray_share();
+>>>>
+
+# The header words generated code reads (value.rs's MutArrayObj: LEN, PTR,
+# UNIQUE; codegen/clif.rs's inline capacity, at and set).
+
+@@ share-keeps-unique-native a logical copy leaves its source header's UNIQUE word set (native): the inline set writes through the source into the backing the copy still holds
+## native/src/runtime/value.rs
+<<<<
+    pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+        self.unique = 0;
+====
+    pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+>>>>
+
+@@ detach-keeps-stale-pointer-native a detach leaves the header's PTR and LEN words on the old backing (native): inline reads and writes through the detached header still reach the backing its copies hold
+## native/src/runtime/value.rs
+<<<<
+        self.backing = backing;
+        self.cache(0);
+====
+        self.backing = backing;
 >>>>
 
 @@ param-mutation-leaks an array parameter is never copied for its callee (no entry copy, no caller-side copy of a consumed parameter's argument): the callee's mutations reach the caller's array

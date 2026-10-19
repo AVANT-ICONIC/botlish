@@ -334,6 +334,7 @@ pub fn define<M: Module>(
     pool: &mut ConstPool,
     sites: &mut Vec<Site>,
     instrument_sites: bool,
+    count_accesses: bool,
     listing: bool,
 ) -> Result<DefineResult, BackendError> {
     let mut text = String::new();
@@ -345,7 +346,7 @@ pub fn define<M: Module>(
     let config = module.isa().frontend_config();
     {
         let b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let mut t = Translator::new(b, module, symbols, f, pool, sites, instrument_sites);
+        let mut t = Translator::new(b, module, symbols, f, pool, sites, instrument_sites, count_accesses);
         t.function()?;
         let Translator { mut b, .. } = t;
         b.seal_all_blocks();
@@ -598,6 +599,19 @@ struct Translator<'a, 'b, M: Module> {
     /// is a pure Cranelift-codegen choice, not something native/lower.tcl's
     /// NIR emission needs to know about).
     listget_fast: bool,
+    /// Whether `op mutarraycapacity` is the inline load of the header's LEN
+    /// word (`mutarray_capacity` below) instead of a `rt_mutarray_capacity`
+    /// call. On by default; BOTLISH_NATIVE_MUTARRAY_INLINE_OPT=0 disables
+    /// every inline MutableArray path (this one and `mutarray_access`), for
+    /// differential testing and benchmark comparison (like `listget_fast`).
+    mutarray_inline: bool,
+    /// Whether `op mutarrayget`/`mutarraygetproven`/`mutarrayset`/
+    /// `mutarraysetproven` are inline loads and stores through the header's
+    /// LEN/PTR/UNIQUE words (`mutarray_get`, `mutarray_set` below), their
+    /// helpers only on a slow path: `mutarray_inline`, unless the program
+    /// counts MutableArray reads and writes (CompileOptions::count_accesses:
+    /// only the helpers count them).
+    mutarray_access: bool,
     /// Whether the prologue zeroes only the physical shadow slots F3b's
     /// per-slot definite-initialization analysis (codegen::roots's
     /// `RootPlan::entry_zero`) says still need it, instead of eagerly
@@ -617,6 +631,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         pool: &'a mut ConstPool,
         sites: &'a mut Vec<Site>,
         instrument_sites: bool,
+        count_accesses: bool,
     ) -> Self {
         let vars = (0..f.regs).map(|_| b.declare_var(I64)).collect();
         let closure = f.env.then(|| b.declare_var(I64));
@@ -634,6 +649,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let stack_maps = matches!(module.isa().name(), "x64" | "aarch64");
         let plan = roots::plan(f, stack_maps);
         let listget_fast = std::env::var("BOTLISH_NATIVE_LISTGET_FAST_OPT").ok().as_deref() != Some("0");
+        let mutarray_inline = std::env::var("BOTLISH_NATIVE_MUTARRAY_INLINE_OPT").ok().as_deref() != Some("0");
         let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
         Translator {
             b,
@@ -667,6 +683,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             plan,
             result_buf: None,
             listget_fast,
+            mutarray_inline,
+            mutarray_access: mutarray_inline && !count_accesses,
             root_init_opt,
         }
     }
@@ -1855,6 +1873,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             ILt | ILe | IGt | IGe | IEq => self.int_compare(op, a[0], a[1]),
             ListGet if self.listget_fast => self.list_get(a[0], a[1]),
             ListGetProven if self.listget_fast => self.list_get_proven(a[0], a[1]),
+            // MutableArray (MUTABLE-ARRAY.md): the header's LEN/PTR/UNIQUE
+            // words (value.rs's MutArrayObj), read inline.
+            MutArrayCapacity if self.mutarray_inline => self.mutarray_capacity(a[0]),
+            MutArrayGet if self.mutarray_access => self.mutarray_get(a[0], a[1], false),
+            MutArrayGetProven if self.mutarray_access => self.mutarray_get(a[0], a[1], true),
+            MutArraySet if self.mutarray_access => self.mutarray_set(a[0], a[1], a[2], false),
+            MutArraySetProven if self.mutarray_access => self.mutarray_set(a[0], a[1], a[2], true),
             // Inline String/UnicodeChar reads (ENCODE-UTF8-ALLOCATION-
             // RESEARCH.md): a character scan over str::length, str::char_at
             // and char::scalar_value runs without a helper call on ASCII text.
@@ -2575,6 +2600,152 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
         self.b.switch_to_block(done);
         result
+    }
+
+    // -----------------------------------------------------------------------
+    // MutableArray (MUTABLE-ARRAY.md) inline paths. A header (value.rs's
+    // MutArrayObj) carries, at fixed offsets, its element count (LEN), the
+    // address of its first element (PTR) and whether its copy-on-write
+    // backing is its alone (UNIQUE), kept exact by the runtime at every
+    // change of the backing or the start. So `capacity` is one load, `at`
+    // a bounds compare and two loads, `set` the same plus the copy-on-write
+    // test and a store, and only what the runtime must decide -- a BigInt or
+    // invalid index (the declared IndexNotFound), a shared backing (the
+    // detach) -- calls the helper, which defines it exactly as before. None
+    // of these paths allocates or is a safepoint (none was:
+    // `op_may_allocate`), so roots and stack maps are unchanged; the
+    // slow-path helpers are the same calls, in the same instruction, as the
+    // whole operation was.
+
+    /// The memory flags of an inline access to a MutableArray header's words
+    /// (HEADER) or to its elements' slots: trusted (aligned and never
+    /// trapping: a live array's header, an address among its elements), each
+    /// in an alias region of its own. Generated code never stores to a
+    /// header (only runtime helpers change it, and every call is a fence for
+    /// every region in Cranelift's alias analysis) and no other CLIF access
+    /// touches a header or a slot, so no location is ever accessed in two
+    /// regions, the property alias regions require. It lets a header word's
+    /// load be reused across stores to slots (redundant load elimination: a
+    /// `capacity(a)` after an `a.set` needs no second load), though not
+    /// across a call or a store in no region (a root slot's), which
+    /// Cranelift treats as a fence.
+    fn mutarray_flags(&mut self, header: bool) -> MemFlagsData {
+        let (user_id, description) = if header { (1, "mutarray header") } else { (2, "mutarray slots") };
+        let region = self.b.func.dfg.alias_regions.insert(ir::AliasRegionData { user_id, description: description.into() });
+        MemFlagsData::trusted().with_alias_region(Some(region))
+    }
+
+    /// `mutable_array::capacity(ARR)`: the header's LEN, tagged. LEN is at
+    /// most MAX_COLLECTION_LENGTH, a small Int, so the tag never overflows
+    /// (the helper's `new_int` never allocated either).
+    fn mutarray_capacity(&mut self, arr: ir::Value) -> ir::Value {
+        let flags = self.mutarray_flags(true);
+        let len = self.b.ins().load(I64, flags, arr, MUTARRAY_LEN_OFFSET);
+        let shifted = self.b.ins().ishl_imm_s(len, 1);
+        self.b.ins().bor_imm_s(shifted, 1)
+    }
+
+    /// The address of element IDX (a raw, valid index) of ARR: PTR + 8 IDX.
+    fn mutarray_slot(&mut self, arr: ir::Value, idx: ir::Value) -> ir::Value {
+        let flags = self.mutarray_flags(true);
+        let ptr = self.b.ins().load(I64, flags, arr, MUTARRAY_PTR_OFFSET);
+        let byte_offset = self.b.ins().ishl_imm_s(idx, 3);
+        self.b.ins().iadd(ptr, byte_offset)
+    }
+
+    /// Branches to SLOW unless INDEX is a small Int below ARR's LEN; returns
+    /// the decoded index, in the block where it is known valid. The unsigned
+    /// compare rejects a negative index and a too-large one alike (LEN is a
+    /// small nonnegative Int), exactly `list_get`'s test.
+    fn mutarray_index(&mut self, arr: ir::Value, index: ir::Value, slow: ir::Block) -> ir::Value {
+        let idx_tag = self.b.ins().band_imm_s(index, 1);
+        let check_bounds = self.b.create_block();
+        self.b.ins().brif(idx_tag, check_bounds, &[], slow, &[]);
+        self.b.switch_to_block(check_bounds);
+        let idx = self.b.ins().sshr_imm_s(index, 1);
+        let flags = self.mutarray_flags(true);
+        let len = self.b.ins().load(I64, flags, arr, MUTARRAY_LEN_OFFSET);
+        let in_bounds = self.b.ins().icmp(IntCC::UnsignedLessThan, idx, len);
+        let valid = self.b.create_block();
+        self.b.ins().brif(in_bounds, valid, &[], slow, &[]);
+        self.b.switch_to_block(valid);
+        idx
+    }
+
+    /// `mutable_array::at(ARR, INDEX)`, inline. PROVEN (`mutarraygetproven`,
+    /// hir/completions.tcl's bounds proof): INDEX is a small Int designating
+    /// an element, so the read is the bare load, with no test and no slow
+    /// path, exactly `list_get_proven`. Otherwise INDEX is tested
+    /// (`mutarray_index`), and a BigInt or invalid one calls
+    /// `rt_mutarray_get`, which reports the declared IndexNotFound.
+    fn mutarray_get(&mut self, arr: ir::Value, index: ir::Value, proven: bool) -> ir::Value {
+        if proven {
+            let idx = self.b.ins().sshr_imm_s(index, 1);
+            let addr = self.mutarray_slot(arr, idx);
+            let flags = self.mutarray_flags(false);
+            return self.b.ins().load(I64, flags, addr, 0);
+        }
+        let done = self.b.create_block();
+        let result = self.b.append_block_param(done, I64);
+        let slow = self.b.create_block();
+        let idx = self.mutarray_index(arr, index, slow);
+        let addr = self.mutarray_slot(arr, idx);
+        let flags = self.mutarray_flags(false);
+        let elem = self.b.ins().load(I64, flags, addr, 0);
+        self.b.ins().jump(done, &[BlockArg::Value(elem)]);
+
+        self.b.switch_to_block(slow);
+        self.b.set_cold_block(slow);
+        let r = self.call_helper("rt_mutarray_get", &[self.vm, arr, index]);
+        self.check(r);
+        self.b.ins().jump(done, &[BlockArg::Value(r)]);
+
+        self.b.switch_to_block(done);
+        result
+    }
+
+    /// `mutable_array::set(ARR, INDEX, VALUE)`, inline: the store of VALUE
+    /// into the element's slot, when the header's UNIQUE word says its
+    /// backing is its alone -- the copy-on-write test `array_writable` makes
+    /// (`Rc::strong_count == 1`), answered by one load, since the runtime
+    /// clears UNIQUE wherever a backing gains a holder (value.rs's
+    /// MutArrayObj). A shared backing (or, unless PROVEN, a BigInt or
+    /// invalid index) calls the helper, which detaches it, writes, and
+    /// re-enables UNIQUE (or reports IndexNotFound). The result is UNIT
+    /// either way. Like the helper, this stores no Botlish object anywhere
+    /// but the slot and allocates nothing: the collector, which traces an
+    /// array's slots, sees the stored value at its next collection.
+    fn mutarray_set(&mut self, arr: ir::Value, index: ir::Value, value: ir::Value, proven: bool) -> ir::Value {
+        let done = self.b.create_block();
+        let slow = self.b.create_block();
+        let idx = if proven {
+            self.b.ins().sshr_imm_s(index, 1)
+        } else {
+            self.mutarray_index(arr, index, slow)
+        };
+        let flags = self.mutarray_flags(true);
+        let unique = self.b.ins().load(I64, flags, arr, MUTARRAY_UNIQUE_OFFSET);
+        let store = self.b.create_block();
+        self.b.ins().brif(unique, store, &[], slow, &[]);
+
+        self.b.switch_to_block(store);
+        let addr = self.mutarray_slot(arr, idx);
+        let flags = self.mutarray_flags(false);
+        self.b.ins().store(flags, value, addr, 0);
+        self.b.ins().jump(done, &[]);
+
+        self.b.switch_to_block(slow);
+        self.b.set_cold_block(slow);
+        if proven {
+            self.call_helper("rt_mutarray_set_proven", &[self.vm, arr, index, value]);
+        } else {
+            let r = self.call_helper("rt_mutarray_set", &[self.vm, arr, index, value]);
+            self.check(r);
+        }
+        self.b.ins().jump(done, &[]);
+
+        self.b.switch_to_block(done);
+        self.iconst(UNIT)
     }
 }
 
