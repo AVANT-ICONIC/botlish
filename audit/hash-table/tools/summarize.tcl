@@ -27,7 +27,9 @@
 #       tools/membership.tcl's rows for one domain and mode (hit/miss): one
 #       row per strategy, one column per set size K; COLUMN is ns (default:
 #       ns per query), code (machine-code bytes), data (data elements) or
-#       generate (compile-time milliseconds the generator spent)
+#       generate (compile-time milliseconds the generator spent), frontend
+#       or lower (milliseconds the front end and native lowering spent on
+#       the generated program)
 #   tclsh9.0 audit/hash-table/tools/summarize.tcl ladder FILE.tsv TAGS ?RUST.tsv RUST-IMPL?
 #       tools/ladder.tcl's rows: one row per implementation, keys, size and
 #       mode, one column per tag (tree), optionally the Rust reference's
@@ -228,7 +230,7 @@ switch -- $command {
     membership {
         lassign $argv _ path domain mode column
         if {$column eq ""} { set column ns }
-        set index [dict get {ns 6 code 7 data 8 generate 9} $column]
+        set index [dict get {ns 6 code 7 data 8 generate 9 frontend 10 lower 11} $column]
         set cells [dict create]
         set strategies {}
         foreach r [readRows $path] {

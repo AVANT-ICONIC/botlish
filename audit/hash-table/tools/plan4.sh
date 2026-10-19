@@ -2,11 +2,11 @@
 # plan4.sh -- the deterministic half of the hash-table experiment's
 # measurement plan, after plan3.sh's timings: instructions per operation
 # (callgrind) for the tables and trees the first instruction ladder did not
-# reach, the Rust reference's counts, per-function profiles, and the copy,
-# memory and NIR phases of the merged tree. Counts do not depend on the
-# machine's load, so this may share the machine. Arguments as plan.sh's;
-# RESULTS-DIR receives instructions.tsv, profiles.txt and the run-all
-# phases' files.
+# reach, the Rust reference's counts, managed-heap allocations per lookup,
+# per-function profiles, and the copy, memory and NIR phases of the merged
+# tree. Counts do not depend on the machine's load, so this may share the
+# machine. Arguments as plan.sh's; RESULTS-DIR receives instructions.tsv,
+# allocs.tsv, profiles.txt and the run-all phases' files.
 #
 #   sh audit/hash-table/tools/plan4.sh RESULTS-DIR BASE HASH INLINE MOD BOUNDS VS COMBO PROBE COMBOPROBE
 set -u
@@ -36,6 +36,19 @@ $tclsh "$here/instructions.tcl" -reference 1 -tag rust -out "$counts" -impls "lp
     -keys "int-dense str-short point" -sizes 1024 -modes "$lookups" || stamp "FAILED: reference counts"
 $tclsh "$here/instructions.tcl" -reference 1 -tag rust -out "$counts" -impls "lp std" \
     -keys int-dense -sizes "16 16384" -modes "build hit miss" || stamp "FAILED: reference counts, sizes"
+
+stamp "allocations per lookup"
+for tree in base combo; do
+    eval root=\$$tree
+    BOTLISH_HT_ROOT=$root $tclsh "$here/allocs.tcl" -tag $tree -out "$out/allocs.tsv" \
+        -impls "listmap chain0 ht0 chain lpa lpmono lpmask rh cd sorted" -keys "int-dense str-short point" \
+        || stamp "FAILED: allocs $tree"
+done
+for tree in probe comboprobe; do
+    eval root=\$$tree
+    BOTLISH_HT_ROOT=$root $tclsh "$here/allocs.tcl" -tag $tree -out "$out/allocs.tsv" -impls lpp \
+        -keys "int-dense str-short point" || stamp "FAILED: allocs $tree"
+done
 
 stamp "profiles"
 for tree in base combo probe comboprobe; do
