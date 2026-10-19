@@ -77,14 +77,14 @@ header winuser.h 4dadbaa4
 header winver.h 736e7a39
 header wow64apiset.h e7a43da7
 shim_library botlish_shim_win32_e3f8535c
-file layouts-check.c 3738 1ea427f0
-file layouts.tsv 6683 6905dec5
-file report.tsv 24568 47ab9d84
-file report.txt 186 06eb1e15
+file layouts-check.c 6192 3112d6d5
+file layouts.tsv 6683 e67369f0
+file report.tsv 24568 04c94603
+file report.txt 180 8d7ecd3d
 file shim.c 198 e3f8535c
 file win32/apiset.bot 9 5357b816
 file win32/basetsd.bot 43 a4712ae3
-file win32/ctypes.bot 1327 6da1756f
+file win32/ctypes.bot 1335 9553ec37
 file win32/datetimeapi.bot 88 8942b585
 file win32/debugapi.bot 55 b176d63c
 file win32/errhandlingapi.bot 55 08dd731b
@@ -98,7 +98,7 @@ file win32/interlockedapi.bot 47 d34ab80e
 file win32/ioapiset.bot 83 0e4bb580
 file win32/jobapi.bot 13 aad2f8e7
 file win32/ktmtypes.bot 59 92935949
-file win32/layouts.bot 5389 a6051516
+file win32/layouts.bot 8085 a7499174
 file win32/libloaderapi.bot 339 1f5b6d97
 file win32/mcx.bot 153 98fcafe6
 file win32/memoryapi.bot 370 aed71613
@@ -314,12 +314,12 @@ blocked variadic 3
 convention_default stdcall 3176
 layout_abi windows-x86_64-gnu clang x86_64-w64-mingw32 {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 220
-layout_count blocked 556
-layout_count blockedDirect 436
-layout_count blockedStructs 429
-layout_count blockedTransitive 120
+layout_count blocked 307
+layout_count blockedDirect 237
+layout_count blockedStructs 180
+layout_count blockedTransitive 70
 layout_count blockedUnions 127
-layout_count emitted 564
+layout_count emitted 813
 layout_count incomplete 10
 layout_count promoted 54
 layout_count public 1120
@@ -328,10 +328,9 @@ layout_count system 0
 layout_count unions 127
 layout_blocked anonymous-overlay 84
 layout_blocked bitfield 55
-layout_blocked fixed-array 222
 layout_blocked flexible-array 3
 layout_blocked float 9
-layout_blocked nested-layout-blocked 275
+layout_blocked nested-layout-blocked 169
 layout_blocked union 127
 contract TpInitializeCallbackEnviron cbe {escape proven-noescape access write} compiler {nocapture writeonly}
 contract TpSetCallbackThreadpool cbe {escape proven-noescape access write} compiler {nocapture writeonly}

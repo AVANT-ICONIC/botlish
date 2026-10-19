@@ -124,6 +124,9 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_ARRAY(T, m, n, L) \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
 
 BOTLISH_RECORD(struct crypto_ivec_st, 16, 8, "CRYPTO_IVEC");
 BOTLISH_POINTER(struct crypto_ivec_st, in, 0, 8, "CRYPTO_IVEC.in");
@@ -133,6 +136,12 @@ BOTLISH_RECORD(struct crypto_iovec_st, 24, 8, "CRYPTO_IOVEC");
 BOTLISH_POINTER(struct crypto_iovec_st, out, 0, 8, "CRYPTO_IOVEC.out");
 BOTLISH_POINTER(struct crypto_iovec_st, in, 8, 8, "CRYPTO_IOVEC.in");
 BOTLISH_SCALAR(struct crypto_iovec_st, len, 16, 8, 0, "CRYPTO_IOVEC.len");
+
+BOTLISH_RECORD(struct aes_key_st, 244, 4, "AES_KEY");
+BOTLISH_ARRAY(struct aes_key_st, rd_key, 60, "AES_KEY.rd_key");
+BOTLISH_OFFSET(struct aes_key_st, rd_key[59], 236, "AES_KEY.rd_key, its last element");
+BOTLISH_SCALAR(struct aes_key_st, rd_key[0], 0, 4, 0, "AES_KEY.rd_key, its first element");
+BOTLISH_SCALAR(struct aes_key_st, rounds, 240, 4, 0, "AES_KEY.rounds");
 
 BOTLISH_RECORD(struct buf_mem_st, 24, 8, "BUF_MEM");
 BOTLISH_SCALAR(struct buf_mem_st, length, 0, 8, 0, "BUF_MEM.length");
@@ -192,18 +201,115 @@ BOTLISH_SCALAR(struct ASN1_AUX_st, ref_offset, 12, 4, 1, "ASN1_AUX.ref_offset");
 BOTLISH_POINTER(struct ASN1_AUX_st, asn1_cb, 16, 8, "ASN1_AUX.asn1_cb");
 BOTLISH_SCALAR(struct ASN1_AUX_st, enc_offset, 24, 4, 1, "ASN1_AUX.enc_offset");
 
+BOTLISH_RECORD(struct evp_encode_ctx_st, 56, 4, "EVP_ENCODE_CTX");
+BOTLISH_SCALAR(struct evp_encode_ctx_st, data_used, 0, 4, 0, "EVP_ENCODE_CTX.data_used");
+BOTLISH_ARRAY(struct evp_encode_ctx_st, data, 48, "EVP_ENCODE_CTX.data");
+BOTLISH_OFFSET(struct evp_encode_ctx_st, data[47], 51, "EVP_ENCODE_CTX.data, its last element");
+BOTLISH_SCALAR(struct evp_encode_ctx_st, data[0], 4, 1, 0, "EVP_ENCODE_CTX.data, its first element");
+BOTLISH_SCALAR(struct evp_encode_ctx_st, eof_seen, 52, 1, 1, "EVP_ENCODE_CTX.eof_seen");
+BOTLISH_SCALAR(struct evp_encode_ctx_st, error_encountered, 53, 1, 1, "EVP_ENCODE_CTX.error_encountered");
+
+BOTLISH_RECORD(struct blake2b_state_st, 208, 8, "BLAKE2B_CTX");
+BOTLISH_ARRAY(struct blake2b_state_st, h, 8, "BLAKE2B_CTX.h");
+BOTLISH_OFFSET(struct blake2b_state_st, h[7], 56, "BLAKE2B_CTX.h, its last element");
+BOTLISH_SCALAR(struct blake2b_state_st, h[0], 0, 8, 0, "BLAKE2B_CTX.h, its first element");
+BOTLISH_SCALAR(struct blake2b_state_st, t_low, 64, 8, 0, "BLAKE2B_CTX.t_low");
+BOTLISH_SCALAR(struct blake2b_state_st, t_high, 72, 4, 0, "BLAKE2B_CTX.t_high");
+BOTLISH_SCALAR(struct blake2b_state_st, block_used, 76, 4, 0, "BLAKE2B_CTX.block_used");
+BOTLISH_ARRAY(struct blake2b_state_st, block, 128, "BLAKE2B_CTX.block");
+BOTLISH_OFFSET(struct blake2b_state_st, block[127], 207, "BLAKE2B_CTX.block, its last element");
+BOTLISH_SCALAR(struct blake2b_state_st, block[0], 80, 1, 0, "BLAKE2B_CTX.block, its first element");
+
+BOTLISH_RECORD(struct bf_key_st, 4168, 4, "BF_KEY");
+BOTLISH_ARRAY(struct bf_key_st, P, 18, "BF_KEY.P");
+BOTLISH_OFFSET(struct bf_key_st, P[17], 68, "BF_KEY.P, its last element");
+BOTLISH_SCALAR(struct bf_key_st, P[0], 0, 4, 0, "BF_KEY.P, its first element");
+BOTLISH_ARRAY(struct bf_key_st, S, 1024, "BF_KEY.S");
+BOTLISH_OFFSET(struct bf_key_st, S[1023], 4164, "BF_KEY.S, its last element");
+BOTLISH_SCALAR(struct bf_key_st, S[0], 72, 4, 0, "BF_KEY.S, its first element");
+
 BOTLISH_RECORD(struct cbs_st, 16, 8, "CBS");
 BOTLISH_POINTER(struct cbs_st, data, 0, 8, "CBS.data");
 BOTLISH_SCALAR(struct cbs_st, len, 8, 8, 0, "CBS.len");
+
+BOTLISH_RECORD(struct cast_key_st, 132, 4, "CAST_KEY");
+BOTLISH_ARRAY(struct cast_key_st, data, 32, "CAST_KEY.data");
+BOTLISH_OFFSET(struct cast_key_st, data[31], 124, "CAST_KEY.data, its last element");
+BOTLISH_SCALAR(struct cast_key_st, data[0], 0, 4, 0, "CAST_KEY.data, its first element");
+BOTLISH_SCALAR(struct cast_key_st, short_key, 128, 4, 1, "CAST_KEY.short_key");
+
+BOTLISH_RECORD(struct evp_cipher_ctx_st, 144, 8, "EVP_CIPHER_CTX");
+BOTLISH_POINTER(struct evp_cipher_ctx_st, cipher, 0, 8, "EVP_CIPHER_CTX.cipher");
+BOTLISH_POINTER(struct evp_cipher_ctx_st, app_data, 8, 8, "EVP_CIPHER_CTX.app_data");
+BOTLISH_POINTER(struct evp_cipher_ctx_st, cipher_data, 16, 8, "EVP_CIPHER_CTX.cipher_data");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, key_len, 24, 4, 0, "EVP_CIPHER_CTX.key_len");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, encrypt, 28, 4, 1, "EVP_CIPHER_CTX.encrypt");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, flags, 32, 4, 0, "EVP_CIPHER_CTX.flags");
+BOTLISH_ARRAY(struct evp_cipher_ctx_st, oiv, 16, "EVP_CIPHER_CTX.oiv");
+BOTLISH_OFFSET(struct evp_cipher_ctx_st, oiv[15], 51, "EVP_CIPHER_CTX.oiv, its last element");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, oiv[0], 36, 1, 0, "EVP_CIPHER_CTX.oiv, its first element");
+BOTLISH_ARRAY(struct evp_cipher_ctx_st, iv, 16, "EVP_CIPHER_CTX.iv");
+BOTLISH_OFFSET(struct evp_cipher_ctx_st, iv[15], 67, "EVP_CIPHER_CTX.iv, its last element");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, iv[0], 52, 1, 0, "EVP_CIPHER_CTX.iv, its first element");
+BOTLISH_ARRAY(struct evp_cipher_ctx_st, buf, 32, "EVP_CIPHER_CTX.buf");
+BOTLISH_OFFSET(struct evp_cipher_ctx_st, buf[31], 99, "EVP_CIPHER_CTX.buf, its last element");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, buf[0], 68, 1, 0, "EVP_CIPHER_CTX.buf, its first element");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, buf_len, 100, 4, 1, "EVP_CIPHER_CTX.buf_len");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, num, 104, 4, 0, "EVP_CIPHER_CTX.num");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, final_used, 108, 4, 1, "EVP_CIPHER_CTX.final_used");
+BOTLISH_ARRAY(struct evp_cipher_ctx_st, final, 32, "EVP_CIPHER_CTX.final");
+BOTLISH_OFFSET(struct evp_cipher_ctx_st, final[31], 143, "EVP_CIPHER_CTX.final, its last element");
+BOTLISH_SCALAR(struct evp_cipher_ctx_st, final[0], 112, 1, 0, "EVP_CIPHER_CTX.final, its first element");
+
+BOTLISH_RECORD(struct evp_cipher_info_st, 24, 8, "EVP_CIPHER_INFO");
+BOTLISH_POINTER(struct evp_cipher_info_st, cipher, 0, 8, "EVP_CIPHER_INFO.cipher");
+BOTLISH_ARRAY(struct evp_cipher_info_st, iv, 16, "EVP_CIPHER_INFO.iv");
+BOTLISH_OFFSET(struct evp_cipher_info_st, iv[15], 23, "EVP_CIPHER_INFO.iv, its last element");
+BOTLISH_SCALAR(struct evp_cipher_info_st, iv[0], 8, 1, 0, "EVP_CIPHER_INFO.iv, its first element");
 
 BOTLISH_RECORD(struct conf_value_st, 24, 8, "CONF_VALUE");
 BOTLISH_POINTER(struct conf_value_st, section, 0, 8, "CONF_VALUE.section");
 BOTLISH_POINTER(struct conf_value_st, name, 8, 8, "CONF_VALUE.name");
 BOTLISH_POINTER(struct conf_value_st, value, 16, 8, "CONF_VALUE.value");
 
+BOTLISH_RECORD(struct sha256_state_st, 112, 4, "SHA256_CTX");
+BOTLISH_ARRAY(struct sha256_state_st, h, 8, "SHA256_CTX.h");
+BOTLISH_OFFSET(struct sha256_state_st, h[7], 28, "SHA256_CTX.h, its last element");
+BOTLISH_SCALAR(struct sha256_state_st, h[0], 0, 4, 0, "SHA256_CTX.h, its first element");
+BOTLISH_SCALAR(struct sha256_state_st, Nl, 32, 4, 0, "SHA256_CTX.Nl");
+BOTLISH_SCALAR(struct sha256_state_st, Nh, 36, 4, 0, "SHA256_CTX.Nh");
+BOTLISH_ARRAY(struct sha256_state_st, data, 64, "SHA256_CTX.data");
+BOTLISH_OFFSET(struct sha256_state_st, data[63], 103, "SHA256_CTX.data, its last element");
+BOTLISH_SCALAR(struct sha256_state_st, data[0], 40, 1, 0, "SHA256_CTX.data, its first element");
+BOTLISH_SCALAR(struct sha256_state_st, num, 104, 4, 0, "SHA256_CTX.num");
+BOTLISH_SCALAR(struct sha256_state_st, md_len, 108, 4, 0, "SHA256_CTX.md_len");
+
+BOTLISH_RECORD(struct sha512_state_st, 208, 8, "SHA512_CTX");
+BOTLISH_ARRAY(struct sha512_state_st, h, 8, "SHA512_CTX.h");
+BOTLISH_OFFSET(struct sha512_state_st, h[7], 56, "SHA512_CTX.h, its last element");
+BOTLISH_SCALAR(struct sha512_state_st, h[0], 0, 8, 0, "SHA512_CTX.h, its first element");
+BOTLISH_SCALAR(struct sha512_state_st, num, 64, 2, 0, "SHA512_CTX.num");
+BOTLISH_SCALAR(struct sha512_state_st, md_len, 66, 2, 0, "SHA512_CTX.md_len");
+BOTLISH_SCALAR(struct sha512_state_st, bytes_so_far_high, 68, 4, 0, "SHA512_CTX.bytes_so_far_high");
+BOTLISH_SCALAR(struct sha512_state_st, bytes_so_far_low, 72, 8, 0, "SHA512_CTX.bytes_so_far_low");
+BOTLISH_ARRAY(struct sha512_state_st, p, 128, "SHA512_CTX.p");
+BOTLISH_OFFSET(struct sha512_state_st, p[127], 207, "SHA512_CTX.p, its last element");
+BOTLISH_SCALAR(struct sha512_state_st, p[0], 80, 1, 0, "SHA512_CTX.p, its first element");
+
 BOTLISH_RECORD(CRYPTO_dynlock, 16, 8, "CRYPTO_dynlock");
 BOTLISH_SCALAR(CRYPTO_dynlock, references, 0, 4, 1, "CRYPTO_dynlock.references");
 BOTLISH_POINTER(CRYPTO_dynlock, data, 8, 8, "CRYPTO_dynlock.data");
+
+BOTLISH_RECORD(struct DES_cblock_st, 8, 1, "DES_cblock");
+BOTLISH_ARRAY(struct DES_cblock_st, bytes, 8, "DES_cblock.bytes");
+BOTLISH_OFFSET(struct DES_cblock_st, bytes[7], 7, "DES_cblock.bytes, its last element");
+BOTLISH_SCALAR(struct DES_cblock_st, bytes[0], 0, 1, 0, "DES_cblock.bytes, its first element");
+
+BOTLISH_RECORD(struct DES_ks, 128, 4, "DES_key_schedule");
+BOTLISH_ARRAY(struct DES_ks, subkeys, 16, "DES_key_schedule.subkeys");
+BOTLISH_ARRAY(struct DES_ks, subkeys[0], 2, "DES_key_schedule.subkeys");
+BOTLISH_OFFSET(struct DES_ks, subkeys[15][1], 124, "DES_key_schedule.subkeys, its last element");
+BOTLISH_SCALAR(struct DES_ks, subkeys[0][0], 0, 4, 0, "DES_key_schedule.subkeys, its first element");
 
 BOTLISH_RECORD(struct DSA_SIG_st, 16, 8, "DSA_SIG");
 BOTLISH_POINTER(struct DSA_SIG_st, r, 0, 8, "DSA_SIG.r");
@@ -228,6 +334,48 @@ BOTLISH_SCALAR(struct ecdsa_method_st, flags, 40, 4, 1, "ECDSA_METHOD.flags");
 BOTLISH_RECORD(struct ecdsa_sig_st, 16, 8, "ECDSA_SIG");
 BOTLISH_POINTER(struct ecdsa_sig_st, r, 0, 8, "ECDSA_SIG.r");
 BOTLISH_POINTER(struct ecdsa_sig_st, s, 8, 8, "ECDSA_SIG.s");
+
+BOTLISH_RECORD(struct evp_hpke_key_st, 1648, 8, "EVP_HPKE_KEY");
+BOTLISH_POINTER(struct evp_hpke_key_st, kem, 0, 8, "EVP_HPKE_KEY.kem");
+BOTLISH_ARRAY(struct evp_hpke_key_st, private_key, 64, "EVP_HPKE_KEY.private_key");
+BOTLISH_OFFSET(struct evp_hpke_key_st, private_key[63], 71, "EVP_HPKE_KEY.private_key, its last element");
+BOTLISH_SCALAR(struct evp_hpke_key_st, private_key[0], 8, 1, 0, "EVP_HPKE_KEY.private_key, its first element");
+BOTLISH_ARRAY(struct evp_hpke_key_st, public_key, 1568, "EVP_HPKE_KEY.public_key");
+BOTLISH_OFFSET(struct evp_hpke_key_st, public_key[1567], 1639, "EVP_HPKE_KEY.public_key, its last element");
+BOTLISH_SCALAR(struct evp_hpke_key_st, public_key[0], 72, 1, 0, "EVP_HPKE_KEY.public_key, its first element");
+BOTLISH_POINTER(struct evp_hpke_key_st, pkey, 1640, 8, "EVP_HPKE_KEY.pkey");
+
+BOTLISH_RECORD(struct HRSS_private_key, 1808, 1, "HRSS_private_key");
+BOTLISH_ARRAY(struct HRSS_private_key, opaque, 1808, "HRSS_private_key.opaque");
+BOTLISH_OFFSET(struct HRSS_private_key, opaque[1807], 1807, "HRSS_private_key.opaque, its last element");
+BOTLISH_SCALAR(struct HRSS_private_key, opaque[0], 0, 1, 0, "HRSS_private_key.opaque, its first element");
+
+BOTLISH_RECORD(struct HRSS_public_key, 1424, 1, "HRSS_public_key");
+BOTLISH_ARRAY(struct HRSS_public_key, opaque, 1424, "HRSS_public_key.opaque");
+BOTLISH_OFFSET(struct HRSS_public_key, opaque[1423], 1423, "HRSS_public_key.opaque, its last element");
+BOTLISH_SCALAR(struct HRSS_public_key, opaque[0], 0, 1, 0, "HRSS_public_key.opaque, its first element");
+
+BOTLISH_RECORD(struct md4_state_st, 92, 4, "MD4_CTX");
+BOTLISH_ARRAY(struct md4_state_st, h, 4, "MD4_CTX.h");
+BOTLISH_OFFSET(struct md4_state_st, h[3], 12, "MD4_CTX.h, its last element");
+BOTLISH_SCALAR(struct md4_state_st, h[0], 0, 4, 0, "MD4_CTX.h, its first element");
+BOTLISH_SCALAR(struct md4_state_st, Nl, 16, 4, 0, "MD4_CTX.Nl");
+BOTLISH_SCALAR(struct md4_state_st, Nh, 20, 4, 0, "MD4_CTX.Nh");
+BOTLISH_ARRAY(struct md4_state_st, data, 64, "MD4_CTX.data");
+BOTLISH_OFFSET(struct md4_state_st, data[63], 87, "MD4_CTX.data, its last element");
+BOTLISH_SCALAR(struct md4_state_st, data[0], 24, 1, 0, "MD4_CTX.data, its first element");
+BOTLISH_SCALAR(struct md4_state_st, num, 88, 4, 0, "MD4_CTX.num");
+
+BOTLISH_RECORD(struct md5_state_st, 92, 4, "MD5_CTX");
+BOTLISH_ARRAY(struct md5_state_st, h, 4, "MD5_CTX.h");
+BOTLISH_OFFSET(struct md5_state_st, h[3], 12, "MD5_CTX.h, its last element");
+BOTLISH_SCALAR(struct md5_state_st, h[0], 0, 4, 0, "MD5_CTX.h, its first element");
+BOTLISH_SCALAR(struct md5_state_st, Nl, 16, 4, 0, "MD5_CTX.Nl");
+BOTLISH_SCALAR(struct md5_state_st, Nh, 20, 4, 0, "MD5_CTX.Nh");
+BOTLISH_ARRAY(struct md5_state_st, data, 64, "MD5_CTX.data");
+BOTLISH_OFFSET(struct md5_state_st, data[63], 87, "MD5_CTX.data, its last element");
+BOTLISH_SCALAR(struct md5_state_st, data[0], 24, 1, 0, "MD5_CTX.data, its first element");
+BOTLISH_SCALAR(struct md5_state_st, num, 88, 4, 0, "MD5_CTX.num");
 
 BOTLISH_RECORD(struct obj_name_st, 24, 8, "OBJ_NAME");
 BOTLISH_SCALAR(struct obj_name_st, type, 0, 4, 1, "OBJ_NAME.type_");
@@ -343,6 +491,14 @@ BOTLISH_POINTER(struct rsa_pss_params_st, maskHash, 32, 8, "RSA_PSS_PARAMS.maskH
 BOTLISH_RECORD(struct private_key_st, 8, 8, "X509_PKEY");
 BOTLISH_POINTER(struct private_key_st, dec_pkey, 0, 8, "X509_PKEY.dec_pkey");
 
+BOTLISH_RECORD(struct X509_info_st, 64, 8, "X509_INFO");
+BOTLISH_POINTER(struct X509_info_st, x509, 0, 8, "X509_INFO.x509");
+BOTLISH_POINTER(struct X509_info_st, crl, 8, 8, "X509_INFO.crl");
+BOTLISH_POINTER(struct X509_info_st, x_pkey, 16, 8, "X509_INFO.x_pkey");
+BOTLISH_NESTED(struct X509_info_st, enc_cipher, 24, 24, "X509_INFO.enc_cipher");
+BOTLISH_SCALAR(struct X509_info_st, enc_len, 48, 4, 1, "X509_INFO.enc_len");
+BOTLISH_POINTER(struct X509_info_st, enc_data, 56, 8, "X509_INFO.enc_data");
+
 BOTLISH_RECORD(struct v3_ext_method, 104, 8, "X509V3_EXT_METHOD");
 BOTLISH_SCALAR(struct v3_ext_method, ext_nid, 0, 4, 1, "X509V3_EXT_METHOD.ext_nid");
 BOTLISH_SCALAR(struct v3_ext_method, ext_flags, 4, 4, 1, "X509V3_EXT_METHOD.ext_flags");
@@ -370,6 +526,24 @@ BOTLISH_POINTER(struct v3_ext_ctx, db, 40, 8, "X509V3_CTX.db");
 BOTLISH_RECORD(struct X509_algor_st, 16, 8, "X509_ALGOR");
 BOTLISH_POINTER(struct X509_algor_st, algorithm, 0, 8, "X509_ALGOR.algorithm");
 BOTLISH_POINTER(struct X509_algor_st, parameter, 8, 8, "X509_ALGOR.parameter");
+
+BOTLISH_RECORD(struct rc4_key_st, 1032, 4, "RC4_KEY");
+BOTLISH_SCALAR(struct rc4_key_st, x, 0, 4, 0, "RC4_KEY.x");
+BOTLISH_SCALAR(struct rc4_key_st, y, 4, 4, 0, "RC4_KEY.y");
+BOTLISH_ARRAY(struct rc4_key_st, data, 256, "RC4_KEY.data");
+BOTLISH_OFFSET(struct rc4_key_st, data[255], 1028, "RC4_KEY.data, its last element");
+BOTLISH_SCALAR(struct rc4_key_st, data[0], 8, 4, 0, "RC4_KEY.data, its first element");
+
+BOTLISH_RECORD(struct RIPEMD160state_st, 96, 4, "RIPEMD160_CTX");
+BOTLISH_ARRAY(struct RIPEMD160state_st, h, 5, "RIPEMD160_CTX.h");
+BOTLISH_OFFSET(struct RIPEMD160state_st, h[4], 16, "RIPEMD160_CTX.h, its last element");
+BOTLISH_SCALAR(struct RIPEMD160state_st, h[0], 0, 4, 0, "RIPEMD160_CTX.h, its first element");
+BOTLISH_SCALAR(struct RIPEMD160state_st, Nl, 20, 4, 0, "RIPEMD160_CTX.Nl");
+BOTLISH_SCALAR(struct RIPEMD160state_st, Nh, 24, 4, 0, "RIPEMD160_CTX.Nh");
+BOTLISH_ARRAY(struct RIPEMD160state_st, data, 64, "RIPEMD160_CTX.data");
+BOTLISH_OFFSET(struct RIPEMD160state_st, data[63], 91, "RIPEMD160_CTX.data, its last element");
+BOTLISH_SCALAR(struct RIPEMD160state_st, data[0], 28, 1, 0, "RIPEMD160_CTX.data, its first element");
+BOTLISH_SCALAR(struct RIPEMD160state_st, num, 92, 4, 0, "RIPEMD160_CTX.num");
 
 BOTLISH_RECORD(struct trust_token_st, 16, 8, "TRUST_TOKEN");
 BOTLISH_POINTER(struct trust_token_st, data, 0, 8, "TRUST_TOKEN.data");

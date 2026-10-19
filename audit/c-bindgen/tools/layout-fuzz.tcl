@@ -11,11 +11,12 @@
 # record itself, an incomplete record, a pointer to a pointer), function
 # pointers (inline and through a typedef), earlier records nested by value,
 # anonymous struct members and typedef-named anonymous records, with
-# #pragma pack(N), packed and aligned attributes around and inside them --
-# and, in some records, a field the layout language lacks: an array (of
-# int, of char, of a record), a flexible array member, a union by value, a
-# bitfield, a float, a double, a _Bool, or a record that holds one of those
-# by value. The fuzzer generates its binding for TARGET (the host's by
+# #pragma pack(N), packed and aligned attributes around and inside them,
+# fixed arrays (FIXED-LAYOUT-ARRAYS.md: of C integers, stdint types, data
+# pointers, earlier records and struct lf_inner, two-dimensional ones) --
+# and, in some records, a field the layout language lacks: a flexible array
+# member, a union by value, a bitfield, a float, a double, a _Bool, an
+# array of one of those, or a record that holds one of those by value. The fuzzer generates its binding for TARGET (the host's by
 # default; any target of the fixture's: the header is freestanding) with an
 # in-memory profile, and checks, each against something other than the
 # generator:
@@ -29,7 +30,8 @@
 #     the pointee identity its own naming rule gives each pointer;
 #   * a second C compiler (GCC: cc on the host, the target's cross gcc
 #     elsewhere, when installed): every size, alignment and offset the
-#     emitted layouts state, through the fuzzer's own C designators -- run
+#     emitted layouts state, and every array's sizeof and its last element's
+#     offset, through the fuzzer's own C designators -- run
 #     as a program on the host, compiled as static assertions for another
 #     target;
 #   * the runtime oracle (tools/c-bindgen/oracle.tcl), on the host: C writes
@@ -206,12 +208,14 @@ proc drawField {r i name earlier typedefs enums self selfName} {
                 return [dict create c "[dict get $e kind] [dict get $e tag] *$name" expect "ffi::c::Ptr\[lf::ctypes::[dict get $e name]\]" members [list [list $name $name]]]
             }
         }
-    } elseif {$x < 0.82} {
+    } elseif {$x < 0.80} {
+        return [drawArray $name $emitted]
+    } elseif {$x < 0.86} {
         if {[chance 0.5]} {
             return [dict create c "int (*$name)(int, void *)" expect "ffi::c::FnPtr\[Fn{args: \[ffi::c::Int, ffi::c::Ptr\[ffi::c::Void\]\], return: ffi::c::Int}\]" members [list [list $name $name]]]
         }
         return [dict create c "lf_callback $name" expect "ffi::c::FnPtr\[Fn{args: \[ffi::c::Long\], return: unit}\]" members [list [list $name $name]]]
-    } elseif {$x < 0.92 && [llength $emitted]} {
+    } elseif {$x < 0.93 && [llength $emitted]} {
         set e [pick $emitted]
         return [dict create c "[dict get $e kind] [dict get $e tag] $name" expect nested nested [dict get $e key] members [list [list $name $name]]]
     } elseif {$x < 1.0} {
@@ -225,17 +229,48 @@ proc drawField {r i name earlier typedefs enums self selfName} {
     return [dict create c "int $name" expect ffi::c::Int members [list [list $name $name]]]
 }
 
+# A fixed array of a supported element (FIXED-LAYOUT-ARRAYS.md): {c DECL
+# expect TYPE members ...}, TYPE `array N of ...` by the model's own tables.
+proc drawArray {name emitted} {
+    set n [between 1 6]
+    switch -- [pick {scalar scalar stdint pointer rows record inner}] {
+        scalar {
+            set c [pick [dict keys $::scalars]]
+            return [dict create c "$c $name\[$n\]" expect "array $n of ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
+        }
+        stdint {
+            set t [pick [dict keys $::stdints]]
+            return [dict create c "$t $name\[$n\]" expect "array $n of ffi::c::[dict get $::scalars [dict get $::stdints $t]]" members [list [list $name $name]]]
+        }
+        pointer {
+            return [dict create c "void *$name\[$n\]" expect "array $n of ffi::c::Ptr\[ffi::c::Void\]" members [list [list $name $name]]]
+        }
+        rows {
+            set m [between 1 4]
+            set c [pick [dict keys $::scalars]]
+            return [dict create c "$c $name\[$n\]\[$m\]" expect "array $n of array $m of ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
+        }
+        record {
+            if {[llength $emitted]} {
+                set e [pick $emitted]
+                return [dict create c "[dict get $e kind] [dict get $e tag] $name\[$n\]" expect "array $n of [dict get $e name]" members [list [list $name $name]]]
+            }
+        }
+    }
+    return [dict create c "struct lf_inner $name\[$n\]" expect "array $n of lf_inner" members [list [list $name $name]]]
+}
+
 # A field the layout language lacks: {c DECL expect blocked reason R dep KEY?}.
 proc drawBlocked {r i name earlier last} {
     set blockedEarlier [lmap e $earlier {expr {[dict get $e kind] eq "struct" && ![dict get $e anonymous] && [dict get $e expectStatus] eq "blocked" ? $e : [continue]}}]
-    set shapes {array chars recarray union bitfield float double bool}
+    set shapes {union bitfield float double bool floats bools unions}
     if {$last} { lappend shapes flexible }
     if {[llength $blockedEarlier]} { lappend shapes nestedBlocked nestedBlocked }
     set shape [pick $shapes]
     switch -- $shape {
-        array { return [dict create c "int $name\[[between 2 5]\]" expect blocked reason fixed-array] }
-        chars { return [dict create c "char $name\[[between 1 9]\]" expect blocked reason fixed-array] }
-        recarray { return [dict create c "struct lf_inner $name\[2\]" expect blocked reason fixed-array] }
+        floats { return [dict create c "float $name\[[between 1 4]\]" expect blocked reason float] }
+        bools { return [dict create c "_Bool $name\[[between 1 4]\]" expect blocked reason c-bool] }
+        unions { return [dict create c "union lf_u $name\[2\]" expect blocked reason union nested 1] }
         flexible { return [dict create c "int $name\[\]" expect blocked reason flexible-array] }
         union { return [dict create c "union lf_u $name" expect blocked reason union nested 1] }
         bitfield { return [dict create c "unsigned int $name : [between 1 9]" expect blocked reason bitfield] }
@@ -376,6 +411,21 @@ proc secondCompiler {dir prog result} {
             lassign $f fname type offset
             append asserts "_Static_assert(__builtin_offsetof($c, $fname) == $offset, \"$name.$fname\");\n"
             append prints "    printf(\"$name.$fname %zu\\n\", __builtin_offsetof($c, $fname));\n"
+            # A fixed array: its sizeof, and its last element's offset (the
+            # stride), by the model's widths.
+            lassign [arrayShape $type $layouts] extents width
+            if {[llength $extents]} {
+                set count 1
+                set last $fname
+                foreach e $extents {
+                    set count [expr {$count * $e}]
+                    append last "\[[expr {$e - 1}]\]"
+                }
+                append asserts "_Static_assert(sizeof((($c *)0)->$fname) == [expr {$count * $width}], \"$name.$fname sizeof\");\n"
+                append asserts "_Static_assert(__builtin_offsetof($c, $last) == [expr {$offset + ($count - 1) * $width}], \"$name.$fname last\");\n"
+                append prints "    printf(\"$name.$fname:size %zu [expr {$count * $width}]\\n\", sizeof((($c *)0)->$fname));\n"
+                append prints "    printf(\"$name.$fname:last %zu [expr {$offset + ($count - 1) * $width}]\\n\", __builtin_offsetof($c, $last));\n"
+            }
         }
     }
     set inc [file join $dir src include]
@@ -395,7 +445,9 @@ proc secondCompiler {dir prog result} {
     set problems {}
     foreach line [split [string trim [exec [file join $dir second]]] \n] {
         lassign $line what a b
-        if {[string match *.* $what]} {
+        if {[string match *:* $what]} {
+            if {$a != $b} { lappend problems "$what: GCC's $a, the layout's $b" }
+        } elseif {[string match *.* $what]} {
             lassign [split $what .] name fname
             set offset ""
             foreach f [lindex [dict get $layouts $name] 2] { if {[lindex $f 0] eq $fname} { set offset [lindex $f 2] } }
@@ -406,6 +458,27 @@ proc secondCompiler {dir prog result} {
         }
     }
     return $problems
+}
+
+# {EXTENTS WIDTH} of a layout field type TYPE: a fixed array's extents,
+# outermost first, and its element's width by the model's tables (a scalar's
+# on the target, a pointer's, a nested layout's size in LAYOUTS); {} {} for
+# any other type.
+proc arrayShape {type layouts} {
+    set extents {}
+    while {[regexp {^array ([0-9]+) of (.*)$} $type -> n inner]} {
+        lappend extents $n
+        set type $inner
+    }
+    if {![llength $extents]} { return {{} {}} }
+    if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+        set width [expr {[dict get [core::cabi::target $::target] pointer] / 8}]
+    } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {
+        set width [expr {[dict get [core::cabi::scalarInfo $scalar $::target] bits] / 8}]
+    } else {
+        set width [lindex [dict get $layouts $type] 0]
+    }
+    return [list $extents $width]
 }
 
 proc writeFile {path text} {

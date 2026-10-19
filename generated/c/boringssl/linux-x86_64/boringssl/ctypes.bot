@@ -22,7 +22,7 @@ opaque struct CRYPTO_IVEC:
 opaque struct CRYPTO_IOVEC:
     tag: unit
 
-# struct aes_key_st (include/openssl/aes.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct aes_key_st (include/openssl/aes.h), a complete C type: its layout is boringssl::layouts::AES_KEY
 opaque struct AES_KEY:
     tag: unit
 
@@ -94,15 +94,15 @@ opaque struct ASN1_ITEM:
 opaque struct stack_st_ASN1_VALUE:
     tag: unit
 
-# struct evp_encode_ctx_st (include/openssl/base64.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_encode_ctx_st (include/openssl/base64.h), a complete C type: its layout is boringssl::layouts::EVP_ENCODE_CTX
 opaque struct EVP_ENCODE_CTX:
     tag: unit
 
-# struct blake2b_state_st (include/openssl/blake2.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct blake2b_state_st (include/openssl/blake2.h), a complete C type: its layout is boringssl::layouts::BLAKE2B_CTX
 opaque struct BLAKE2B_CTX:
     tag: unit
 
-# struct bf_key_st (include/openssl/blowfish.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct bf_key_st (include/openssl/blowfish.h), a complete C type: its layout is boringssl::layouts::BF_KEY
 opaque struct BF_KEY:
     tag: unit
 
@@ -114,11 +114,11 @@ opaque struct CBS:
 opaque struct CBB:
     tag: unit
 
-# struct cast_key_st (include/openssl/cast.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct cast_key_st (include/openssl/cast.h), a complete C type: its layout is boringssl::layouts::CAST_KEY
 opaque struct CAST_KEY:
     tag: unit
 
-# struct evp_cipher_ctx_st (include/openssl/cipher.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_cipher_ctx_st (include/openssl/cipher.h), a complete C type: its layout is boringssl::layouts::EVP_CIPHER_CTX
 opaque struct EVP_CIPHER_CTX:
     tag: unit
 
@@ -134,11 +134,11 @@ opaque struct CONF_VALUE:
 opaque struct stack_st_CONF_VALUE:
     tag: unit
 
-# struct sha256_state_st (include/openssl/sha2.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct sha256_state_st (include/openssl/sha2.h), a complete C type: its layout is boringssl::layouts::SHA256_CTX
 opaque struct SHA256_CTX:
     tag: unit
 
-# struct sha512_state_st (include/openssl/sha2.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct sha512_state_st (include/openssl/sha2.h), a complete C type: its layout is boringssl::layouts::SHA512_CTX
 opaque struct SHA512_CTX:
     tag: unit
 
@@ -146,11 +146,11 @@ opaque struct SHA512_CTX:
 opaque struct SHA_CTX:
     tag: unit
 
-# struct DES_cblock_st (include/openssl/des.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct DES_cblock_st (include/openssl/des.h), a complete C type: its layout is boringssl::layouts::DES_cblock
 opaque struct DES_cblock:
     tag: unit
 
-# struct DES_ks (include/openssl/des.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct DES_ks (include/openssl/des.h), a complete C type: its layout is boringssl::layouts::DES_key_schedule
 opaque struct DES_key_schedule:
     tag: unit
 
@@ -182,23 +182,23 @@ opaque struct HMAC_CTX:
 opaque struct EVP_HPKE_CTX:
     tag: unit
 
-# struct evp_hpke_key_st (include/openssl/hpke.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_hpke_key_st (include/openssl/hpke.h), a complete C type: its layout is boringssl::layouts::EVP_HPKE_KEY
 opaque struct EVP_HPKE_KEY:
     tag: unit
 
-# struct HRSS_private_key (include/openssl/hrss.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct HRSS_private_key (include/openssl/hrss.h), a complete C type: its layout is boringssl::layouts::HRSS_private_key
 opaque struct HRSS_private_key:
     tag: unit
 
-# struct HRSS_public_key (include/openssl/hrss.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct HRSS_public_key (include/openssl/hrss.h), a complete C type: its layout is boringssl::layouts::HRSS_public_key
 opaque struct HRSS_public_key:
     tag: unit
 
-# struct md4_state_st (include/openssl/md4.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct md4_state_st (include/openssl/md4.h), a complete C type: its layout is boringssl::layouts::MD4_CTX
 opaque struct MD4_CTX:
     tag: unit
 
-# struct md5_state_st (include/openssl/md5.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct md5_state_st (include/openssl/md5.h), a complete C type: its layout is boringssl::layouts::MD5_CTX
 opaque struct MD5_CTX:
     tag: unit
 
@@ -414,7 +414,11 @@ opaque struct NETSCAPE_SPKAC:
 opaque struct RSA_PSS_PARAMS:
     tag: unit
 
-# struct X509_info_st (include/openssl/x509.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct private_key_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509_PKEY
+opaque struct X509_PKEY:
+    tag: unit
+
+# struct X509_info_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509_INFO
 opaque struct X509_INFO:
     tag: unit
 
@@ -438,11 +442,11 @@ opaque struct X509_ALGOR:
 opaque struct RAND_METHOD:
     tag: unit
 
-# struct rc4_key_st (include/openssl/rc4.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct rc4_key_st (include/openssl/rc4.h), a complete C type: its layout is boringssl::layouts::RC4_KEY
 opaque struct RC4_KEY:
     tag: unit
 
-# struct RIPEMD160state_st (include/openssl/ripemd.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct RIPEMD160state_st (include/openssl/ripemd.h), a complete C type: its layout is boringssl::layouts::RIPEMD160_CTX
 opaque struct RIPEMD160_CTX:
     tag: unit
 

@@ -13,14 +13,15 @@
 # never on a guess: a record becomes representable when every one of its
 # direct blockers is a reason the features lift and every record it
 # contains by value becomes representable too (an array of a blocked record
-# stays blocked when arrays are lifted; a struct holding a union by value is
+# is recovered only with its element; a struct holding a union by value is
 # recovered with unions only if the union's own members are representable).
 # Nothing here implements a feature; it counts.
 
 namespace eval ::cbind::pressure {
     # Feature -> the blocker reasons it lifts, in report order.
+    # (Fixed arrays are no missing feature since FIXED-LAYOUT-ARRAYS.md: an
+    # array of representable elements is a layout field.)
     variable features {
-        {fixed arrays} {fixed-array}
         {unions and anonymous overlays} {union anonymous-overlay}
         {ffi::c::Bool fields} {c-bool}
         {float fields} {float}
@@ -29,9 +30,8 @@ namespace eval ::cbind::pressure {
         {long double fields} {long-double}
         {bitfields} {bitfield}
         {flexible array members} {flexible-array}
-        {fixed arrays and unions} {fixed-array union anonymous-overlay}
-        {fixed arrays, unions and Bool} {fixed-array union anonymous-overlay c-bool}
-        {all of the above} {fixed-array union anonymous-overlay c-bool float double long-double bitfield flexible-array}
+        {unions and Bool} {union anonymous-overlay c-bool}
+        {all of the above} {union anonymous-overlay c-bool float double long-double bitfield flexible-array}
     }
 }
 

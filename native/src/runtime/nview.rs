@@ -785,6 +785,83 @@ mod tests {
         });
     }
 
+    /// The text of a runtime value (a List of Ints here).
+    fn shown(v: Value) -> String {
+        super::super::show::show(v)
+    }
+
+    #[test]
+    fn array_native_rows_load_every_encoding() {
+        with_vm(|p| {
+            let (v, _keep) = word(&[1, 0xff, 0x80, 0x7f, 0x34, 0x12, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+            let row = |code: i64, offset: i64, n: i64| shown(rt_native_load_array(p, v, make_small(offset), make_small(code), make_small(n)));
+            assert_eq!(row(1, 0, 4), "[1, 255, 128, 127]");
+            assert_eq!(row(17, 0, 4), "[1, -1, -128, 127]");
+            // Element i at offset + i * width, little-endian.
+            assert_eq!(row(2, 4, 2), "[4660, 65534]");
+            assert_eq!(row(18, 4, 2), "[4660, -2]");
+            assert_eq!(row(8, 8, 1), "[18446744073709551615]");
+            assert_eq!(row(24, 8, 1), "[-1]");
+        });
+    }
+
+    #[test]
+    fn array_native_row_store_writes_only_the_row() {
+        with_vm(|p| {
+            let (v, storage) = sentinel(16);
+            let l = vm(p).new_list(vec![make_small(1), make_small(0x1234), make_small(65535)]);
+            vm(p).temp_roots.push(l);
+            assert_eq!(rt_native_store_array(p, v, make_small(3), make_small(2), l), UNIT);
+            assert_eq!(&storage[3..9], &[1, 0, 0x34, 0x12, 0xff, 0xff]);
+            assert!(storage[..3].iter().chain(&storage[9..]).all(|b| *b == 0xA5));
+        });
+        // Every element is encoded before the first byte is written: one
+        // outside the encoding is RANGE with the memory untouched.
+        with_vm(|p| {
+            let (v, storage) = sentinel(8);
+            let l = vm(p).new_list(vec![make_small(1), make_small(2), make_small(256)]);
+            vm(p).temp_roots.push(l);
+            assert_eq!(rt_native_store_array(p, v, make_small(0), make_small(1), l), NO_VALUE);
+            assert!(storage.iter().all(|b| *b == 0xA5));
+        });
+    }
+
+    #[test]
+    fn array_byte_rows_load_store_and_check_bounds() {
+        with_vm(|p| {
+            let s = vm(p).new_bytes(&[9, 8, 7, 6, 5, 4]);
+            vm(p).temp_roots.push(s);
+            assert_eq!(shown(rt_bin_load_array(p, s, make_small(1), make_small(2), make_small(2))), "[1800, 1286]");
+            // A row past the storage's end is refused, never read.
+            assert_eq!(rt_bin_load_array(p, s, make_small(3), make_small(2), make_small(2)), NO_VALUE);
+        });
+        with_vm(|p| {
+            let m = super::super::ops::rt_mbytes_new(p, make_small(6));
+            vm(p).temp_roots.push(m);
+            let l = vm(p).new_list(vec![make_small(-1), make_small(2)]);
+            vm(p).temp_roots.push(l);
+            assert_eq!(rt_bin_store_array(p, m, make_small(2), make_small(18), l), UNIT);
+            assert_eq!(mutbytes_of(m), &[0, 0, 0xff, 0xff, 2, 0]);
+            // A row past the end is refused, nothing written.
+            assert_eq!(rt_bin_store_array(p, m, make_small(3), make_small(18), l), NO_VALUE);
+            assert_eq!(mutbytes_of(m), &[0, 0, 0xff, 0xff, 2, 0]);
+        });
+    }
+
+    #[test]
+    fn array_byte_pointer_elements_copy_address_bits() {
+        with_vm(|p| {
+            let m = super::super::ops::rt_mbytes_new(p, make_small(16));
+            vm(p).temp_roots.push(m);
+            assert_eq!(rt_bin_store_ptr(p, m, make_small(8), make_small(8), make_cptr(0x0102_0304_0506)), UNIT);
+            assert_eq!(rt_bin_store_ptr(p, m, make_small(0), make_small(8), CPTR_NULL), UNIT);
+            assert_eq!(mutbytes_of(m), &[0, 0, 0, 0, 0, 0, 0, 0, 6, 5, 4, 3, 2, 1, 0, 0]);
+            // Past the end, or an Int for a pointer: refused.
+            assert_eq!(rt_bin_store_ptr(p, m, make_small(9), make_small(8), CPTR_NULL), NO_VALUE);
+            assert_eq!(rt_bin_store_ptr(p, m, make_small(0), make_small(8), make_small(4096)), NO_VALUE);
+        });
+    }
+
     #[test]
     fn nedit_fixture_bytes_copy_memory() {
         with_vm(|p| {

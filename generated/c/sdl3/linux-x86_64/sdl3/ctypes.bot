@@ -42,7 +42,7 @@ opaque struct SDL_Color:
 opaque struct SDL_Palette:
     tag: unit
 
-# struct SDL_PixelFormatDetails (include/SDL3/SDL_pixels.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct SDL_PixelFormatDetails (include/SDL3/SDL_pixels.h), a complete C type: its layout is sdl3::layouts::SDL_PixelFormatDetails
 opaque struct SDL_PixelFormatDetails:
     tag: unit
 
@@ -78,7 +78,15 @@ opaque struct SDL_DisplayMode:
 opaque struct SDL_DialogFileFilter:
     tag: unit
 
-# struct SDL_VirtualJoystickDesc (include/SDL3/SDL_joystick.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct SDL_VirtualJoystickTouchpadDesc (include/SDL3/SDL_joystick.h), a complete C type: its layout is sdl3::layouts::SDL_VirtualJoystickTouchpadDesc
+opaque struct SDL_VirtualJoystickTouchpadDesc:
+    tag: unit
+
+# struct SDL_VirtualJoystickSensorDesc (include/SDL3/SDL_joystick.h), a complete C type whose layout is blocked (layouts.tsv)
+opaque struct SDL_VirtualJoystickSensorDesc:
+    tag: unit
+
+# struct SDL_VirtualJoystickDesc (include/SDL3/SDL_joystick.h), a complete C type: its layout is sdl3::layouts::SDL_VirtualJoystickDesc
 opaque struct SDL_VirtualJoystickDesc:
     tag: unit
 
@@ -210,7 +218,7 @@ opaque struct SDL_Locale:
 opaque struct SDL_MessageBoxButtonData:
     tag: unit
 
-# struct SDL_MessageBoxColorScheme (include/SDL3/SDL_messagebox.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct SDL_MessageBoxColorScheme (include/SDL3/SDL_messagebox.h), a complete C type: its layout is sdl3::layouts::SDL_MessageBoxColorScheme
 opaque struct SDL_MessageBoxColorScheme:
     tag: unit
 

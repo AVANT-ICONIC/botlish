@@ -23,6 +23,13 @@ layout CRYPTO_IOVEC:
     field in: ffi::c::Ptr[ffi::c::UChar] at 8   # const uint8_t *in
     field len: ffi::c::ULong at 16              # size_t len
 
+# struct aes_key_st, typedef AES_KEY (include/openssl/aes.h:38): sizeof 244, _Alignof 4
+layout AES_KEY:
+    size 244
+    align 4
+    field rd_key: array 60 of ffi::c::UInt at 0  # uint32_t rd_key[4 * (14 + 1)]
+    field rounds: ffi::c::UInt at 240            # unsigned int rounds
+
 # struct buf_mem_st, typedef BUF_MEM (include/openssl/buf.h:29): sizeof 24, _Alignof 8
 layout BUF_MEM:
     size 24
@@ -108,12 +115,70 @@ layout ASN1_AUX:
     field asn1_cb: ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::ASN1_VALUE]], ffi::c::Ptr[boringssl::ctypes::ASN1_ITEM], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}] at 16  # ASN1_aux_cb *asn1_cb
     field enc_offset: ffi::c::Int at 24                                   # int enc_offset
 
+# struct evp_encode_ctx_st, typedef EVP_ENCODE_CTX (include/openssl/base64.h:135): sizeof 56, _Alignof 4
+layout EVP_ENCODE_CTX:
+    size 56
+    align 4
+    field data_used: ffi::c::UInt at 0           # unsigned int data_used
+    field data: array 48 of ffi::c::UChar at 4   # uint8_t data[48]
+    field eof_seen: ffi::c::Char at 52           # char eof_seen
+    field error_encountered: ffi::c::Char at 53  # char error_encountered
+
+# struct blake2b_state_st, typedef BLAKE2B_CTX (include/openssl/blake2.h:31): sizeof 208, _Alignof 8
+layout BLAKE2B_CTX:
+    size 208
+    align 8
+    field h: array 8 of ffi::c::ULong at 0         # uint64_t h[8]
+    field t_low: ffi::c::ULong at 64               # uint64_t t_low
+    field t_high: ffi::c::UInt at 72               # uint32_t t_high
+    field block_used: ffi::c::UInt at 76           # uint32_t block_used
+    field block: array 128 of ffi::c::UChar at 80  # uint8_t block[128]
+
+# struct bf_key_st, typedef BF_KEY (include/openssl/blowfish.h:38): sizeof 4168, _Alignof 4
+layout BF_KEY:
+    size 4168
+    align 4
+    field P: array 18 of ffi::c::UInt at 0     # uint32_t P[16 + 2]
+    field S: array 1024 of ffi::c::UInt at 72  # uint32_t S[4 *256]
+
 # struct cbs_st, typedef CBS (include/openssl/bytestring.h:40): sizeof 16, _Alignof 8
 layout CBS:
     size 16
     align 8
     field data: ffi::c::Ptr[ffi::c::UChar] at 0  # const uint8_t *data
     field len: ffi::c::ULong at 8                # size_t len
+
+# struct cast_key_st, typedef CAST_KEY (include/openssl/cast.h:41): sizeof 132, _Alignof 4
+layout CAST_KEY:
+    size 132
+    align 4
+    field data: array 32 of ffi::c::UInt at 0  # uint32_t data[32]
+    field short_key: ffi::c::Int at 128        # int short_key
+
+# struct evp_cipher_ctx_st, typedef EVP_CIPHER_CTX (include/openssl/cipher.h:721): sizeof 144, _Alignof 8
+layout EVP_CIPHER_CTX:
+    size 144
+    align 8
+    field cipher: ffi::c::Ptr[boringssl::ctypes::EVP_CIPHER] at 0  # const EVP_CIPHER *cipher
+    field app_data: ffi::c::Ptr[ffi::c::Void] at 8                 # void *app_data
+    field cipher_data: ffi::c::Ptr[ffi::c::Void] at 16             # void *cipher_data
+    field key_len: ffi::c::UInt at 24                              # unsigned int key_len
+    field encrypt: ffi::c::Int at 28                               # int encrypt
+    field flags: ffi::c::UInt at 32                                # uint32_t flags
+    field oiv: array 16 of ffi::c::UChar at 36                     # uint8_t oiv[16]
+    field iv: array 16 of ffi::c::UChar at 52                      # uint8_t iv[16]
+    field buf: array 32 of ffi::c::UChar at 68                     # uint8_t buf[32]
+    field buf_len: ffi::c::Int at 100                              # int buf_len
+    field num: ffi::c::UInt at 104                                 # unsigned int num
+    field final_used: ffi::c::Int at 108                           # int final_used
+    field final: array 32 of ffi::c::UChar at 112                  # uint8_t final[32]
+
+# struct evp_cipher_info_st, typedef EVP_CIPHER_INFO (include/openssl/cipher.h:765): sizeof 24, _Alignof 8
+layout EVP_CIPHER_INFO:
+    size 24
+    align 8
+    field cipher: ffi::c::Ptr[boringssl::ctypes::EVP_CIPHER] at 0  # const EVP_CIPHER *cipher
+    field iv: array 16 of ffi::c::UChar at 8                       # unsigned char iv[16]
 
 # struct conf_value_st, typedef CONF_VALUE (include/openssl/conf.h:45): sizeof 24, _Alignof 8
 layout CONF_VALUE:
@@ -123,12 +188,46 @@ layout CONF_VALUE:
     field name: ffi::c::Ptr[ffi::c::Char] at 8     # char *name
     field value: ffi::c::Ptr[ffi::c::Char] at 16   # char *value
 
+# struct sha256_state_st, typedef SHA256_CTX (include/openssl/sha2.h:95): sizeof 112, _Alignof 4
+layout SHA256_CTX:
+    size 112
+    align 4
+    field h: array 8 of ffi::c::UInt at 0        # uint32_t h[8]
+    field Nl: ffi::c::UInt at 32                 # uint32_t Nl
+    field Nh: ffi::c::UInt at 36                 # uint32_t Nh
+    field data: array 64 of ffi::c::UChar at 40  # uint8_t data[64]
+    field num: ffi::c::UInt at 104               # unsigned int num
+    field md_len: ffi::c::UInt at 108            # unsigned int md_len
+
+# struct sha512_state_st, typedef SHA512_CTX (include/openssl/sha2.h:162): sizeof 208, _Alignof 8
+layout SHA512_CTX:
+    size 208
+    align 8
+    field h: array 8 of ffi::c::ULong at 0       # uint64_t h[8]
+    field num: ffi::c::UShort at 64              # uint16_t num
+    field md_len: ffi::c::UShort at 66           # uint16_t md_len
+    field bytes_so_far_high: ffi::c::UInt at 68  # uint32_t bytes_so_far_high
+    field bytes_so_far_low: ffi::c::ULong at 72  # uint64_t bytes_so_far_low
+    field p: array 128 of ffi::c::UChar at 80    # uint8_t p[128]
+
 # an anonymous struct, typedef CRYPTO_dynlock (include/openssl/thread.h:78): sizeof 16, _Alignof 8
 layout CRYPTO_dynlock:
     size 16
     align 8
     field references: ffi::c::Int at 0                                    # int references
     field data: ffi::c::Ptr[boringssl::ctypes::CRYPTO_dynlock_value] at 8  # struct CRYPTO_dynlock_value *data
+
+# struct DES_cblock_st, typedef DES_cblock (include/openssl/des.h:34): sizeof 8, _Alignof 1
+layout DES_cblock:
+    size 8
+    align 1
+    field bytes: array 8 of ffi::c::UChar at 0  # uint8_t bytes[8]
+
+# struct DES_ks, typedef DES_key_schedule (include/openssl/des.h:38): sizeof 128, _Alignof 4
+layout DES_key_schedule:
+    size 128
+    align 4
+    field subkeys: array 16 of array 2 of ffi::c::UInt at 0  # uint32_t subkeys[16][2]
 
 # struct DSA_SIG_st, typedef DSA_SIG (include/openssl/dsa.h:148): sizeof 16, _Alignof 8
 layout DSA_SIG:
@@ -168,6 +267,47 @@ layout ECDSA_SIG:
     align 8
     field r: ffi::c::Ptr[boringssl::ctypes::BIGNUM] at 0  # BIGNUM *r
     field s: ffi::c::Ptr[boringssl::ctypes::BIGNUM] at 8  # BIGNUM *s
+
+# struct evp_hpke_key_st, typedef EVP_HPKE_KEY (include/openssl/hpke.h:417): sizeof 1648, _Alignof 8
+layout EVP_HPKE_KEY:
+    size 1648
+    align 8
+    field kem: ffi::c::Ptr[boringssl::ctypes::EVP_HPKE_KEM] at 0  # const EVP_HPKE_KEM *kem
+    field private_key: array 64 of ffi::c::UChar at 8             # uint8_t private_key[64]
+    field public_key: array 1568 of ffi::c::UChar at 72           # uint8_t public_key[1568]
+    field pkey: ffi::c::Ptr[boringssl::ctypes::EVP_PKEY] at 1640  # EVP_PKEY *pkey
+
+# struct HRSS_private_key (include/openssl/hrss.h:37): sizeof 1808, _Alignof 1
+layout HRSS_private_key:
+    size 1808
+    align 1
+    field opaque: array 1808 of ffi::c::UChar at 0  # uint8_t opaque[1808]
+
+# struct HRSS_public_key (include/openssl/hrss.h:41): sizeof 1424, _Alignof 1
+layout HRSS_public_key:
+    size 1424
+    align 1
+    field opaque: array 1424 of ffi::c::UChar at 0  # uint8_t opaque[1424]
+
+# struct md4_state_st, typedef MD4_CTX (include/openssl/md4.h:61): sizeof 92, _Alignof 4
+layout MD4_CTX:
+    size 92
+    align 4
+    field h: array 4 of ffi::c::UInt at 0        # uint32_t h[4]
+    field Nl: ffi::c::UInt at 16                 # uint32_t Nl
+    field Nh: ffi::c::UInt at 20                 # uint32_t Nh
+    field data: array 64 of ffi::c::UChar at 24  # uint8_t data[64]
+    field num: ffi::c::UInt at 88                # unsigned int num
+
+# struct md5_state_st, typedef MD5_CTX (include/openssl/md5.h:55): sizeof 92, _Alignof 4
+layout MD5_CTX:
+    size 92
+    align 4
+    field h: array 4 of ffi::c::UInt at 0        # uint32_t h[4]
+    field Nl: ffi::c::UInt at 16                 # uint32_t Nl
+    field Nh: ffi::c::UInt at 20                 # uint32_t Nh
+    field data: array 64 of ffi::c::UChar at 24  # uint8_t data[64]
+    field num: ffi::c::UInt at 88                # unsigned int num
 
 # struct obj_name_st, typedef OBJ_NAME (include/openssl/obj.h:189): sizeof 24, _Alignof 8
 layout OBJ_NAME:
@@ -352,6 +492,17 @@ layout X509_PKEY:
     align 8
     field dec_pkey: ffi::c::Ptr[boringssl::ctypes::EVP_PKEY] at 0  # EVP_PKEY *dec_pkey
 
+# struct X509_info_st, typedef X509_INFO (include/openssl/x509.h:4724): sizeof 64, _Alignof 8
+layout X509_INFO:
+    size 64
+    align 8
+    field x509: ffi::c::Ptr[boringssl::ctypes::X509] at 0          # X509 *x509
+    field crl: ffi::c::Ptr[boringssl::ctypes::X509_CRL] at 8       # X509_CRL *crl
+    field x_pkey: ffi::c::Ptr[boringssl::ctypes::X509_PKEY] at 16  # X509_PKEY *x_pkey
+    field enc_cipher: EVP_CIPHER_INFO at 24                        # EVP_CIPHER_INFO enc_cipher
+    field enc_len: ffi::c::Int at 48                               # int enc_len
+    field enc_data: ffi::c::Ptr[ffi::c::Char] at 56                # char *enc_data
+
 # struct v3_ext_method, typedef X509V3_EXT_METHOD (include/openssl/x509.h:4775): sizeof 104, _Alignof 8
 layout X509V3_EXT_METHOD:
     size 104
@@ -388,6 +539,24 @@ layout X509_ALGOR:
     align 8
     field algorithm: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT] at 0  # ASN1_OBJECT *algorithm
     field parameter: ffi::c::Ptr[boringssl::ctypes::ASN1_TYPE] at 8    # ASN1_TYPE *parameter
+
+# struct rc4_key_st, typedef RC4_KEY (include/openssl/rc4.h:28): sizeof 1032, _Alignof 4
+layout RC4_KEY:
+    size 1032
+    align 4
+    field x: ffi::c::UInt at 0                  # uint32_t x
+    field y: ffi::c::UInt at 4                  # uint32_t y
+    field data: array 256 of ffi::c::UInt at 8  # uint32_t data[256]
+
+# struct RIPEMD160state_st, typedef RIPEMD160_CTX (include/openssl/ripemd.h:34): sizeof 96, _Alignof 4
+layout RIPEMD160_CTX:
+    size 96
+    align 4
+    field h: array 5 of ffi::c::UInt at 0        # uint32_t h[5]
+    field Nl: ffi::c::UInt at 20                 # uint32_t Nl
+    field Nh: ffi::c::UInt at 24                 # uint32_t Nh
+    field data: array 64 of ffi::c::UChar at 28  # uint8_t data[64]
+    field num: ffi::c::UInt at 92                # unsigned int num
 
 # struct trust_token_st, typedef TRUST_TOKEN (include/openssl/trust_token.h:63): sizeof 16, _Alignof 8
 layout TRUST_TOKEN:

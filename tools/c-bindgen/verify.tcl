@@ -18,7 +18,13 @@
 #       (__builtin_classify_type 1), of X's width and signedness on the
 #       target (core/cabi.tcl's table), and no _Bool ((T)2 == 2);
 #     a pointer field: of pointer class (5) and the target's pointer width;
-#     a nested layout: of record class (12) and that layout's size.
+#     a nested layout: of record class (12) and that layout's size;
+#     a fixed array (array N of E, FIXED-LAYOUT-ARRAYS.md): an array type at
+#       every dimension (never a pointer: __builtin_types_compatible_p of the
+#       member and its first element's address is 0) of exactly its extent
+#       (sizeof m / sizeof m[0]), its first element m[0]...[0] checked as a
+#       field of type E at the array's offset, and its last element at the
+#       offset plus the array's width less one element's (the stride).
 #
 # A layout the compiler disagrees with does not compile: the message names
 # the layout and the field.
@@ -123,6 +129,9 @@ proc ::cbind::verify::source {files profile target undefs} {
         "    BOTLISH_OFFSET(T, m, offset, L); \\"
         "    _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L \": a struct\"); \\"
         "    _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L \": the nested layout's size\")"
+        "#define BOTLISH_ARRAY(T, m, n, L) \\"
+        "    _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)\[0\])), L \": an array\"); \\"
+        "    _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)\[0\]) == (n), L \": extent\")"
     } \n]\n
     foreach l $layouts {
         lassign $l name size align fields
@@ -138,6 +147,36 @@ proc ::cbind::verify::source {files profile target undefs} {
             }
             set m [dict get $members [list $name $fname]]
             set label "\"$name.$fname\""
+            # A fixed array: every dimension, then its first and last
+            # elements; the element itself is checked below as a field.
+            set extents {}
+            while {[regexp {^array ([0-9]+) of (.*)$} $type -> n inner]} {
+                lappend extents $n
+                set type $inner
+            }
+            if {[llength $extents]} {
+                set path $m
+                set last $m
+                set count 1
+                foreach n $extents {
+                    append text "BOTLISH_ARRAY($c, $path, $n, $label);\n"
+                    append path "\[0\]"
+                    append last "\[[expr {$n - 1}]\]"
+                    set count [expr {$count * $n}]
+                }
+                if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+                    set width $pointerBytes
+                } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {
+                    set width [expr {[dict get [core::cabi::scalarInfo $scalar $target] bits] / 8}]
+                } elseif {[dict exists $sizes $type]} {
+                    set width [dict get $sizes $type]
+                } else {
+                    error "c-bindgen verify: field $name.$fname has an element type no check knows: $type"
+                }
+                append text "BOTLISH_OFFSET($c, $last, [expr {$offset + ($count - 1) * $width}], \"$name.$fname, its last element\");\n"
+                set m $path
+                set label "\"$name.$fname, its first element\""
+            }
             if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
                 append text "BOTLISH_POINTER($c, $m, $offset, $pointerBytes, $label);\n"
             } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {

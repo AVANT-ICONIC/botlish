@@ -24,6 +24,9 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_ARRAY(T, m, n, L) \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
 
 BOTLISH_RECORD(struct SDL_alignment_test, 16, 8, "SDL_alignment_test");
 BOTLISH_SCALAR(struct SDL_alignment_test, a, 0, 1, 0, "SDL_alignment_test.a");
@@ -76,6 +79,26 @@ BOTLISH_POINTER(struct SDL_Palette, colors, 8, 8, "SDL_Palette.colors");
 BOTLISH_SCALAR(struct SDL_Palette, version, 16, 4, 0, "SDL_Palette.version");
 BOTLISH_SCALAR(struct SDL_Palette, refcount, 20, 4, 1, "SDL_Palette.refcount");
 
+BOTLISH_RECORD(struct SDL_PixelFormatDetails, 32, 4, "SDL_PixelFormatDetails");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, format, 0, 4, 0, "SDL_PixelFormatDetails.format");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, bits_per_pixel, 4, 1, 0, "SDL_PixelFormatDetails.bits_per_pixel");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, bytes_per_pixel, 5, 1, 0, "SDL_PixelFormatDetails.bytes_per_pixel");
+BOTLISH_ARRAY(struct SDL_PixelFormatDetails, padding, 2, "SDL_PixelFormatDetails.padding");
+BOTLISH_OFFSET(struct SDL_PixelFormatDetails, padding[1], 7, "SDL_PixelFormatDetails.padding, its last element");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, padding[0], 6, 1, 0, "SDL_PixelFormatDetails.padding, its first element");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Rmask, 8, 4, 0, "SDL_PixelFormatDetails.Rmask");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Gmask, 12, 4, 0, "SDL_PixelFormatDetails.Gmask");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Bmask, 16, 4, 0, "SDL_PixelFormatDetails.Bmask");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Amask, 20, 4, 0, "SDL_PixelFormatDetails.Amask");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Rbits, 24, 1, 0, "SDL_PixelFormatDetails.Rbits");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Gbits, 25, 1, 0, "SDL_PixelFormatDetails.Gbits");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Bbits, 26, 1, 0, "SDL_PixelFormatDetails.Bbits");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Abits, 27, 1, 0, "SDL_PixelFormatDetails.Abits");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Rshift, 28, 1, 0, "SDL_PixelFormatDetails.Rshift");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Gshift, 29, 1, 0, "SDL_PixelFormatDetails.Gshift");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Bshift, 30, 1, 0, "SDL_PixelFormatDetails.Bshift");
+BOTLISH_SCALAR(struct SDL_PixelFormatDetails, Ashift, 31, 1, 0, "SDL_PixelFormatDetails.Ashift");
+
 BOTLISH_RECORD(struct SDL_Point, 8, 4, "SDL_Point");
 BOTLISH_SCALAR(struct SDL_Point, x, 0, 4, 1, "SDL_Point.x");
 BOTLISH_SCALAR(struct SDL_Point, y, 4, 4, 1, "SDL_Point.y");
@@ -107,6 +130,47 @@ BOTLISH_SCALAR(struct SDL_CameraSpec, framerate_denominator, 20, 4, 1, "SDL_Came
 BOTLISH_RECORD(struct SDL_DialogFileFilter, 16, 8, "SDL_DialogFileFilter");
 BOTLISH_POINTER(struct SDL_DialogFileFilter, name, 0, 8, "SDL_DialogFileFilter.name");
 BOTLISH_POINTER(struct SDL_DialogFileFilter, pattern, 8, 8, "SDL_DialogFileFilter.pattern");
+
+BOTLISH_RECORD(struct SDL_GUID, 16, 1, "SDL_GUID");
+BOTLISH_ARRAY(struct SDL_GUID, data, 16, "SDL_GUID.data");
+BOTLISH_OFFSET(struct SDL_GUID, data[15], 15, "SDL_GUID.data, its last element");
+BOTLISH_SCALAR(struct SDL_GUID, data[0], 0, 1, 0, "SDL_GUID.data, its first element");
+
+BOTLISH_RECORD(struct SDL_VirtualJoystickTouchpadDesc, 8, 2, "SDL_VirtualJoystickTouchpadDesc");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickTouchpadDesc, nfingers, 0, 2, 0, "SDL_VirtualJoystickTouchpadDesc.nfingers");
+BOTLISH_ARRAY(struct SDL_VirtualJoystickTouchpadDesc, padding, 3, "SDL_VirtualJoystickTouchpadDesc.padding");
+BOTLISH_OFFSET(struct SDL_VirtualJoystickTouchpadDesc, padding[2], 6, "SDL_VirtualJoystickTouchpadDesc.padding, its last element");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickTouchpadDesc, padding[0], 2, 2, 0, "SDL_VirtualJoystickTouchpadDesc.padding, its first element");
+
+BOTLISH_RECORD(struct SDL_VirtualJoystickDesc, 136, 8, "SDL_VirtualJoystickDesc");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, version, 0, 4, 0, "SDL_VirtualJoystickDesc.version");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, type, 4, 2, 0, "SDL_VirtualJoystickDesc.type_");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, padding, 6, 2, 0, "SDL_VirtualJoystickDesc.padding");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, vendor_id, 8, 2, 0, "SDL_VirtualJoystickDesc.vendor_id");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, product_id, 10, 2, 0, "SDL_VirtualJoystickDesc.product_id");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, naxes, 12, 2, 0, "SDL_VirtualJoystickDesc.naxes");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, nbuttons, 14, 2, 0, "SDL_VirtualJoystickDesc.nbuttons");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, nballs, 16, 2, 0, "SDL_VirtualJoystickDesc.nballs");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, nhats, 18, 2, 0, "SDL_VirtualJoystickDesc.nhats");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, ntouchpads, 20, 2, 0, "SDL_VirtualJoystickDesc.ntouchpads");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, nsensors, 22, 2, 0, "SDL_VirtualJoystickDesc.nsensors");
+BOTLISH_ARRAY(struct SDL_VirtualJoystickDesc, padding2, 2, "SDL_VirtualJoystickDesc.padding2");
+BOTLISH_OFFSET(struct SDL_VirtualJoystickDesc, padding2[1], 26, "SDL_VirtualJoystickDesc.padding2, its last element");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, padding2[0], 24, 2, 0, "SDL_VirtualJoystickDesc.padding2, its first element");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, button_mask, 28, 4, 0, "SDL_VirtualJoystickDesc.button_mask");
+BOTLISH_SCALAR(struct SDL_VirtualJoystickDesc, axis_mask, 32, 4, 0, "SDL_VirtualJoystickDesc.axis_mask");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, name, 40, 8, "SDL_VirtualJoystickDesc.name");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, touchpads, 48, 8, "SDL_VirtualJoystickDesc.touchpads");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, sensors, 56, 8, "SDL_VirtualJoystickDesc.sensors");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, userdata, 64, 8, "SDL_VirtualJoystickDesc.userdata");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, Update, 72, 8, "SDL_VirtualJoystickDesc.Update");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, SetPlayerIndex, 80, 8, "SDL_VirtualJoystickDesc.SetPlayerIndex");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, Rumble, 88, 8, "SDL_VirtualJoystickDesc.Rumble");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, RumbleTriggers, 96, 8, "SDL_VirtualJoystickDesc.RumbleTriggers");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, SetLED, 104, 8, "SDL_VirtualJoystickDesc.SetLED");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, SendEffect, 112, 8, "SDL_VirtualJoystickDesc.SendEffect");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, SetSensorsEnabled, 120, 8, "SDL_VirtualJoystickDesc.SetSensorsEnabled");
+BOTLISH_POINTER(struct SDL_VirtualJoystickDesc, Cleanup, 128, 8, "SDL_VirtualJoystickDesc.Cleanup");
 
 BOTLISH_RECORD(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->input) *)0)->axis), 12, 4, "SDL_GamepadBinding_input_axis");
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->input) *)0)->axis), axis, 0, 4, 1, "SDL_GamepadBinding_input_axis.axis");
@@ -438,11 +502,102 @@ BOTLISH_POINTER(struct SDL_GPUVulkanOptions, device_extension_names, 32, 8, "SDL
 BOTLISH_SCALAR(struct SDL_GPUVulkanOptions, instance_extension_count, 40, 4, 0, "SDL_GPUVulkanOptions.instance_extension_count");
 BOTLISH_POINTER(struct SDL_GPUVulkanOptions, instance_extension_names, 48, 8, "SDL_GPUVulkanOptions.instance_extension_names");
 
+BOTLISH_RECORD(struct SDL_HapticDirection, 16, 4, "SDL_HapticDirection");
+BOTLISH_SCALAR(struct SDL_HapticDirection, type, 0, 1, 0, "SDL_HapticDirection.type_");
+BOTLISH_ARRAY(struct SDL_HapticDirection, dir, 3, "SDL_HapticDirection.dir");
+BOTLISH_OFFSET(struct SDL_HapticDirection, dir[2], 12, "SDL_HapticDirection.dir, its last element");
+BOTLISH_SCALAR(struct SDL_HapticDirection, dir[0], 4, 4, 1, "SDL_HapticDirection.dir, its first element");
+
+BOTLISH_RECORD(struct SDL_HapticConstant, 40, 4, "SDL_HapticConstant");
+BOTLISH_SCALAR(struct SDL_HapticConstant, type, 0, 2, 0, "SDL_HapticConstant.type_");
+BOTLISH_NESTED(struct SDL_HapticConstant, direction, 4, 16, "SDL_HapticConstant.direction");
+BOTLISH_SCALAR(struct SDL_HapticConstant, length, 20, 4, 0, "SDL_HapticConstant.length");
+BOTLISH_SCALAR(struct SDL_HapticConstant, delay, 24, 2, 0, "SDL_HapticConstant.delay");
+BOTLISH_SCALAR(struct SDL_HapticConstant, button, 26, 2, 0, "SDL_HapticConstant.button");
+BOTLISH_SCALAR(struct SDL_HapticConstant, interval, 28, 2, 0, "SDL_HapticConstant.interval");
+BOTLISH_SCALAR(struct SDL_HapticConstant, level, 30, 2, 1, "SDL_HapticConstant.level");
+BOTLISH_SCALAR(struct SDL_HapticConstant, attack_length, 32, 2, 0, "SDL_HapticConstant.attack_length");
+BOTLISH_SCALAR(struct SDL_HapticConstant, attack_level, 34, 2, 0, "SDL_HapticConstant.attack_level");
+BOTLISH_SCALAR(struct SDL_HapticConstant, fade_length, 36, 2, 0, "SDL_HapticConstant.fade_length");
+BOTLISH_SCALAR(struct SDL_HapticConstant, fade_level, 38, 2, 0, "SDL_HapticConstant.fade_level");
+
+BOTLISH_RECORD(struct SDL_HapticPeriodic, 48, 4, "SDL_HapticPeriodic");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, type, 0, 2, 0, "SDL_HapticPeriodic.type_");
+BOTLISH_NESTED(struct SDL_HapticPeriodic, direction, 4, 16, "SDL_HapticPeriodic.direction");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, length, 20, 4, 0, "SDL_HapticPeriodic.length");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, delay, 24, 2, 0, "SDL_HapticPeriodic.delay");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, button, 26, 2, 0, "SDL_HapticPeriodic.button");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, interval, 28, 2, 0, "SDL_HapticPeriodic.interval");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, period, 30, 2, 0, "SDL_HapticPeriodic.period");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, magnitude, 32, 2, 1, "SDL_HapticPeriodic.magnitude");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, offset, 34, 2, 1, "SDL_HapticPeriodic.offset");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, phase, 36, 2, 0, "SDL_HapticPeriodic.phase");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, attack_length, 38, 2, 0, "SDL_HapticPeriodic.attack_length");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, attack_level, 40, 2, 0, "SDL_HapticPeriodic.attack_level");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, fade_length, 42, 2, 0, "SDL_HapticPeriodic.fade_length");
+BOTLISH_SCALAR(struct SDL_HapticPeriodic, fade_level, 44, 2, 0, "SDL_HapticPeriodic.fade_level");
+
+BOTLISH_RECORD(struct SDL_HapticCondition, 68, 4, "SDL_HapticCondition");
+BOTLISH_SCALAR(struct SDL_HapticCondition, type, 0, 2, 0, "SDL_HapticCondition.type_");
+BOTLISH_NESTED(struct SDL_HapticCondition, direction, 4, 16, "SDL_HapticCondition.direction");
+BOTLISH_SCALAR(struct SDL_HapticCondition, length, 20, 4, 0, "SDL_HapticCondition.length");
+BOTLISH_SCALAR(struct SDL_HapticCondition, delay, 24, 2, 0, "SDL_HapticCondition.delay");
+BOTLISH_SCALAR(struct SDL_HapticCondition, button, 26, 2, 0, "SDL_HapticCondition.button");
+BOTLISH_SCALAR(struct SDL_HapticCondition, interval, 28, 2, 0, "SDL_HapticCondition.interval");
+BOTLISH_ARRAY(struct SDL_HapticCondition, right_sat, 3, "SDL_HapticCondition.right_sat");
+BOTLISH_OFFSET(struct SDL_HapticCondition, right_sat[2], 34, "SDL_HapticCondition.right_sat, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, right_sat[0], 30, 2, 0, "SDL_HapticCondition.right_sat, its first element");
+BOTLISH_ARRAY(struct SDL_HapticCondition, left_sat, 3, "SDL_HapticCondition.left_sat");
+BOTLISH_OFFSET(struct SDL_HapticCondition, left_sat[2], 40, "SDL_HapticCondition.left_sat, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, left_sat[0], 36, 2, 0, "SDL_HapticCondition.left_sat, its first element");
+BOTLISH_ARRAY(struct SDL_HapticCondition, right_coeff, 3, "SDL_HapticCondition.right_coeff");
+BOTLISH_OFFSET(struct SDL_HapticCondition, right_coeff[2], 46, "SDL_HapticCondition.right_coeff, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, right_coeff[0], 42, 2, 1, "SDL_HapticCondition.right_coeff, its first element");
+BOTLISH_ARRAY(struct SDL_HapticCondition, left_coeff, 3, "SDL_HapticCondition.left_coeff");
+BOTLISH_OFFSET(struct SDL_HapticCondition, left_coeff[2], 52, "SDL_HapticCondition.left_coeff, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, left_coeff[0], 48, 2, 1, "SDL_HapticCondition.left_coeff, its first element");
+BOTLISH_ARRAY(struct SDL_HapticCondition, deadband, 3, "SDL_HapticCondition.deadband");
+BOTLISH_OFFSET(struct SDL_HapticCondition, deadband[2], 58, "SDL_HapticCondition.deadband, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, deadband[0], 54, 2, 0, "SDL_HapticCondition.deadband, its first element");
+BOTLISH_ARRAY(struct SDL_HapticCondition, center, 3, "SDL_HapticCondition.center");
+BOTLISH_OFFSET(struct SDL_HapticCondition, center[2], 64, "SDL_HapticCondition.center, its last element");
+BOTLISH_SCALAR(struct SDL_HapticCondition, center[0], 60, 2, 1, "SDL_HapticCondition.center, its first element");
+
+BOTLISH_RECORD(struct SDL_HapticRamp, 44, 4, "SDL_HapticRamp");
+BOTLISH_SCALAR(struct SDL_HapticRamp, type, 0, 2, 0, "SDL_HapticRamp.type_");
+BOTLISH_NESTED(struct SDL_HapticRamp, direction, 4, 16, "SDL_HapticRamp.direction");
+BOTLISH_SCALAR(struct SDL_HapticRamp, length, 20, 4, 0, "SDL_HapticRamp.length");
+BOTLISH_SCALAR(struct SDL_HapticRamp, delay, 24, 2, 0, "SDL_HapticRamp.delay");
+BOTLISH_SCALAR(struct SDL_HapticRamp, button, 26, 2, 0, "SDL_HapticRamp.button");
+BOTLISH_SCALAR(struct SDL_HapticRamp, interval, 28, 2, 0, "SDL_HapticRamp.interval");
+BOTLISH_SCALAR(struct SDL_HapticRamp, start, 30, 2, 1, "SDL_HapticRamp.start");
+BOTLISH_SCALAR(struct SDL_HapticRamp, end, 32, 2, 1, "SDL_HapticRamp.end");
+BOTLISH_SCALAR(struct SDL_HapticRamp, attack_length, 34, 2, 0, "SDL_HapticRamp.attack_length");
+BOTLISH_SCALAR(struct SDL_HapticRamp, attack_level, 36, 2, 0, "SDL_HapticRamp.attack_level");
+BOTLISH_SCALAR(struct SDL_HapticRamp, fade_length, 38, 2, 0, "SDL_HapticRamp.fade_length");
+BOTLISH_SCALAR(struct SDL_HapticRamp, fade_level, 40, 2, 0, "SDL_HapticRamp.fade_level");
+
 BOTLISH_RECORD(struct SDL_HapticLeftRight, 12, 4, "SDL_HapticLeftRight");
 BOTLISH_SCALAR(struct SDL_HapticLeftRight, type, 0, 2, 0, "SDL_HapticLeftRight.type_");
 BOTLISH_SCALAR(struct SDL_HapticLeftRight, length, 4, 4, 0, "SDL_HapticLeftRight.length");
 BOTLISH_SCALAR(struct SDL_HapticLeftRight, large_magnitude, 8, 2, 0, "SDL_HapticLeftRight.large_magnitude");
 BOTLISH_SCALAR(struct SDL_HapticLeftRight, small_magnitude, 10, 2, 0, "SDL_HapticLeftRight.small_magnitude");
+
+BOTLISH_RECORD(struct SDL_HapticCustom, 56, 8, "SDL_HapticCustom");
+BOTLISH_SCALAR(struct SDL_HapticCustom, type, 0, 2, 0, "SDL_HapticCustom.type_");
+BOTLISH_NESTED(struct SDL_HapticCustom, direction, 4, 16, "SDL_HapticCustom.direction");
+BOTLISH_SCALAR(struct SDL_HapticCustom, length, 20, 4, 0, "SDL_HapticCustom.length");
+BOTLISH_SCALAR(struct SDL_HapticCustom, delay, 24, 2, 0, "SDL_HapticCustom.delay");
+BOTLISH_SCALAR(struct SDL_HapticCustom, button, 26, 2, 0, "SDL_HapticCustom.button");
+BOTLISH_SCALAR(struct SDL_HapticCustom, interval, 28, 2, 0, "SDL_HapticCustom.interval");
+BOTLISH_SCALAR(struct SDL_HapticCustom, channels, 30, 1, 0, "SDL_HapticCustom.channels");
+BOTLISH_SCALAR(struct SDL_HapticCustom, period, 32, 2, 0, "SDL_HapticCustom.period");
+BOTLISH_SCALAR(struct SDL_HapticCustom, samples, 34, 2, 0, "SDL_HapticCustom.samples");
+BOTLISH_POINTER(struct SDL_HapticCustom, data, 40, 8, "SDL_HapticCustom.data");
+BOTLISH_SCALAR(struct SDL_HapticCustom, attack_length, 48, 2, 0, "SDL_HapticCustom.attack_length");
+BOTLISH_SCALAR(struct SDL_HapticCustom, attack_level, 50, 2, 0, "SDL_HapticCustom.attack_level");
+BOTLISH_SCALAR(struct SDL_HapticCustom, fade_length, 52, 2, 0, "SDL_HapticCustom.fade_length");
+BOTLISH_SCALAR(struct SDL_HapticCustom, fade_level, 54, 2, 0, "SDL_HapticCustom.fade_level");
 
 BOTLISH_RECORD(struct SDL_hid_device_info, 80, 8, "SDL_hid_device_info");
 BOTLISH_POINTER(struct SDL_hid_device_info, path, 0, 8, "SDL_hid_device_info.path");
@@ -474,6 +629,11 @@ BOTLISH_RECORD(struct SDL_MessageBoxColor, 3, 1, "SDL_MessageBoxColor");
 BOTLISH_SCALAR(struct SDL_MessageBoxColor, r, 0, 1, 0, "SDL_MessageBoxColor.r");
 BOTLISH_SCALAR(struct SDL_MessageBoxColor, g, 1, 1, 0, "SDL_MessageBoxColor.g");
 BOTLISH_SCALAR(struct SDL_MessageBoxColor, b, 2, 1, 0, "SDL_MessageBoxColor.b");
+
+BOTLISH_RECORD(struct SDL_MessageBoxColorScheme, 15, 1, "SDL_MessageBoxColorScheme");
+BOTLISH_ARRAY(struct SDL_MessageBoxColorScheme, colors, 5, "SDL_MessageBoxColorScheme.colors");
+BOTLISH_OFFSET(struct SDL_MessageBoxColorScheme, colors[4], 12, "SDL_MessageBoxColorScheme.colors, its last element");
+BOTLISH_NESTED(struct SDL_MessageBoxColorScheme, colors[0], 0, 3, "SDL_MessageBoxColorScheme.colors, its first element");
 
 BOTLISH_RECORD(struct SDL_MessageBoxData, 56, 8, "SDL_MessageBoxData");
 BOTLISH_SCALAR(struct SDL_MessageBoxData, flags, 0, 4, 0, "SDL_MessageBoxData.flags");

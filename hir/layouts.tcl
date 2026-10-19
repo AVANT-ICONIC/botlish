@@ -653,8 +653,10 @@ proc hir::layouts::FieldPath {id names {indices {}}} {
         set last [expr {$index == $count - 1}]
         if {[dict get $repr kind] eq "layout"} {
             if {$last} {
-                return [list problem LAYOUT-OPERAND [format {%s.%s is the nested layout %s, not a field a write can name: a write names one scalar or pointer field, or a fixed array (%s.%s.%s)} \
-                    $written $text [dict get $repr layout] $written $text [lindex [StructNames [dict get $repr layout]] 0]] $index ""]
+                # (A fixed array is named too, said where the layout has one.)
+                return [list problem LAYOUT-OPERAND [format {%s.%s is the nested layout %s, not a field a write can name: a write names one scalar or pointer field%s (%s.%s.%s)} \
+                    $written $text [dict get $repr layout] [expr {[HasArrays $id] ? ", or a fixed array" : ""}] \
+                    $written $text [lindex [StructNames [dict get $repr layout]] 0]] $index ""]
             }
             set layout [dict get $repr layout]
             set base $offset

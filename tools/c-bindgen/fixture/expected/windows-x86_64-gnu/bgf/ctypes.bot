@@ -14,7 +14,7 @@ opaque struct bgf_point:
 opaque struct bgf_twin_struct:
     tag: unit
 
-# struct bgf_chars (include/bgf/bgf_records.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct bgf_chars (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_chars
 opaque struct bgf_chars:
     tag: unit
 
@@ -30,7 +30,7 @@ opaque struct bgf_rect:
 opaque struct bgf_frame:
     tag: unit
 
-# struct bgf_points4 (include/bgf/bgf_records.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct bgf_points4 (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_points4
 opaque struct bgf_points4:
     tag: unit
 

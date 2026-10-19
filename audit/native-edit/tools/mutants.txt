@@ -24,23 +24,21 @@
 @@ offset-ignored-lowering native lowering writes every field at its edit's base, ignoring the field's offset
 ## native/lower.tcl
 <<<<
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    set at [At fn $e $base $offset]
     if {$kind eq "ptr"} {
-        set code [Assign fn "int $width" $e]
-        set suffix ptr
 ====
-    set at [Assign fn "int $base" $e]
+    set at [At fn $e $base 0]
     if {$kind eq "ptr"} {
-        set code [Assign fn "int $width" $e]
-        set suffix ptr
 >>>>
 
 @@ offset-zero-runtime the store helper writes at the edit's address, dropping the field's offset
 ## native/src/runtime/nview.rs
 <<<<
+pub extern "C" fn rt_native_store(p: *mut Vm, edit: Value, offset: Value, code: Value, value: Value) -> Value {
     const CONTEXT: &str = "native edit";
     let address = match view_address(p, edit, offset, CONTEXT) {
 ====
+pub extern "C" fn rt_native_store(p: *mut Vm, edit: Value, offset: Value, code: Value, value: Value) -> Value {
     const CONTEXT: &str = "native edit";
     let address = match view_address(p, edit, make_small(0), CONTEXT) {
 >>>>
@@ -108,14 +106,14 @@ proc core::binary::writeForeign {data path pointer} {
 @@ signed-as-unsigned-interp the reference byte write encodes every scalar as unsigned
 ## core/binary.tcl
 <<<<
+    set bytes [RecordBytes binary::write $data $path]
     set n [core::value::intOf $value]
     set piece [ScalarPiece $n $sign $width $endian]
 ====
+    set bytes [RecordBytes binary::write $data $path]
     set n [core::value::intOf $value]
     set piece [ScalarPiece $n u $width $endian]
 >>>>
-
-# --- range check skipped and truncation occurs --------------------------------
 
 @@ value-unchecked-static a write's value is not held to its field's type: any Int is admitted
 ## hir/layouts.tcl
@@ -146,24 +144,22 @@ proc core::binary::writeForeign {data path pointer} {
 @@ nested-base-dropped-store a store through a subrecord of an edit drops the subrecord's offset
 ## native/lower.tcl
 <<<<
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    set at [At fn $e $base $offset]
     if {$kind eq "ptr"} {
 ====
-    set at [Assign fn "int $offset" $e]
+    set at [At fn $e 0 $offset]
     if {$kind eq "ptr"} {
 >>>>
 
 @@ nested-base-dropped-path a designator path through nested layouts keeps only the leaf's own offset
 ## hir/layouts.tcl
 <<<<
-        lappend path $name
         set offset [expr {$base + [dict get $field offset]}]
+        set repr $field
 ====
-        lappend path $name
         set offset [dict get $field offset]
+        set repr $field
 >>>>
-
-# --- store overwrites padding / an adjacent field ------------------------------
 
 @@ padding-overwritten-runtime a store writes one byte past its field (padding, or the next field)
 ## native/src/runtime/nview.rs
@@ -185,11 +181,11 @@ proc core::binary::writeForeign {data path pointer} {
 ## core/binary.tcl
 <<<<
     set bytes [RecordBytes binary::write $data $path]
+    set n [core::value::intOf $value]
 ====
     set bytes [binary format x[string length [RecordBytes binary::write $data $path]]]
+    set n [core::value::intOf $value]
 >>>>
-
-# --- pointer stores -----------------------------------------------------------
 
 @@ pointer-width-wrong a pointer store writes four bytes, whatever the target's pointer width
 ## native/lower.tcl
@@ -225,12 +221,12 @@ proc core::binary::writeForeign {data path pointer} {
 @@ null-encoded-nonzero-interp the reference foreign write encodes null as all-ones
 ## core/binary.tcl
 <<<<
+    set bytes [RecordBytes binary::write_foreign $data $path]
     set bits [expr {$address & ((1 << (8 * $width)) - 1)}]
 ====
+    set bytes [RecordBytes binary::write_foreign $data $path]
     set bits [expr {$address == 0 ? (1 << (8 * $width)) - 1 : $address & ((1 << (8 * $width)) - 1)}]
 >>>>
-
-# --- read-only views, distinct types ------------------------------------------
 
 @@ view-writable a store accepts a NativeView: read authority writes
 ## hir/layouts.tcl
@@ -290,9 +286,9 @@ core::native::declareDirectNamespace binary::native
 @@ foreign-write-takes-an-int a foreign write's value is not checked: an Int is encoded into a pointer field
 ## hir/layouts.tcl
 <<<<
-    if {($op eq "write" && $pointer) || ($op eq "write_foreign" && !$pointer)} {
+    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)} {
 ====
-    if {$op eq "write_foreign" || ($op eq "write" && $pointer)} {
+    if {$op eq "write_foreign" || ($op eq "write" && [ReprPointerPath $field] ne "none")} {
 >>>>
 
 @@ ordinary-write-of-pointer an ordinary binary::write accepts a pointer field: byte serialization encodes pointers
@@ -300,22 +296,18 @@ core::native::declareDirectNamespace binary::native
 <<<<
                 write {
                     if {$pointer} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
 ====
                 write {
                     if {0} {
->>>>
-## hir/layouts.tcl
-<<<<
-    if {($op eq "write" && $pointer) || ($op eq "write_foreign" && !$pointer)} {
-====
-    if {$op eq "write_foreign" && !$pointer} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
 >>>>
 
 @@ foreign-write-of-scalar binary::write_foreign accepts an ordinary field
 ## hir/layouts.tcl
 <<<<
                 write_foreign {
-                    if {!$pointer} {
+                    if {!$pointer && ![PointerArray $field]} {
 ====
                 write_foreign {
                     if {0} {
@@ -336,11 +328,11 @@ core::native::declareDirectNamespace binary::native
 @@ foreign-write-moves-pointer binary::write_foreign takes ownership of the pointer it encodes
 ## core/binary.tcl
 <<<<
-    -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutLengthMismatch} \
-    -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
+    -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
+    -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
 ====
-    -runtime {bytestore-alloc} -ownership {observe observe move} -errors {LayoutLengthMismatch} \
-    -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
+    -runtime {bytestore-alloc} -ownership {observe observe move} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
+    -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
 >>>>
 
 @@ store-moves-pointer binary::store takes ownership of the pointer it stores
@@ -428,10 +420,10 @@ core::native::declareDirectNamespace binary::native
 ## hir/layouts.tcl
 <<<<
         if {!$last} {
-            set what [expr {[dict get $field kind] eq "pointer" ? "a C pointer" : "a scalar"}]
+            set hint [expr {[dict get $repr kind] eq "array" ?
 ====
         if {0} {
-            set what [expr {[dict get $field kind] eq "pointer" ? "a C pointer" : "a scalar"}]
+            set hint [expr {[dict get $repr kind] eq "array" ?
 >>>>
 
 @@ designator-of-another-layout a store accepts a field of another layout than its edit's

@@ -1002,13 +1002,20 @@ fn register_proof_tests():
                 0
             0
     test::value("la-proofs-extent/loaded-rows", 0, extent_loaded_rows)
+    fn extent_loaded_length() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
+                x = list::at(binary::load(v.first), 3)
+                0
+            0
+    test::value("la-proofs-extent/loaded-length", 0, extent_loaded_length)
     fn extent_short_literal() errors compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 binary::store(e, SHAPES.first, [u8(1), u8(2), u8(3)])
                 0
             0
-    test::rejects_at("la-proofs-extent/short-literal", compiler::DiagnosticCode::KnownError, 1008, 17, extent_short_literal)
+    test::rejects_at("la-proofs-extent/short-literal", compiler::DiagnosticCode::KnownError, 1015, 17, extent_short_literal)
     fn extent_long_loop() errors compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
@@ -1017,21 +1024,37 @@ fn register_proof_tests():
                 binary::store(e, SHAPES.first, xs)
                 0
             0
-    test::rejects_at("la-proofs-extent/long-loop", compiler::DiagnosticCode::KnownError, 1017, 17, extent_long_loop)
+    test::rejects_at("la-proofs-extent/long-loop", compiler::DiagnosticCode::KnownError, 1024, 17, extent_long_loop)
     fn extent_function_result() errors compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 binary::store(e, SHAPES.first, u8s([1, 2, 3, 4]))
                 0
             0
-    test::rejects_at("la-proofs-extent/function-result", compiler::DiagnosticCode::UnhandledError, 1024, 17, extent_function_result)
+    test::rejects_at("la-proofs-extent/function-result", compiler::DiagnosticCode::UnhandledError, 1031, 17, extent_function_result)
     fn extent_function_rows() errors compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 binary::store(e, SHAPES.m, [u16s([1, 2, 3]), u16s([4, 5, 6])])
                 0
             0
-    test::rejects_at("la-proofs-extent/function-rows", compiler::DiagnosticCode::UnhandledError, 1031, 17, extent_function_rows)
+    test::rejects_at("la-proofs-extent/function-rows", compiler::DiagnosticCode::UnhandledError, 1038, 17, extent_function_rows)
+    fn extent_copy_of_another_extent() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
+                0
+            fn g(w: NativeView[SCALARS], e: NativeEdit[SHAPES]) -> int:
+                binary::store(e, SHAPES.first, binary::load(w.u8))
+                0
+            0
+    test::rejects_at("la-proofs-extent/copy-of-another-extent", compiler::DiagnosticCode::KnownError, 1047, 17, extent_copy_of_another_extent)
+    fn extent_loaded_length_past() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
+                x = list::at(binary::load(v.first), 4)
+                0
+            0
+    test::rejects_at("la-proofs-extent/loaded-length-past", compiler::DiagnosticCode::KnownError, 1054, 21, extent_loaded_length_past)
 
 fn register_layout_arrays_tests():
     register_declaration_tests()

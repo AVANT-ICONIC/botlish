@@ -257,10 +257,13 @@ proc ::cbind::records::ArrayOf {type} {
 }
 
 # What a field of C type TYPE is to a layout: {ok scalar TEXT}, {ok pointer
-# TEXT}, {ok nested KEY}, or {no BLOCKERS DEPS}, BLOCKERS the direct
-# blockers {REASON DETAIL} (every one), DEPS the records it contains by
-# value ({KEY RELATION}). The scalar and pointer mapping is the binding
-# model's (model.tcl), the one function signatures use.
+# TEXT}, {ok nested KEY}, {ok array {DEPTH ELEMENT}} (a fixed array of
+# DEPTH dimensions -- their extents are the layout probe's, never the
+# declaration's expressions -- whose innermost ELEMENT is one of the other
+# three, {KIND TEXT}: FIXED-LAYOUT-ARRAYS.md), or {no BLOCKERS DEPS},
+# BLOCKERS the direct blockers {REASON DETAIL} (every one), DEPS the records
+# it contains by value ({KEY RELATION}). The scalar and pointer mapping is
+# the binding model's (model.tcl), the one function signatures use.
 proc ::cbind::records::FieldType {type} {
     set ix $::cbind::model::ix
     lassign [::cir::resolve $ix $type] chain final
@@ -315,7 +318,7 @@ proc ::cbind::records::FieldType {type} {
         }
         array {
             lassign [ArrayOf $t] bounds elem
-            set flexible [expr {[lindex $bounds 0] eq "" || [lindex $bounds 0] eq {lit 0}}]
+            set flexible [expr {"" in $bounds || {lit 0} in $bounds}]
             set inner [FieldType $elem]
             set deps {}
             if {[lindex $inner 0] eq "ok" && [lindex $inner 1] eq "nested"} {
@@ -323,17 +326,21 @@ proc ::cbind::records::FieldType {type} {
             } elseif {[lindex $inner 0] eq "no"} {
                 lappend deps {*}[lmap d [lindex $inner 2] {list [lindex $d 0] array-element}]
             }
-            set detail "[ElementCategory $elem $inner] elements, [::cir::spell $type]"
-            set reason [expr {$flexible ? "flexible-array" : "fixed-array"}]
-            set out [concat $blockers [list [list $reason $detail]]]
+            set out $blockers
+            if {$flexible} {
+                # A flexible array member, or a zero-length array: no fixed
+                # extent, so no layout (FIXED-LAYOUT-ARRAYS.md).
+                lappend out [list flexible-array "[ElementCategory $elem $inner] elements, [::cir::spell $type]"]
+            }
             # The element's own blockers stay visible (an array of floats is
-            # an array and a float).
+            # blocked by its element).
             if {[lindex $inner 0] eq "no"} {
                 foreach b [lindex $inner 1] {
-                    if {[lindex $b 0] ni {fixed-array flexible-array}} { lappend out [list [lindex $b 0] "array element: [lindex $b 1]"] }
+                    if {[lindex $b 0] ne "flexible-array"} { lappend out [list [lindex $b 0] "array element: [lindex $b 1]"] }
                 }
             }
-            return [list no $out $deps]
+            if {[llength $out]} { return [list no $out $deps] }
+            return [list ok array [list [llength $bounds] [lrange $inner 1 2]]]
         }
         fn { return [list no [concat $blockers [list [list unsupported-field-type "a function type ([::cir::spell $type])"]]] {}] }
         typedef {
@@ -427,7 +434,9 @@ proc ::cbind::records::requests {model} {
 # are value entries -- rec:KEY {sizeof _Alignof}, fld:KEY:I {offsetof
 # sizeof} (offsetof alone for a flexible array member, nothing for a
 # bitfield or an anonymous union), dim:KEY:I {the element count of an array
-# member} -- UNDEFS the macros to #undef before them: a record's, a typedef's
+# member}, dims:KEY:I {each dimension's element count, outermost first, then
+# the innermost element's sizeof} -- UNDEFS the macros to #undef before
+# them: a record's, a typedef's
 # and a member's names are the preprocessed declarations' tokens, which a
 # macro defined after the declaration would rewrite in the probe.
 proc ::cbind::records::probeEntries {model} {
@@ -455,6 +464,18 @@ proc ::cbind::records::probeEntries {model} {
                     lappend entries [list fld:$key:$i [list "__builtin_offsetof($c, $p)" "sizeof((($c *)0)->$p)"]]
                     if {[llength $bounds]} {
                         lappend entries [list dim:$key:$i [list "sizeof((($c *)0)->$p) / sizeof((($c *)0)->$p\[0\])"]]
+                        # Every dimension's extent, outermost first, then the
+                        # innermost element's size: the compiler's answers
+                        # (FIXED-LAYOUT-ARRAYS.md), never the bound
+                        # expressions'.
+                        set questions {}
+                        set at "(($c *)0)->$p"
+                        foreach b $bounds {
+                            lappend questions "sizeof($at) / sizeof($at\[0\])"
+                            append at "\[0\]"
+                        }
+                        lappend questions "sizeof($at)"
+                        lappend entries [list dims:$key:$i $questions]
                     }
                 }
             }
@@ -510,8 +531,8 @@ proc ::cbind::records::resolve {model theFacts} {
 }
 
 # REC with its members mapped and its probe facts read: fields (each with
-# kind scalar|pointer|nested|blocked, type, offset, size), direct blockers,
-# deps, size, align.
+# kind scalar|pointer|nested|array|blocked, type -- an array's extents, its
+# element in `element` -- offset, size), direct blockers, deps, size, align.
 proc ::cbind::records::Classify {recs rec} {
     variable facts
     set key [dict get $rec key]
@@ -589,10 +610,15 @@ proc ::cbind::records::Classify {recs rec} {
             if {[llength $ccs] && ![FieldConvention $key $i]} {
                 set mapped [list no [list [list unsupported-calling-convention "an explicit calling convention: [join $ccs {, }]"]] {}]
             }
+            if {[lindex $mapped 0] eq "ok" && [lindex $mapped 1] eq "array"} {
+                set mapped [ArrayField $recs $key $i $f [lindex $mapped 2] $overlay fb deps]
+            }
             if {[lindex $mapped 0] eq "ok"} {
                 dict set f kind [lindex $mapped 1]
                 dict set f type [lindex $mapped 2]
-                if {[lindex $mapped 1] eq "nested"} {
+                if {[lindex $mapped 1] eq "array"} {
+                    dict set f element [lindex $mapped 3]
+                } elseif {[lindex $mapped 1] eq "nested"} {
                     if {[dict exists $recs [lindex $mapped 2]]} {
                         lappend deps [list [lindex $mapped 2] [expr {[dict get $rec kind] eq "union" ? "union-member" : "field"}]]
                     } else {
@@ -632,6 +658,87 @@ proc ::cbind::records::Classify {recs rec} {
     dict set rec deps $deps
     dict set rec hasPromoted $promoted
     return $rec
+}
+
+# The mapping of member I of record KEY (the field F so far), a fixed array
+# of DEPTH dimensions of ELEMENT ({KIND TEXT}, FieldType's): {ok array
+# EXTENTS ELEMENT}, EXTENTS each dimension's element count as the layout
+# probe gives it (dims:KEY:I), or {no} with the blocker appended to FBVAR.
+# The probe's innermost element size must be the element's width (a scalar's
+# on the target, a pointer's, the nested record's sizeof) and the extents'
+# product times it the member's sizeof: arrays add no layout rule, and a
+# disagreement is a blocker, never a guess. A nested element is a by-value
+# dependency (DEPSVAR). A member of an anonymous union (OVERLAY: no C name
+# probes it, and the record is blocked as a union) keeps its declaration's
+# extents, for the manifest only.
+proc ::cbind::records::ArrayField {recs key i f mapped overlay fbVar depsVar} {
+    variable facts
+    upvar 1 $fbVar fb $depsVar deps
+    lassign $mapped depth element
+    lassign $element kind text
+    if {$overlay && ![dict exists $facts dims:$key:$i]} {
+        lassign [ArrayOf [dict get $f ctype]] bounds
+        if {[lindex $element 0] eq "nested" && [dict exists $recs $text]} { lappend deps [list $text array-element] }
+        return [list ok array [lmap b $bounds {::cir::BoundText $b}] $element]
+    }
+    if {![dict exists $facts dims:$key:$i] || [lindex [dict get $facts dims:$key:$i] 0] ne "ok"
+            || [llength [lindex [dict get $facts dims:$key:$i] 1]] != $depth + 1} {
+        lappend fb [list probe-rejected "the compiler gave no extents of array member [dict get $f path]"]
+        return no
+    }
+    set answers [lindex [dict get $facts dims:$key:$i] 1]
+    set extents [lrange $answers 0 end-1]
+    set elementSize [lindex $answers end]
+    set width ""
+    switch -- $kind {
+        scalar {
+            if {[regexp {^ffi::c::([A-Za-z]+)$} $text -> scalar]} {
+                set width [expr {[dict get [core::cabi::scalarInfo $scalar $::cbind::model::target] bits] / 8}]
+            }
+        }
+        pointer {
+            set width [expr {[dict get [core::cabi::target $::cbind::model::target] pointer] / 8}]
+        }
+        nested {
+            if {![dict exists $recs $text]} {
+                lappend fb [list unsupported-field-type "an array of $text by value, a record of no candidate definition"]
+                return no
+            }
+            lappend deps [list $text array-element]
+            if {[dict exists $facts rec:$text] && [lindex [dict get $facts rec:$text] 0] eq "ok"} {
+                set width [lindex [dict get $facts rec:$text] 1 0]
+            }
+        }
+    }
+    set product 1
+    foreach n $extents {
+        if {![string is entier -strict $n] || $n < 1} {
+            lappend fb [list flexible-array "array member [dict get $f path] has a dimension of $n elements"]
+            return no
+        }
+        set product [expr {$product * $n}]
+    }
+    if {$width ne "" && ($elementSize != $width || ([dict get $f size] ne "" && $product * $width != [dict get $f size]))} {
+        lappend fb [list probe-rejected "the compiler's extents of array member [dict get $f path] ([join $extents x] of $elementSize bytes, [dict get $f size] in all) disagree with its element's width $width"]
+        return no
+    }
+    return [list ok array $extents $element]
+}
+
+# The Botlish type text of the representable field F of a record of RECS
+# (named): a scalar's or a pointer's type (identity keys still marked, as
+# the binding model writes them), a nested record's layout name, a fixed
+# array's `array N of ...` down to its element's.
+proc ::cbind::records::FieldText {recs f} {
+    switch -- [dict get $f kind] {
+        nested { return [dict get $recs [dict get $f type] layoutName] }
+        array {
+            lassign [dict get $f element] kind text
+            set element [expr {$kind eq "nested" ? [dict get $recs $text layoutName] : $text}]
+            return "[join [lmap n [dict get $f type] {string cat "array $n of "}] {}]$element"
+        }
+    }
+    return [dict get $f type]
 }
 
 # 1 if the layout probe says member I of record KEY has the plain type of

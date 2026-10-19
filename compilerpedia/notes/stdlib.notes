@@ -2264,17 +2264,18 @@ keywords: serialize; encode; write struct; pack; to bytes
 related: concept.binary-layouts stdlib.binary::parse
 
 == NOTES
-L is read from the value's static type, which must be LayoutStruct[L]
-(an untyped value or an ordinary struct is BINARY-OPERAND). Every field
-is written at its offset in its encoding, little-endian, and padding is
+L is read from the value's static type, which must be LayoutStruct[L] (an
+untyped value or an ordinary struct is BINARY-OPERAND). Every field is
+written at its offset in its encoding, little-endian, and padding is
 written as zero bytes, so equal values emit equal bytes. A field's value
 is in its domain by its type; a fixed array's List must have exactly the
 array's extent (its type cannot say so), else the call fails with the
 declared LayoutExtentMismatch and emits nothing -- unless the compiler
 proves every extent (a list literal, a counted loop, a value binary::parse
 or binary::load made), when it declares no error. A layout without arrays
-never fails. parse of emit's result gives the value back. A LayoutStruct is built from its fields with
-`LayoutStruct[L] {field: value, ...}`. It is never a function value.
+never fails. parse of emit's result gives the value back. A LayoutStruct
+is built from its fields with `LayoutStruct[L] {field: value, ...}`. It is
+never a function value.
 
 == EXAMPLES
 @example accept
@@ -2440,7 +2441,8 @@ name an array element (L.items[3]) or a whole fixed array written from a
 List of exactly its extent (LayoutExtentMismatch otherwise, checked after
 the size and before anything is written). A pointer field, or an array
 holding pointers, is never written this way (LAYOUT-NATIVE-ONLY):
-binary::write_foreign encodes existing pointers. Runs on every backend. Declared nomethod.
+binary::write_foreign encodes existing pointers. Runs on every backend.
+Declared nomethod.
 
 == EXAMPLES
 @example accept
@@ -2480,15 +2482,15 @@ The explicit foreign encoding: the field must be a C pointer field, or a
 fixed array of them written from a List of pointers of exactly its extent
 (LAYOUT-FOREIGN-WRITE otherwise: an array of records holding pointers is
 filled a field at a time, L.rs[1].p), and p exactly its declared
-ffi::c::Ptr or FnPtr type (an Int is TYPE). p is observed, never moved: the bytes do not
-own it, keep it alive, or know whether C keeps it after a call -- a
-wrapper models that protocol. The record built this way is exposed to C
-by the existing borrowing contract (a read noescape pointer parameter).
-The law is one-way: binary::parse of a layout with a pointer field stays
-LAYOUT-NATIVE-ONLY whatever the bytes hold, and a pointer is read back
-only from native memory, through a view or an edit. Runs on every backend
-(a C pointer's address is its value there too). Declared nomethod.
-NATIVE-LAYOUT-WRITES.md.
+ffi::c::Ptr or FnPtr type (an Int is TYPE). p is observed, never moved:
+the bytes do not own it, keep it alive, or know whether C keeps it after a
+call -- a wrapper models that protocol. The record built this way is
+exposed to C by the existing borrowing contract (a read noescape pointer
+parameter). The law is one-way: binary::parse of a layout with a pointer
+field stays LAYOUT-NATIVE-ONLY whatever the bytes hold, and a pointer is
+read back only from native memory, through a view or an edit. Runs on
+every backend (a C pointer's address is its value there too). Declared
+nomethod. NATIVE-LAYOUT-WRITES.md.
 
 @topic stdlib.binary::load
 title: -
@@ -2498,14 +2500,14 @@ keywords: read whole struct; copy native record; snapshot; load view
 related: concept.binary-layouts stdlib.binary::native::view stdlib.binary::parse
 
 == NOTES
-v must statically be a NativeView[L] or a NativeEdit[L] (anything else
-is BINARY-OPERAND) -- or a live fixed array, NativeView[array N of E]
+v must statically be a NativeView[L] or a NativeEdit[L] (anything else is
+BINARY-OPERAND) -- or a live fixed array, NativeView[array N of E]
 (v.items, or an element of one), whose copy is its List of exactly N
-elements (rows a List of Lists, records a List of LayoutStructs).
-The result is the same immutable LayoutStruct[L] binary::parse would
-give for the same bytes, nested layouts and arrays included, so a record
-read many times can be loaded once and read as ordinary fields; padding
-is never read. For a native-only layout the LayoutStruct owns the pointers it read
+elements (rows a List of Lists, records a List of LayoutStructs). The
+result is the same immutable LayoutStruct[L] binary::parse would give for
+the same bytes, nested layouts and arrays included, so a record read many
+times can be loaded once and read as ordinary fields; padding is never
+read. For a native-only layout the LayoutStruct owns the pointers it read
 and is affine like any value that holds a Ptr. Natively only, like the
 view itself.
 

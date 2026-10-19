@@ -844,7 +844,7 @@ test la-proofs-index {an element index the compiler proves inside 0..N-1 removes
     }
 } -cleanup {unset -nocomplain f body} -result {accepted accepted accepted accepted accepted accepted KNOWN-ERROR KNOWN-ERROR UNHANDLED-ERROR UNHANDLED-ERROR UNHANDLED-ERROR UNHANDLED-ERROR}
 
-test la-proofs-extent {a whole-array write whose List the compiler proves of exactly the extent needs no LayoutExtentMismatch handler: a list literal (each row too, for a two-dimensional array), a counted loop of the extent, a branch on list::length(xs) == N, a List or LayoutStruct copied by binary::load or binary::parse (and a field of one: the copy has exactly its arrays' extents), a construction of exact fields; a List proven of another length always fails (KNOWN-ERROR); a function's result, whose length no contract states, is unproven (UNHANDLED-ERROR: FIXED-LAYOUT-ARRAYS.md records the gap), as is a binary::load of a different array} -body {
+test la-proofs-extent {a whole-array write whose List the compiler proves of exactly the extent needs no LayoutExtentMismatch handler: a list literal (each row too, for a two-dimensional array), a counted loop of the extent, a branch on list::length(xs) == N, a List or LayoutStruct copied by binary::load or binary::parse (and a field of one: the copy has exactly its arrays' extents), a construction of exact fields; a List proven of another length always fails (KNOWN-ERROR); a function's result, whose length no contract states, is unproven (UNHANDLED-ERROR: FIXED-LAYOUT-ARRAYS.md records the gap); a copy of an array of another extent (SCALARS.u8, three elements, into SHAPES.first's four) is proven to fail (KNOWN-ERROR), and a loaded List's length is its array's extent for every analysis (list::at(binary::load(v.first), 3) needs no handler, index 4 always fails); an element index is no designator outside a write (v.m[1]: LAYOUT-OPERAND)} -body {
     set f "fn f(v: NativeView\[SHAPES\], e: NativeEdit\[SHAPES\], k: int) -> int:\n"
     set parsed "    s = binary::parse(SHAPES, bytes_of(fill(48, 0))):\n        on LayoutLengthMismatch:\n            return 0\n"
     lmap body [list \
@@ -860,10 +860,14 @@ test la-proofs-extent {a whole-array write whose List the compiler proves of exa
         "    xs = loop i from 0 to 5:\n        u8(i)\n    binary::store(e, SHAPES.first, xs)\n    0\n" \
         "    binary::store(e, SHAPES.first, u8s(\[1, 2, 3, 4\]))\n    0\n" \
         "    binary::store(e, SHAPES.m, \[binary::load(binary::element(v.m, 1)), binary::load(binary::element(v.m, 0))\])\n    0\n" \
-        "    binary::store(e, SHAPES.m, \[u16s(\[1, 2, 3\]), u16s(\[4, 5, 6\])\])\n    0\n"] {
+        "    binary::store(e, SHAPES.m, \[u16s(\[1, 2, 3\]), u16s(\[4, 5, 6\])\])\n    0\n" \
+        "    binary::store(e, SHAPES.first, binary::load(v.m\[1\]))\n    0\n" \
+        "    0\nfn g(w: NativeView\[SCALARS\], e: NativeEdit\[SHAPES\]) -> int:\n    binary::store(e, SHAPES.first, binary::load(w.u8))\n    0\n" \
+        "    x = list::at(binary::load(v.first), 3)\n    0\n" \
+        "    x = list::at(binary::load(v.first), 4)\n    0\n"] {
         laKinds "$f$body\n0\n"
     }
-} -cleanup {unset -nocomplain f parsed body} -result {accepted accepted accepted accepted accepted accepted accepted accepted KNOWN-ERROR KNOWN-ERROR UNHANDLED-ERROR accepted UNHANDLED-ERROR}
+} -cleanup {unset -nocomplain f parsed body} -result {accepted accepted accepted accepted accepted accepted accepted accepted KNOWN-ERROR KNOWN-ERROR UNHANDLED-ERROR accepted UNHANDLED-ERROR LAYOUT-OPERAND KNOWN-ERROR accepted KNOWN-ERROR}
 
 test la-many-records {an array of more records than a copy unrolls (MANY.ps, ten PT records: read element by element in a counted loop) imprints, emits and round-trips on every backend, and loads and stores natively, each record at 2 + 4i; an array of one array of one element is still an array (rows: [[v]])} -body {
     set bytes [laRamp 44]

@@ -10,7 +10,7 @@ import ffi::c
 opaque struct EXCEPTION_POINTERS:
     tag: unit
 
-# struct _EXCEPTION_RECORD (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _EXCEPTION_RECORD (winnt.h), a complete C type: its layout is win32::layouts::EXCEPTION_RECORD
 opaque struct EXCEPTION_RECORD:
     tag: unit
 
@@ -18,7 +18,7 @@ opaque struct EXCEPTION_RECORD:
 opaque struct CONTEXT:
     tag: unit
 
-# struct _GROUP_AFFINITY (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _GROUP_AFFINITY (winnt.h), a complete C type: its layout is win32::layouts::GROUP_AFFINITY
 opaque struct GROUP_AFFINITY:
     tag: unit
 
@@ -42,11 +42,15 @@ opaque struct LIST_ENTRY:
 opaque struct SINGLE_LIST_ENTRY:
     tag: unit
 
-# struct _GUID (guiddef.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _GUID (guiddef.h), a complete C type: its layout is win32::layouts::GUID
 opaque struct GUID:
     tag: unit
 
-# struct _XSAVE_AREA (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _M128A (winnt.h), a complete C type: its layout is win32::layouts::M128A
+opaque struct M128A:
+    tag: unit
+
+# struct _XSAVE_AREA (winnt.h), a complete C type: its layout is win32::layouts::XSAVE_AREA
 opaque struct XSAVE_AREA:
     tag: unit
 
@@ -54,11 +58,11 @@ opaque struct XSAVE_AREA:
 opaque struct RUNTIME_FUNCTION:
     tag: unit
 
-# struct _UNWIND_HISTORY_TABLE (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _UNWIND_HISTORY_TABLE (winnt.h), a complete C type: its layout is win32::layouts::UNWIND_HISTORY_TABLE
 opaque struct UNWIND_HISTORY_TABLE:
     tag: unit
 
-# struct _KNONVOLATILE_CONTEXT_POINTERS (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _KNONVOLATILE_CONTEXT_POINTERS (winnt.h), a complete C type: its layout is win32::layouts::KNONVOLATILE_CONTEXT_POINTERS
 opaque struct KNONVOLATILE_CONTEXT_POINTERS:
     tag: unit
 
@@ -70,7 +74,7 @@ opaque struct GENERIC_MAPPING:
 opaque struct LUID_AND_ATTRIBUTES:
     tag: unit
 
-# struct _SID_IDENTIFIER_AUTHORITY (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SID_IDENTIFIER_AUTHORITY (winnt.h), a complete C type: its layout is win32::layouts::SID_IDENTIFIER_AUTHORITY
 opaque struct SID_IDENTIFIER_AUTHORITY:
     tag: unit
 
@@ -78,7 +82,7 @@ opaque struct SID_IDENTIFIER_AUTHORITY:
 opaque struct SID_AND_ATTRIBUTES:
     tag: unit
 
-# struct _SID_AND_ATTRIBUTES_HASH (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SID_AND_ATTRIBUTES_HASH (winnt.h), a complete C type: its layout is win32::layouts::SID_AND_ATTRIBUTES_HASH
 opaque struct SID_AND_ATTRIBUTES_HASH:
     tag: unit
 
@@ -90,11 +94,11 @@ opaque struct ACL:
 opaque struct OBJECT_TYPE_LIST:
     tag: unit
 
-# struct _PRIVILEGE_SET (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _PRIVILEGE_SET (winnt.h), a complete C type: its layout is win32::layouts::PRIVILEGE_SET
 opaque struct PRIVILEGE_SET:
     tag: unit
 
-# struct _ACCESS_REASONS (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _ACCESS_REASONS (winnt.h), a complete C type: its layout is win32::layouts::ACCESS_REASONS
 opaque struct ACCESS_REASONS:
     tag: unit
 
@@ -102,11 +106,11 @@ opaque struct ACCESS_REASONS:
 opaque struct SE_SECURITY_DESCRIPTOR:
     tag: unit
 
-# struct _TOKEN_GROUPS (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _TOKEN_GROUPS (winnt.h), a complete C type: its layout is win32::layouts::TOKEN_GROUPS
 opaque struct TOKEN_GROUPS:
     tag: unit
 
-# struct _TOKEN_PRIVILEGES (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _TOKEN_PRIVILEGES (winnt.h), a complete C type: its layout is win32::layouts::TOKEN_PRIVILEGES
 opaque struct TOKEN_PRIVILEGES:
     tag: unit
 
@@ -166,23 +170,23 @@ opaque struct SLIST_HEADER:
 opaque struct RTL_RUN_ONCE:
     tag: unit
 
-# struct _RTL_BARRIER (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _RTL_BARRIER (winnt.h), a complete C type: its layout is win32::layouts::RTL_BARRIER
 opaque struct RTL_BARRIER:
     tag: unit
 
-# struct _OSVERSIONINFOA (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OSVERSIONINFOA (winnt.h), a complete C type: its layout is win32::layouts::OSVERSIONINFOA
 opaque struct OSVERSIONINFOA:
     tag: unit
 
-# struct _OSVERSIONINFOW (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OSVERSIONINFOW (winnt.h), a complete C type: its layout is win32::layouts::OSVERSIONINFOW
 opaque struct OSVERSIONINFOW:
     tag: unit
 
-# struct _OSVERSIONINFOEXA (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OSVERSIONINFOEXA (winnt.h), a complete C type: its layout is win32::layouts::OSVERSIONINFOEXA
 opaque struct OSVERSIONINFOEXA:
     tag: unit
 
-# struct _OSVERSIONINFOEXW (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OSVERSIONINFOEXW (winnt.h), a complete C type: its layout is win32::layouts::OSVERSIONINFOEXW
 opaque struct OSVERSIONINFOEXW:
     tag: unit
 
@@ -210,7 +214,7 @@ opaque struct RTL_VERIFIER_THUNK_DESCRIPTOR:
 opaque struct RTL_VERIFIER_DLL_DESCRIPTOR:
     tag: unit
 
-# struct _PERFORMANCE_DATA (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _PERFORMANCE_DATA (winnt.h), a complete C type: its layout is win32::layouts::PERFORMANCE_DATA
 opaque struct PERFORMANCE_DATA:
     tag: unit
 
@@ -222,7 +226,7 @@ opaque struct TP_POOL_STACK_INFORMATION:
 opaque struct TP_CALLBACK_ENVIRON_V3:
     tag: unit
 
-# struct _WOW64_CONTEXT (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _WOW64_CONTEXT (winnt.h), a complete C type: its layout is win32::layouts::WOW64_CONTEXT
 opaque struct WOW64_CONTEXT:
     tag: unit
 
@@ -366,11 +370,11 @@ opaque struct OVERLAPPED_ENTRY:
 opaque struct SYSTEMTIME:
     tag: unit
 
-# struct _WIN32_FIND_DATAA (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _WIN32_FIND_DATAA (minwinbase.h), a complete C type: its layout is win32::layouts::WIN32_FIND_DATAA
 opaque struct WIN32_FIND_DATAA:
     tag: unit
 
-# struct _WIN32_FIND_DATAW (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _WIN32_FIND_DATAW (minwinbase.h), a complete C type: its layout is win32::layouts::WIN32_FIND_DATAW
 opaque struct WIN32_FIND_DATAW:
     tag: unit
 
@@ -426,7 +430,7 @@ opaque struct SYSTEM_INFO:
 opaque struct MEMORYSTATUSEX:
     tag: unit
 
-# struct _COMMPROP (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _COMMPROP (winbase.h), a complete C type: its layout is win32::layouts::COMMPROP
 opaque struct COMMPROP:
     tag: unit
 
@@ -450,7 +454,7 @@ opaque struct COMMCONFIG:
 opaque struct MEMORYSTATUS:
     tag: unit
 
-# struct _OFSTRUCT (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OFSTRUCT (winbase.h), a complete C type: its layout is win32::layouts::OFSTRUCT
 opaque struct OFSTRUCT:
     tag: unit
 
@@ -478,19 +482,19 @@ opaque struct OPERATION_START_PARAMETERS:
 opaque struct OPERATION_END_PARAMETERS:
     tag: unit
 
-# struct tagHW_PROFILE_INFOA (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagHW_PROFILE_INFOA (winbase.h), a complete C type: its layout is win32::layouts::HW_PROFILE_INFOA
 opaque struct HW_PROFILE_INFOA:
     tag: unit
 
-# struct tagHW_PROFILE_INFOW (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagHW_PROFILE_INFOW (winbase.h), a complete C type: its layout is win32::layouts::HW_PROFILE_INFOW
 opaque struct HW_PROFILE_INFOW:
     tag: unit
 
-# struct _TIME_ZONE_INFORMATION (timezoneapi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _TIME_ZONE_INFORMATION (timezoneapi.h), a complete C type: its layout is win32::layouts::TIME_ZONE_INFORMATION
 opaque struct TIME_ZONE_INFORMATION:
     tag: unit
 
-# struct _TIME_DYNAMIC_ZONE_INFORMATION (timezoneapi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _TIME_DYNAMIC_ZONE_INFORMATION (timezoneapi.h), a complete C type: its layout is win32::layouts::DYNAMIC_TIME_ZONE_INFORMATION
 opaque struct DYNAMIC_TIME_ZONE_INFORMATION:
     tag: unit
 
@@ -526,11 +530,11 @@ opaque struct BITMAP:
 opaque struct RGBQUAD:
     tag: unit
 
-# struct tagLOGCOLORSPACEA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagLOGCOLORSPACEA (wingdi.h), a complete C type: its layout is win32::layouts::LOGCOLORSPACEA
 opaque struct LOGCOLORSPACEA:
     tag: unit
 
-# struct tagLOGCOLORSPACEW (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagLOGCOLORSPACEW (wingdi.h), a complete C type: its layout is win32::layouts::LOGCOLORSPACEW
 opaque struct LOGCOLORSPACEW:
     tag: unit
 
@@ -538,23 +542,23 @@ opaque struct LOGCOLORSPACEW:
 opaque struct BITMAPINFOHEADER:
     tag: unit
 
-# struct tagBITMAPINFO (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagBITMAPINFO (wingdi.h), a complete C type: its layout is win32::layouts::BITMAPINFO
 opaque struct BITMAPINFO:
     tag: unit
 
-# struct tagFONTSIGNATURE (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagFONTSIGNATURE (wingdi.h), a complete C type: its layout is win32::layouts::FONTSIGNATURE
 opaque struct FONTSIGNATURE:
     tag: unit
 
-# struct tagCHARSETINFO (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagCHARSETINFO (wingdi.h), a complete C type: its layout is win32::layouts::CHARSETINFO
 opaque struct CHARSETINFO:
     tag: unit
 
-# struct tagHANDLETABLE (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagHANDLETABLE (wingdi.h), a complete C type: its layout is win32::layouts::HANDLETABLE
 opaque struct HANDLETABLE:
     tag: unit
 
-# struct tagMETARECORD (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagMETARECORD (wingdi.h), a complete C type: its layout is win32::layouts::METARECORD
 opaque struct METARECORD:
     tag: unit
 
@@ -562,7 +566,7 @@ opaque struct METARECORD:
 opaque struct METAFILEPICT:
     tag: unit
 
-# struct tagENHMETARECORD (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagENHMETARECORD (wingdi.h), a complete C type: its layout is win32::layouts::ENHMETARECORD
 opaque struct ENHMETARECORD:
     tag: unit
 
@@ -590,15 +594,15 @@ opaque struct LOGPEN:
 opaque struct PALETTEENTRY:
     tag: unit
 
-# struct tagLOGPALETTE (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagLOGPALETTE (wingdi.h), a complete C type: its layout is win32::layouts::LOGPALETTE
 opaque struct LOGPALETTE:
     tag: unit
 
-# struct tagLOGFONTA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagLOGFONTA (wingdi.h), a complete C type: its layout is win32::layouts::LOGFONTA
 opaque struct LOGFONTA:
     tag: unit
 
-# struct tagLOGFONTW (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagLOGFONTW (wingdi.h), a complete C type: its layout is win32::layouts::LOGFONTW
 opaque struct LOGFONTW:
     tag: unit
 
@@ -610,11 +614,11 @@ opaque struct DEVMODEA:
 opaque struct DEVMODEW:
     tag: unit
 
-# struct _DISPLAY_DEVICEA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _DISPLAY_DEVICEA (wingdi.h), a complete C type: its layout is win32::layouts::DISPLAY_DEVICEA
 opaque struct DISPLAY_DEVICEA:
     tag: unit
 
-# struct _DISPLAY_DEVICEW (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _DISPLAY_DEVICEW (wingdi.h), a complete C type: its layout is win32::layouts::DISPLAY_DEVICEW
 opaque struct DISPLAY_DEVICEW:
     tag: unit
 
@@ -630,7 +634,7 @@ opaque struct DISPLAYCONFIG_PATH_INFO:
 opaque struct DISPLAYCONFIG_DEVICE_INFO_HEADER:
     tag: unit
 
-# struct _RGNDATA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _RGNDATA (wingdi.h), a complete C type: its layout is win32::layouts::RGNDATA
 opaque struct RGNDATA:
     tag: unit
 
@@ -682,15 +686,15 @@ opaque struct RASTERIZER_STATUS:
 opaque struct PIXELFORMATDESCRIPTOR:
     tag: unit
 
-# struct tagGLYPHSET (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagGLYPHSET (wingdi.h), a complete C type: its layout is win32::layouts::GLYPHSET
 opaque struct GLYPHSET:
     tag: unit
 
-# struct tagENUMLOGFONTEXDVA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagENUMLOGFONTEXDVA (wingdi.h), a complete C type: its layout is win32::layouts::ENUMLOGFONTEXDVA
 opaque struct ENUMLOGFONTEXDVA:
     tag: unit
 
-# struct tagENUMLOGFONTEXDVW (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagENUMLOGFONTEXDVW (wingdi.h), a complete C type: its layout is win32::layouts::ENUMLOGFONTEXDVW
 opaque struct ENUMLOGFONTEXDVW:
     tag: unit
 
@@ -750,6 +754,10 @@ opaque struct WNDCLASSW:
 opaque struct MSG:
     tag: unit
 
+# struct tagWINDOWPOS (winuser.h), a complete C type: its layout is win32::layouts::WINDOWPOS
+opaque struct WINDOWPOS:
+    tag: unit
+
 # struct tagTRACKMOUSEEVENT (winuser.h), a complete C type: its layout is win32::layouts::TRACKMOUSEEVENT
 opaque struct TRACKMOUSEEVENT:
     tag: unit
@@ -758,7 +766,7 @@ opaque struct TRACKMOUSEEVENT:
 opaque struct ACCEL:
     tag: unit
 
-# struct tagPAINTSTRUCT (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagPAINTSTRUCT (winuser.h), a complete C type: its layout is win32::layouts::PAINTSTRUCT
 opaque struct PAINTSTRUCT:
     tag: unit
 
@@ -862,11 +870,11 @@ opaque struct MSGBOXPARAMSW:
 opaque struct ICONINFO:
     tag: unit
 
-# struct _ICONINFOEXA (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _ICONINFOEXA (winuser.h), a complete C type: its layout is win32::layouts::ICONINFOEXA
 opaque struct ICONINFOEXA:
     tag: unit
 
-# struct _ICONINFOEXW (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _ICONINFOEXW (winuser.h), a complete C type: its layout is win32::layouts::ICONINFOEXW
 opaque struct ICONINFOEXW:
     tag: unit
 
@@ -890,7 +898,7 @@ opaque struct CURSORINFO:
 opaque struct WINDOWINFO:
     tag: unit
 
-# struct tagTITLEBARINFO (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagTITLEBARINFO (winuser.h), a complete C type: its layout is win32::layouts::TITLEBARINFO
 opaque struct TITLEBARINFO:
     tag: unit
 
@@ -898,7 +906,7 @@ opaque struct TITLEBARINFO:
 opaque struct MENUBARINFO:
     tag: unit
 
-# struct tagSCROLLBARINFO (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagSCROLLBARINFO (winuser.h), a complete C type: its layout is win32::layouts::SCROLLBARINFO
 opaque struct SCROLLBARINFO:
     tag: unit
 
@@ -926,7 +934,7 @@ opaque struct RAWINPUTDEVICE:
 opaque struct RAWINPUTDEVICELIST:
     tag: unit
 
-# struct tagPOINTER_DEVICE_INFO (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagPOINTER_DEVICE_INFO (winuser.h), a complete C type: its layout is win32::layouts::POINTER_DEVICE_INFO
 opaque struct POINTER_DEVICE_INFO:
     tag: unit
 
@@ -958,15 +966,15 @@ opaque struct GESTURECONFIG:
 opaque struct INPUT_MESSAGE_SOURCE:
     tag: unit
 
-# struct _cpinfo (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _cpinfo (winnls.h), a complete C type: its layout is win32::layouts::CPINFO
 opaque struct CPINFO:
     tag: unit
 
-# struct _cpinfoexA (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _cpinfoexA (winnls.h), a complete C type: its layout is win32::layouts::CPINFOEXA
 opaque struct CPINFOEXA:
     tag: unit
 
-# struct _cpinfoexW (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _cpinfoexW (winnls.h), a complete C type: its layout is win32::layouts::CPINFOEXW
 opaque struct CPINFOEXW:
     tag: unit
 
@@ -986,15 +994,15 @@ opaque struct CURRENCYFMTA:
 opaque struct CURRENCYFMTW:
     tag: unit
 
-# struct _nlsversioninfo (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _nlsversioninfo (winnls.h), a complete C type: its layout is win32::layouts::NLSVERSIONINFO
 opaque struct NLSVERSIONINFO:
     tag: unit
 
-# struct _nlsversioninfoex (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _nlsversioninfoex (winnls.h), a complete C type: its layout is win32::layouts::NLSVERSIONINFOEX
 opaque struct NLSVERSIONINFOEX:
     tag: unit
 
-# struct _FILEMUIINFO (winnls.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _FILEMUIINFO (winnls.h), a complete C type: its layout is win32::layouts::FILEMUIINFO
 opaque struct FILEMUIINFO:
     tag: unit
 
@@ -1026,7 +1034,7 @@ opaque struct CONSOLE_FONT_INFO:
 opaque struct CONSOLE_SELECTION_INFO:
     tag: unit
 
-# struct _CONSOLE_FONT_INFOEX (wincon.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _CONSOLE_FONT_INFOEX (wincon.h), a complete C type: its layout is win32::layouts::CONSOLE_FONT_INFOEX
 opaque struct CONSOLE_FONT_INFOEX:
     tag: unit
 
@@ -1034,7 +1042,7 @@ opaque struct CONSOLE_FONT_INFOEX:
 opaque struct CONSOLE_HISTORY_INFO:
     tag: unit
 
-# struct _CONSOLE_SCREEN_BUFFER_INFOEX (wincon.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _CONSOLE_SCREEN_BUFFER_INFOEX (wincon.h), a complete C type: its layout is win32::layouts::CONSOLE_SCREEN_BUFFER_INFOEX
 opaque struct CONSOLE_SCREEN_BUFFER_INFOEX:
     tag: unit
 
@@ -1082,7 +1090,7 @@ opaque struct NETINFOSTRUCT:
 opaque struct NETCONNECTINFOSTRUCT:
     tag: unit
 
-# struct _VIRTUAL_STORAGE_TYPE (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _VIRTUAL_STORAGE_TYPE (virtdisk.h), a complete C type: its layout is win32::layouts::VIRTUAL_STORAGE_TYPE
 opaque struct VIRTUAL_STORAGE_TYPE:
     tag: unit
 
@@ -1222,23 +1230,23 @@ opaque struct COMPOSITIONFORM:
 opaque struct CANDIDATEFORM:
     tag: unit
 
-# struct tagCANDIDATELIST (imm.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagCANDIDATELIST (imm.h), a complete C type: its layout is win32::layouts::CANDIDATELIST
 opaque struct CANDIDATELIST:
     tag: unit
 
-# struct tagSTYLEBUFA (imm.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagSTYLEBUFA (imm.h), a complete C type: its layout is win32::layouts::STYLEBUFA
 opaque struct STYLEBUFA:
     tag: unit
 
-# struct tagSTYLEBUFW (imm.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagSTYLEBUFW (imm.h), a complete C type: its layout is win32::layouts::STYLEBUFW
 opaque struct STYLEBUFW:
     tag: unit
 
-# struct tagIMEMENUITEMINFOA (imm.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagIMEMENUITEMINFOA (imm.h), a complete C type: its layout is win32::layouts::IMEMENUITEMINFOA
 opaque struct IMEMENUITEMINFOA:
     tag: unit
 
-# struct tagIMEMENUITEMINFOW (imm.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagIMEMENUITEMINFOW (imm.h), a complete C type: its layout is win32::layouts::IMEMENUITEMINFOW
 opaque struct IMEMENUITEMINFOW:
     tag: unit
 

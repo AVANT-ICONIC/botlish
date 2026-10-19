@@ -229,6 +229,52 @@ layout bgf_multi:
     align 4
     field v: ffi::c::Int at 0  # int v
 
+# struct bgf_chars, typedef bgf_chars (include/bgf/bgf_records.h:181): sizeof 20, _Alignof 4
+layout bgf_chars:
+    size 20
+    align 4
+    field len: ffi::c::Int at 0                # int len
+    field name: array 16 of ffi::c::Char at 4  # char name[16]
+
+# struct bgf_wide_text, typedef bgf_wide_text (include/bgf/bgf_records.h:182): sizeof 36, _Alignof 4
+layout bgf_wide_text:
+    size 36
+    align 4
+    field len: ffi::c::Int at 0               # int len
+    field text: array 8 of ffi::c::UInt at 4  # wchar_t text[8]
+
+# struct bgf_points4, typedef bgf_points4 (include/bgf/bgf_records.h:183): sizeof 32, _Alignof 4
+layout bgf_points4:
+    size 32
+    align 4
+    field pts: array 4 of bgf_point at 0  # bgf_point pts[4]
+
+# struct bgf_ptrs3, typedef bgf_ptrs3 (include/bgf/bgf_records.h:184): sizeof 24, _Alignof 8
+layout bgf_ptrs3:
+    size 24
+    align 8
+    field slots: array 3 of ffi::c::Ptr[ffi::c::Void] at 0  # void *slots[3]
+
+# struct bgf_matrix, typedef bgf_matrix (include/bgf/bgf_records.h:185): sizeof 24, _Alignof 4
+layout bgf_matrix:
+    size 24
+    align 4
+    field m: array 2 of array 3 of ffi::c::Int at 0  # int m[2][3]
+
+# struct bgf_outer_blocked, typedef bgf_outer_blocked (include/bgf/bgf_records.h:202): sizeof 24, _Alignof 4
+layout bgf_outer_blocked:
+    size 24
+    align 4
+    field n: ffi::c::Int at 0    # int n
+    field chars: bgf_chars at 4  # bgf_chars chars
+
+# struct bgf_chain2, typedef bgf_chain2 (include/bgf/bgf_records.h:203): sizeof 32, _Alignof 8
+layout bgf_chain2:
+    size 32
+    align 8
+    field inner: bgf_outer_blocked at 0  # bgf_outer_blocked inner
+    field tail: ffi::c::Long at 24       # long tail
+
 # struct bgf_points_ref, typedef bgf_points_ref (include/bgf/bgf_records.h:204): sizeof 16, _Alignof 8
 layout bgf_points_ref:
     size 16

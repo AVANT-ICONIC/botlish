@@ -25,6 +25,9 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_ARRAY(T, m, n, L) \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
 
 BOTLISH_RECORD(struct bgf_point, 8, 4, "bgf_point");
 BOTLISH_SCALAR(struct bgf_point, x, 0, 4, 1, "bgf_point.x");
@@ -165,6 +168,42 @@ BOTLISH_SCALAR(struct List, align, 4, 4, 1, "List_.align");
 
 BOTLISH_RECORD(struct bgf_multi, 4, 4, "bgf_multi");
 BOTLISH_SCALAR(struct bgf_multi, v, 0, 4, 1, "bgf_multi.v");
+
+BOTLISH_RECORD(struct bgf_chars, 20, 4, "bgf_chars");
+BOTLISH_SCALAR(struct bgf_chars, len, 0, 4, 1, "bgf_chars.len");
+BOTLISH_ARRAY(struct bgf_chars, name, 16, "bgf_chars.name");
+BOTLISH_OFFSET(struct bgf_chars, name[15], 19, "bgf_chars.name, its last element");
+BOTLISH_SCALAR(struct bgf_chars, name[0], 4, 1, 0, "bgf_chars.name, its first element");
+
+BOTLISH_RECORD(struct bgf_wide_text, 36, 4, "bgf_wide_text");
+BOTLISH_SCALAR(struct bgf_wide_text, len, 0, 4, 1, "bgf_wide_text.len");
+BOTLISH_ARRAY(struct bgf_wide_text, text, 8, "bgf_wide_text.text");
+BOTLISH_OFFSET(struct bgf_wide_text, text[7], 32, "bgf_wide_text.text, its last element");
+BOTLISH_SCALAR(struct bgf_wide_text, text[0], 4, 4, 0, "bgf_wide_text.text, its first element");
+
+BOTLISH_RECORD(struct bgf_points4, 32, 4, "bgf_points4");
+BOTLISH_ARRAY(struct bgf_points4, pts, 4, "bgf_points4.pts");
+BOTLISH_OFFSET(struct bgf_points4, pts[3], 24, "bgf_points4.pts, its last element");
+BOTLISH_NESTED(struct bgf_points4, pts[0], 0, 8, "bgf_points4.pts, its first element");
+
+BOTLISH_RECORD(struct bgf_ptrs3, 24, 8, "bgf_ptrs3");
+BOTLISH_ARRAY(struct bgf_ptrs3, slots, 3, "bgf_ptrs3.slots");
+BOTLISH_OFFSET(struct bgf_ptrs3, slots[2], 16, "bgf_ptrs3.slots, its last element");
+BOTLISH_POINTER(struct bgf_ptrs3, slots[0], 0, 8, "bgf_ptrs3.slots, its first element");
+
+BOTLISH_RECORD(struct bgf_matrix, 24, 4, "bgf_matrix");
+BOTLISH_ARRAY(struct bgf_matrix, m, 2, "bgf_matrix.m");
+BOTLISH_ARRAY(struct bgf_matrix, m[0], 3, "bgf_matrix.m");
+BOTLISH_OFFSET(struct bgf_matrix, m[1][2], 20, "bgf_matrix.m, its last element");
+BOTLISH_SCALAR(struct bgf_matrix, m[0][0], 0, 4, 1, "bgf_matrix.m, its first element");
+
+BOTLISH_RECORD(struct bgf_outer_blocked, 24, 4, "bgf_outer_blocked");
+BOTLISH_SCALAR(struct bgf_outer_blocked, n, 0, 4, 1, "bgf_outer_blocked.n");
+BOTLISH_NESTED(struct bgf_outer_blocked, chars, 4, 20, "bgf_outer_blocked.chars");
+
+BOTLISH_RECORD(struct bgf_chain2, 32, 8, "bgf_chain2");
+BOTLISH_NESTED(struct bgf_chain2, inner, 0, 24, "bgf_chain2.inner");
+BOTLISH_SCALAR(struct bgf_chain2, tail, 24, 8, 1, "bgf_chain2.tail");
 
 BOTLISH_RECORD(struct bgf_points_ref, 16, 8, "bgf_points_ref");
 BOTLISH_POINTER(struct bgf_points_ref, points, 0, 8, "bgf_points_ref.points");

@@ -1441,11 +1441,11 @@ record	struct Tcl_Obj	layout-blocked		nested-layout-blocked	field internalRep (u
 record	struct Tcl_Namespace	layout-direct	tcl::layouts	Tcl_Namespace	sizeof 40, _Alignof 8, 5 fields
 record	struct Tcl_CallFrame	layout-direct	tcl::layouts	Tcl_CallFrame	sizeof 112, _Alignof 8, 14 fields
 record	struct anon@tcl.h:846	layout-direct	tcl::layouts	Tcl_CmdInfo	sizeof 80, _Alignof 8, 10 fields
-record	struct Tcl_DString	layout-blocked		fixed-array	field staticSpace: char elements, char [200]
-record	union anon@tcl.h:1092	layout-blocked		fixed-array,union	a union: its members overlap; field words: scalar elements, int [1]; field string: char elements, char [1]
+record	struct Tcl_DString	layout-direct	tcl::layouts	Tcl_DString	sizeof 224, _Alignof 8, 4 fields
+record	union anon@tcl.h:1092	layout-blocked		union	a union: its members overlap
 record	struct Tcl_HashEntry	layout-blocked		nested-layout-blocked	field key (union anon@tcl.h:1092, field) -> union
 record	struct Tcl_HashKeyType	layout-direct	tcl::layouts	Tcl_HashKeyType	sizeof 40, _Alignof 8, 6 fields
-record	struct Tcl_HashTable	layout-blocked		fixed-array	field staticBuckets: pointer elements, Tcl_HashEntry *[4]
+record	struct Tcl_HashTable	layout-direct	tcl::layouts	Tcl_HashTable	sizeof 104, _Alignof 8, 11 fields
 record	struct Tcl_HashSearch	layout-direct	tcl::layouts	Tcl_HashSearch	sizeof 24, _Alignof 8, 3 fields
 record	struct anon@tcl.h:1259	layout-direct	tcl::layouts	Tcl_DictSearch	sizeof 24, _Alignof 8, 3 fields
 record	struct Tcl_Event	layout-direct	tcl::layouts	Tcl_Event	sizeof 16, _Alignof 8, 2 fields
@@ -1455,7 +1455,7 @@ record	struct Tcl_GlobTypeData	layout-direct	tcl::layouts	Tcl_GlobTypeData	sizeo
 record	struct Tcl_Filesystem	layout-direct	tcl::layouts	Tcl_Filesystem	sizeof 248, _Alignof 8, 31 fields
 record	struct Tcl_NotifierProcs	layout-direct	tcl::layouts	Tcl_NotifierProcs	sizeof 64, _Alignof 8, 8 fields
 record	struct Tcl_Token	layout-direct	tcl::layouts	Tcl_Token	sizeof 32, _Alignof 8, 4 fields
-record	struct Tcl_Parse	layout-blocked		fixed-array	field staticTokens: record elements, Tcl_Token [20]
+record	struct Tcl_Parse	layout-direct	tcl::layouts	Tcl_Parse	sizeof 744, _Alignof 8, 15 fields
 record	struct Tcl_EncodingType	layout-direct	tcl::layouts	Tcl_EncodingType	sizeof 48, _Alignof 8, 6 fields
 record	struct Tcl_Config	layout-direct	tcl::layouts	Tcl_Config	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@tcl.h:2175	layout-direct	tcl::layouts	Tcl_ArgvInfo	sizeof 48, _Alignof 8, 6 fields

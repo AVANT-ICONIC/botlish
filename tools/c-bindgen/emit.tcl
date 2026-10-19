@@ -274,7 +274,8 @@ proc ::cbind::emit::files {theModel} {
 # The layouts module of MODEL: {TEXT KEYS}, KEYS the pointee identities its
 # pointer fields name. One ordinary `layout` per emitted record, in
 # emission order (records.tcl): the compiler's sizeof, _Alignof and offsets,
-# each field's type the binding model's mapping of its C type, each field
+# each field's type the binding model's mapping of its C type (a fixed
+# array's extents the compiler's too: FIXED-LAYOUT-ARRAYS.md), each field
 # with its C declaration beside it.
 proc ::cbind::emit::Layouts {} {
     variable model
@@ -295,12 +296,12 @@ proc ::cbind::emit::Layouts {} {
         append body "    align [dict get $rec align]\n"
         set lines {}
         foreach f [dict get $rec fields] {
-            switch -- [dict get $f kind] {
-                scalar - pointer { set type [Type [dict get $f type]] }
-                nested { set type [dict get $recs [dict get $f type] layoutName] }
-                default { error "c-bindgen: a blocked field in the emitted layout $key" }
+            if {[dict get $f kind] ni {scalar pointer nested array}} {
+                error "c-bindgen: a blocked field in the emitted layout $key"
             }
-            lappend keys {*}[Keys [dict get $f type]]
+            set text [::cbind::records::FieldText $recs $f]
+            set type [Type $text]
+            lappend keys {*}[Keys $text]
             set decl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname] $anonNames] " "]
             lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
         }

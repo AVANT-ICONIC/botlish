@@ -55,11 +55,11 @@ field	struct SDL_Palette	0	ncolors	scalar	0	4	-	int ncolors	ffi::c::Int	c=ncolor
 field	struct SDL_Palette	1	colors	pointer	8	8	-	SDL_Color *colors	ffi::c::Ptr[SDL_Color]	c=colors
 field	struct SDL_Palette	2	version	scalar	16	4	-	Uint32 version	ffi::c::UInt	c=version
 field	struct SDL_Palette	3	refcount	scalar	20	4	-	int refcount	ffi::c::Int	c=refcount
-record	struct SDL_PixelFormatDetails	-	-	layout-blocked	-	32	4	struct SDL_PixelFormatDetails	-	typedefs=SDL_PixelFormatDetails; identity=sdl3::ctypes::SDL_PixelFormatDetails; header=include/SDL3/SDL_pixels.h:1154; blockers=fixed-array: field padding: char elements, Uint8 [2]; roots=fixed-array; pointed-by=5
+record	struct SDL_PixelFormatDetails	-	SDL_PixelFormatDetails	layout-direct	-	32	4	struct SDL_PixelFormatDetails	-	typedefs=SDL_PixelFormatDetails; identity=sdl3::ctypes::SDL_PixelFormatDetails; header=include/SDL3/SDL_pixels.h:1154; pointed-by=5
 field	struct SDL_PixelFormatDetails	0	format	scalar	0	4	-	SDL_PixelFormat format	ffi::c::UInt	c=format
 field	struct SDL_PixelFormatDetails	1	bits_per_pixel	scalar	4	1	-	Uint8 bits_per_pixel	ffi::c::UChar	c=bits_per_pixel
 field	struct SDL_PixelFormatDetails	2	bytes_per_pixel	scalar	5	1	-	Uint8 bytes_per_pixel	ffi::c::UChar	c=bytes_per_pixel
-field	struct SDL_PixelFormatDetails	3	padding	fixed-array	6	2	-	Uint8 padding[2]	-	c=padding; element=char Uint8; bounds=2; extent=2; blockers=fixed-array: char elements, Uint8 [2]
+field	struct SDL_PixelFormatDetails	3	padding	array	6	2	-	Uint8 padding[2]	array 2 of ffi::c::UChar	c=padding; element=char Uint8; bounds=2; extent=2
 field	struct SDL_PixelFormatDetails	4	Rmask	scalar	8	4	-	Uint32 Rmask	ffi::c::UInt	c=Rmask
 field	struct SDL_PixelFormatDetails	5	Gmask	scalar	12	4	-	Uint32 Gmask	ffi::c::UInt	c=Gmask
 field	struct SDL_PixelFormatDetails	6	Bmask	scalar	16	4	-	Uint32 Bmask	ffi::c::UInt	c=Bmask
@@ -117,15 +117,15 @@ field	struct SDL_DisplayMode	8	internal	pointer	32	8	-	SDL_DisplayModeData *inte
 record	struct SDL_DialogFileFilter	-	SDL_DialogFileFilter	layout-direct	-	16	8	struct SDL_DialogFileFilter	-	typedefs=SDL_DialogFileFilter; identity=sdl3::ctypes::SDL_DialogFileFilter; header=include/SDL3/SDL_dialog.h:70; pointed-by=2
 field	struct SDL_DialogFileFilter	0	name	pointer	0	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
 field	struct SDL_DialogFileFilter	1	pattern	pointer	8	8	-	const char *pattern	ffi::c::Ptr[ffi::c::Char]	c=pattern
-record	struct SDL_GUID	-	-	layout-blocked	-	16	1	struct SDL_GUID	-	typedefs=SDL_GUID; identity=-; header=include/SDL3/SDL_guid.h:61; blockers=fixed-array: field data: char elements, Uint8 [16]; roots=fixed-array
-field	struct SDL_GUID	0	data	fixed-array	0	16	-	Uint8 data[16]	-	c=data; element=char Uint8; bounds=16; extent=16; blockers=fixed-array: char elements, Uint8 [16]
-record	struct SDL_VirtualJoystickTouchpadDesc	-	-	layout-blocked	-	8	2	struct SDL_VirtualJoystickTouchpadDesc	-	typedefs=SDL_VirtualJoystickTouchpadDesc; identity=sdl3::ctypes::SDL_VirtualJoystickTouchpadDesc; header=include/SDL3/SDL_joystick.h:433; blockers=fixed-array: field padding: scalar elements, Uint16 [3]; roots=fixed-array
+record	struct SDL_GUID	-	SDL_GUID	layout-direct	-	16	1	struct SDL_GUID	-	typedefs=SDL_GUID; identity=-; header=include/SDL3/SDL_guid.h:61
+field	struct SDL_GUID	0	data	array	0	16	-	Uint8 data[16]	array 16 of ffi::c::UChar	c=data; element=char Uint8; bounds=16; extent=16
+record	struct SDL_VirtualJoystickTouchpadDesc	-	SDL_VirtualJoystickTouchpadDesc	layout-direct	-	8	2	struct SDL_VirtualJoystickTouchpadDesc	-	typedefs=SDL_VirtualJoystickTouchpadDesc; identity=sdl3::ctypes::SDL_VirtualJoystickTouchpadDesc; header=include/SDL3/SDL_joystick.h:433
 field	struct SDL_VirtualJoystickTouchpadDesc	0	nfingers	scalar	0	2	-	Uint16 nfingers	ffi::c::UShort	c=nfingers
-field	struct SDL_VirtualJoystickTouchpadDesc	1	padding	fixed-array	2	6	-	Uint16 padding[3]	-	c=padding; element=scalar Uint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Uint16 [3]
+field	struct SDL_VirtualJoystickTouchpadDesc	1	padding	array	2	6	-	Uint16 padding[3]	array 3 of ffi::c::UShort	c=padding; element=scalar Uint16; bounds=3; extent=3
 record	struct SDL_VirtualJoystickSensorDesc	-	-	layout-blocked	-	8	4	struct SDL_VirtualJoystickSensorDesc	-	typedefs=SDL_VirtualJoystickSensorDesc; identity=sdl3::ctypes::SDL_VirtualJoystickSensorDesc; header=include/SDL3/SDL_joystick.h:446; blockers=float: field rate: float (float); roots=float
 field	struct SDL_VirtualJoystickSensorDesc	0	type_	scalar	0	4	-	SDL_SensorType type	ffi::c::Int	c=type
 field	struct SDL_VirtualJoystickSensorDesc	1	rate	float	4	4	-	float rate	-	c=rate; blockers=float: float (float)
-record	struct SDL_VirtualJoystickDesc	-	-	layout-blocked	-	136	8	struct SDL_VirtualJoystickDesc	-	typedefs=SDL_VirtualJoystickDesc; identity=sdl3::ctypes::SDL_VirtualJoystickDesc; header=include/SDL3/SDL_joystick.h:465; blockers=fixed-array: field padding2: scalar elements, Uint16 [2]; roots=fixed-array; pointed-by=1
+record	struct SDL_VirtualJoystickDesc	-	SDL_VirtualJoystickDesc	layout-direct	-	136	8	struct SDL_VirtualJoystickDesc	-	typedefs=SDL_VirtualJoystickDesc; identity=sdl3::ctypes::SDL_VirtualJoystickDesc; header=include/SDL3/SDL_joystick.h:465; pointed-by=1
 field	struct SDL_VirtualJoystickDesc	0	version	scalar	0	4	-	Uint32 version	ffi::c::UInt	c=version
 field	struct SDL_VirtualJoystickDesc	1	type_	scalar	4	2	-	Uint16 type	ffi::c::UShort	c=type
 field	struct SDL_VirtualJoystickDesc	2	padding	scalar	6	2	-	Uint16 padding	ffi::c::UShort	c=padding
@@ -137,7 +137,7 @@ field	struct SDL_VirtualJoystickDesc	7	nballs	scalar	16	2	-	Uint16 nballs	ffi::c
 field	struct SDL_VirtualJoystickDesc	8	nhats	scalar	18	2	-	Uint16 nhats	ffi::c::UShort	c=nhats
 field	struct SDL_VirtualJoystickDesc	9	ntouchpads	scalar	20	2	-	Uint16 ntouchpads	ffi::c::UShort	c=ntouchpads
 field	struct SDL_VirtualJoystickDesc	10	nsensors	scalar	22	2	-	Uint16 nsensors	ffi::c::UShort	c=nsensors
-field	struct SDL_VirtualJoystickDesc	11	padding2	fixed-array	24	4	-	Uint16 padding2[2]	-	c=padding2; element=scalar Uint16; bounds=2; extent=2; blockers=fixed-array: scalar elements, Uint16 [2]
+field	struct SDL_VirtualJoystickDesc	11	padding2	array	24	4	-	Uint16 padding2[2]	array 2 of ffi::c::UShort	c=padding2; element=scalar Uint16; bounds=2; extent=2
 field	struct SDL_VirtualJoystickDesc	12	button_mask	scalar	28	4	-	Uint32 button_mask	ffi::c::UInt	c=button_mask
 field	struct SDL_VirtualJoystickDesc	13	axis_mask	scalar	32	4	-	Uint32 axis_mask	ffi::c::UInt	c=axis_mask
 field	struct SDL_VirtualJoystickDesc	14	name	pointer	40	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
@@ -372,13 +372,13 @@ field	struct SDL_GamepadTouchpadEvent	5	finger	scalar	24	4	-	Sint32 finger	ffi::
 field	struct SDL_GamepadTouchpadEvent	6	x	float	28	4	-	float x	-	c=x; blockers=float: float (float)
 field	struct SDL_GamepadTouchpadEvent	7	y	float	32	4	-	float y	-	c=y; blockers=float: float (float)
 field	struct SDL_GamepadTouchpadEvent	8	pressure	float	36	4	-	float pressure	-	c=pressure; blockers=float: float (float)
-record	struct SDL_GamepadSensorEvent	-	-	layout-blocked	-	48	8	struct SDL_GamepadSensorEvent	-	typedefs=SDL_GamepadSensorEvent; identity=-; header=include/SDL3/SDL_events.h:702; blockers=fixed-array: field data: other elements, float [3] | float: field data: array element: float (float); roots=fixed-array,float
+record	struct SDL_GamepadSensorEvent	-	-	layout-blocked	-	48	8	struct SDL_GamepadSensorEvent	-	typedefs=SDL_GamepadSensorEvent; identity=-; header=include/SDL3/SDL_events.h:702; blockers=float: field data: array element: float (float); roots=float
 field	struct SDL_GamepadSensorEvent	0	type_	scalar	0	4	-	SDL_EventType type	ffi::c::UInt	c=type
 field	struct SDL_GamepadSensorEvent	1	reserved	scalar	4	4	-	Uint32 reserved	ffi::c::UInt	c=reserved
 field	struct SDL_GamepadSensorEvent	2	timestamp	scalar	8	8	-	Uint64 timestamp	ffi::c::ULong	c=timestamp
 field	struct SDL_GamepadSensorEvent	3	which	scalar	16	4	-	SDL_JoystickID which	ffi::c::UInt	c=which
 field	struct SDL_GamepadSensorEvent	4	sensor	scalar	20	4	-	Sint32 sensor	ffi::c::Int	c=sensor
-field	struct SDL_GamepadSensorEvent	5	data	fixed-array	24	12	-	float data[3]	-	c=data; element=other float; bounds=3; extent=3; blockers=fixed-array: other elements, float [3] | float: array element: float (float)
+field	struct SDL_GamepadSensorEvent	5	data	float	24	12	-	float data[3]	-	c=data; element=other float; bounds=3; extent=3; blockers=float: array element: float (float)
 field	struct SDL_GamepadSensorEvent	6	sensor_timestamp	scalar	40	8	-	Uint64 sensor_timestamp	ffi::c::ULong	c=sensor_timestamp
 record	struct SDL_AudioDeviceEvent	-	-	layout-blocked	-	24	8	struct SDL_AudioDeviceEvent	-	typedefs=SDL_AudioDeviceEvent; identity=-; header=include/SDL3/SDL_events.h:722; blockers=c-bool: field recording: C _Bool (_Bool); roots=c-bool
 field	struct SDL_AudioDeviceEvent	0	type_	scalar	0	4	-	SDL_EventType type	ffi::c::UInt	c=type
@@ -487,12 +487,12 @@ field	struct SDL_ClipboardEvent	2	timestamp	scalar	8	8	-	Uint64 timestamp	ffi::c
 field	struct SDL_ClipboardEvent	3	owner	c-bool	16	1	-	_Bool owner	-	c=owner; blockers=c-bool: C _Bool (_Bool)
 field	struct SDL_ClipboardEvent	4	num_mime_types	scalar	20	4	-	Sint32 num_mime_types	ffi::c::Int	c=num_mime_types
 field	struct SDL_ClipboardEvent	5	mime_types	pointer	24	8	-	const char **mime_types	ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]	c=mime_types
-record	struct SDL_SensorEvent	-	-	layout-blocked	-	56	8	struct SDL_SensorEvent	-	typedefs=SDL_SensorEvent; identity=-; header=include/SDL3/SDL_events.h:969; blockers=fixed-array: field data: other elements, float [6] | float: field data: array element: float (float); roots=fixed-array,float
+record	struct SDL_SensorEvent	-	-	layout-blocked	-	56	8	struct SDL_SensorEvent	-	typedefs=SDL_SensorEvent; identity=-; header=include/SDL3/SDL_events.h:969; blockers=float: field data: array element: float (float); roots=float
 field	struct SDL_SensorEvent	0	type_	scalar	0	4	-	SDL_EventType type	ffi::c::UInt	c=type
 field	struct SDL_SensorEvent	1	reserved	scalar	4	4	-	Uint32 reserved	ffi::c::UInt	c=reserved
 field	struct SDL_SensorEvent	2	timestamp	scalar	8	8	-	Uint64 timestamp	ffi::c::ULong	c=timestamp
 field	struct SDL_SensorEvent	3	which	scalar	16	4	-	SDL_SensorID which	ffi::c::UInt	c=which
-field	struct SDL_SensorEvent	4	data	fixed-array	20	24	-	float data[6]	-	c=data; element=other float; bounds=6; extent=6; blockers=fixed-array: other elements, float [6] | float: array element: float (float)
+field	struct SDL_SensorEvent	4	data	float	20	24	-	float data[6]	-	c=data; element=other float; bounds=6; extent=6; blockers=float: array element: float (float)
 field	struct SDL_SensorEvent	5	sensor_timestamp	scalar	48	8	-	Uint64 sensor_timestamp	ffi::c::ULong	c=sensor_timestamp
 record	struct SDL_QuitEvent	-	SDL_QuitEvent	layout-direct	-	16	8	struct SDL_QuitEvent	-	typedefs=SDL_QuitEvent; identity=-; header=include/SDL3/SDL_events.h:984
 field	struct SDL_QuitEvent	0	type_	scalar	0	4	-	SDL_EventType type	ffi::c::UInt	c=type
@@ -506,7 +506,7 @@ field	struct SDL_UserEvent	3	windowID	scalar	16	4	-	SDL_WindowID windowID	ffi::c
 field	struct SDL_UserEvent	4	code	scalar	20	4	-	Sint32 code	ffi::c::Int	c=code
 field	struct SDL_UserEvent	5	data1	pointer	24	8	-	void *data1	ffi::c::Ptr[ffi::c::Void]	c=data1
 field	struct SDL_UserEvent	6	data2	pointer	32	8	-	void *data2	ffi::c::Ptr[ffi::c::Void]	c=data2
-record	union SDL_Event	-	-	layout-blocked	-	128	8	union SDL_Event	-	typedefs=SDL_Event; identity=sdl3::ctypes::SDL_Event; header=include/SDL3/SDL_events.h:1022; blockers=union: a union: its members overlap | fixed-array: field padding: char elements, Uint8 [128]; nested=field key (struct SDL_KeyboardEvent, union-member) -> c-bool | field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool | field motion (struct SDL_MouseMotionEvent, union-member) -> float | field button (struct SDL_MouseButtonEvent, union-member) -> c-bool | field wheel (struct SDL_MouseWheelEvent, union-member) -> float | field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool | field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool | field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float | field gsensor (struct SDL_GamepadSensorEvent, union-member) -> fixed-array | field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool | field sensor (struct SDL_SensorEvent, union-member) -> fixed-array | field tfinger (struct SDL_TouchFingerEvent, union-member) -> float | field pinch (struct SDL_PinchFingerEvent, union-member) -> float | field ptouch (struct SDL_PenTouchEvent, union-member) -> float | field pmotion (struct SDL_PenMotionEvent, union-member) -> float | field pbutton (struct SDL_PenButtonEvent, union-member) -> float | field paxis (struct SDL_PenAxisEvent, union-member) -> float | field drop (struct SDL_DropEvent, union-member) -> float | field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool; roots=c-bool,fixed-array,float,union; deps=struct SDL_AudioDeviceEvent,struct SDL_CameraDeviceEvent,struct SDL_ClipboardEvent,struct SDL_CommonEvent,struct SDL_DisplayEvent,struct SDL_DropEvent,struct SDL_GamepadAxisEvent,struct SDL_GamepadButtonEvent,struct SDL_GamepadDeviceEvent,struct SDL_GamepadSensorEvent,struct SDL_GamepadTouchpadEvent,struct SDL_JoyAxisEvent,struct SDL_JoyBallEvent,struct SDL_JoyBatteryEvent,struct SDL_JoyButtonEvent,struct SDL_JoyDeviceEvent,struct SDL_JoyHatEvent,struct SDL_KeyboardDeviceEvent,struct SDL_KeyboardEvent,struct SDL_MouseButtonEvent,struct SDL_MouseDeviceEvent,struct SDL_MouseMotionEvent,struct SDL_MouseWheelEvent,struct SDL_PenAxisEvent,struct SDL_PenButtonEvent,struct SDL_PenMotionEvent,struct SDL_PenProximityEvent,struct SDL_PenTouchEvent,struct SDL_PinchFingerEvent,struct SDL_QuitEvent,struct SDL_RenderEvent,struct SDL_SensorEvent,struct SDL_TextEditingCandidatesEvent,struct SDL_TextEditingEvent,struct SDL_TextInputEvent,struct SDL_TouchFingerEvent,struct SDL_UserEvent,struct SDL_WindowEvent; pointed-by=8
+record	union SDL_Event	-	-	layout-blocked	-	128	8	union SDL_Event	-	typedefs=SDL_Event; identity=sdl3::ctypes::SDL_Event; header=include/SDL3/SDL_events.h:1022; blockers=union: a union: its members overlap; nested=field key (struct SDL_KeyboardEvent, union-member) -> c-bool | field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool | field motion (struct SDL_MouseMotionEvent, union-member) -> float | field button (struct SDL_MouseButtonEvent, union-member) -> c-bool | field wheel (struct SDL_MouseWheelEvent, union-member) -> float | field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool | field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool | field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float | field gsensor (struct SDL_GamepadSensorEvent, union-member) -> float | field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool | field sensor (struct SDL_SensorEvent, union-member) -> float | field tfinger (struct SDL_TouchFingerEvent, union-member) -> float | field pinch (struct SDL_PinchFingerEvent, union-member) -> float | field ptouch (struct SDL_PenTouchEvent, union-member) -> float | field pmotion (struct SDL_PenMotionEvent, union-member) -> float | field pbutton (struct SDL_PenButtonEvent, union-member) -> float | field paxis (struct SDL_PenAxisEvent, union-member) -> float | field drop (struct SDL_DropEvent, union-member) -> float | field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool; roots=c-bool,float,union; deps=struct SDL_AudioDeviceEvent,struct SDL_CameraDeviceEvent,struct SDL_ClipboardEvent,struct SDL_CommonEvent,struct SDL_DisplayEvent,struct SDL_DropEvent,struct SDL_GamepadAxisEvent,struct SDL_GamepadButtonEvent,struct SDL_GamepadDeviceEvent,struct SDL_GamepadSensorEvent,struct SDL_GamepadTouchpadEvent,struct SDL_JoyAxisEvent,struct SDL_JoyBallEvent,struct SDL_JoyBatteryEvent,struct SDL_JoyButtonEvent,struct SDL_JoyDeviceEvent,struct SDL_JoyHatEvent,struct SDL_KeyboardDeviceEvent,struct SDL_KeyboardEvent,struct SDL_MouseButtonEvent,struct SDL_MouseDeviceEvent,struct SDL_MouseMotionEvent,struct SDL_MouseWheelEvent,struct SDL_PenAxisEvent,struct SDL_PenButtonEvent,struct SDL_PenMotionEvent,struct SDL_PenProximityEvent,struct SDL_PenTouchEvent,struct SDL_PinchFingerEvent,struct SDL_QuitEvent,struct SDL_RenderEvent,struct SDL_SensorEvent,struct SDL_TextEditingCandidatesEvent,struct SDL_TextEditingEvent,struct SDL_TextInputEvent,struct SDL_TouchFingerEvent,struct SDL_UserEvent,struct SDL_WindowEvent; pointed-by=8
 field	union SDL_Event	0	type_	scalar	0	4	-	Uint32 type	ffi::c::UInt	c=type
 field	union SDL_Event	1	common	nested	0	16	-	SDL_CommonEvent common	SDL_CommonEvent	c=common
 field	union SDL_Event	2	display	nested	0	32	-	SDL_DisplayEvent display	SDL_DisplayEvent	c=display
@@ -546,7 +546,7 @@ field	union SDL_Event	35	paxis	nested	0	48	-	SDL_PenAxisEvent paxis	SDL_PenAxisE
 field	union SDL_Event	36	render	nested	0	24	-	SDL_RenderEvent render	SDL_RenderEvent	c=render
 field	union SDL_Event	37	drop	nested	0	48	-	SDL_DropEvent drop	SDL_DropEvent	c=drop
 field	union SDL_Event	38	clipboard	nested	0	32	-	SDL_ClipboardEvent clipboard	SDL_ClipboardEvent	c=clipboard
-field	union SDL_Event	39	padding	fixed-array	0	128	-	Uint8 padding[128]	-	c=padding; element=char Uint8; bounds=128; extent=128; blockers=fixed-array: char elements, Uint8 [128]
+field	union SDL_Event	39	padding	array	0	128	-	Uint8 padding[128]	array 128 of ffi::c::UChar	c=padding; element=char Uint8; bounds=128; extent=128
 record	struct SDL_PathInfo	-	SDL_PathInfo	layout-direct	-	40	8	struct SDL_PathInfo	-	typedefs=SDL_PathInfo; identity=sdl3::ctypes::SDL_PathInfo; header=include/SDL3/SDL_filesystem.h:267; pointed-by=2
 field	struct SDL_PathInfo	0	type_	scalar	0	4	-	SDL_PathType type	ffi::c::UInt	c=type
 field	struct SDL_PathInfo	1	size	scalar	8	8	-	Uint64 size	ffi::c::ULong	c=size
@@ -823,10 +823,10 @@ field	struct SDL_GPUVulkanOptions	3	device_extension_count	scalar	24	4	-	Uint32 
 field	struct SDL_GPUVulkanOptions	4	device_extension_names	pointer	32	8	-	const char **device_extension_names	ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]	c=device_extension_names
 field	struct SDL_GPUVulkanOptions	5	instance_extension_count	scalar	40	4	-	Uint32 instance_extension_count	ffi::c::UInt	c=instance_extension_count
 field	struct SDL_GPUVulkanOptions	6	instance_extension_names	pointer	48	8	-	const char **instance_extension_names	ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]	c=instance_extension_names
-record	struct SDL_HapticDirection	-	-	layout-blocked	-	16	4	struct SDL_HapticDirection	-	typedefs=SDL_HapticDirection; identity=-; header=include/SDL3/SDL_haptic.h:566; blockers=fixed-array: field dir: scalar elements, Sint32 [3]; roots=fixed-array
+record	struct SDL_HapticDirection	-	SDL_HapticDirection	layout-direct	-	16	4	struct SDL_HapticDirection	-	typedefs=SDL_HapticDirection; identity=-; header=include/SDL3/SDL_haptic.h:566
 field	struct SDL_HapticDirection	0	type_	scalar	0	1	-	SDL_HapticDirectionType type	ffi::c::UChar	c=type
-field	struct SDL_HapticDirection	1	dir	fixed-array	4	12	-	Sint32 dir[3]	-	c=dir; element=scalar Sint32; bounds=3; extent=3; blockers=fixed-array: scalar elements, Sint32 [3]
-record	struct SDL_HapticConstant	-	-	layout-blocked	-	40	4	struct SDL_HapticConstant	-	typedefs=SDL_HapticConstant; identity=-; header=include/SDL3/SDL_haptic.h:586; nested=field direction (struct SDL_HapticDirection, field) -> fixed-array; roots=fixed-array; deps=struct SDL_HapticDirection
+field	struct SDL_HapticDirection	1	dir	array	4	12	-	Sint32 dir[3]	array 3 of ffi::c::Int	c=dir; element=scalar Sint32; bounds=3; extent=3
+record	struct SDL_HapticConstant	-	SDL_HapticConstant	layout-direct	-	40	4	struct SDL_HapticConstant	-	typedefs=SDL_HapticConstant; identity=-; header=include/SDL3/SDL_haptic.h:586; deps=struct SDL_HapticDirection
 field	struct SDL_HapticConstant	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	struct SDL_HapticConstant	1	direction	nested	4	16	-	SDL_HapticDirection direction	SDL_HapticDirection	c=direction
 field	struct SDL_HapticConstant	2	length	scalar	20	4	-	Uint32 length	ffi::c::UInt	c=length
@@ -838,7 +838,7 @@ field	struct SDL_HapticConstant	7	attack_length	scalar	32	2	-	Uint16 attack_leng
 field	struct SDL_HapticConstant	8	attack_level	scalar	34	2	-	Uint16 attack_level	ffi::c::UShort	c=attack_level
 field	struct SDL_HapticConstant	9	fade_length	scalar	36	2	-	Uint16 fade_length	ffi::c::UShort	c=fade_length
 field	struct SDL_HapticConstant	10	fade_level	scalar	38	2	-	Uint16 fade_level	ffi::c::UShort	c=fade_level
-record	struct SDL_HapticPeriodic	-	-	layout-blocked	-	48	4	struct SDL_HapticPeriodic	-	typedefs=SDL_HapticPeriodic; identity=-; header=include/SDL3/SDL_haptic.h:672; nested=field direction (struct SDL_HapticDirection, field) -> fixed-array; roots=fixed-array; deps=struct SDL_HapticDirection
+record	struct SDL_HapticPeriodic	-	SDL_HapticPeriodic	layout-direct	-	48	4	struct SDL_HapticPeriodic	-	typedefs=SDL_HapticPeriodic; identity=-; header=include/SDL3/SDL_haptic.h:672; deps=struct SDL_HapticDirection
 field	struct SDL_HapticPeriodic	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	struct SDL_HapticPeriodic	1	direction	nested	4	16	-	SDL_HapticDirection direction	SDL_HapticDirection	c=direction
 field	struct SDL_HapticPeriodic	2	length	scalar	20	4	-	Uint32 length	ffi::c::UInt	c=length
@@ -853,20 +853,20 @@ field	struct SDL_HapticPeriodic	10	attack_length	scalar	38	2	-	Uint16 attack_len
 field	struct SDL_HapticPeriodic	11	attack_level	scalar	40	2	-	Uint16 attack_level	ffi::c::UShort	c=attack_level
 field	struct SDL_HapticPeriodic	12	fade_length	scalar	42	2	-	Uint16 fade_length	ffi::c::UShort	c=fade_length
 field	struct SDL_HapticPeriodic	13	fade_level	scalar	44	2	-	Uint16 fade_level	ffi::c::UShort	c=fade_level
-record	struct SDL_HapticCondition	-	-	layout-blocked	-	68	4	struct SDL_HapticCondition	-	typedefs=SDL_HapticCondition; identity=-; header=include/SDL3/SDL_haptic.h:728; blockers=fixed-array: field right_sat: scalar elements, Uint16 [3] | fixed-array: field left_sat: scalar elements, Uint16 [3] | fixed-array: field right_coeff: scalar elements, Sint16 [3] | fixed-array: field left_coeff: scalar elements, Sint16 [3] | fixed-array: field deadband: scalar elements, Uint16 [3] | fixed-array: field center: scalar elements, Sint16 [3]; nested=field direction (struct SDL_HapticDirection, field) -> fixed-array; roots=fixed-array; deps=struct SDL_HapticDirection
+record	struct SDL_HapticCondition	-	SDL_HapticCondition	layout-direct	-	68	4	struct SDL_HapticCondition	-	typedefs=SDL_HapticCondition; identity=-; header=include/SDL3/SDL_haptic.h:728; deps=struct SDL_HapticDirection
 field	struct SDL_HapticCondition	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	struct SDL_HapticCondition	1	direction	nested	4	16	-	SDL_HapticDirection direction	SDL_HapticDirection	c=direction
 field	struct SDL_HapticCondition	2	length	scalar	20	4	-	Uint32 length	ffi::c::UInt	c=length
 field	struct SDL_HapticCondition	3	delay	scalar	24	2	-	Uint16 delay	ffi::c::UShort	c=delay
 field	struct SDL_HapticCondition	4	button	scalar	26	2	-	Uint16 button	ffi::c::UShort	c=button
 field	struct SDL_HapticCondition	5	interval	scalar	28	2	-	Uint16 interval	ffi::c::UShort	c=interval
-field	struct SDL_HapticCondition	6	right_sat	fixed-array	30	6	-	Uint16 right_sat[3]	-	c=right_sat; element=scalar Uint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Uint16 [3]
-field	struct SDL_HapticCondition	7	left_sat	fixed-array	36	6	-	Uint16 left_sat[3]	-	c=left_sat; element=scalar Uint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Uint16 [3]
-field	struct SDL_HapticCondition	8	right_coeff	fixed-array	42	6	-	Sint16 right_coeff[3]	-	c=right_coeff; element=scalar Sint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Sint16 [3]
-field	struct SDL_HapticCondition	9	left_coeff	fixed-array	48	6	-	Sint16 left_coeff[3]	-	c=left_coeff; element=scalar Sint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Sint16 [3]
-field	struct SDL_HapticCondition	10	deadband	fixed-array	54	6	-	Uint16 deadband[3]	-	c=deadband; element=scalar Uint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Uint16 [3]
-field	struct SDL_HapticCondition	11	center	fixed-array	60	6	-	Sint16 center[3]	-	c=center; element=scalar Sint16; bounds=3; extent=3; blockers=fixed-array: scalar elements, Sint16 [3]
-record	struct SDL_HapticRamp	-	-	layout-blocked	-	44	4	struct SDL_HapticRamp	-	typedefs=SDL_HapticRamp; identity=-; header=include/SDL3/SDL_haptic.h:767; nested=field direction (struct SDL_HapticDirection, field) -> fixed-array; roots=fixed-array; deps=struct SDL_HapticDirection
+field	struct SDL_HapticCondition	6	right_sat	array	30	6	-	Uint16 right_sat[3]	array 3 of ffi::c::UShort	c=right_sat; element=scalar Uint16; bounds=3; extent=3
+field	struct SDL_HapticCondition	7	left_sat	array	36	6	-	Uint16 left_sat[3]	array 3 of ffi::c::UShort	c=left_sat; element=scalar Uint16; bounds=3; extent=3
+field	struct SDL_HapticCondition	8	right_coeff	array	42	6	-	Sint16 right_coeff[3]	array 3 of ffi::c::Short	c=right_coeff; element=scalar Sint16; bounds=3; extent=3
+field	struct SDL_HapticCondition	9	left_coeff	array	48	6	-	Sint16 left_coeff[3]	array 3 of ffi::c::Short	c=left_coeff; element=scalar Sint16; bounds=3; extent=3
+field	struct SDL_HapticCondition	10	deadband	array	54	6	-	Uint16 deadband[3]	array 3 of ffi::c::UShort	c=deadband; element=scalar Uint16; bounds=3; extent=3
+field	struct SDL_HapticCondition	11	center	array	60	6	-	Sint16 center[3]	array 3 of ffi::c::Short	c=center; element=scalar Sint16; bounds=3; extent=3
+record	struct SDL_HapticRamp	-	SDL_HapticRamp	layout-direct	-	44	4	struct SDL_HapticRamp	-	typedefs=SDL_HapticRamp; identity=-; header=include/SDL3/SDL_haptic.h:767; deps=struct SDL_HapticDirection
 field	struct SDL_HapticRamp	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	struct SDL_HapticRamp	1	direction	nested	4	16	-	SDL_HapticDirection direction	SDL_HapticDirection	c=direction
 field	struct SDL_HapticRamp	2	length	scalar	20	4	-	Uint32 length	ffi::c::UInt	c=length
@@ -884,7 +884,7 @@ field	struct SDL_HapticLeftRight	0	type_	scalar	0	2	-	SDL_HapticEffectType type	
 field	struct SDL_HapticLeftRight	1	length	scalar	4	4	-	Uint32 length	ffi::c::UInt	c=length
 field	struct SDL_HapticLeftRight	2	large_magnitude	scalar	8	2	-	Uint16 large_magnitude	ffi::c::UShort	c=large_magnitude
 field	struct SDL_HapticLeftRight	3	small_magnitude	scalar	10	2	-	Uint16 small_magnitude	ffi::c::UShort	c=small_magnitude
-record	struct SDL_HapticCustom	-	-	layout-blocked	-	56	8	struct SDL_HapticCustom	-	typedefs=SDL_HapticCustom; identity=-; header=include/SDL3/SDL_haptic.h:836; nested=field direction (struct SDL_HapticDirection, field) -> fixed-array; roots=fixed-array; deps=struct SDL_HapticDirection
+record	struct SDL_HapticCustom	-	SDL_HapticCustom	layout-direct	-	56	8	struct SDL_HapticCustom	-	typedefs=SDL_HapticCustom; identity=-; header=include/SDL3/SDL_haptic.h:836; deps=struct SDL_HapticDirection
 field	struct SDL_HapticCustom	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	struct SDL_HapticCustom	1	direction	nested	4	16	-	SDL_HapticDirection direction	SDL_HapticDirection	c=direction
 field	struct SDL_HapticCustom	2	length	scalar	20	4	-	Uint32 length	ffi::c::UInt	c=length
@@ -899,7 +899,7 @@ field	struct SDL_HapticCustom	10	attack_length	scalar	48	2	-	Uint16 attack_lengt
 field	struct SDL_HapticCustom	11	attack_level	scalar	50	2	-	Uint16 attack_level	ffi::c::UShort	c=attack_level
 field	struct SDL_HapticCustom	12	fade_length	scalar	52	2	-	Uint16 fade_length	ffi::c::UShort	c=fade_length
 field	struct SDL_HapticCustom	13	fade_level	scalar	54	2	-	Uint16 fade_level	ffi::c::UShort	c=fade_level
-record	union SDL_HapticEffect	-	-	layout-blocked	-	72	8	union SDL_HapticEffect	-	typedefs=SDL_HapticEffect; identity=sdl3::ctypes::SDL_HapticEffect; header=include/SDL3/SDL_haptic.h:935; blockers=union: a union: its members overlap; nested=field constant (struct SDL_HapticConstant, union-member) -> struct SDL_HapticDirection -> fixed-array | field periodic (struct SDL_HapticPeriodic, union-member) -> struct SDL_HapticDirection -> fixed-array | field condition (struct SDL_HapticCondition, union-member) -> fixed-array | field ramp (struct SDL_HapticRamp, union-member) -> struct SDL_HapticDirection -> fixed-array | field custom (struct SDL_HapticCustom, union-member) -> struct SDL_HapticDirection -> fixed-array; roots=fixed-array,union; deps=struct SDL_HapticCondition,struct SDL_HapticConstant,struct SDL_HapticCustom,struct SDL_HapticLeftRight,struct SDL_HapticPeriodic,struct SDL_HapticRamp; pointed-by=3
+record	union SDL_HapticEffect	-	-	layout-blocked	-	72	8	union SDL_HapticEffect	-	typedefs=SDL_HapticEffect; identity=sdl3::ctypes::SDL_HapticEffect; header=include/SDL3/SDL_haptic.h:935; blockers=union: a union: its members overlap; roots=union; deps=struct SDL_HapticCondition,struct SDL_HapticConstant,struct SDL_HapticCustom,struct SDL_HapticLeftRight,struct SDL_HapticPeriodic,struct SDL_HapticRamp; pointed-by=3
 field	union SDL_HapticEffect	0	type_	scalar	0	2	-	SDL_HapticEffectType type	ffi::c::UShort	c=type
 field	union SDL_HapticEffect	1	constant	nested	0	40	-	SDL_HapticConstant constant	SDL_HapticConstant	c=constant
 field	union SDL_HapticEffect	2	periodic	nested	0	48	-	SDL_HapticPeriodic periodic	SDL_HapticPeriodic	c=periodic
@@ -934,8 +934,8 @@ record	struct SDL_MessageBoxColor	-	SDL_MessageBoxColor	layout-direct	-	3	1	stru
 field	struct SDL_MessageBoxColor	0	r	scalar	0	1	-	Uint8 r	ffi::c::UChar	c=r
 field	struct SDL_MessageBoxColor	1	g	scalar	1	1	-	Uint8 g	ffi::c::UChar	c=g
 field	struct SDL_MessageBoxColor	2	b	scalar	2	1	-	Uint8 b	ffi::c::UChar	c=b
-record	struct SDL_MessageBoxColorScheme	-	-	layout-blocked	-	15	1	struct SDL_MessageBoxColorScheme	-	typedefs=SDL_MessageBoxColorScheme; identity=sdl3::ctypes::SDL_MessageBoxColorScheme; header=include/SDL3/SDL_messagebox.h:118; blockers=fixed-array: field colors: record elements, SDL_MessageBoxColor [SDL_MESSAGEBOX_COLOR_COUNT]; roots=fixed-array; deps=struct SDL_MessageBoxColor
-field	struct SDL_MessageBoxColorScheme	0	colors	fixed-array	0	15	-	SDL_MessageBoxColor colors[SDL_MESSAGEBOX_COLOR_COUNT]	-	c=colors; element=record SDL_MessageBoxColor; bounds=SDL_MESSAGEBOX_COLOR_COUNT; extent=5; blockers=fixed-array: record elements, SDL_MessageBoxColor [SDL_MESSAGEBOX_COLOR_COUNT]
+record	struct SDL_MessageBoxColorScheme	-	SDL_MessageBoxColorScheme	layout-direct	-	15	1	struct SDL_MessageBoxColorScheme	-	typedefs=SDL_MessageBoxColorScheme; identity=sdl3::ctypes::SDL_MessageBoxColorScheme; header=include/SDL3/SDL_messagebox.h:118; deps=struct SDL_MessageBoxColor
+field	struct SDL_MessageBoxColorScheme	0	colors	array	0	15	-	SDL_MessageBoxColor colors[SDL_MESSAGEBOX_COLOR_COUNT]	array 5 of SDL_MessageBoxColor	c=colors; element=record SDL_MessageBoxColor; bounds=SDL_MESSAGEBOX_COLOR_COUNT; extent=5
 record	struct SDL_MessageBoxData	-	SDL_MessageBoxData	layout-direct	-	56	8	struct SDL_MessageBoxData	-	typedefs=SDL_MessageBoxData; identity=sdl3::ctypes::SDL_MessageBoxData; header=include/SDL3/SDL_messagebox.h:128; pointed-by=1
 field	struct SDL_MessageBoxData	0	flags	scalar	0	4	-	SDL_MessageBoxFlags flags	ffi::c::UInt	c=flags
 field	struct SDL_MessageBoxData	1	window	pointer	8	8	-	SDL_Window *window	ffi::c::Ptr[SDL_Window]	c=window

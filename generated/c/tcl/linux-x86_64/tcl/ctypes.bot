@@ -34,7 +34,7 @@ opaque struct Tcl_Namespace:
 opaque struct Tcl_CmdInfo:
     tag: unit
 
-# struct Tcl_DString (generic/tcl.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct Tcl_DString (generic/tcl.h), a complete C type: its layout is tcl::layouts::Tcl_DString
 opaque struct Tcl_DString:
     tag: unit
 
@@ -46,7 +46,7 @@ opaque struct Tcl_HashEntry:
 opaque struct Tcl_HashKeyType:
     tag: unit
 
-# struct Tcl_HashTable (generic/tcl.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct Tcl_HashTable (generic/tcl.h), a complete C type: its layout is tcl::layouts::Tcl_HashTable
 opaque struct Tcl_HashTable:
     tag: unit
 
@@ -90,7 +90,7 @@ opaque struct Tcl_NotifierProcs:
 opaque struct Tcl_Token:
     tag: unit
 
-# struct Tcl_Parse (generic/tcl.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct Tcl_Parse (generic/tcl.h), a complete C type: its layout is tcl::layouts::Tcl_Parse
 opaque struct Tcl_Parse:
     tag: unit
 

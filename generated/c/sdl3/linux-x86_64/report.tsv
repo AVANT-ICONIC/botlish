@@ -4840,7 +4840,7 @@ record	struct SDL_AudioSpec	layout-direct	sdl3::layouts	SDL_AudioSpec	sizeof 12,
 record	struct SDL_Color	layout-direct	sdl3::layouts	SDL_Color	sizeof 4, _Alignof 1, 4 fields
 record	struct SDL_FColor	layout-blocked		float	field r: float (float); field g: float (float); field b: float (float); field a: float (float)
 record	struct SDL_Palette	layout-direct	sdl3::layouts	SDL_Palette	sizeof 24, _Alignof 8, 4 fields
-record	struct SDL_PixelFormatDetails	layout-blocked		fixed-array	field padding: char elements, Uint8 [2]
+record	struct SDL_PixelFormatDetails	layout-direct	sdl3::layouts	SDL_PixelFormatDetails	sizeof 32, _Alignof 4, 16 fields
 record	struct SDL_Point	layout-direct	sdl3::layouts	SDL_Point	sizeof 8, _Alignof 4, 2 fields
 record	struct SDL_FPoint	layout-blocked		float	field x: float (float); field y: float (float)
 record	struct SDL_Rect	layout-direct	sdl3::layouts	SDL_Rect	sizeof 16, _Alignof 4, 4 fields
@@ -4849,10 +4849,10 @@ record	struct SDL_Surface	layout-direct	sdl3::layouts	SDL_Surface	sizeof 48, _Al
 record	struct SDL_CameraSpec	layout-direct	sdl3::layouts	SDL_CameraSpec	sizeof 24, _Alignof 4, 6 fields
 record	struct SDL_DisplayMode	layout-blocked		float	field pixel_density: float (float); field refresh_rate: float (float)
 record	struct SDL_DialogFileFilter	layout-direct	sdl3::layouts	SDL_DialogFileFilter	sizeof 16, _Alignof 8, 2 fields
-record	struct SDL_GUID	layout-blocked		fixed-array	field data: char elements, Uint8 [16]
-record	struct SDL_VirtualJoystickTouchpadDesc	layout-blocked		fixed-array	field padding: scalar elements, Uint16 [3]
+record	struct SDL_GUID	layout-direct	sdl3::layouts	SDL_GUID	sizeof 16, _Alignof 1, 1 fields
+record	struct SDL_VirtualJoystickTouchpadDesc	layout-direct	sdl3::layouts	SDL_VirtualJoystickTouchpadDesc	sizeof 8, _Alignof 2, 2 fields
 record	struct SDL_VirtualJoystickSensorDesc	layout-blocked		float	field rate: float (float)
-record	struct SDL_VirtualJoystickDesc	layout-blocked		fixed-array	field padding2: scalar elements, Uint16 [2]
+record	struct SDL_VirtualJoystickDesc	layout-direct	sdl3::layouts	SDL_VirtualJoystickDesc	sizeof 136, _Alignof 8, 26 fields
 record	struct anon@SDL_gamepad.h:276	layout-direct	sdl3::layouts	SDL_GamepadBinding_input_axis	sizeof 12, _Alignof 4, 3 fields
 record	struct anon@SDL_gamepad.h:283	layout-direct	sdl3::layouts	SDL_GamepadBinding_input_hat	sizeof 8, _Alignof 4, 2 fields
 record	union anon@SDL_gamepad.h:272	layout-blocked		union	a union: its members overlap
@@ -4883,7 +4883,7 @@ record	struct SDL_GamepadAxisEvent	layout-direct	sdl3::layouts	SDL_GamepadAxisEv
 record	struct SDL_GamepadButtonEvent	layout-blocked		c-bool	field down: C _Bool (_Bool)
 record	struct SDL_GamepadDeviceEvent	layout-direct	sdl3::layouts	SDL_GamepadDeviceEvent	sizeof 24, _Alignof 8, 4 fields
 record	struct SDL_GamepadTouchpadEvent	layout-blocked		float	field x: float (float); field y: float (float); field pressure: float (float)
-record	struct SDL_GamepadSensorEvent	layout-blocked		fixed-array,float	field data: other elements, float [3]; field data: array element: float (float)
+record	struct SDL_GamepadSensorEvent	layout-blocked		float	field data: array element: float (float)
 record	struct SDL_AudioDeviceEvent	layout-blocked		c-bool	field recording: C _Bool (_Bool)
 record	struct SDL_CameraDeviceEvent	layout-direct	sdl3::layouts	SDL_CameraDeviceEvent	sizeof 24, _Alignof 8, 4 fields
 record	struct SDL_RenderEvent	layout-direct	sdl3::layouts	SDL_RenderEvent	sizeof 24, _Alignof 8, 4 fields
@@ -4896,10 +4896,10 @@ record	struct SDL_PenButtonEvent	layout-blocked		c-bool,float	field x: float (fl
 record	struct SDL_PenAxisEvent	layout-blocked		float	field x: float (float); field y: float (float); field value: float (float)
 record	struct SDL_DropEvent	layout-blocked		float	field x: float (float); field y: float (float)
 record	struct SDL_ClipboardEvent	layout-blocked		c-bool	field owner: C _Bool (_Bool)
-record	struct SDL_SensorEvent	layout-blocked		fixed-array,float	field data: other elements, float [6]; field data: array element: float (float)
+record	struct SDL_SensorEvent	layout-blocked		float	field data: array element: float (float)
 record	struct SDL_QuitEvent	layout-direct	sdl3::layouts	SDL_QuitEvent	sizeof 16, _Alignof 8, 3 fields
 record	struct SDL_UserEvent	layout-direct	sdl3::layouts	SDL_UserEvent	sizeof 40, _Alignof 8, 7 fields
-record	union SDL_Event	layout-blocked		fixed-array,nested-layout-blocked,union	a union: its members overlap; field padding: char elements, Uint8 [128]; field key (struct SDL_KeyboardEvent, union-member) -> c-bool; field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool; field motion (struct SDL_MouseMotionEvent, union-member) -> float; field button (struct SDL_MouseButtonEvent, union-member) -> c-bool; field wheel (struct SDL_MouseWheelEvent, union-member) -> float; field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool; field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool; field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float; field gsensor (struct SDL_GamepadSensorEvent, union-member) -> fixed-array; field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool; field sensor (struct SDL_SensorEvent, union-member) -> fixed-array; field tfinger (struct SDL_TouchFingerEvent, union-member) -> float; field pinch (struct SDL_PinchFingerEvent, union-member) -> float; field ptouch (struct SDL_PenTouchEvent, union-member) -> float; field pmotion (struct SDL_PenMotionEvent, union-member) -> float; field pbutton (struct SDL_PenButtonEvent, union-member) -> float; field paxis (struct SDL_PenAxisEvent, union-member) -> float; field drop (struct SDL_DropEvent, union-member) -> float; field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool
+record	union SDL_Event	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field key (struct SDL_KeyboardEvent, union-member) -> c-bool; field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool; field motion (struct SDL_MouseMotionEvent, union-member) -> float; field button (struct SDL_MouseButtonEvent, union-member) -> c-bool; field wheel (struct SDL_MouseWheelEvent, union-member) -> float; field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool; field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool; field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float; field gsensor (struct SDL_GamepadSensorEvent, union-member) -> float; field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool; field sensor (struct SDL_SensorEvent, union-member) -> float; field tfinger (struct SDL_TouchFingerEvent, union-member) -> float; field pinch (struct SDL_PinchFingerEvent, union-member) -> float; field ptouch (struct SDL_PenTouchEvent, union-member) -> float; field pmotion (struct SDL_PenMotionEvent, union-member) -> float; field pbutton (struct SDL_PenButtonEvent, union-member) -> float; field paxis (struct SDL_PenAxisEvent, union-member) -> float; field drop (struct SDL_DropEvent, union-member) -> float; field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool
 record	struct SDL_PathInfo	layout-direct	sdl3::layouts	SDL_PathInfo	sizeof 40, _Alignof 8, 5 fields
 record	struct SDL_GPUViewport	layout-blocked		float	field x: float (float); field y: float (float); field w: float (float); field h: float (float); field min_depth: float (float); field max_depth: float (float)
 record	struct SDL_GPUTextureTransferInfo	layout-direct	sdl3::layouts	SDL_GPUTextureTransferInfo	sizeof 24, _Alignof 8, 4 fields
@@ -4937,19 +4937,19 @@ record	struct SDL_GPUTextureSamplerBinding	layout-direct	sdl3::layouts	SDL_GPUTe
 record	struct SDL_GPUStorageBufferReadWriteBinding	layout-blocked		c-bool	field cycle: C _Bool (_Bool)
 record	struct SDL_GPUStorageTextureReadWriteBinding	layout-blocked		c-bool	field cycle: C _Bool (_Bool)
 record	struct SDL_GPUVulkanOptions	layout-direct	sdl3::layouts	SDL_GPUVulkanOptions	sizeof 56, _Alignof 8, 7 fields
-record	struct SDL_HapticDirection	layout-blocked		fixed-array	field dir: scalar elements, Sint32 [3]
-record	struct SDL_HapticConstant	layout-blocked		nested-layout-blocked	field direction (struct SDL_HapticDirection, field) -> fixed-array
-record	struct SDL_HapticPeriodic	layout-blocked		nested-layout-blocked	field direction (struct SDL_HapticDirection, field) -> fixed-array
-record	struct SDL_HapticCondition	layout-blocked		fixed-array,nested-layout-blocked	field right_sat: scalar elements, Uint16 [3]; field left_sat: scalar elements, Uint16 [3]; field right_coeff: scalar elements, Sint16 [3]; field left_coeff: scalar elements, Sint16 [3]; field deadband: scalar elements, Uint16 [3]; field center: scalar elements, Sint16 [3]; field direction (struct SDL_HapticDirection, field) -> fixed-array
-record	struct SDL_HapticRamp	layout-blocked		nested-layout-blocked	field direction (struct SDL_HapticDirection, field) -> fixed-array
+record	struct SDL_HapticDirection	layout-direct	sdl3::layouts	SDL_HapticDirection	sizeof 16, _Alignof 4, 2 fields
+record	struct SDL_HapticConstant	layout-direct	sdl3::layouts	SDL_HapticConstant	sizeof 40, _Alignof 4, 11 fields
+record	struct SDL_HapticPeriodic	layout-direct	sdl3::layouts	SDL_HapticPeriodic	sizeof 48, _Alignof 4, 14 fields
+record	struct SDL_HapticCondition	layout-direct	sdl3::layouts	SDL_HapticCondition	sizeof 68, _Alignof 4, 12 fields
+record	struct SDL_HapticRamp	layout-direct	sdl3::layouts	SDL_HapticRamp	sizeof 44, _Alignof 4, 12 fields
 record	struct SDL_HapticLeftRight	layout-direct	sdl3::layouts	SDL_HapticLeftRight	sizeof 12, _Alignof 4, 4 fields
-record	struct SDL_HapticCustom	layout-blocked		nested-layout-blocked	field direction (struct SDL_HapticDirection, field) -> fixed-array
-record	union SDL_HapticEffect	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field constant (struct SDL_HapticConstant, union-member) -> struct SDL_HapticDirection -> fixed-array; field periodic (struct SDL_HapticPeriodic, union-member) -> struct SDL_HapticDirection -> fixed-array; field condition (struct SDL_HapticCondition, union-member) -> fixed-array; field ramp (struct SDL_HapticRamp, union-member) -> struct SDL_HapticDirection -> fixed-array; field custom (struct SDL_HapticCustom, union-member) -> struct SDL_HapticDirection -> fixed-array
+record	struct SDL_HapticCustom	layout-direct	sdl3::layouts	SDL_HapticCustom	sizeof 56, _Alignof 8, 14 fields
+record	union SDL_HapticEffect	layout-blocked		union	a union: its members overlap
 record	struct SDL_hid_device_info	layout-direct	sdl3::layouts	SDL_hid_device_info	sizeof 80, _Alignof 8, 15 fields
 record	struct SDL_Locale	layout-direct	sdl3::layouts	SDL_Locale	sizeof 16, _Alignof 8, 2 fields
 record	struct SDL_MessageBoxButtonData	layout-direct	sdl3::layouts	SDL_MessageBoxButtonData	sizeof 16, _Alignof 8, 3 fields
 record	struct SDL_MessageBoxColor	layout-direct	sdl3::layouts	SDL_MessageBoxColor	sizeof 3, _Alignof 1, 3 fields
-record	struct SDL_MessageBoxColorScheme	layout-blocked		fixed-array	field colors: record elements, SDL_MessageBoxColor [SDL_MESSAGEBOX_COLOR_COUNT]
+record	struct SDL_MessageBoxColorScheme	layout-direct	sdl3::layouts	SDL_MessageBoxColorScheme	sizeof 15, _Alignof 1, 1 fields
 record	struct SDL_MessageBoxData	layout-direct	sdl3::layouts	SDL_MessageBoxData	sizeof 56, _Alignof 8, 7 fields
 record	struct SDL_Vertex	layout-blocked		nested-layout-blocked	field position (struct SDL_FPoint, field) -> float; field color (struct SDL_FColor, field) -> float; field position (struct SDL_FPoint, field) -> float
 record	struct SDL_Texture	layout-direct	sdl3::layouts	SDL_Texture	sizeof 16, _Alignof 4, 4 fields

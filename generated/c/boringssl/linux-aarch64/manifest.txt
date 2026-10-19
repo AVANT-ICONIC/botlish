@@ -134,7 +134,7 @@ file boringssl/cms.bot 65 15277d28
 file boringssl/conf.bot 79 5071c239
 file boringssl/crypto.bot 148 1e1121b5
 file boringssl/ctrdrbg.bot 67 d561d729
-file boringssl/ctypes.bot 787 03ef7d19
+file boringssl/ctypes.bot 791 27b46c60
 file boringssl/curve25519.bot 120 cc705775
 file boringssl/des.bot 109 407a2371
 file boringssl/dh.bot 234 ef596fdf
@@ -154,7 +154,7 @@ file boringssl/hmac.bot 102 51b6c838
 file boringssl/hpke.bot 368 88e276e9
 file boringssl/hrss.bot 52 9f702ea6
 file boringssl/kdf.bot 45 c05c73e1
-file boringssl/layouts.bot 459 64133492
+file boringssl/layouts.bot 628 d4b98f41
 file boringssl/md4.bot 42 a29c225f
 file boringssl/md5.bot 42 f1ec2b80
 file boringssl/mem.bot 187 ab4e2190
@@ -197,10 +197,10 @@ file boringssl/x509.bot 4004 93f9a416
 file boringssl/x509v3.bot 25 d6c6e883
 file boringssl/x509v3_errors.bot 70 2bf66f03
 file boringssl/xwing.bot 59 d07bcbdf
-file layouts-check.c 420 61bb42c7
-file layouts.tsv 646 fadabe82
-file report.tsv 11389 268c5825
-file report.txt 177 75ec774f
+file layouts-check.c 594 40c11a8a
+file layouts.tsv 646 e2f2c96f
+file report.tsv 11389 66c1c068
+file report.txt 171 e5f488b1
 file shim.c 3374 752c8e63
 libraries boringssl/aead.bot {crypto stdc++}
 libraries boringssl/aes.bot {crypto stdc++}
@@ -312,12 +312,12 @@ blocked va-list 2
 blocked variadic 5
 layout_abi linux-aarch64 clang aarch64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 27
-layout_count blocked 70
-layout_count blockedDirect 47
-layout_count blockedStructs 47
+layout_count blocked 51
+layout_count blockedDirect 28
+layout_count blockedStructs 28
 layout_count blockedTransitive 23
 layout_count blockedUnions 23
-layout_count emitted 52
+layout_count emitted 71
 layout_count incomplete 102
 layout_count promoted 1
 layout_count public 122
@@ -326,8 +326,7 @@ layout_count system 0
 layout_count unions 23
 layout_blocked anonymous-overlay 2
 layout_blocked bitfield 2
-layout_blocked fixed-array 37
-layout_blocked nested-layout-blocked 27
+layout_blocked nested-layout-blocked 26
 layout_blocked union 23
 layout_blocked unsupported-pointer 1
 contract sk_void_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}

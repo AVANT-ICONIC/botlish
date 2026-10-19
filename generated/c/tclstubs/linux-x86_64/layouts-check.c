@@ -29,6 +29,9 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_ARRAY(T, m, n, L) \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
 
 BOTLISH_RECORD(struct Tcl_RegExpIndices, 16, 8, "Tcl_RegExpIndices");
 BOTLISH_SCALAR(struct Tcl_RegExpIndices, start, 0, 8, 1, "Tcl_RegExpIndices.start");
@@ -102,6 +105,14 @@ BOTLISH_POINTER(Tcl_CmdInfo, namespacePtr, 56, 8, "Tcl_CmdInfo.namespacePtr");
 BOTLISH_POINTER(Tcl_CmdInfo, objProc2, 64, 8, "Tcl_CmdInfo.objProc2");
 BOTLISH_POINTER(Tcl_CmdInfo, objClientData2, 72, 8, "Tcl_CmdInfo.objClientData2");
 
+BOTLISH_RECORD(struct Tcl_DString, 224, 8, "Tcl_DString");
+BOTLISH_POINTER(struct Tcl_DString, string, 0, 8, "Tcl_DString.string");
+BOTLISH_SCALAR(struct Tcl_DString, length, 8, 8, 1, "Tcl_DString.length");
+BOTLISH_SCALAR(struct Tcl_DString, spaceAvl, 16, 8, 1, "Tcl_DString.spaceAvl");
+BOTLISH_ARRAY(struct Tcl_DString, staticSpace, 200, "Tcl_DString.staticSpace");
+BOTLISH_OFFSET(struct Tcl_DString, staticSpace[199], 223, "Tcl_DString.staticSpace, its last element");
+BOTLISH_SCALAR(struct Tcl_DString, staticSpace[0], 24, 1, 1, "Tcl_DString.staticSpace, its first element");
+
 BOTLISH_RECORD(struct Tcl_HashKeyType, 40, 8, "Tcl_HashKeyType");
 BOTLISH_SCALAR(struct Tcl_HashKeyType, version, 0, 4, 1, "Tcl_HashKeyType.version");
 BOTLISH_SCALAR(struct Tcl_HashKeyType, flags, 4, 4, 1, "Tcl_HashKeyType.flags");
@@ -109,6 +120,21 @@ BOTLISH_POINTER(struct Tcl_HashKeyType, hashKeyProc, 8, 8, "Tcl_HashKeyType.hash
 BOTLISH_POINTER(struct Tcl_HashKeyType, compareKeysProc, 16, 8, "Tcl_HashKeyType.compareKeysProc");
 BOTLISH_POINTER(struct Tcl_HashKeyType, allocEntryProc, 24, 8, "Tcl_HashKeyType.allocEntryProc");
 BOTLISH_POINTER(struct Tcl_HashKeyType, freeEntryProc, 32, 8, "Tcl_HashKeyType.freeEntryProc");
+
+BOTLISH_RECORD(struct Tcl_HashTable, 104, 8, "Tcl_HashTable");
+BOTLISH_POINTER(struct Tcl_HashTable, buckets, 0, 8, "Tcl_HashTable.buckets");
+BOTLISH_ARRAY(struct Tcl_HashTable, staticBuckets, 4, "Tcl_HashTable.staticBuckets");
+BOTLISH_OFFSET(struct Tcl_HashTable, staticBuckets[3], 32, "Tcl_HashTable.staticBuckets, its last element");
+BOTLISH_POINTER(struct Tcl_HashTable, staticBuckets[0], 8, 8, "Tcl_HashTable.staticBuckets, its first element");
+BOTLISH_SCALAR(struct Tcl_HashTable, numBuckets, 40, 8, 1, "Tcl_HashTable.numBuckets");
+BOTLISH_SCALAR(struct Tcl_HashTable, numEntries, 48, 8, 1, "Tcl_HashTable.numEntries");
+BOTLISH_SCALAR(struct Tcl_HashTable, rebuildSize, 56, 8, 1, "Tcl_HashTable.rebuildSize");
+BOTLISH_SCALAR(struct Tcl_HashTable, mask, 64, 8, 0, "Tcl_HashTable.mask");
+BOTLISH_SCALAR(struct Tcl_HashTable, downShift, 72, 4, 1, "Tcl_HashTable.downShift");
+BOTLISH_SCALAR(struct Tcl_HashTable, keyType, 76, 4, 1, "Tcl_HashTable.keyType");
+BOTLISH_POINTER(struct Tcl_HashTable, findProc, 80, 8, "Tcl_HashTable.findProc");
+BOTLISH_POINTER(struct Tcl_HashTable, createProc, 88, 8, "Tcl_HashTable.createProc");
+BOTLISH_POINTER(struct Tcl_HashTable, typePtr, 96, 8, "Tcl_HashTable.typePtr");
 
 BOTLISH_RECORD(struct Tcl_HashSearch, 24, 8, "Tcl_HashSearch");
 BOTLISH_POINTER(struct Tcl_HashSearch, tablePtr, 0, 8, "Tcl_HashSearch.tablePtr");
@@ -201,6 +227,25 @@ BOTLISH_SCALAR(struct Tcl_Token, type, 0, 4, 1, "Tcl_Token.type_");
 BOTLISH_POINTER(struct Tcl_Token, start, 8, 8, "Tcl_Token.start");
 BOTLISH_SCALAR(struct Tcl_Token, size, 16, 8, 1, "Tcl_Token.size");
 BOTLISH_SCALAR(struct Tcl_Token, numComponents, 24, 8, 1, "Tcl_Token.numComponents");
+
+BOTLISH_RECORD(struct Tcl_Parse, 744, 8, "Tcl_Parse");
+BOTLISH_POINTER(struct Tcl_Parse, commentStart, 0, 8, "Tcl_Parse.commentStart");
+BOTLISH_SCALAR(struct Tcl_Parse, commentSize, 8, 8, 1, "Tcl_Parse.commentSize");
+BOTLISH_POINTER(struct Tcl_Parse, commandStart, 16, 8, "Tcl_Parse.commandStart");
+BOTLISH_SCALAR(struct Tcl_Parse, commandSize, 24, 8, 1, "Tcl_Parse.commandSize");
+BOTLISH_SCALAR(struct Tcl_Parse, numWords, 32, 8, 1, "Tcl_Parse.numWords");
+BOTLISH_POINTER(struct Tcl_Parse, tokenPtr, 40, 8, "Tcl_Parse.tokenPtr");
+BOTLISH_SCALAR(struct Tcl_Parse, numTokens, 48, 8, 1, "Tcl_Parse.numTokens");
+BOTLISH_SCALAR(struct Tcl_Parse, tokensAvailable, 56, 8, 1, "Tcl_Parse.tokensAvailable");
+BOTLISH_SCALAR(struct Tcl_Parse, errorType, 64, 4, 1, "Tcl_Parse.errorType");
+BOTLISH_SCALAR(struct Tcl_Parse, incomplete, 68, 4, 1, "Tcl_Parse.incomplete");
+BOTLISH_POINTER(struct Tcl_Parse, string, 72, 8, "Tcl_Parse.string");
+BOTLISH_POINTER(struct Tcl_Parse, end, 80, 8, "Tcl_Parse.end");
+BOTLISH_POINTER(struct Tcl_Parse, interp, 88, 8, "Tcl_Parse.interp");
+BOTLISH_POINTER(struct Tcl_Parse, term, 96, 8, "Tcl_Parse.term");
+BOTLISH_ARRAY(struct Tcl_Parse, staticTokens, 20, "Tcl_Parse.staticTokens");
+BOTLISH_OFFSET(struct Tcl_Parse, staticTokens[19], 712, "Tcl_Parse.staticTokens, its last element");
+BOTLISH_NESTED(struct Tcl_Parse, staticTokens[0], 104, 32, "Tcl_Parse.staticTokens, its first element");
 
 BOTLISH_RECORD(struct Tcl_EncodingType, 48, 8, "Tcl_EncodingType");
 BOTLISH_POINTER(struct Tcl_EncodingType, encodingName, 0, 8, "Tcl_EncodingType.encodingName");

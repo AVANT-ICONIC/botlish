@@ -23436,7 +23436,7 @@ tag	union _LARGE_INTEGER	opaque	win32::ctypes	complete, behind pointers	identity
 tag	union _RATE_QUOTA_LIMIT	unused		complete	no bound signature points to it
 tag	union _SLIST_HEADER	opaque	win32::ctypes	complete, behind pointers	identity SLIST_HEADER
 tag	union _ULARGE_INTEGER	opaque	win32::ctypes	complete, behind pointers	identity ULARGE_INTEGER
-record	struct _GROUP_AFFINITY	layout-blocked		fixed-array	field Reserved: scalar elements, WORD [3]
+record	struct _GROUP_AFFINITY	layout-direct	win32::layouts	GROUP_AFFINITY	sizeof 16, _Alignof 8, 3 fields
 record	struct _FLOAT128	layout-direct	win32::layouts	FLOAT128	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@winnt.h:520	layout-direct	win32::layouts	LARGE_INTEGER_u	sizeof 8, _Alignof 4, 2 fields
 record	union _LARGE_INTEGER	layout-blocked		union	a union: its members overlap
@@ -23447,40 +23447,40 @@ record	struct _LIST_ENTRY	layout-direct	win32::layouts	LIST_ENTRY	sizeof 16, _Al
 record	struct _SINGLE_LIST_ENTRY	layout-direct	win32::layouts	SINGLE_LIST_ENTRY	sizeof 8, _Alignof 8, 1 fields
 record	struct LIST_ENTRY32	layout-direct	win32::layouts	LIST_ENTRY32	sizeof 8, _Alignof 4, 2 fields
 record	struct LIST_ENTRY64	layout-direct	win32::layouts	LIST_ENTRY64	sizeof 16, _Alignof 8, 2 fields
-record	struct _GUID	layout-blocked		fixed-array	field Data4: char elements, unsigned char [8]
-record	struct _OBJECTID	layout-blocked		nested-layout-blocked	field Lineage (struct _GUID, field) -> fixed-array
+record	struct _GUID	layout-direct	win32::layouts	GUID	sizeof 16, _Alignof 4, 4 fields
+record	struct _OBJECTID	layout-direct	win32::layouts	OBJECTID	sizeof 20, _Alignof 4, 2 fields
 record	struct _M128A	layout-direct	win32::layouts	M128A	sizeof 16, _Alignof 16, 2 fields
-record	struct _XSAVE_FORMAT	layout-blocked		fixed-array	field FloatRegisters: record elements, M128A [8]; field XmmRegisters: record elements, M128A [16]; field Reserved4: char elements, BYTE [96]
+record	struct _XSAVE_FORMAT	layout-direct	win32::layouts	XSAVE_FORMAT	sizeof 512, _Alignof 16, 16 fields
 record	struct _XSAVE_CET_U_FORMAT	layout-direct	win32::layouts	XSAVE_CET_U_FORMAT	sizeof 16, _Alignof 8, 2 fields
-record	struct _XSAVE_AREA_HEADER	layout-blocked		fixed-array	field Reserved: scalar elements, DWORD64 [7]
-record	struct _XSAVE_AREA	layout-blocked		nested-layout-blocked	field LegacyState (struct _XSAVE_FORMAT, field) -> fixed-array; field Header (struct _XSAVE_AREA_HEADER, field) -> fixed-array
+record	struct _XSAVE_AREA_HEADER	layout-direct	win32::layouts	XSAVE_AREA_HEADER	sizeof 64, _Alignof 8, 2 fields
+record	struct _XSAVE_AREA	layout-direct	win32::layouts	XSAVE_AREA	sizeof 576, _Alignof 16, 2 fields
 record	struct _XSTATE_CONTEXT	layout-direct	win32::layouts	XSTATE_CONTEXT	sizeof 32, _Alignof 8, 5 fields
 record	union anon@winnt.h:1533	layout-blocked		bitfield,union	a union: its members overlap; field UseWrss: bitfield UseWrss: WORD : 1; field PopShadowStackOne: bitfield PopShadowStackOne: WORD : 1; field Unused: bitfield Unused: WORD : 14
-record	struct _KERNEL_CET_CONTEXT	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 4: an anonymous union member (union anon@winnt.h:1533): its members overlap the record's; field Fill: scalar elements, WORD [2]; member 4 (union anon@winnt.h:1533, anonymous-member) -> union
+record	struct _KERNEL_CET_CONTEXT	layout-blocked		anonymous-overlay,nested-layout-blocked	member 4: an anonymous union member (union anon@winnt.h:1533): its members overlap the record's; member 4 (union anon@winnt.h:1533, anonymous-member) -> union
 record	struct anon@winnt.h:1546	layout-direct	win32::layouts	SCOPE_TABLE_AMD64_ScopeRecord	sizeof 16, _Alignof 4, 4 fields
-record	struct _SCOPE_TABLE_AMD64	layout-blocked		fixed-array	field ScopeRecord: record elements, struct anon@winnt.h:1546 [1]
-record	struct _XMM_SAVE_AREA32	layout-blocked		fixed-array	field FloatRegisters: record elements, M128A [8]; field XmmRegisters: record elements, M128A [16]; field Reserved4: char elements, BYTE [96]
-record	union anon@winnt.h:1847	layout-blocked		fixed-array,nested-layout-blocked,union	a union: its members overlap; field Header: record elements, M128A [2]; field Legacy: record elements, M128A [8]; field FltSave (struct _XMM_SAVE_AREA32, union-member) -> fixed-array; field FltSave (struct _XMM_SAVE_AREA32, union-member) -> fixed-array
-record	struct _CONTEXT	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 39: an anonymous union member (union anon@winnt.h:1847): its members overlap the record's; field VectorRegister: record elements, M128A [26]; member 39 (union anon@winnt.h:1847, anonymous-member) -> union
+record	struct _SCOPE_TABLE_AMD64	layout-direct	win32::layouts	SCOPE_TABLE_AMD64	sizeof 20, _Alignof 4, 2 fields
+record	struct _XMM_SAVE_AREA32	layout-direct	win32::layouts	XMM_SAVE_AREA32	sizeof 512, _Alignof 16, 16 fields
+record	union anon@winnt.h:1847	layout-blocked		union	a union: its members overlap
+record	struct _CONTEXT	layout-blocked		anonymous-overlay,nested-layout-blocked	member 39: an anonymous union member (union anon@winnt.h:1847): its members overlap the record's; member 39 (union anon@winnt.h:1847, anonymous-member) -> union
 record	struct _RUNTIME_FUNCTION	layout-direct	win32::layouts	RUNTIME_FUNCTION	sizeof 12, _Alignof 4, 3 fields
 record	struct anon@winnt.h:2550	layout-direct	win32::layouts	LDT_ENTRY_HighWord_Bytes	sizeof 4, _Alignof 1, 4 fields
 record	struct anon@winnt.h:2556	layout-blocked		bitfield	field BaseMid: bitfield BaseMid: DWORD : 8; field Type: bitfield Type: DWORD : 5; field Dpl: bitfield Dpl: DWORD : 2; field Pres: bitfield Pres: DWORD : 1; field LimitHi: bitfield LimitHi: DWORD : 4; field Sys: bitfield Sys: DWORD : 1; field Reserved_0: bitfield Reserved_0: DWORD : 1; field Default_Big: bitfield Default_Big: DWORD : 1; field Granularity: bitfield Granularity: DWORD : 1; field BaseHi: bitfield BaseHi: DWORD : 8
 record	union anon@winnt.h:2549	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Bits (struct anon@winnt.h:2556, union-member) -> bitfield
 record	struct _LDT_ENTRY	layout-blocked		nested-layout-blocked	field HighWord (union anon@winnt.h:2549, field) -> union
-record	struct _EXCEPTION_RECORD	layout-blocked		fixed-array	field ExceptionInformation: scalar elements, ULONG_PTR [15]
-record	struct _EXCEPTION_RECORD32	layout-blocked		fixed-array	field ExceptionInformation: scalar elements, DWORD [15]
-record	struct _EXCEPTION_RECORD64	layout-blocked		fixed-array	field ExceptionInformation: scalar elements, DWORD64 [15]
+record	struct _EXCEPTION_RECORD	layout-direct	win32::layouts	EXCEPTION_RECORD	sizeof 152, _Alignof 8, 6 fields
+record	struct _EXCEPTION_RECORD32	layout-direct	win32::layouts	EXCEPTION_RECORD32	sizeof 80, _Alignof 4, 6 fields
+record	struct _EXCEPTION_RECORD64	layout-direct	win32::layouts	EXCEPTION_RECORD64	sizeof 152, _Alignof 8, 7 fields
 record	struct _EXCEPTION_POINTERS	layout-direct	win32::layouts	EXCEPTION_POINTERS	sizeof 16, _Alignof 8, 2 fields
 record	struct _UNWIND_HISTORY_TABLE_ENTRY	layout-direct	win32::layouts	UNWIND_HISTORY_TABLE_ENTRY	sizeof 16, _Alignof 8, 2 fields
-record	struct _UNWIND_HISTORY_TABLE	layout-blocked		fixed-array	field Entry: record elements, UNWIND_HISTORY_TABLE_ENTRY [12]
+record	struct _UNWIND_HISTORY_TABLE	layout-direct	win32::layouts	UNWIND_HISTORY_TABLE	sizeof 216, _Alignof 8, 8 fields
 record	struct _DISPATCHER_CONTEXT	layout-direct	win32::layouts	DISPATCHER_CONTEXT	sizeof 80, _Alignof 8, 11 fields
-record	struct _KNONVOLATILE_CONTEXT_POINTERS	layout-blocked		fixed-array	field FloatingContext: pointer elements, PM128A [16]; field IntegerContext: pointer elements, PULONG64 [16]
+record	struct _KNONVOLATILE_CONTEXT_POINTERS	layout-direct	win32::layouts	KNONVOLATILE_CONTEXT_POINTERS	sizeof 256, _Alignof 8, 2 fields
 record	struct _GENERIC_MAPPING	layout-direct	win32::layouts	GENERIC_MAPPING	sizeof 16, _Alignof 4, 4 fields
 record	struct _LUID_AND_ATTRIBUTES	layout-direct	win32::layouts	LUID_AND_ATTRIBUTES	sizeof 12, _Alignof 4, 2 fields
-record	struct _SID_IDENTIFIER_AUTHORITY	layout-blocked		fixed-array	field Value: char elements, BYTE [6]
-record	struct _SID	layout-blocked		fixed-array,nested-layout-blocked	field SubAuthority: scalar elements, DWORD [1]; field IdentifierAuthority (struct _SID_IDENTIFIER_AUTHORITY, field) -> fixed-array
+record	struct _SID_IDENTIFIER_AUTHORITY	layout-direct	win32::layouts	SID_IDENTIFIER_AUTHORITY	sizeof 6, _Alignof 1, 1 fields
+record	struct _SID	layout-direct	win32::layouts	SID	sizeof 12, _Alignof 4, 4 fields
 record	struct _SID_AND_ATTRIBUTES	layout-direct	win32::layouts	SID_AND_ATTRIBUTES	sizeof 16, _Alignof 8, 2 fields
-record	struct _SID_AND_ATTRIBUTES_HASH	layout-blocked		fixed-array	field Hash: scalar elements, SID_HASH_ENTRY [32]
+record	struct _SID_AND_ATTRIBUTES_HASH	layout-direct	win32::layouts	SID_AND_ATTRIBUTES_HASH	sizeof 272, _Alignof 8, 3 fields
 record	struct _ACL	layout-direct	win32::layouts	ACL	sizeof 8, _Alignof 2, 5 fields
 record	struct _ACE_HEADER	layout-direct	win32::layouts	ACE_HEADER	sizeof 4, _Alignof 2, 3 fields
 record	struct _ACCESS_ALLOWED_ACE	layout-direct	win32::layouts	ACCESS_ALLOWED_ACE	sizeof 12, _Alignof 4, 3 fields
@@ -23492,35 +23492,35 @@ record	struct _SYSTEM_SCOPED_POLICY_ID_ACE	layout-direct	win32::layouts	SYSTEM_S
 record	struct _SYSTEM_MANDATORY_LABEL_ACE	layout-direct	win32::layouts	SYSTEM_MANDATORY_LABEL_ACE	sizeof 12, _Alignof 4, 3 fields
 record	struct _SYSTEM_PROCESS_TRUST_LABEL_ACE	layout-direct	win32::layouts	SYSTEM_PROCESS_TRUST_LABEL_ACE	sizeof 12, _Alignof 4, 3 fields
 record	struct _SYSTEM_ACCESS_FILTER_ACE	layout-direct	win32::layouts	SYSTEM_ACCESS_FILTER_ACE	sizeof 12, _Alignof 4, 3 fields
-record	struct _ACCESS_ALLOWED_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _ACCESS_DENIED_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _SYSTEM_AUDIT_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _SYSTEM_ALARM_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
+record	struct _ACCESS_ALLOWED_OBJECT_ACE	layout-direct	win32::layouts	ACCESS_ALLOWED_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _ACCESS_DENIED_OBJECT_ACE	layout-direct	win32::layouts	ACCESS_DENIED_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _SYSTEM_AUDIT_OBJECT_ACE	layout-direct	win32::layouts	SYSTEM_AUDIT_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _SYSTEM_ALARM_OBJECT_ACE	layout-direct	win32::layouts	SYSTEM_ALARM_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
 record	struct _ACCESS_ALLOWED_CALLBACK_ACE	layout-direct	win32::layouts	ACCESS_ALLOWED_CALLBACK_ACE	sizeof 12, _Alignof 4, 3 fields
 record	struct _ACCESS_DENIED_CALLBACK_ACE	layout-direct	win32::layouts	ACCESS_DENIED_CALLBACK_ACE	sizeof 12, _Alignof 4, 3 fields
 record	struct _SYSTEM_AUDIT_CALLBACK_ACE	layout-direct	win32::layouts	SYSTEM_AUDIT_CALLBACK_ACE	sizeof 12, _Alignof 4, 3 fields
 record	struct _SYSTEM_ALARM_CALLBACK_ACE	layout-direct	win32::layouts	SYSTEM_ALARM_CALLBACK_ACE	sizeof 12, _Alignof 4, 3 fields
-record	struct _ACCESS_ALLOWED_CALLBACK_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _ACCESS_DENIED_CALLBACK_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _SYSTEM_AUDIT_CALLBACK_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
-record	struct _SYSTEM_ALARM_CALLBACK_OBJECT_ACE	layout-blocked		nested-layout-blocked	field ObjectType (struct _GUID, field) -> fixed-array; field ObjectType (struct _GUID, field) -> fixed-array
+record	struct _ACCESS_ALLOWED_CALLBACK_OBJECT_ACE	layout-direct	win32::layouts	ACCESS_ALLOWED_CALLBACK_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _ACCESS_DENIED_CALLBACK_OBJECT_ACE	layout-direct	win32::layouts	ACCESS_DENIED_CALLBACK_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _SYSTEM_AUDIT_CALLBACK_OBJECT_ACE	layout-direct	win32::layouts	SYSTEM_AUDIT_CALLBACK_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
+record	struct _SYSTEM_ALARM_CALLBACK_OBJECT_ACE	layout-direct	win32::layouts	SYSTEM_ALARM_CALLBACK_OBJECT_ACE	sizeof 48, _Alignof 4, 6 fields
 record	struct _ACL_REVISION_INFORMATION	layout-direct	win32::layouts	ACL_REVISION_INFORMATION	sizeof 4, _Alignof 4, 1 fields
 record	struct _ACL_SIZE_INFORMATION	layout-direct	win32::layouts	ACL_SIZE_INFORMATION	sizeof 12, _Alignof 4, 3 fields
 record	struct _SECURITY_DESCRIPTOR_RELATIVE	layout-direct	win32::layouts	SECURITY_DESCRIPTOR_RELATIVE	sizeof 20, _Alignof 4, 7 fields
 record	struct _SECURITY_DESCRIPTOR	layout-direct	win32::layouts	SECURITY_DESCRIPTOR	sizeof 40, _Alignof 8, 7 fields
 record	struct _SECURITY_OBJECT_AI_PARAMS	layout-direct	win32::layouts	SECURITY_OBJECT_AI_PARAMS	sizeof 8, _Alignof 4, 2 fields
 record	struct _OBJECT_TYPE_LIST	layout-direct	win32::layouts	OBJECT_TYPE_LIST	sizeof 16, _Alignof 8, 3 fields
-record	struct _PRIVILEGE_SET	layout-blocked		fixed-array	field Privilege: record elements, LUID_AND_ATTRIBUTES [1]
-record	struct _ACCESS_REASONS	layout-blocked		fixed-array	field Data: scalar elements, ACCESS_REASON [32]
+record	struct _PRIVILEGE_SET	layout-direct	win32::layouts	PRIVILEGE_SET	sizeof 20, _Alignof 4, 3 fields
+record	struct _ACCESS_REASONS	layout-direct	win32::layouts	ACCESS_REASONS	sizeof 128, _Alignof 4, 1 fields
 record	struct _SE_SECURITY_DESCRIPTOR	layout-direct	win32::layouts	SE_SECURITY_DESCRIPTOR	sizeof 16, _Alignof 8, 3 fields
 record	struct _SE_ACCESS_REQUEST	layout-direct	win32::layouts	SE_ACCESS_REQUEST	sizeof 56, _Alignof 8, 8 fields
 record	struct _SE_ACCESS_REPLY	layout-direct	win32::layouts	SE_ACCESS_REPLY	sizeof 40, _Alignof 8, 6 fields
 record	struct _TOKEN_USER	layout-direct	win32::layouts	TOKEN_USER	sizeof 16, _Alignof 8, 1 fields
 record	union anon@winnt.h:4022	layout-blocked		union	a union: its members overlap
-record	union anon@winnt.h:4026	layout-blocked		fixed-array,nested-layout-blocked,union	a union: its members overlap; field Buffer: char elements, BYTE [(sizeof (SID) - sizeof (DWORD) + ((15) *sizeof (DWORD)))]; field Sid (struct _SID, union-member) -> fixed-array
+record	union anon@winnt.h:4026	layout-blocked		union	a union: its members overlap
 record	struct _SE_TOKEN_USER	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@winnt.h:4022): its members overlap the record's; member 2: an anonymous union member (union anon@winnt.h:4026): its members overlap the record's; member 1 (union anon@winnt.h:4022, anonymous-member) -> union; member 2 (union anon@winnt.h:4026, anonymous-member) -> union
-record	struct _TOKEN_GROUPS	layout-blocked		fixed-array	field Groups: record elements, SID_AND_ATTRIBUTES [1]
-record	struct _TOKEN_PRIVILEGES	layout-blocked		fixed-array	field Privileges: record elements, LUID_AND_ATTRIBUTES [1]
+record	struct _TOKEN_GROUPS	layout-direct	win32::layouts	TOKEN_GROUPS	sizeof 24, _Alignof 8, 2 fields
+record	struct _TOKEN_PRIVILEGES	layout-direct	win32::layouts	TOKEN_PRIVILEGES	sizeof 16, _Alignof 4, 2 fields
 record	struct _TOKEN_OWNER	layout-direct	win32::layouts	TOKEN_OWNER	sizeof 8, _Alignof 8, 1 fields
 record	struct _TOKEN_PRIMARY_GROUP	layout-direct	win32::layouts	TOKEN_PRIMARY_GROUP	sizeof 8, _Alignof 8, 1 fields
 record	struct _TOKEN_DEFAULT_DACL	layout-direct	win32::layouts	TOKEN_DEFAULT_DACL	sizeof 8, _Alignof 8, 1 fields
@@ -23532,10 +23532,10 @@ record	struct _TOKEN_ELEVATION	layout-direct	win32::layouts	TOKEN_ELEVATION	size
 record	struct _TOKEN_MANDATORY_LABEL	layout-direct	win32::layouts	TOKEN_MANDATORY_LABEL	sizeof 16, _Alignof 8, 1 fields
 record	struct _TOKEN_MANDATORY_POLICY	layout-direct	win32::layouts	TOKEN_MANDATORY_POLICY	sizeof 4, _Alignof 4, 1 fields
 record	struct _TOKEN_ACCESS_INFORMATION	layout-direct	win32::layouts	TOKEN_ACCESS_INFORMATION	sizeof 72, _Alignof 8, 11 fields
-record	struct _TOKEN_AUDIT_POLICY	layout-blocked		fixed-array	field PerUserPolicy: char elements, UCHAR [(((56)) >> 1) + 1]
-record	struct _TOKEN_SOURCE	layout-blocked		fixed-array	field SourceName: char elements, CHAR [8]
+record	struct _TOKEN_AUDIT_POLICY	layout-direct	win32::layouts	TOKEN_AUDIT_POLICY	sizeof 29, _Alignof 1, 1 fields
+record	struct _TOKEN_SOURCE	layout-direct	win32::layouts	TOKEN_SOURCE	sizeof 16, _Alignof 4, 2 fields
 record	struct _TOKEN_STATISTICS	layout-blocked		nested-layout-blocked	field ExpirationTime (union _LARGE_INTEGER, field) -> union
-record	struct _TOKEN_CONTROL	layout-blocked		nested-layout-blocked	field TokenSource (struct _TOKEN_SOURCE, field) -> fixed-array
+record	struct _TOKEN_CONTROL	layout-direct	win32::layouts	TOKEN_CONTROL	sizeof 40, _Alignof 4, 4 fields
 record	struct _TOKEN_ORIGIN	layout-direct	win32::layouts	TOKEN_ORIGIN	sizeof 8, _Alignof 4, 1 fields
 record	struct _TOKEN_APPCONTAINER_INFORMATION	layout-direct	win32::layouts	TOKEN_APPCONTAINER_INFORMATION	sizeof 8, _Alignof 8, 1 fields
 record	struct _TOKEN_SID_INFORMATION	layout-direct	win32::layouts	TOKEN_SID_INFORMATION	sizeof 8, _Alignof 8, 1 fields
@@ -23544,7 +23544,7 @@ record	struct _CLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE	layout-direct	win32::layouts	
 record	struct _CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE	layout-direct	win32::layouts	CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE	sizeof 16, _Alignof 8, 2 fields
 record	union anon@winnt.h:4228	layout-blocked		union	a union: its members overlap
 record	struct _CLAIM_SECURITY_ATTRIBUTE_V1	layout-blocked		nested-layout-blocked	field Values (union anon@winnt.h:4228, field) -> union
-record	union anon@winnt.h:4243	layout-blocked		fixed-array,union	a union: its members overlap; field pInt64: scalar elements, DWORD [1]; field pUint64: scalar elements, DWORD [1]; field ppString: scalar elements, DWORD [1]; field pFqbn: scalar elements, DWORD [1]; field pOctetString: scalar elements, DWORD [1]
+record	union anon@winnt.h:4243	layout-blocked		union	a union: its members overlap
 record	struct _CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1	layout-blocked		nested-layout-blocked	field Values (union anon@winnt.h:4243, field) -> union
 record	union anon@winnt.h:4260	layout-blocked		union	a union: its members overlap
 record	struct _CLAIM_SECURITY_ATTRIBUTES_INFORMATION	layout-blocked		nested-layout-blocked	field Attribute (union anon@winnt.h:4260, field) -> union
@@ -23610,7 +23610,7 @@ record	struct _PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY	layout-blocked		anony
 record	struct _JOBOBJECT_BASIC_ACCOUNTING_INFORMATION	layout-blocked		nested-layout-blocked	field TotalUserTime (union _LARGE_INTEGER, field) -> union; field TotalUserTime (union _LARGE_INTEGER, field) -> union; field TotalUserTime (union _LARGE_INTEGER, field) -> union; field TotalUserTime (union _LARGE_INTEGER, field) -> union
 record	struct _JOBOBJECT_BASIC_LIMIT_INFORMATION	layout-blocked		nested-layout-blocked	field PerProcessUserTimeLimit (union _LARGE_INTEGER, field) -> union; field PerProcessUserTimeLimit (union _LARGE_INTEGER, field) -> union
 record	struct _JOBOBJECT_EXTENDED_LIMIT_INFORMATION	layout-blocked		nested-layout-blocked	field BasicLimitInformation (struct _JOBOBJECT_BASIC_LIMIT_INFORMATION, field) -> union _LARGE_INTEGER -> union
-record	struct _JOBOBJECT_BASIC_PROCESS_ID_LIST	layout-blocked		fixed-array	field ProcessIdList: scalar elements, ULONG_PTR [1]
+record	struct _JOBOBJECT_BASIC_PROCESS_ID_LIST	layout-direct	win32::layouts	JOBOBJECT_BASIC_PROCESS_ID_LIST	sizeof 16, _Alignof 8, 3 fields
 record	struct _JOBOBJECT_BASIC_UI_RESTRICTIONS	layout-direct	win32::layouts	JOBOBJECT_BASIC_UI_RESTRICTIONS	sizeof 4, _Alignof 4, 1 fields
 record	struct _JOBOBJECT_SECURITY_LIMIT_INFORMATION	layout-direct	win32::layouts	JOBOBJECT_SECURITY_LIMIT_INFORMATION	sizeof 40, _Alignof 8, 5 fields
 record	struct _JOBOBJECT_END_OF_JOB_TIME_INFORMATION	layout-direct	win32::layouts	JOBOBJECT_END_OF_JOB_TIME_INFORMATION	sizeof 4, _Alignof 4, 1 fields
@@ -23635,19 +23635,19 @@ record	struct JOBOBJECT_IO_RATE_CONTROL_INFORMATION_NATIVE_V2	layout-direct	win3
 record	struct JOBOBJECT_IO_RATE_CONTROL_INFORMATION_NATIVE_V3	layout-direct	win32::layouts	JOBOBJECT_IO_RATE_CONTROL_INFORMATION_NATIVE_V3	sizeof 144, _Alignof 8, 19 fields
 record	struct _JOBOBJECT_IO_ATTRIBUTION_STATS	layout-direct	win32::layouts	JOBOBJECT_IO_ATTRIBUTION_STATS	sizeof 32, _Alignof 8, 4 fields
 record	struct _JOBOBJECT_IO_ATTRIBUTION_INFORMATION	layout-direct	win32::layouts	JOBOBJECT_IO_ATTRIBUTION_INFORMATION	sizeof 72, _Alignof 8, 3 fields
-record	struct _SILOOBJECT_BASIC_INFORMATION	layout-blocked		fixed-array	field Reserved: char elements, BYTE [3]
+record	struct _SILOOBJECT_BASIC_INFORMATION	layout-direct	win32::layouts	SILOOBJECT_BASIC_INFORMATION	sizeof 16, _Alignof 4, 5 fields
 record	struct _SERVERSILO_BASIC_INFORMATION	layout-direct	win32::layouts	SERVERSILO_BASIC_INFORMATION	sizeof 32, _Alignof 8, 6 fields
 record	struct _CACHE_DESCRIPTOR	layout-direct	win32::layouts	CACHE_DESCRIPTOR	sizeof 12, _Alignof 4, 5 fields
 record	struct anon@winnt.h:5327	layout-direct	win32::layouts	SYSTEM_LOGICAL_PROCESSOR_INFORMATION_ProcessorCore	sizeof 1, _Alignof 1, 1 fields
 record	struct anon@winnt.h:5330	layout-direct	win32::layouts	SYSTEM_LOGICAL_PROCESSOR_INFORMATION_NumaNode	sizeof 4, _Alignof 4, 1 fields
-record	union anon@winnt.h:5326	layout-blocked		fixed-array,union	a union: its members overlap; field Reserved: scalar elements, ULONGLONG [2]
+record	union anon@winnt.h:5326	layout-blocked		union	a union: its members overlap
 record	struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@winnt.h:5326): its members overlap the record's; member 3 (union anon@winnt.h:5326, anonymous-member) -> union
-record	struct _PROCESSOR_RELATIONSHIP	layout-blocked		fixed-array,nested-layout-blocked	field Reserved: char elements, BYTE [21]; field GroupMask: record elements, GROUP_AFFINITY [1]; field GroupMask (struct _GROUP_AFFINITY, array-element) -> fixed-array
-record	struct _NUMA_NODE_RELATIONSHIP	layout-blocked		fixed-array,nested-layout-blocked	field Reserved: char elements, BYTE [20]; field GroupMask (struct _GROUP_AFFINITY, field) -> fixed-array
-record	struct _CACHE_RELATIONSHIP	layout-blocked		fixed-array,nested-layout-blocked	field Reserved: char elements, BYTE [20]; field GroupMask (struct _GROUP_AFFINITY, field) -> fixed-array
-record	struct _PROCESSOR_GROUP_INFO	layout-blocked		fixed-array	field Reserved: char elements, BYTE [38]
-record	struct _GROUP_RELATIONSHIP	layout-blocked		fixed-array,nested-layout-blocked	field Reserved: char elements, BYTE [20]; field GroupInfo: record elements, PROCESSOR_GROUP_INFO [1]; field GroupInfo (struct _PROCESSOR_GROUP_INFO, array-element) -> fixed-array
-record	union anon@winnt.h:5378	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Processor (struct _PROCESSOR_RELATIONSHIP, union-member) -> fixed-array; field NumaNode (struct _NUMA_NODE_RELATIONSHIP, union-member) -> fixed-array; field Cache (struct _CACHE_RELATIONSHIP, union-member) -> fixed-array; field Group (struct _GROUP_RELATIONSHIP, union-member) -> fixed-array
+record	struct _PROCESSOR_RELATIONSHIP	layout-direct	win32::layouts	PROCESSOR_RELATIONSHIP	sizeof 40, _Alignof 8, 4 fields
+record	struct _NUMA_NODE_RELATIONSHIP	layout-direct	win32::layouts	NUMA_NODE_RELATIONSHIP	sizeof 40, _Alignof 8, 3 fields
+record	struct _CACHE_RELATIONSHIP	layout-direct	win32::layouts	CACHE_RELATIONSHIP	sizeof 48, _Alignof 8, 7 fields
+record	struct _PROCESSOR_GROUP_INFO	layout-direct	win32::layouts	PROCESSOR_GROUP_INFO	sizeof 48, _Alignof 8, 4 fields
+record	struct _GROUP_RELATIONSHIP	layout-direct	win32::layouts	GROUP_RELATIONSHIP	sizeof 72, _Alignof 8, 4 fields
+record	union anon@winnt.h:5378	layout-blocked		union	a union: its members overlap
 record	struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@winnt.h:5378): its members overlap the record's; member 3 (union anon@winnt.h:5378, anonymous-member) -> union
 record	union anon@winnt.h:5409	layout-blocked		bitfield,union	a union: its members overlap; field Parked: bitfield Parked: BYTE : 1; field Allocated: bitfield Allocated: BYTE : 1; field AllocatedToTargetProcess: bitfield AllocatedToTargetProcess: BYTE : 1; field RealTime: bitfield RealTime: BYTE : 1; field ReservedFlags: bitfield ReservedFlags: BYTE : 4
 record	union anon@winnt.h:5419	layout-blocked		union	a union: its members overlap
@@ -23659,7 +23659,7 @@ record	struct _SYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION	layout-direct	win32::layo
 record	struct _SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION	layout-blocked		bitfield	field Machine: bitfield Machine: DWORD : 16; field KernelMode: bitfield KernelMode: DWORD : 1; field UserMode: bitfield UserMode: DWORD : 1; field Native: bitfield Native: DWORD : 1; field Process: bitfield Process: DWORD : 1; field WoW64Container: bitfield WoW64Container: DWORD : 1; field ReservedZero0: bitfield ReservedZero0: DWORD : 11
 record	struct _XSTATE_FEATURE	layout-direct	win32::layouts	XSTATE_FEATURE	sizeof 8, _Alignof 4, 2 fields
 record	union anon@winnt.h:5600	layout-blocked		bitfield,union	a union: its members overlap; field OptimizedSave: bitfield OptimizedSave: DWORD : 1; field CompactionEnabled: bitfield CompactionEnabled: DWORD : 1; field ExtendedFeatureDisable: bitfield ExtendedFeatureDisable: DWORD : 1
-record	struct _XSTATE_CONFIGURATION	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 4: an anonymous union member (union anon@winnt.h:5600): its members overlap the record's; field Features: record elements, XSTATE_FEATURE [(64)]; field AllFeatures: scalar elements, DWORD [(64)]; member 4 (union anon@winnt.h:5600, anonymous-member) -> union
+record	struct _XSTATE_CONFIGURATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 4: an anonymous union member (union anon@winnt.h:5600): its members overlap the record's; member 4 (union anon@winnt.h:5600, anonymous-member) -> union
 record	struct _MEMORY_BASIC_INFORMATION	layout-direct	win32::layouts	MEMORY_BASIC_INFORMATION	sizeof 48, _Alignof 8, 8 fields
 record	struct _MEMORY_BASIC_INFORMATION32	layout-direct	win32::layouts	MEMORY_BASIC_INFORMATION32	sizeof 28, _Alignof 4, 7 fields
 record	struct _MEMORY_BASIC_INFORMATION64	layout-direct	win32::layouts	MEMORY_BASIC_INFORMATION64	sizeof 48, _Alignof 16, 9 fields
@@ -23667,30 +23667,30 @@ record	struct _CFG_CALL_TARGET_INFO	layout-direct	win32::layouts	CFG_CALL_TARGET
 record	struct _MEM_ADDRESS_REQUIREMENTS	layout-direct	win32::layouts	MEM_ADDRESS_REQUIREMENTS	sizeof 24, _Alignof 8, 3 fields
 record	union anon@winnt.h:5766	layout-blocked		union	a union: its members overlap
 record	struct MEM_EXTENDED_PARAMETER	layout-blocked		anonymous-overlay,bitfield,nested-layout-blocked	field Type: bitfield Type: DWORD64 : 8; field Reserved: bitfield Reserved: DWORD64 : 64 - 8; member 3: an anonymous union member (union anon@winnt.h:5766): its members overlap the record's; member 3 (union anon@winnt.h:5766, anonymous-member) -> union
-record	struct _ENCLAVE_CREATE_INFO_SGX	layout-blocked		fixed-array	field Secs: char elements, BYTE [4096]
-record	struct _ENCLAVE_INIT_INFO_SGX	layout-blocked		fixed-array	field SigStruct: char elements, BYTE [1808]; field Reserved1: char elements, BYTE [240]; field EInitToken: char elements, BYTE [304]; field Reserved2: char elements, BYTE [1744]
-record	struct _ENCLAVE_CREATE_INFO_VBS	layout-blocked		fixed-array	field OwnerID: char elements, BYTE [32]
-record	struct _ENCLAVE_CREATE_INFO_VBS_BASIC	layout-blocked		fixed-array	field OwnerID: char elements, BYTE [32]
+record	struct _ENCLAVE_CREATE_INFO_SGX	layout-direct	win32::layouts	ENCLAVE_CREATE_INFO_SGX	sizeof 4096, _Alignof 1, 1 fields
+record	struct _ENCLAVE_INIT_INFO_SGX	layout-direct	win32::layouts	ENCLAVE_INIT_INFO_SGX	sizeof 4096, _Alignof 1, 4 fields
+record	struct _ENCLAVE_CREATE_INFO_VBS	layout-direct	win32::layouts	ENCLAVE_CREATE_INFO_VBS	sizeof 36, _Alignof 4, 2 fields
+record	struct _ENCLAVE_CREATE_INFO_VBS_BASIC	layout-direct	win32::layouts	ENCLAVE_CREATE_INFO_VBS_BASIC	sizeof 36, _Alignof 4, 2 fields
 record	struct _ENCLAVE_LOAD_DATA_VBS_BASIC	layout-direct	win32::layouts	ENCLAVE_LOAD_DATA_VBS_BASIC	sizeof 4, _Alignof 4, 1 fields
 record	union anon@winnt.h:5858	layout-blocked		union	a union: its members overlap
-record	struct _ENCLAVE_INIT_INFO_VBS_BASIC	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	field FamilyId: char elements, BYTE [16]; field ImageId: char elements, BYTE [16]; member 6: an anonymous union member (union anon@winnt.h:5858): its members overlap the record's; member 6 (union anon@winnt.h:5858, anonymous-member) -> union
+record	struct _ENCLAVE_INIT_INFO_VBS_BASIC	layout-blocked		anonymous-overlay,nested-layout-blocked	member 6: an anonymous union member (union anon@winnt.h:5858): its members overlap the record's; member 6 (union anon@winnt.h:5858, anonymous-member) -> union
 record	struct _ENCLAVE_INIT_INFO_VBS	layout-direct	win32::layouts	ENCLAVE_INIT_INFO_VBS	sizeof 8, _Alignof 4, 2 fields
 record	struct _MEMORY_PARTITION_DEDICATED_MEMORY_ATTRIBUTE	layout-direct	win32::layouts	MEMORY_PARTITION_DEDICATED_MEMORY_ATTRIBUTE	sizeof 16, _Alignof 8, 3 fields
 record	struct _MEMORY_PARTITION_DEDICATED_MEMORY_INFORMATION	layout-direct	win32::layouts	MEMORY_PARTITION_DEDICATED_MEMORY_INFORMATION	sizeof 32, _Alignof 8, 7 fields
-record	struct _FILE_ID_128	layout-blocked		fixed-array	field Identifier: char elements, BYTE [16]
-record	struct _FILE_NOTIFY_INFORMATION	layout-blocked		fixed-array	field FileName: wide-char elements, WCHAR [1]
+record	struct _FILE_ID_128	layout-direct	win32::layouts	FILE_ID_128	sizeof 16, _Alignof 1, 1 fields
+record	struct _FILE_NOTIFY_INFORMATION	layout-direct	win32::layouts	FILE_NOTIFY_INFORMATION	sizeof 16, _Alignof 4, 4 fields
 record	union anon@winnt.h:6050	layout-blocked		union	a union: its members overlap
-record	struct _FILE_NOTIFY_EXTENDED_INFORMATION	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 10: an anonymous union member (union anon@winnt.h:6050): its members overlap the record's; field FileName: wide-char elements, WCHAR [1]; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; member 10 (union anon@winnt.h:6050, anonymous-member) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_NOTIFY_EXTENDED_INFORMATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 10: an anonymous union member (union anon@winnt.h:6050): its members overlap the record's; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; member 10 (union anon@winnt.h:6050, anonymous-member) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
 record	union anon@winnt.h:6078	layout-blocked		union	a union: its members overlap
-record	struct _FILE_NOTIFY_FULL_INFORMATION	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 10: an anonymous union member (union anon@winnt.h:6078): its members overlap the record's; field FileName: wide-char elements, WCHAR [1]; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; member 10 (union anon@winnt.h:6078, anonymous-member) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_NOTIFY_FULL_INFORMATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 10: an anonymous union member (union anon@winnt.h:6078): its members overlap the record's; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; member 10 (union anon@winnt.h:6078, anonymous-member) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
 record	union _FILE_SEGMENT_ELEMENT	layout-blocked		union	a union: its members overlap
-record	struct anon@winnt.h:6111	layout-blocked		fixed-array	field DataBuffer: char elements, BYTE [1]
-record	struct _REPARSE_GUID_DATA_BUFFER	layout-blocked		nested-layout-blocked	field ReparseGuid (struct _GUID, field) -> fixed-array; field GenericReparseBuffer (struct anon@winnt.h:6111, field) -> fixed-array
-record	struct _SCRUB_DATA_INPUT	layout-blocked		fixed-array	field ObjectId: scalar elements, DWORD [4]; field Reserved: scalar elements, DWORD [41]; field ResumeContext: char elements, BYTE [1040]
+record	struct anon@winnt.h:6111	layout-direct	win32::layouts	REPARSE_GUID_DATA_BUFFER_GenericReparseBuffer	sizeof 1, _Alignof 1, 1 fields
+record	struct _REPARSE_GUID_DATA_BUFFER	layout-direct	win32::layouts	REPARSE_GUID_DATA_BUFFER	sizeof 28, _Alignof 4, 5 fields
+record	struct _SCRUB_DATA_INPUT	layout-direct	win32::layouts	SCRUB_DATA_INPUT	sizeof 1232, _Alignof 4, 6 fields
 record	struct _SCRUB_PARITY_EXTENT	layout-direct	win32::layouts	SCRUB_PARITY_EXTENT	sizeof 16, _Alignof 8, 2 fields
-record	struct _SCRUB_PARITY_EXTENT_DATA	layout-blocked		fixed-array	field ParityExtents: record elements, SCRUB_PARITY_EXTENT [1]
-record	struct _SCRUB_DATA_OUTPUT	layout-blocked		fixed-array	field Reserved: scalar elements, DWORD [9]; field ResumeContext: char elements, BYTE [1040]
-record	struct CM_Power_Data_s	layout-blocked		fixed-array	field PD_PowerStateMapping: scalar elements, DEVICE_POWER_STATE [7]
+record	struct _SCRUB_PARITY_EXTENT_DATA	layout-direct	win32::layouts	SCRUB_PARITY_EXTENT_DATA	sizeof 24, _Alignof 8, 5 fields
+record	struct _SCRUB_DATA_OUTPUT	layout-direct	win32::layouts	SCRUB_DATA_OUTPUT	sizeof 1232, _Alignof 8, 24 fields
+record	struct CM_Power_Data_s	layout-direct	win32::layouts	CM_POWER_DATA	sizeof 56, _Alignof 4, 8 fields
 record	struct _POWER_USER_PRESENCE	layout-direct	win32::layouts	POWER_USER_PRESENCE	sizeof 4, _Alignof 4, 1 fields
 record	struct _POWER_SESSION_CONNECT	layout-direct	win32::layouts	POWER_SESSION_CONNECT	sizeof 2, _Alignof 1, 2 fields
 record	struct _POWER_SESSION_TIMEOUTS	layout-direct	win32::layouts	POWER_SESSION_TIMEOUTS	sizeof 8, _Alignof 4, 2 fields
@@ -23699,88 +23699,88 @@ record	struct _POWER_SESSION_WINLOGON	layout-direct	win32::layouts	POWER_SESSION
 record	struct _POWER_IDLE_RESILIENCY	layout-direct	win32::layouts	POWER_IDLE_RESILIENCY	sizeof 8, _Alignof 4, 2 fields
 record	struct _POWER_MONITOR_INVOCATION	layout-direct	win32::layouts	POWER_MONITOR_INVOCATION	sizeof 8, _Alignof 4, 3 fields
 record	struct _RESUME_PERFORMANCE	layout-direct	win32::layouts	RESUME_PERFORMANCE	sizeof 24, _Alignof 8, 3 fields
-record	struct anon@winnt.h:6662	layout-blocked		fixed-array,nested-layout-blocked	field Data: char elements, BYTE [1]; field Guid (struct _GUID, field) -> fixed-array
-record	struct anon@winnt.h:6672	layout-blocked		nested-layout-blocked	field Guid (struct _GUID, field) -> fixed-array
+record	struct anon@winnt.h:6662	layout-direct	win32::layouts	SET_POWER_SETTING_VALUE	sizeof 32, _Alignof 4, 5 fields
+record	struct anon@winnt.h:6672	layout-direct	win32::layouts	NOTIFY_USER_POWER_SETTING	sizeof 16, _Alignof 4, 1 fields
 record	struct _APPLICATIONLAUNCH_SETTING_VALUE	layout-blocked		nested-layout-blocked	field ActivationTime (union _LARGE_INTEGER, field) -> union
 record	struct _POWER_PLATFORM_INFORMATION	layout-direct	win32::layouts	POWER_PLATFORM_INFORMATION	sizeof 1, _Alignof 1, 1 fields
 record	struct anon@winnt.h:6713	layout-direct	win32::layouts	BATTERY_REPORTING_SCALE	sizeof 8, _Alignof 4, 2 fields
 record	struct anon@winnt.h:6718	layout-direct	win32::layouts	PPM_WMI_LEGACY_PERFSTATE	sizeof 12, _Alignof 4, 3 fields
 record	struct anon@winnt.h:6724	layout-direct	win32::layouts	PPM_WMI_IDLE_STATE	sizeof 32, _Alignof 4, 11 fields
-record	struct anon@winnt.h:6738	layout-blocked		fixed-array	field State: record elements, PPM_WMI_IDLE_STATE [1]
-record	struct anon@winnt.h:6747	layout-blocked		fixed-array	field State: record elements, PPM_WMI_IDLE_STATE [1]
+record	struct anon@winnt.h:6738	layout-direct	win32::layouts	PPM_WMI_IDLE_STATES	sizeof 56, _Alignof 8, 6 fields
+record	struct anon@winnt.h:6747	layout-direct	win32::layouts	PPM_WMI_IDLE_STATES_EX	sizeof 56, _Alignof 8, 6 fields
 record	struct anon@winnt.h:6756	layout-direct	win32::layouts	PPM_WMI_PERF_STATE	sizeof 64, _Alignof 8, 14 fields
-record	struct anon@winnt.h:6773	layout-blocked		fixed-array	field State: record elements, PPM_WMI_PERF_STATE [1]
-record	struct anon@winnt.h:6797	layout-blocked		fixed-array	field State: record elements, PPM_WMI_PERF_STATE [1]
-record	struct anon@winnt.h:6824	layout-blocked		fixed-array	field IdleTimeBuckets: scalar elements, DWORD [6]
-record	struct anon@winnt.h:6832	layout-blocked		fixed-array,nested-layout-blocked	field State: record elements, PPM_IDLE_STATE_ACCOUNTING [1]; field State (struct anon@winnt.h:6824, array-element) -> fixed-array
+record	struct anon@winnt.h:6773	layout-direct	win32::layouts	PPM_WMI_PERF_STATES	sizeof 144, _Alignof 8, 21 fields
+record	struct anon@winnt.h:6797	layout-direct	win32::layouts	PPM_WMI_PERF_STATES_EX	sizeof 144, _Alignof 8, 21 fields
+record	struct anon@winnt.h:6824	layout-direct	win32::layouts	PPM_IDLE_STATE_ACCOUNTING	sizeof 48, _Alignof 8, 5 fields
+record	struct anon@winnt.h:6832	layout-direct	win32::layouts	PPM_IDLE_ACCOUNTING	sizeof 72, _Alignof 8, 5 fields
 record	struct anon@winnt.h:6840	layout-direct	win32::layouts	PPM_IDLE_STATE_BUCKET_EX	sizeof 24, _Alignof 8, 4 fields
-record	struct anon@winnt.h:6847	layout-blocked		fixed-array	field IdleTimeBuckets: record elements, PPM_IDLE_STATE_BUCKET_EX [16]
-record	struct anon@winnt.h:6858	layout-blocked		fixed-array,nested-layout-blocked	field State: record elements, PPM_IDLE_STATE_ACCOUNTING_EX [1]; field State (struct anon@winnt.h:6847, array-element) -> fixed-array
+record	struct anon@winnt.h:6847	layout-direct	win32::layouts	PPM_IDLE_STATE_ACCOUNTING_EX	sizeof 416, _Alignof 8, 8 fields
+record	struct anon@winnt.h:6858	layout-direct	win32::layouts	PPM_IDLE_ACCOUNTING_EX	sizeof 440, _Alignof 8, 6 fields
 record	struct anon@winnt.h:6903	layout-direct	win32::layouts	PPM_PERFSTATE_EVENT	sizeof 20, _Alignof 4, 5 fields
 record	struct anon@winnt.h:6911	layout-direct	win32::layouts	PPM_PERFSTATE_DOMAIN_EVENT	sizeof 24, _Alignof 8, 4 fields
 record	struct anon@winnt.h:6918	layout-direct	win32::layouts	PPM_IDLESTATE_EVENT	sizeof 16, _Alignof 8, 3 fields
 record	struct anon@winnt.h:6924	layout-direct	win32::layouts	PPM_THERMALCHANGE_EVENT	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@winnt.h:6928	layout-direct	win32::layouts	PPM_THERMAL_POLICY_EVENT	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@winnt.h:6944	layout-direct	win32::layouts	POWER_ACTION_POLICY	sizeof 12, _Alignof 4, 3 fields
-record	struct anon@winnt.h:6978	layout-blocked		fixed-array	field Spare: char elements, BYTE [2]
-record	struct anon@winnt.h:6985	layout-blocked		fixed-array	field Spare: char elements, BYTE [3]
-record	struct _SYSTEM_POWER_POLICY	layout-blocked		fixed-array,nested-layout-blocked	field Spare2: char elements, BYTE [2]; field DischargePolicy: record elements, SYSTEM_POWER_LEVEL [4]; field VideoReserved: scalar elements, DWORD [3]; field DischargePolicy (struct anon@winnt.h:6985, array-element) -> fixed-array
+record	struct anon@winnt.h:6978	layout-direct	win32::layouts	PROCESSOR_IDLESTATE_INFO	sizeof 8, _Alignof 4, 4 fields
+record	struct anon@winnt.h:6985	layout-direct	win32::layouts	SYSTEM_POWER_LEVEL	sizeof 24, _Alignof 4, 5 fields
+record	struct _SYSTEM_POWER_POLICY	layout-direct	win32::layouts	SYSTEM_POWER_POLICY	sizeof 232, _Alignof 4, 28 fields
 record	union anon@winnt.h:7032	layout-blocked		bitfield,union	a union: its members overlap; field AllowScaling: bitfield AllowScaling: WORD : 1; field Disabled: bitfield Disabled: WORD : 1; field Reserved: bitfield Reserved: WORD : 14
-record	struct anon@winnt.h:7030	layout-blocked		fixed-array,nested-layout-blocked	field Policy: record elements, PROCESSOR_IDLESTATE_INFO [3]; field Flags (union anon@winnt.h:7032, field) -> union; field Policy (struct anon@winnt.h:6978, array-element) -> fixed-array
-record	struct _PROCESSOR_POWER_POLICY_INFO	layout-blocked		bitfield,fixed-array	field Spare: char elements, BYTE [2]; field AllowDemotion: bitfield AllowDemotion: DWORD : 1; field AllowPromotion: bitfield AllowPromotion: DWORD : 1; field Reserved: bitfield Reserved: DWORD : 30
-record	struct _PROCESSOR_POWER_POLICY	layout-blocked		bitfield,fixed-array,nested-layout-blocked	field Spare: char elements, BYTE [3]; field DisableCStates: bitfield DisableCStates: DWORD : 1; field Reserved: bitfield Reserved: DWORD : 31; field Policy: record elements, PROCESSOR_POWER_POLICY_INFO [3]; field Policy (struct _PROCESSOR_POWER_POLICY_INFO, array-element) -> fixed-array
+record	struct anon@winnt.h:7030	layout-blocked		nested-layout-blocked	field Flags (union anon@winnt.h:7032, field) -> union
+record	struct _PROCESSOR_POWER_POLICY_INFO	layout-blocked		bitfield	field AllowDemotion: bitfield AllowDemotion: DWORD : 1; field AllowPromotion: bitfield AllowPromotion: DWORD : 1; field Reserved: bitfield Reserved: DWORD : 30
+record	struct _PROCESSOR_POWER_POLICY	layout-blocked		bitfield,nested-layout-blocked	field DisableCStates: bitfield DisableCStates: DWORD : 1; field Reserved: bitfield Reserved: DWORD : 31; field Policy (struct _PROCESSOR_POWER_POLICY_INFO, array-element) -> bitfield
 record	union anon@winnt.h:7073	layout-blocked		bitfield,union	a union: its members overlap; field NoDomainAccounting: bitfield NoDomainAccounting: BYTE : 1; field IncreasePolicy: bitfield IncreasePolicy: BYTE : 2; field DecreasePolicy: bitfield DecreasePolicy: BYTE : 2; field Reserved: bitfield Reserved: BYTE : 3
 record	union anon@winnt.h:7071	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Flags (union anon@winnt.h:7073, union-member) -> union
 record	struct anon@winnt.h:7066	layout-blocked		anonymous-overlay,nested-layout-blocked	member 5: an anonymous union member (union anon@winnt.h:7071): its members overlap the record's; member 5 (union anon@winnt.h:7071, anonymous-member) -> union
 record	struct _ADMINISTRATOR_POWER_POLICY	layout-direct	win32::layouts	ADMINISTRATOR_POWER_POLICY	sizeof 24, _Alignof 4, 6 fields
-record	struct anon@winnt.h:7099	layout-blocked		fixed-array	field spare2: char elements, BYTE [3]; field spare3: char elements, BYTE [8]; field BatteryScale: record elements, BATTERY_REPORTING_SCALE [3]
-record	struct anon@winnt.h:7131	layout-blocked		fixed-array	field Spare1: char elements, BOOLEAN [4]
-record	struct _IMAGE_DOS_HEADER	layout-blocked		fixed-array	field e_res: scalar elements, WORD [4]; field e_res2: scalar elements, WORD [10]
+record	struct anon@winnt.h:7099	layout-direct	win32::layouts	SYSTEM_POWER_CAPABILITIES	sizeof 76, _Alignof 4, 29 fields
+record	struct anon@winnt.h:7131	layout-direct	win32::layouts	SYSTEM_BATTERY_STATE	sizeof 32, _Alignof 4, 11 fields
+record	struct _IMAGE_DOS_HEADER	layout-direct	win32::layouts	IMAGE_DOS_HEADER	sizeof 64, _Alignof 2, 19 fields
 record	struct _IMAGE_OS2_HEADER	layout-direct	win32::layouts	IMAGE_OS2_HEADER	sizeof 64, _Alignof 2, 30 fields
-record	struct _IMAGE_VXD_HEADER	layout-blocked		fixed-array	field e32_res3: char elements, BYTE [12]
+record	struct _IMAGE_VXD_HEADER	layout-direct	win32::layouts	IMAGE_VXD_HEADER	sizeof 196, _Alignof 2, 51 fields
 record	struct _IMAGE_FILE_HEADER	layout-direct	win32::layouts	IMAGE_FILE_HEADER	sizeof 20, _Alignof 4, 7 fields
 record	struct _IMAGE_DATA_DIRECTORY	layout-direct	win32::layouts	IMAGE_DATA_DIRECTORY	sizeof 8, _Alignof 4, 2 fields
-record	struct _IMAGE_OPTIONAL_HEADER	layout-blocked		fixed-array	field DataDirectory: record elements, IMAGE_DATA_DIRECTORY [16]
-record	struct _IMAGE_ROM_OPTIONAL_HEADER	layout-blocked		fixed-array	field CprMask: scalar elements, DWORD [4]
-record	struct _IMAGE_OPTIONAL_HEADER64	layout-blocked		fixed-array	field DataDirectory: record elements, IMAGE_DATA_DIRECTORY [16]
-record	struct _IMAGE_NT_HEADERS64	layout-blocked		nested-layout-blocked	field OptionalHeader (struct _IMAGE_OPTIONAL_HEADER64, field) -> fixed-array
-record	struct _IMAGE_NT_HEADERS	layout-blocked		nested-layout-blocked	field OptionalHeader (struct _IMAGE_OPTIONAL_HEADER, field) -> fixed-array
-record	struct _IMAGE_ROM_HEADERS	layout-blocked		nested-layout-blocked	field OptionalHeader (struct _IMAGE_ROM_OPTIONAL_HEADER, field) -> fixed-array
-record	struct ANON_OBJECT_HEADER	layout-blocked		nested-layout-blocked	field ClassID (struct _GUID, field) -> fixed-array
-record	struct ANON_OBJECT_HEADER_V2	layout-blocked		nested-layout-blocked	field ClassID (struct _GUID, field) -> fixed-array
-record	struct ANON_OBJECT_HEADER_BIGOBJ	layout-blocked		nested-layout-blocked	field ClassID (struct _GUID, field) -> fixed-array
+record	struct _IMAGE_OPTIONAL_HEADER	layout-direct	win32::layouts	IMAGE_OPTIONAL_HEADER32	sizeof 224, _Alignof 4, 31 fields
+record	struct _IMAGE_ROM_OPTIONAL_HEADER	layout-direct	win32::layouts	IMAGE_ROM_OPTIONAL_HEADER	sizeof 56, _Alignof 4, 13 fields
+record	struct _IMAGE_OPTIONAL_HEADER64	layout-direct	win32::layouts	IMAGE_OPTIONAL_HEADER64	sizeof 240, _Alignof 4, 30 fields
+record	struct _IMAGE_NT_HEADERS64	layout-direct	win32::layouts	IMAGE_NT_HEADERS64	sizeof 264, _Alignof 4, 3 fields
+record	struct _IMAGE_NT_HEADERS	layout-direct	win32::layouts	IMAGE_NT_HEADERS32	sizeof 248, _Alignof 4, 3 fields
+record	struct _IMAGE_ROM_HEADERS	layout-direct	win32::layouts	IMAGE_ROM_HEADERS	sizeof 76, _Alignof 4, 2 fields
+record	struct ANON_OBJECT_HEADER	layout-direct	win32::layouts	ANON_OBJECT_HEADER	sizeof 32, _Alignof 4, 7 fields
+record	struct ANON_OBJECT_HEADER_V2	layout-direct	win32::layouts	ANON_OBJECT_HEADER_V2	sizeof 44, _Alignof 4, 10 fields
+record	struct ANON_OBJECT_HEADER_BIGOBJ	layout-direct	win32::layouts	ANON_OBJECT_HEADER_BIGOBJ	sizeof 56, _Alignof 4, 13 fields
 record	union anon@winnt.h:7552	layout-blocked		union	a union: its members overlap
-record	struct _IMAGE_SECTION_HEADER	layout-blocked		fixed-array,nested-layout-blocked	field Name: char elements, BYTE [8]; field Misc (union anon@winnt.h:7552, field) -> union
+record	struct _IMAGE_SECTION_HEADER	layout-blocked		nested-layout-blocked	field Misc (union anon@winnt.h:7552, field) -> union
 record	struct anon@winnt.h:7617	layout-direct	win32::layouts	IMAGE_SYMBOL_N_Name	sizeof 8, _Alignof 2, 2 fields
-record	union anon@winnt.h:7615	layout-blocked		fixed-array,union	a union: its members overlap; field ShortName: char elements, BYTE [8]; field LongName: scalar elements, DWORD [2]
+record	union anon@winnt.h:7615	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_SYMBOL	layout-blocked		nested-layout-blocked	field N (union anon@winnt.h:7615, field) -> union
 record	struct anon@winnt.h:7636	layout-direct	win32::layouts	IMAGE_SYMBOL_EX_N_Name	sizeof 8, _Alignof 2, 2 fields
-record	union anon@winnt.h:7634	layout-blocked		fixed-array,union	a union: its members overlap; field ShortName: char elements, BYTE [8]; field LongName: scalar elements, DWORD [2]
+record	union anon@winnt.h:7634	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_SYMBOL_EX	layout-blocked		nested-layout-blocked	field N (union anon@winnt.h:7634, field) -> union
-record	struct IMAGE_AUX_SYMBOL_TOKEN_DEF	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [12]
+record	struct IMAGE_AUX_SYMBOL_TOKEN_DEF	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_TOKEN_DEF	sizeof 18, _Alignof 2, 4 fields
 record	struct anon@winnt.h:7752	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_Sym_Misc_LnSz	sizeof 4, _Alignof 2, 2 fields
 record	union anon@winnt.h:7751	layout-blocked		union	a union: its members overlap
 record	struct anon@winnt.h:7759	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_Sym_FcnAry_Function	sizeof 8, _Alignof 2, 2 fields
-record	struct anon@winnt.h:7763	layout-blocked		fixed-array	field Dimension: scalar elements, WORD [4]
-record	union anon@winnt.h:7758	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Array (struct anon@winnt.h:7763, union-member) -> fixed-array
+record	struct anon@winnt.h:7763	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_Sym_FcnAry_Array	sizeof 8, _Alignof 2, 1 fields
+record	union anon@winnt.h:7758	layout-blocked		union	a union: its members overlap
 record	struct anon@winnt.h:7749	layout-blocked		nested-layout-blocked	field Misc (union anon@winnt.h:7751, field) -> union; field FcnAry (union anon@winnt.h:7758, field) -> union
-record	struct anon@winnt.h:7769	layout-blocked		fixed-array	field Name: char elements, BYTE [18]
+record	struct anon@winnt.h:7769	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_File	sizeof 18, _Alignof 1, 1 fields
 record	struct anon@winnt.h:7772	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_Section	sizeof 16, _Alignof 2, 6 fields
-record	struct anon@winnt.h:7781	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [14]
-record	union _IMAGE_AUX_SYMBOL	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Sym (struct anon@winnt.h:7749, union-member) -> union anon@winnt.h:7751 -> union; field File (struct anon@winnt.h:7769, union-member) -> fixed-array; field TokenDef (struct IMAGE_AUX_SYMBOL_TOKEN_DEF, union-member) -> fixed-array; field CRC (struct anon@winnt.h:7781, union-member) -> fixed-array
-record	struct anon@winnt.h:7788	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [12]
-record	struct anon@winnt.h:7793	layout-blocked		fixed-array	field Name: char elements, BYTE [sizeof (IMAGE_SYMBOL_EX)]
-record	struct anon@winnt.h:7796	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [2]
-record	struct anon@winnt.h:7811	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [16]
-record	union _IMAGE_AUX_SYMBOL_EX	layout-blocked		fixed-array,nested-layout-blocked,union	a union: its members overlap; field rgbReserved: char elements, BYTE [2]; field Sym (struct anon@winnt.h:7788, union-member) -> fixed-array; field File (struct anon@winnt.h:7793, union-member) -> fixed-array; field Section (struct anon@winnt.h:7796, union-member) -> fixed-array; field TokenDef (struct IMAGE_AUX_SYMBOL_TOKEN_DEF, union-member) -> fixed-array; field CRC (struct anon@winnt.h:7811, union-member) -> fixed-array
+record	struct anon@winnt.h:7781	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_CRC	sizeof 18, _Alignof 2, 2 fields
+record	union _IMAGE_AUX_SYMBOL	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Sym (struct anon@winnt.h:7749, union-member) -> union anon@winnt.h:7751 -> union
+record	struct anon@winnt.h:7788	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_EX_Sym	sizeof 20, _Alignof 2, 3 fields
+record	struct anon@winnt.h:7793	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_EX_File	sizeof 20, _Alignof 1, 1 fields
+record	struct anon@winnt.h:7796	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_EX_Section	sizeof 20, _Alignof 2, 9 fields
+record	struct anon@winnt.h:7811	layout-direct	win32::layouts	IMAGE_AUX_SYMBOL_EX_CRC	sizeof 20, _Alignof 2, 2 fields
+record	union _IMAGE_AUX_SYMBOL_EX	layout-blocked		union	a union: its members overlap
 record	union anon@winnt.h:7836	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_RELOCATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@winnt.h:7836): its members overlap the record's; member 1 (union anon@winnt.h:7836, anonymous-member) -> union
 record	union anon@winnt.h:8174	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_LINENUMBER	layout-blocked		nested-layout-blocked	field Type (union anon@winnt.h:8174, field) -> union
 record	struct _IMAGE_BASE_RELOCATION	layout-direct	win32::layouts	IMAGE_BASE_RELOCATION	sizeof 8, _Alignof 4, 2 fields
-record	struct _IMAGE_ARCHIVE_MEMBER_HEADER	layout-blocked		fixed-array	field Name: char elements, BYTE [16]; field Date: char elements, BYTE [12]; field UserID: char elements, BYTE [6]; field GroupID: char elements, BYTE [6]; field Mode: char elements, BYTE [8]; field Size: char elements, BYTE [10]; field EndHeader: char elements, BYTE [2]
+record	struct _IMAGE_ARCHIVE_MEMBER_HEADER	layout-direct	win32::layouts	IMAGE_ARCHIVE_MEMBER_HEADER	sizeof 60, _Alignof 1, 7 fields
 record	struct _IMAGE_EXPORT_DIRECTORY	layout-direct	win32::layouts	IMAGE_EXPORT_DIRECTORY	sizeof 40, _Alignof 4, 11 fields
-record	struct _IMAGE_IMPORT_BY_NAME	layout-blocked		fixed-array	field Name: char elements, CHAR [1]
+record	struct _IMAGE_IMPORT_BY_NAME	layout-direct	win32::layouts	IMAGE_IMPORT_BY_NAME	sizeof 4, _Alignof 2, 2 fields
 record	union anon@winnt.h:8247	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_THUNK_DATA64	layout-blocked		nested-layout-blocked	field u1 (union anon@winnt.h:8247, field) -> union
 record	union anon@winnt.h:8259	layout-blocked		union	a union: its members overlap
@@ -23797,8 +23797,8 @@ record	struct _IMAGE_RESOURCE_DIRECTORY	layout-direct	win32::layouts	IMAGE_RESOU
 record	union anon@winnt.h:8371	layout-blocked		bitfield,union	a union: its members overlap; field NameOffset: bitfield NameOffset: DWORD : 31; field NameIsString: bitfield NameIsString: DWORD : 1
 record	union anon@winnt.h:8379	layout-blocked		bitfield,union	a union: its members overlap; field OffsetToDirectory: bitfield OffsetToDirectory: DWORD : 31; field DataIsDirectory: bitfield DataIsDirectory: DWORD : 1
 record	struct _IMAGE_RESOURCE_DIRECTORY_ENTRY	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@winnt.h:8371): its members overlap the record's; member 2: an anonymous union member (union anon@winnt.h:8379): its members overlap the record's; member 1 (union anon@winnt.h:8371, anonymous-member) -> union; member 2 (union anon@winnt.h:8379, anonymous-member) -> union
-record	struct _IMAGE_RESOURCE_DIRECTORY_STRING	layout-blocked		fixed-array	field NameString: char elements, CHAR [1]
-record	struct _IMAGE_RESOURCE_DIR_STRING_U	layout-blocked		fixed-array	field NameString: wide-char elements, WCHAR [1]
+record	struct _IMAGE_RESOURCE_DIRECTORY_STRING	layout-direct	win32::layouts	IMAGE_RESOURCE_DIRECTORY_STRING	sizeof 4, _Alignof 2, 2 fields
+record	struct _IMAGE_RESOURCE_DIR_STRING_U	layout-direct	win32::layouts	IMAGE_RESOURCE_DIR_STRING_U	sizeof 4, _Alignof 2, 2 fields
 record	struct _IMAGE_RESOURCE_DATA_ENTRY	layout-direct	win32::layouts	IMAGE_RESOURCE_DATA_ENTRY	sizeof 16, _Alignof 4, 4 fields
 record	struct anon@winnt.h:8405	layout-direct	win32::layouts	IMAGE_LOAD_CONFIG_DIRECTORY32	sizeof 72, _Alignof 4, 20 fields
 record	struct anon@winnt.h:8428	layout-direct	win32::layouts	IMAGE_LOAD_CONFIG_DIRECTORY64	sizeof 112, _Alignof 4, 20 fields
@@ -23815,11 +23815,11 @@ record	struct _IMAGE_RUNTIME_FUNCTION_ENTRY	layout-blocked		anonymous-overlay,ne
 record	struct _IMAGE_DEBUG_DIRECTORY	layout-direct	win32::layouts	IMAGE_DEBUG_DIRECTORY	sizeof 28, _Alignof 4, 8 fields
 record	struct _IMAGE_COFF_SYMBOLS_HEADER	layout-direct	win32::layouts	IMAGE_COFF_SYMBOLS_HEADER	sizeof 32, _Alignof 4, 8 fields
 record	struct _FPO_DATA	layout-blocked		bitfield	field cbProlog: bitfield cbProlog: WORD : 8; field cbRegs: bitfield cbRegs: WORD : 3; field fHasSEH: bitfield fHasSEH: WORD : 1; field fUseBP: bitfield fUseBP: WORD : 1; field reserved: bitfield reserved: WORD : 1; field cbFrame: bitfield cbFrame: WORD : 2
-record	struct _IMAGE_DEBUG_MISC	layout-blocked		fixed-array	field Reserved: char elements, BYTE [3]; field Data: char elements, BYTE [1]
+record	struct _IMAGE_DEBUG_MISC	layout-direct	win32::layouts	IMAGE_DEBUG_MISC	sizeof 16, _Alignof 4, 5 fields
 record	struct _IMAGE_FUNCTION_ENTRY	layout-direct	win32::layouts	IMAGE_FUNCTION_ENTRY	sizeof 12, _Alignof 4, 3 fields
 record	union anon@winnt.h:8646	layout-blocked		union	a union: its members overlap
 record	struct _IMAGE_FUNCTION_ENTRY64	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@winnt.h:8646): its members overlap the record's; member 3 (union anon@winnt.h:8646, anonymous-member) -> union
-record	struct _IMAGE_SEPARATE_DEBUG_HEADER	layout-blocked		fixed-array	field Reserved: scalar elements, DWORD [2]
+record	struct _IMAGE_SEPARATE_DEBUG_HEADER	layout-direct	win32::layouts	IMAGE_SEPARATE_DEBUG_HEADER	sizeof 48, _Alignof 4, 13 fields
 record	struct _NON_PAGED_DEBUG_INFO	layout-direct	win32::layouts	NON_PAGED_DEBUG_INFO	sizeof 32, _Alignof 4, 9 fields
 record	struct _ImageArchitectureHeader	layout-blocked		bitfield	field AmaskValue: bitfield AmaskValue: unsigned int : 1; field Adummy1: bitfield Adummy1: int : 7; field AmaskShift: bitfield AmaskShift: unsigned int : 8; field Adummy2: bitfield Adummy2: int : 16
 record	struct _ImageArchitectureEntry	layout-direct	win32::layouts	IMAGE_ARCHITECTURE_ENTRY	sizeof 8, _Alignof 4, 2 fields
@@ -23832,14 +23832,14 @@ record	struct anon@winnt.h:8842	layout-blocked		bitfield	field Depth: bitfield D
 record	struct anon@winnt.h:8851	layout-blocked		bitfield	field Depth: bitfield Depth: ULONGLONG : 16; field Sequence: bitfield Sequence: ULONGLONG : 48; field HeaderType: bitfield HeaderType: ULONGLONG : 1; field Reserved: bitfield Reserved: ULONGLONG : 3; field NextEntry: bitfield NextEntry: ULONGLONG : 60
 record	union _SLIST_HEADER	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Header8 (struct anon@winnt.h:8842, union-member) -> bitfield; field HeaderX64 (struct anon@winnt.h:8851, union-member) -> bitfield
 record	struct _RTL_RUN_ONCE	layout-direct	win32::layouts	RTL_RUN_ONCE	sizeof 8, _Alignof 8, 1 fields
-record	struct _RTL_BARRIER	layout-blocked		fixed-array	field Reserved3: scalar elements, ULONG_PTR [2]
-record	struct _MESSAGE_RESOURCE_ENTRY	layout-blocked		fixed-array	field Text: char elements, BYTE [1]
+record	struct _RTL_BARRIER	layout-direct	win32::layouts	RTL_BARRIER	sizeof 32, _Alignof 8, 5 fields
+record	struct _MESSAGE_RESOURCE_ENTRY	layout-direct	win32::layouts	MESSAGE_RESOURCE_ENTRY	sizeof 6, _Alignof 2, 3 fields
 record	struct _MESSAGE_RESOURCE_BLOCK	layout-direct	win32::layouts	MESSAGE_RESOURCE_BLOCK	sizeof 12, _Alignof 4, 3 fields
-record	struct _MESSAGE_RESOURCE_DATA	layout-blocked		fixed-array	field Blocks: record elements, MESSAGE_RESOURCE_BLOCK [1]
-record	struct _OSVERSIONINFOA	layout-blocked		fixed-array	field szCSDVersion: char elements, CHAR [128]
-record	struct _OSVERSIONINFOW	layout-blocked		fixed-array	field szCSDVersion: wide-char elements, WCHAR [128]
-record	struct _OSVERSIONINFOEXA	layout-blocked		fixed-array	field szCSDVersion: char elements, CHAR [128]
-record	struct _OSVERSIONINFOEXW	layout-blocked		fixed-array	field szCSDVersion: wide-char elements, WCHAR [128]
+record	struct _MESSAGE_RESOURCE_DATA	layout-direct	win32::layouts	MESSAGE_RESOURCE_DATA	sizeof 16, _Alignof 4, 2 fields
+record	struct _OSVERSIONINFOA	layout-direct	win32::layouts	OSVERSIONINFOA	sizeof 148, _Alignof 4, 6 fields
+record	struct _OSVERSIONINFOW	layout-direct	win32::layouts	OSVERSIONINFOW	sizeof 276, _Alignof 4, 6 fields
+record	struct _OSVERSIONINFOEXA	layout-direct	win32::layouts	OSVERSIONINFOEXA	sizeof 156, _Alignof 4, 11 fields
+record	struct _OSVERSIONINFOEXW	layout-direct	win32::layouts	OSVERSIONINFOEXW	sizeof 284, _Alignof 4, 11 fields
 record	struct _RTL_CRITICAL_SECTION_DEBUG	layout-direct	win32::layouts	RTL_CRITICAL_SECTION_DEBUG	sizeof 48, _Alignof 8, 9 fields
 record	struct _RTL_CRITICAL_SECTION	layout-direct	win32::layouts	RTL_CRITICAL_SECTION	sizeof 40, _Alignof 8, 6 fields
 record	struct _RTL_SRWLOCK	layout-direct	win32::layouts	RTL_SRWLOCK	sizeof 8, _Alignof 8, 1 fields
@@ -23848,17 +23848,17 @@ record	struct _ACTIVATION_CONTEXT_QUERY_INDEX	layout-direct	win32::layouts	ACTIV
 record	struct _ASSEMBLY_FILE_DETAILED_INFORMATION	layout-direct	win32::layouts	ASSEMBLY_FILE_DETAILED_INFORMATION	sizeof 32, _Alignof 8, 5 fields
 record	struct _ACTIVATION_CONTEXT_ASSEMBLY_DETAILED_INFORMATION	layout-blocked		nested-layout-blocked	field liManifestLastWriteTime (union _LARGE_INTEGER, field) -> union; field liManifestLastWriteTime (union _LARGE_INTEGER, field) -> union
 record	struct _ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION	layout-direct	win32::layouts	ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION	sizeof 12, _Alignof 4, 3 fields
-record	struct _COMPATIBILITY_CONTEXT_ELEMENT	layout-blocked		nested-layout-blocked	field Id (struct _GUID, field) -> fixed-array
-record	struct _ACTIVATION_CONTEXT_COMPATIBILITY_INFORMATION	layout-blocked		flexible-array,nested-layout-blocked	field Elements: record elements, COMPATIBILITY_CONTEXT_ELEMENT []; field Elements (struct _COMPATIBILITY_CONTEXT_ELEMENT, array-element) -> struct _GUID -> fixed-array
-record	struct _SUPPORTED_OS_INFO	layout-blocked		fixed-array	field OsList: scalar elements, WORD [(4)]
+record	struct _COMPATIBILITY_CONTEXT_ELEMENT	layout-direct	win32::layouts	COMPATIBILITY_CONTEXT_ELEMENT	sizeof 20, _Alignof 4, 2 fields
+record	struct _ACTIVATION_CONTEXT_COMPATIBILITY_INFORMATION	layout-blocked		flexible-array	field Elements: record elements, COMPATIBILITY_CONTEXT_ELEMENT []
+record	struct _SUPPORTED_OS_INFO	layout-direct	win32::layouts	SUPPORTED_OS_INFO	sizeof 12, _Alignof 2, 3 fields
 record	struct _ACTIVATION_CONTEXT_DETAILED_INFORMATION	layout-direct	win32::layouts	ACTIVATION_CONTEXT_DETAILED_INFORMATION	sizeof 64, _Alignof 8, 12 fields
 record	struct _RTL_VERIFIER_THUNK_DESCRIPTOR	layout-direct	win32::layouts	RTL_VERIFIER_THUNK_DESCRIPTOR	sizeof 24, _Alignof 8, 3 fields
 record	struct _RTL_VERIFIER_DLL_DESCRIPTOR	layout-direct	win32::layouts	RTL_VERIFIER_DLL_DESCRIPTOR	sizeof 32, _Alignof 8, 4 fields
 record	struct _RTL_VERIFIER_PROVIDER_DESCRIPTOR	layout-direct	win32::layouts	RTL_VERIFIER_PROVIDER_DESCRIPTOR	sizeof 80, _Alignof 8, 11 fields
 record	struct _HARDWARE_COUNTER_DATA	layout-direct	win32::layouts	HARDWARE_COUNTER_DATA	sizeof 16, _Alignof 8, 3 fields
-record	struct _PERFORMANCE_DATA	layout-blocked		fixed-array	field HwCounters: record elements, HARDWARE_COUNTER_DATA [16]
+record	struct _PERFORMANCE_DATA	layout-direct	win32::layouts	PERFORMANCE_DATA	sizeof 288, _Alignof 8, 9 fields
 record	struct _EVENTLOGRECORD	layout-direct	win32::layouts	EVENTLOGRECORD	sizeof 56, _Alignof 4, 16 fields
-record	struct _EVENTSFORLOGFILE	layout-blocked		fixed-array,flexible-array	field szLogicalLogFile: wide-char elements, WCHAR [256]; field pEventLogRecords: record elements, EVENTLOGRECORD []
+record	struct _EVENTSFORLOGFILE	layout-blocked		flexible-array	field pEventLogRecords: record elements, EVENTLOGRECORD []
 record	struct _PACKEDEVENTINFO	layout-blocked		flexible-array	field ulOffsets: scalar elements, DWORD []
 record	struct _TAPE_ERASE	layout-direct	win32::layouts	TAPE_ERASE	sizeof 8, _Alignof 4, 2 fields
 record	struct _TAPE_PREPARE	layout-direct	win32::layouts	TAPE_PREPARE	sizeof 8, _Alignof 4, 2 fields
@@ -23876,34 +23876,34 @@ record	struct anon@winnt.h:9935	layout-blocked		bitfield	field LongFunction: bit
 record	union anon@winnt.h:9933	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field s (struct anon@winnt.h:9935, union-member) -> bitfield
 record	struct _TP_CALLBACK_ENVIRON_V3	layout-blocked		nested-layout-blocked	field u (union anon@winnt.h:9933, field) -> union
 record	struct _TRANSACTION_NOTIFICATION	layout-blocked		nested-layout-blocked	field TmVirtualClock (union _LARGE_INTEGER, field) -> union
-record	struct _TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT	layout-blocked		nested-layout-blocked	field EnlistmentId (struct _GUID, field) -> fixed-array; field EnlistmentId (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_NOTIFICATION_TM_ONLINE_ARGUMENT	layout-blocked		nested-layout-blocked	field TmIdentity (struct _GUID, field) -> fixed-array
+record	struct _TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT	layout-direct	win32::layouts	TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT	sizeof 32, _Alignof 4, 2 fields
+record	struct _TRANSACTION_NOTIFICATION_TM_ONLINE_ARGUMENT	layout-direct	win32::layouts	TRANSACTION_NOTIFICATION_TM_ONLINE_ARGUMENT	sizeof 20, _Alignof 4, 2 fields
 record	struct _TRANSACTION_NOTIFICATION_SAVEPOINT_ARGUMENT	layout-direct	win32::layouts	TRANSACTION_NOTIFICATION_SAVEPOINT_ARGUMENT	sizeof 4, _Alignof 4, 1 fields
-record	struct _TRANSACTION_NOTIFICATION_PROPAGATE_ARGUMENT	layout-blocked		nested-layout-blocked	field UOW (struct _GUID, field) -> fixed-array; field UOW (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_NOTIFICATION_MARSHAL_ARGUMENT	layout-blocked		nested-layout-blocked	field UOW (struct _GUID, field) -> fixed-array
+record	struct _TRANSACTION_NOTIFICATION_PROPAGATE_ARGUMENT	layout-direct	win32::layouts	TRANSACTION_NOTIFICATION_PROPAGATE_ARGUMENT	sizeof 40, _Alignof 4, 4 fields
+record	struct _TRANSACTION_NOTIFICATION_MARSHAL_ARGUMENT	layout-direct	win32::layouts	TRANSACTION_NOTIFICATION_MARSHAL_ARGUMENT	sizeof 20, _Alignof 4, 2 fields
 record	struct _KCRM_MARSHAL_HEADER	layout-direct	win32::layouts	KCRM_MARSHAL_HEADER	sizeof 16, _Alignof 4, 4 fields
-record	struct _KCRM_TRANSACTION_BLOB	layout-blocked		fixed-array,nested-layout-blocked	field Description: wide-char elements, WCHAR [64]; field UOW (struct _GUID, field) -> fixed-array; field UOW (struct _GUID, field) -> fixed-array
-record	struct _KCRM_PROTOCOL_BLOB	layout-blocked		nested-layout-blocked	field ProtocolId (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_BASIC_INFORMATION	layout-blocked		nested-layout-blocked	field TransactionId (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTIONMANAGER_BASIC_INFORMATION	layout-blocked		nested-layout-blocked	field TmIdentity (struct _GUID, field) -> fixed-array; field VirtualClock (union _LARGE_INTEGER, field) -> union
-record	struct _TRANSACTIONMANAGER_LOG_INFORMATION	layout-blocked		nested-layout-blocked	field LogIdentity (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTIONMANAGER_LOGPATH_INFORMATION	layout-blocked		fixed-array	field LogPath: wide-char elements, WCHAR [1]
+record	struct _KCRM_TRANSACTION_BLOB	layout-direct	win32::layouts	KCRM_TRANSACTION_BLOB	sizeof 172, _Alignof 4, 6 fields
+record	struct _KCRM_PROTOCOL_BLOB	layout-direct	win32::layouts	KCRM_PROTOCOL_BLOB	sizeof 32, _Alignof 4, 5 fields
+record	struct _TRANSACTION_BASIC_INFORMATION	layout-direct	win32::layouts	TRANSACTION_BASIC_INFORMATION	sizeof 24, _Alignof 4, 3 fields
+record	struct _TRANSACTIONMANAGER_BASIC_INFORMATION	layout-blocked		nested-layout-blocked	field VirtualClock (union _LARGE_INTEGER, field) -> union
+record	struct _TRANSACTIONMANAGER_LOG_INFORMATION	layout-direct	win32::layouts	TRANSACTIONMANAGER_LOG_INFORMATION	sizeof 16, _Alignof 4, 1 fields
+record	struct _TRANSACTIONMANAGER_LOGPATH_INFORMATION	layout-direct	win32::layouts	TRANSACTIONMANAGER_LOGPATH_INFORMATION	sizeof 8, _Alignof 4, 2 fields
 record	struct _TRANSACTIONMANAGER_RECOVERY_INFORMATION	layout-direct	win32::layouts	TRANSACTIONMANAGER_RECOVERY_INFORMATION	sizeof 8, _Alignof 8, 1 fields
-record	struct _TRANSACTIONMANAGER_OLDEST_INFORMATION	layout-blocked		nested-layout-blocked	field OldestTransactionGuid (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_PROPERTIES_INFORMATION	layout-blocked		fixed-array,nested-layout-blocked	field Description: wide-char elements, WCHAR [1]; field Timeout (union _LARGE_INTEGER, field) -> union
+record	struct _TRANSACTIONMANAGER_OLDEST_INFORMATION	layout-direct	win32::layouts	TRANSACTIONMANAGER_OLDEST_INFORMATION	sizeof 16, _Alignof 4, 1 fields
+record	struct _TRANSACTION_PROPERTIES_INFORMATION	layout-blocked		nested-layout-blocked	field Timeout (union _LARGE_INTEGER, field) -> union
 record	struct _TRANSACTION_BIND_INFORMATION	layout-direct	win32::layouts	TRANSACTION_BIND_INFORMATION	sizeof 8, _Alignof 8, 1 fields
-record	struct _TRANSACTION_ENLISTMENT_PAIR	layout-blocked		nested-layout-blocked	field EnlistmentId (struct _GUID, field) -> fixed-array; field EnlistmentId (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_ENLISTMENTS_INFORMATION	layout-blocked		fixed-array,nested-layout-blocked	field EnlistmentPair: record elements, TRANSACTION_ENLISTMENT_PAIR [1]; field EnlistmentPair (struct _TRANSACTION_ENLISTMENT_PAIR, array-element) -> struct _GUID -> fixed-array
-record	struct _TRANSACTION_SUPERIOR_ENLISTMENT_INFORMATION	layout-blocked		nested-layout-blocked	field SuperiorEnlistmentPair (struct _TRANSACTION_ENLISTMENT_PAIR, field) -> struct _GUID -> fixed-array
-record	struct _RESOURCEMANAGER_BASIC_INFORMATION	layout-blocked		fixed-array,nested-layout-blocked	field Description: wide-char elements, WCHAR [1]; field ResourceManagerId (struct _GUID, field) -> fixed-array
+record	struct _TRANSACTION_ENLISTMENT_PAIR	layout-direct	win32::layouts	TRANSACTION_ENLISTMENT_PAIR	sizeof 32, _Alignof 4, 2 fields
+record	struct _TRANSACTION_ENLISTMENTS_INFORMATION	layout-direct	win32::layouts	TRANSACTION_ENLISTMENTS_INFORMATION	sizeof 36, _Alignof 4, 2 fields
+record	struct _TRANSACTION_SUPERIOR_ENLISTMENT_INFORMATION	layout-direct	win32::layouts	TRANSACTION_SUPERIOR_ENLISTMENT_INFORMATION	sizeof 32, _Alignof 4, 1 fields
+record	struct _RESOURCEMANAGER_BASIC_INFORMATION	layout-direct	win32::layouts	RESOURCEMANAGER_BASIC_INFORMATION	sizeof 24, _Alignof 4, 3 fields
 record	struct _RESOURCEMANAGER_COMPLETION_INFORMATION	layout-direct	win32::layouts	RESOURCEMANAGER_COMPLETION_INFORMATION	sizeof 16, _Alignof 8, 2 fields
-record	struct _ENLISTMENT_BASIC_INFORMATION	layout-blocked		nested-layout-blocked	field EnlistmentId (struct _GUID, field) -> fixed-array; field EnlistmentId (struct _GUID, field) -> fixed-array; field EnlistmentId (struct _GUID, field) -> fixed-array
-record	struct _ENLISTMENT_CRM_INFORMATION	layout-blocked		nested-layout-blocked	field CrmTransactionManagerId (struct _GUID, field) -> fixed-array; field CrmTransactionManagerId (struct _GUID, field) -> fixed-array; field CrmTransactionManagerId (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_LIST_ENTRY	layout-blocked		nested-layout-blocked	field UOW (struct _GUID, field) -> fixed-array
-record	struct _TRANSACTION_LIST_INFORMATION	layout-blocked		fixed-array,nested-layout-blocked	field TransactionInformation: record elements, TRANSACTION_LIST_ENTRY [1]; field TransactionInformation (struct _TRANSACTION_LIST_ENTRY, array-element) -> struct _GUID -> fixed-array
-record	struct _KTMOBJECT_CURSOR	layout-blocked		fixed-array,nested-layout-blocked	field ObjectIds: record elements, GUID [1]; field LastQuery (struct _GUID, field) -> fixed-array; field LastQuery (struct _GUID, array-element) -> fixed-array
-record	struct _WOW64_FLOATING_SAVE_AREA	layout-blocked		fixed-array	field RegisterArea: char elements, BYTE [80]
-record	struct _WOW64_CONTEXT	layout-blocked		fixed-array,nested-layout-blocked	field ExtendedRegisters: char elements, BYTE [512]; field FloatSave (struct _WOW64_FLOATING_SAVE_AREA, field) -> fixed-array
+record	struct _ENLISTMENT_BASIC_INFORMATION	layout-direct	win32::layouts	ENLISTMENT_BASIC_INFORMATION	sizeof 48, _Alignof 4, 3 fields
+record	struct _ENLISTMENT_CRM_INFORMATION	layout-direct	win32::layouts	ENLISTMENT_CRM_INFORMATION	sizeof 48, _Alignof 4, 3 fields
+record	struct _TRANSACTION_LIST_ENTRY	layout-direct	win32::layouts	TRANSACTION_LIST_ENTRY	sizeof 16, _Alignof 4, 1 fields
+record	struct _TRANSACTION_LIST_INFORMATION	layout-direct	win32::layouts	TRANSACTION_LIST_INFORMATION	sizeof 20, _Alignof 4, 2 fields
+record	struct _KTMOBJECT_CURSOR	layout-direct	win32::layouts	KTMOBJECT_CURSOR	sizeof 36, _Alignof 4, 3 fields
+record	struct _WOW64_FLOATING_SAVE_AREA	layout-direct	win32::layouts	WOW64_FLOATING_SAVE_AREA	sizeof 112, _Alignof 4, 9 fields
+record	struct _WOW64_CONTEXT	layout-direct	win32::layouts	WOW64_CONTEXT	sizeof 716, _Alignof 4, 25 fields
 record	struct anon@winnt.h:10324	layout-direct	win32::layouts	WOW64_LDT_ENTRY_HighWord_Bytes	sizeof 4, _Alignof 1, 4 fields
 record	struct anon@winnt.h:10330	layout-blocked		bitfield	field BaseMid: bitfield BaseMid: DWORD : 8; field Type: bitfield Type: DWORD : 5; field Dpl: bitfield Dpl: DWORD : 2; field Pres: bitfield Pres: DWORD : 1; field LimitHi: bitfield LimitHi: DWORD : 4; field Sys: bitfield Sys: DWORD : 1; field Reserved_0: bitfield Reserved_0: DWORD : 1; field Default_Big: bitfield Default_Big: DWORD : 1; field Granularity: bitfield Granularity: DWORD : 1; field BaseHi: bitfield BaseHi: DWORD : 8
 record	union anon@winnt.h:10323	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Bits (struct anon@winnt.h:10330, union-member) -> bitfield
@@ -23946,23 +23946,23 @@ record	struct tagPOINT	layout-direct	win32::layouts	POINT	sizeof 8, _Alignof 4, 
 record	struct _POINTL	layout-direct	win32::layouts	POINTL	sizeof 8, _Alignof 4, 2 fields
 record	struct tagSIZE	layout-direct	win32::layouts	SIZE	sizeof 8, _Alignof 4, 2 fields
 record	struct tagPOINTS	layout-direct	win32::layouts	POINTS	sizeof 4, _Alignof 2, 2 fields
-record	struct APP_LOCAL_DEVICE_ID	layout-blocked		fixed-array	field value: char elements, BYTE [32]
+record	struct APP_LOCAL_DEVICE_ID	layout-direct	win32::layouts	APP_LOCAL_DEVICE_ID	sizeof 32, _Alignof 1, 1 fields
 record	struct DPI_AWARENESS_CONTEXT__	layout-direct	win32::layouts	DPI_AWARENESS_CONTEXT__	sizeof 4, _Alignof 4, 1 fields
 record	struct _SECURITY_ATTRIBUTES	layout-direct	win32::layouts	SECURITY_ATTRIBUTES	sizeof 24, _Alignof 8, 3 fields
 record	union anon@minwinbase.h:22	layout-blocked		union	a union: its members overlap
 record	struct _OVERLAPPED	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@minwinbase.h:22): its members overlap the record's; member 3 (union anon@minwinbase.h:22, anonymous-member) -> union
 record	struct _OVERLAPPED_ENTRY	layout-direct	win32::layouts	OVERLAPPED_ENTRY	sizeof 32, _Alignof 8, 4 fields
 record	struct _SYSTEMTIME	layout-direct	win32::layouts	SYSTEMTIME	sizeof 16, _Alignof 2, 8 fields
-record	struct _WIN32_FIND_DATAA	layout-blocked		fixed-array	field cFileName: char elements, CHAR [260]; field cAlternateFileName: char elements, CHAR [14]
-record	struct _WIN32_FIND_DATAW	layout-blocked		fixed-array	field cFileName: wide-char elements, WCHAR [260]; field cAlternateFileName: wide-char elements, WCHAR [14]
-record	struct anon@minwinbase.h:190	layout-blocked		fixed-array	field dwReserved: scalar elements, DWORD [3]
+record	struct _WIN32_FIND_DATAA	layout-direct	win32::layouts	WIN32_FIND_DATAA	sizeof 320, _Alignof 4, 10 fields
+record	struct _WIN32_FIND_DATAW	layout-direct	win32::layouts	WIN32_FIND_DATAW	sizeof 592, _Alignof 4, 10 fields
+record	struct anon@minwinbase.h:190	layout-direct	win32::layouts	PROCESS_HEAP_ENTRY_Block	sizeof 24, _Alignof 8, 2 fields
 record	struct anon@minwinbase.h:194	layout-direct	win32::layouts	PROCESS_HEAP_ENTRY_Region	sizeof 24, _Alignof 8, 4 fields
-record	union anon@minwinbase.h:189	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Block (struct anon@minwinbase.h:190, union-member) -> fixed-array
+record	union anon@minwinbase.h:189	layout-blocked		union	a union: its members overlap
 record	struct _PROCESS_HEAP_ENTRY	layout-blocked		anonymous-overlay,nested-layout-blocked	member 6: an anonymous union member (union anon@minwinbase.h:189): its members overlap the record's; member 6 (union anon@minwinbase.h:189, anonymous-member) -> union
 record	struct anon@minwinbase.h:214	layout-direct	win32::layouts	REASON_CONTEXT_Reason_Detailed	sizeof 24, _Alignof 8, 4 fields
 record	union anon@minwinbase.h:213	layout-blocked		union	a union: its members overlap
 record	struct _REASON_CONTEXT	layout-blocked		nested-layout-blocked	field Reason (union anon@minwinbase.h:213, field) -> union
-record	struct _EXCEPTION_DEBUG_INFO	layout-blocked		nested-layout-blocked	field ExceptionRecord (struct _EXCEPTION_RECORD, field) -> fixed-array
+record	struct _EXCEPTION_DEBUG_INFO	layout-direct	win32::layouts	EXCEPTION_DEBUG_INFO	sizeof 160, _Alignof 8, 2 fields
 record	struct _CREATE_THREAD_DEBUG_INFO	layout-direct	win32::layouts	CREATE_THREAD_DEBUG_INFO	sizeof 24, _Alignof 8, 3 fields
 record	struct _CREATE_PROCESS_DEBUG_INFO	layout-direct	win32::layouts	CREATE_PROCESS_DEBUG_INFO	sizeof 72, _Alignof 8, 10 fields
 record	struct _EXIT_THREAD_DEBUG_INFO	layout-direct	win32::layouts	EXIT_THREAD_DEBUG_INFO	sizeof 4, _Alignof 4, 1 fields
@@ -23971,7 +23971,7 @@ record	struct _LOAD_DLL_DEBUG_INFO	layout-direct	win32::layouts	LOAD_DLL_DEBUG_I
 record	struct _UNLOAD_DLL_DEBUG_INFO	layout-direct	win32::layouts	UNLOAD_DLL_DEBUG_INFO	sizeof 8, _Alignof 8, 1 fields
 record	struct _OUTPUT_DEBUG_STRING_INFO	layout-direct	win32::layouts	OUTPUT_DEBUG_STRING_INFO	sizeof 16, _Alignof 8, 3 fields
 record	struct _RIP_INFO	layout-direct	win32::layouts	RIP_INFO	sizeof 8, _Alignof 4, 2 fields
-record	union anon@minwinbase.h:300	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Exception (struct _EXCEPTION_DEBUG_INFO, union-member) -> struct _EXCEPTION_RECORD -> fixed-array
+record	union anon@minwinbase.h:300	layout-blocked		union	a union: its members overlap
 record	struct _DEBUG_EVENT	layout-blocked		nested-layout-blocked	field u (union anon@minwinbase.h:300, field) -> union
 record	struct _BY_HANDLE_FILE_INFORMATION	layout-direct	win32::layouts	BY_HANDLE_FILE_INFORMATION	sizeof 52, _Alignof 4, 10 fields
 record	struct _WIN32_FILE_ATTRIBUTE_DATA	layout-direct	win32::layouts	WIN32_FILE_ATTRIBUTE_DATA	sizeof 36, _Alignof 4, 6 fields
@@ -23994,18 +23994,18 @@ record	struct _MEMORY_PRIORITY_INFORMATION	layout-direct	win32::layouts	MEMORY_P
 record	union anon@sysinfoapi.h:19	layout-blocked		union	a union: its members overlap
 record	struct _SYSTEM_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@sysinfoapi.h:19): its members overlap the record's; member 1 (union anon@sysinfoapi.h:19, anonymous-member) -> union
 record	struct _MEMORYSTATUSEX	layout-direct	win32::layouts	MEMORYSTATUSEX	sizeof 64, _Alignof 8, 9 fields
-record	struct _COMMPROP	layout-blocked		fixed-array	field wcProvChar: wide-char elements, WCHAR [1]
+record	struct _COMMPROP	layout-direct	win32::layouts	COMMPROP	sizeof 64, _Alignof 4, 18 fields
 record	struct _COMSTAT	layout-blocked		bitfield	field fCtsHold: bitfield fCtsHold: DWORD : 1; field fDsrHold: bitfield fDsrHold: DWORD : 1; field fRlsdHold: bitfield fRlsdHold: DWORD : 1; field fXoffHold: bitfield fXoffHold: DWORD : 1; field fXoffSent: bitfield fXoffSent: DWORD : 1; field fEof: bitfield fEof: DWORD : 1; field fTxim: bitfield fTxim: DWORD : 1; field fReserved: bitfield fReserved: DWORD : 25
 record	struct _DCB	layout-blocked		bitfield	field fBinary: bitfield fBinary: DWORD : 1; field fParity: bitfield fParity: DWORD : 1; field fOutxCtsFlow: bitfield fOutxCtsFlow: DWORD : 1; field fOutxDsrFlow: bitfield fOutxDsrFlow: DWORD : 1; field fDtrControl: bitfield fDtrControl: DWORD : 2; field fDsrSensitivity: bitfield fDsrSensitivity: DWORD : 1; field fTXContinueOnXoff: bitfield fTXContinueOnXoff: DWORD : 1; field fOutX: bitfield fOutX: DWORD : 1; field fInX: bitfield fInX: DWORD : 1; field fErrorChar: bitfield fErrorChar: DWORD : 1; field fNull: bitfield fNull: DWORD : 1; field fRtsControl: bitfield fRtsControl: DWORD : 2; field fAbortOnError: bitfield fAbortOnError: DWORD : 1; field fDummy2: bitfield fDummy2: DWORD : 17
 record	struct _COMMTIMEOUTS	layout-direct	win32::layouts	COMMTIMEOUTS	sizeof 20, _Alignof 4, 5 fields
-record	struct _COMMCONFIG	layout-blocked		fixed-array,nested-layout-blocked	field wcProviderData: wide-char elements, WCHAR [1]; field dcb (struct _DCB, field) -> bitfield
+record	struct _COMMCONFIG	layout-blocked		nested-layout-blocked	field dcb (struct _DCB, field) -> bitfield
 record	struct _MEMORYSTATUS	layout-direct	win32::layouts	MEMORYSTATUS	sizeof 56, _Alignof 8, 8 fields
 record	struct _JIT_DEBUG_INFO	layout-direct	win32::layouts	JIT_DEBUG_INFO	sizeof 40, _Alignof 8, 7 fields
-record	struct _OFSTRUCT	layout-blocked		fixed-array	field szPathName: char elements, CHAR [128]
+record	struct _OFSTRUCT	layout-direct	win32::layouts	OFSTRUCT	sizeof 136, _Alignof 2, 6 fields
 record	struct _UMS_SCHEDULER_STARTUP_INFO	layout-direct	win32::layouts	UMS_SCHEDULER_STARTUP_INFO	sizeof 32, _Alignof 8, 4 fields
 record	union anon@winbase.h:1248	layout-blocked		bitfield,union	a union: its members overlap; field IsUmsSchedulerThread: bitfield IsUmsSchedulerThread: ULONG : 1; field IsUmsWorkerThread: bitfield IsUmsWorkerThread: ULONG : 1
 record	struct _UMS_SYSTEM_THREAD_INFORMATION	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@winbase.h:1248): its members overlap the record's; member 2 (union anon@winbase.h:1248, anonymous-member) -> union
-record	struct _WIN32_STREAM_ID	layout-blocked		fixed-array,nested-layout-blocked	field cStreamName: wide-char elements, WCHAR [1]; field Size (union _LARGE_INTEGER, field) -> union
+record	struct _WIN32_STREAM_ID	layout-blocked		nested-layout-blocked	field Size (union _LARGE_INTEGER, field) -> union
 record	struct _STARTUPINFOEXA	layout-direct	win32::layouts	STARTUPINFOEXA	sizeof 112, _Alignof 8, 2 fields
 record	struct _STARTUPINFOEXW	layout-direct	win32::layouts	STARTUPINFOEXW	sizeof 112, _Alignof 8, 2 fields
 record	struct anon@winbase.h:2312	layout-blocked		nested-layout-blocked	field uliChunkNumber (union _ULARGE_INTEGER, field) -> union; field uliChunkNumber (union _ULARGE_INTEGER, field) -> union; field uliChunkNumber (union _ULARGE_INTEGER, field) -> union; field uliChunkNumber (union _ULARGE_INTEGER, field) -> union
@@ -24017,14 +24017,14 @@ record	struct anon@winbase.h:2355	layout-blocked		nested-layout-blocked	field ul
 record	union anon@winbase.h:2311	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field ChunkStarted (struct anon@winbase.h:2312, union-member) -> union _ULARGE_INTEGER -> union; field ChunkFinished (struct anon@winbase.h:2322, union-member) -> union _ULARGE_INTEGER -> union; field StreamStarted (struct anon@winbase.h:2334, union-member) -> union _ULARGE_INTEGER -> union; field StreamFinished (struct anon@winbase.h:2342, union-member) -> union _ULARGE_INTEGER -> union; field Error (struct anon@winbase.h:2355, union-member) -> union _ULARGE_INTEGER -> union
 record	struct COPYFILE2_MESSAGE	layout-blocked		nested-layout-blocked	field Info (union anon@winbase.h:2311, field) -> union
 record	struct COPYFILE2_EXTENDED_PARAMETERS	layout-direct	win32::layouts	COPYFILE2_EXTENDED_PARAMETERS	sizeof 32, _Alignof 8, 5 fields
-record	struct _WIN32_FIND_STREAM_DATA	layout-blocked		fixed-array,nested-layout-blocked	field cStreamName: wide-char elements, WCHAR [260 + 36]; field StreamSize (union _LARGE_INTEGER, field) -> union
+record	struct _WIN32_FIND_STREAM_DATA	layout-blocked		nested-layout-blocked	field StreamSize (union _LARGE_INTEGER, field) -> union
 record	struct _EVENTLOG_FULL_INFORMATION	layout-direct	win32::layouts	EVENTLOG_FULL_INFORMATION	sizeof 4, _Alignof 4, 1 fields
 record	struct _OPERATION_START_PARAMETERS	layout-direct	win32::layouts	OPERATION_START_PARAMETERS	sizeof 12, _Alignof 4, 3 fields
 record	struct _OPERATION_END_PARAMETERS	layout-direct	win32::layouts	OPERATION_END_PARAMETERS	sizeof 12, _Alignof 4, 3 fields
-record	struct tagHW_PROFILE_INFOA	layout-blocked		fixed-array	field szHwProfileGuid: char elements, CHAR [39]; field szHwProfileName: char elements, CHAR [80]
-record	struct tagHW_PROFILE_INFOW	layout-blocked		fixed-array	field szHwProfileGuid: wide-char elements, WCHAR [39]; field szHwProfileName: wide-char elements, WCHAR [80]
-record	struct _TIME_ZONE_INFORMATION	layout-blocked		fixed-array	field StandardName: wide-char elements, WCHAR [32]; field DaylightName: wide-char elements, WCHAR [32]
-record	struct _TIME_DYNAMIC_ZONE_INFORMATION	layout-blocked		fixed-array	field StandardName: wide-char elements, WCHAR [32]; field DaylightName: wide-char elements, WCHAR [32]; field TimeZoneKeyName: wide-char elements, WCHAR [128]
+record	struct tagHW_PROFILE_INFOA	layout-direct	win32::layouts	HW_PROFILE_INFOA	sizeof 124, _Alignof 4, 3 fields
+record	struct tagHW_PROFILE_INFOW	layout-direct	win32::layouts	HW_PROFILE_INFOW	sizeof 244, _Alignof 4, 3 fields
+record	struct _TIME_ZONE_INFORMATION	layout-direct	win32::layouts	TIME_ZONE_INFORMATION	sizeof 172, _Alignof 4, 7 fields
+record	struct _TIME_DYNAMIC_ZONE_INFORMATION	layout-direct	win32::layouts	DYNAMIC_TIME_ZONE_INFORMATION	sizeof 432, _Alignof 4, 9 fields
 record	struct _SYSTEM_POWER_STATUS	layout-direct	win32::layouts	SYSTEM_POWER_STATUS	sizeof 12, _Alignof 4, 6 fields
 record	struct tagACTCTXA	layout-direct	win32::layouts	ACTCTXA	sizeof 56, _Alignof 8, 9 fields
 record	struct tagACTCTXW	layout-direct	win32::layouts	ACTCTXW	sizeof 56, _Alignof 8, 9 fields
@@ -24034,31 +24034,31 @@ record	struct tagACTCTX_SECTION_KEYED_DATA	layout-direct	win32::layouts	ACTCTX_S
 record	struct _ACTIVATION_CONTEXT_BASIC_INFORMATION	layout-direct	win32::layouts	ACTIVATION_CONTEXT_BASIC_INFORMATION	sizeof 16, _Alignof 8, 2 fields
 record	struct _FILE_BASIC_INFO	layout-blocked		nested-layout-blocked	field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
 record	struct _FILE_STANDARD_INFO	layout-blocked		nested-layout-blocked	field AllocationSize (union _LARGE_INTEGER, field) -> union; field AllocationSize (union _LARGE_INTEGER, field) -> union
-record	struct _FILE_NAME_INFO	layout-blocked		fixed-array	field FileName: wide-char elements, WCHAR [1]
+record	struct _FILE_NAME_INFO	layout-direct	win32::layouts	FILE_NAME_INFO	sizeof 8, _Alignof 4, 2 fields
 record	struct _FILE_CASE_SENSITIVE_INFO	layout-direct	win32::layouts	FILE_CASE_SENSITIVE_INFO	sizeof 4, _Alignof 4, 1 fields
 record	union anon@winbase.h:3127	layout-blocked		union	a union: its members overlap
-record	struct _FILE_RENAME_INFO	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	member 1: an anonymous union member (union anon@winbase.h:3127): its members overlap the record's; field FileName: wide-char elements, WCHAR [1]; member 1 (union anon@winbase.h:3127, anonymous-member) -> union
+record	struct _FILE_RENAME_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@winbase.h:3127): its members overlap the record's; member 1 (union anon@winbase.h:3127, anonymous-member) -> union
 record	struct _FILE_ALLOCATION_INFO	layout-blocked		nested-layout-blocked	field AllocationSize (union _LARGE_INTEGER, field) -> union
 record	struct _FILE_END_OF_FILE_INFO	layout-blocked		nested-layout-blocked	field EndOfFile (union _LARGE_INTEGER, field) -> union
-record	struct _FILE_STREAM_INFO	layout-blocked		fixed-array,nested-layout-blocked	field StreamName: wide-char elements, WCHAR [1]; field StreamSize (union _LARGE_INTEGER, field) -> union; field StreamSize (union _LARGE_INTEGER, field) -> union
-record	struct _FILE_COMPRESSION_INFO	layout-blocked		fixed-array,nested-layout-blocked	field Reserved: char elements, UCHAR [3]; field CompressedFileSize (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_STREAM_INFO	layout-blocked		nested-layout-blocked	field StreamSize (union _LARGE_INTEGER, field) -> union; field StreamSize (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_COMPRESSION_INFO	layout-blocked		nested-layout-blocked	field CompressedFileSize (union _LARGE_INTEGER, field) -> union
 record	struct _FILE_ATTRIBUTE_TAG_INFO	layout-direct	win32::layouts	FILE_ATTRIBUTE_TAG_INFO	sizeof 8, _Alignof 4, 2 fields
 record	struct _FILE_DISPOSITION_INFO	layout-direct	win32::layouts	FILE_DISPOSITION_INFO	sizeof 1, _Alignof 1, 1 fields
 record	struct _FILE_DISPOSITION_INFO_EX	layout-direct	win32::layouts	FILE_DISPOSITION_INFO_EX	sizeof 4, _Alignof 4, 1 fields
-record	struct _FILE_ID_BOTH_DIR_INFO	layout-blocked		fixed-array,nested-layout-blocked	field ShortName: wide-char elements, WCHAR [12]; field FileName: wide-char elements, WCHAR [1]; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
-record	struct _FILE_FULL_DIR_INFO	layout-blocked		fixed-array,nested-layout-blocked	field FileName: wide-char elements, WCHAR [1]; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_ID_BOTH_DIR_INFO	layout-blocked		nested-layout-blocked	field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
+record	struct _FILE_FULL_DIR_INFO	layout-blocked		nested-layout-blocked	field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
 record	struct _FILE_IO_PRIORITY_HINT_INFO	layout-direct	win32::layouts	FILE_IO_PRIORITY_HINT_INFO	sizeof 4, _Alignof 4, 1 fields
 record	struct _FILE_ALIGNMENT_INFO	layout-direct	win32::layouts	FILE_ALIGNMENT_INFO	sizeof 4, _Alignof 4, 1 fields
 record	struct _FILE_STORAGE_INFO	layout-direct	win32::layouts	FILE_STORAGE_INFO	sizeof 28, _Alignof 4, 7 fields
-record	struct _FILE_ID_INFO	layout-blocked		nested-layout-blocked	field FileId (struct _FILE_ID_128, field) -> fixed-array
-record	struct _FILE_ID_EXTD_DIR_INFO	layout-blocked		fixed-array,nested-layout-blocked	field FileName: wide-char elements, WCHAR [1]; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field FileId (struct _FILE_ID_128, field) -> fixed-array
-record	struct anon@winbase.h:3307	layout-blocked		fixed-array	field Reserved: scalar elements, ULONG [8]
+record	struct _FILE_ID_INFO	layout-direct	win32::layouts	FILE_ID_INFO	sizeof 24, _Alignof 8, 2 fields
+record	struct _FILE_ID_EXTD_DIR_INFO	layout-blocked		nested-layout-blocked	field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union; field CreationTime (union _LARGE_INTEGER, field) -> union
+record	struct anon@winbase.h:3307	layout-direct	win32::layouts	FILE_REMOTE_PROTOCOL_INFO_GenericReserved	sizeof 32, _Alignof 4, 1 fields
 record	struct anon@winbase.h:3317	layout-direct	win32::layouts	FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2_Server	sizeof 4, _Alignof 4, 1 fields
 record	struct anon@winbase.h:3320	layout-direct	win32::layouts	FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2_Share	sizeof 8, _Alignof 4, 2 fields
 record	struct anon@winbase.h:3316	layout-direct	win32::layouts	FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2	sizeof 12, _Alignof 4, 2 fields
-record	union anon@winbase.h:3315	layout-blocked		fixed-array,union	a union: its members overlap; field Reserved: scalar elements, ULONG [16]
-record	struct _FILE_REMOTE_PROTOCOL_INFO	layout-blocked		nested-layout-blocked	field GenericReserved (struct anon@winbase.h:3307, field) -> fixed-array; field ProtocolSpecific (union anon@winbase.h:3315, field) -> union
-record	union anon@winbase.h:3348	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field FileId (union _LARGE_INTEGER, union-member) -> union; field ObjectId (struct _GUID, union-member) -> fixed-array; field ExtendedFileId (struct _FILE_ID_128, union-member) -> fixed-array
+record	union anon@winbase.h:3315	layout-blocked		union	a union: its members overlap
+record	struct _FILE_REMOTE_PROTOCOL_INFO	layout-blocked		nested-layout-blocked	field ProtocolSpecific (union anon@winbase.h:3315, field) -> union
+record	union anon@winbase.h:3348	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field FileId (union _LARGE_INTEGER, union-member) -> union
 record	struct FILE_ID_DESCRIPTOR	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@winbase.h:3348): its members overlap the record's; member 3 (union anon@winbase.h:3348, anonymous-member) -> union
 record	struct _DRAWPATRECT	layout-direct	win32::layouts	DRAWPATRECT	sizeof 20, _Alignof 4, 4 fields
 record	struct _PSINJECTDATA	layout-direct	win32::layouts	PSINJECTDATA	sizeof 8, _Alignof 4, 3 fields
@@ -24070,55 +24070,55 @@ record	struct tagRGBTRIPLE	layout-direct	win32::layouts	RGBTRIPLE	sizeof 3, _Ali
 record	struct tagRGBQUAD	layout-direct	win32::layouts	RGBQUAD	sizeof 4, _Alignof 1, 4 fields
 record	struct tagCIEXYZ	layout-direct	win32::layouts	CIEXYZ	sizeof 12, _Alignof 4, 3 fields
 record	struct tagICEXYZTRIPLE	layout-direct	win32::layouts	CIEXYZTRIPLE	sizeof 36, _Alignof 4, 3 fields
-record	struct tagLOGCOLORSPACEA	layout-blocked		fixed-array	field lcsFilename: char elements, CHAR [260]
-record	struct tagLOGCOLORSPACEW	layout-blocked		fixed-array	field lcsFilename: wide-char elements, WCHAR [260]
+record	struct tagLOGCOLORSPACEA	layout-direct	win32::layouts	LOGCOLORSPACEA	sizeof 328, _Alignof 4, 10 fields
+record	struct tagLOGCOLORSPACEW	layout-direct	win32::layouts	LOGCOLORSPACEW	sizeof 588, _Alignof 4, 10 fields
 record	struct tagBITMAPCOREHEADER	layout-direct	win32::layouts	BITMAPCOREHEADER	sizeof 12, _Alignof 4, 5 fields
 record	struct tagBITMAPINFOHEADER	layout-direct	win32::layouts	BITMAPINFOHEADER	sizeof 40, _Alignof 4, 11 fields
 record	struct anon@wingdi.h:609	layout-direct	win32::layouts	BITMAPV4HEADER	sizeof 108, _Alignof 4, 20 fields
 record	struct anon@wingdi.h:632	layout-direct	win32::layouts	BITMAPV5HEADER	sizeof 124, _Alignof 4, 24 fields
-record	struct tagBITMAPINFO	layout-blocked		fixed-array	field bmiColors: record elements, RGBQUAD [1]
-record	struct tagBITMAPCOREINFO	layout-blocked		fixed-array	field bmciColors: record elements, RGBTRIPLE [1]
+record	struct tagBITMAPINFO	layout-direct	win32::layouts	BITMAPINFO	sizeof 44, _Alignof 4, 2 fields
+record	struct tagBITMAPCOREINFO	layout-direct	win32::layouts	BITMAPCOREINFO	sizeof 16, _Alignof 4, 2 fields
 record	struct tagBITMAPFILEHEADER	layout-direct	win32::layouts	BITMAPFILEHEADER	sizeof 14, _Alignof 2, 5 fields
-record	struct tagFONTSIGNATURE	layout-blocked		fixed-array	field fsUsb: scalar elements, DWORD [4]; field fsCsb: scalar elements, DWORD [2]
-record	struct tagCHARSETINFO	layout-blocked		nested-layout-blocked	field fs (struct tagFONTSIGNATURE, field) -> fixed-array
-record	struct tagLOCALESIGNATURE	layout-blocked		fixed-array	field lsUsb: scalar elements, DWORD [4]; field lsCsbDefault: scalar elements, DWORD [2]; field lsCsbSupported: scalar elements, DWORD [2]
-record	struct tagHANDLETABLE	layout-blocked		fixed-array	field objectHandle: pointer elements, HGDIOBJ [1]
-record	struct tagMETARECORD	layout-blocked		fixed-array	field rdParm: scalar elements, WORD [1]
+record	struct tagFONTSIGNATURE	layout-direct	win32::layouts	FONTSIGNATURE	sizeof 24, _Alignof 4, 2 fields
+record	struct tagCHARSETINFO	layout-direct	win32::layouts	CHARSETINFO	sizeof 32, _Alignof 4, 3 fields
+record	struct tagLOCALESIGNATURE	layout-direct	win32::layouts	LOCALESIGNATURE	sizeof 32, _Alignof 4, 3 fields
+record	struct tagHANDLETABLE	layout-direct	win32::layouts	HANDLETABLE	sizeof 8, _Alignof 8, 1 fields
+record	struct tagMETARECORD	layout-direct	win32::layouts	METARECORD	sizeof 8, _Alignof 4, 3 fields
 record	struct tagMETAFILEPICT	layout-direct	win32::layouts	METAFILEPICT	sizeof 24, _Alignof 8, 4 fields
 record	struct tagMETAHEADER	layout-direct	win32::layouts	METAHEADER	sizeof 18, _Alignof 2, 7 fields
-record	struct tagENHMETARECORD	layout-blocked		fixed-array	field dParm: scalar elements, DWORD [1]
+record	struct tagENHMETARECORD	layout-direct	win32::layouts	ENHMETARECORD	sizeof 12, _Alignof 4, 3 fields
 record	struct tagENHMETAHEADER	layout-direct	win32::layouts	ENHMETAHEADER	sizeof 108, _Alignof 4, 19 fields
 record	struct tagTEXTMETRICA	layout-direct	win32::layouts	TEXTMETRICA	sizeof 56, _Alignof 4, 20 fields
 record	struct tagTEXTMETRICW	layout-direct	win32::layouts	TEXTMETRICW	sizeof 60, _Alignof 4, 20 fields
 record	struct tagNEWTEXTMETRICA	layout-direct	win32::layouts	NEWTEXTMETRICA	sizeof 72, _Alignof 4, 24 fields
 record	struct tagNEWTEXTMETRICW	layout-direct	win32::layouts	NEWTEXTMETRICW	sizeof 76, _Alignof 4, 24 fields
-record	struct tagNEWTEXTMETRICEXA	layout-blocked		nested-layout-blocked	field ntmFontSig (struct tagFONTSIGNATURE, field) -> fixed-array
-record	struct tagNEWTEXTMETRICEXW	layout-blocked		nested-layout-blocked	field ntmFontSig (struct tagFONTSIGNATURE, field) -> fixed-array
+record	struct tagNEWTEXTMETRICEXA	layout-direct	win32::layouts	NEWTEXTMETRICEXA	sizeof 96, _Alignof 4, 2 fields
+record	struct tagNEWTEXTMETRICEXW	layout-direct	win32::layouts	NEWTEXTMETRICEXW	sizeof 100, _Alignof 4, 2 fields
 record	struct tagPELARRAY	layout-direct	win32::layouts	PELARRAY	sizeof 20, _Alignof 4, 5 fields
 record	struct tagLOGBRUSH	layout-direct	win32::layouts	LOGBRUSH	sizeof 16, _Alignof 8, 3 fields
 record	struct tagLOGBRUSH32	layout-direct	win32::layouts	LOGBRUSH32	sizeof 12, _Alignof 4, 3 fields
 record	struct tagLOGPEN	layout-direct	win32::layouts	LOGPEN	sizeof 16, _Alignof 4, 3 fields
-record	struct tagEXTLOGPEN	layout-blocked		fixed-array	field elpStyleEntry: scalar elements, DWORD [1]
-record	struct tagEXTLOGPEN32	layout-blocked		fixed-array	field elpStyleEntry: scalar elements, DWORD [1]
+record	struct tagEXTLOGPEN	layout-direct	win32::layouts	EXTLOGPEN	sizeof 32, _Alignof 8, 7 fields
+record	struct tagEXTLOGPEN32	layout-direct	win32::layouts	EXTLOGPEN32	sizeof 28, _Alignof 4, 7 fields
 record	struct tagPALETTEENTRY	layout-direct	win32::layouts	PALETTEENTRY	sizeof 4, _Alignof 1, 4 fields
-record	struct tagLOGPALETTE	layout-blocked		fixed-array	field palPalEntry: record elements, PALETTEENTRY [1]
-record	struct tagLOGFONTA	layout-blocked		fixed-array	field lfFaceName: char elements, CHAR [32]
-record	struct tagLOGFONTW	layout-blocked		fixed-array	field lfFaceName: wide-char elements, WCHAR [32]
-record	struct tagENUMLOGFONTA	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: char elements, BYTE [64]; field elfStyle: char elements, BYTE [32]; field elfLogFont (struct tagLOGFONTA, field) -> fixed-array
-record	struct tagENUMLOGFONTW	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: wide-char elements, WCHAR [64]; field elfStyle: wide-char elements, WCHAR [32]; field elfLogFont (struct tagLOGFONTW, field) -> fixed-array
-record	struct tagENUMLOGFONTEXA	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: char elements, BYTE [64]; field elfStyle: char elements, BYTE [32]; field elfScript: char elements, BYTE [32]; field elfLogFont (struct tagLOGFONTA, field) -> fixed-array
-record	struct tagENUMLOGFONTEXW	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: wide-char elements, WCHAR [64]; field elfStyle: wide-char elements, WCHAR [32]; field elfScript: wide-char elements, WCHAR [32]; field elfLogFont (struct tagLOGFONTW, field) -> fixed-array
+record	struct tagLOGPALETTE	layout-direct	win32::layouts	LOGPALETTE	sizeof 8, _Alignof 2, 3 fields
+record	struct tagLOGFONTA	layout-direct	win32::layouts	LOGFONTA	sizeof 60, _Alignof 4, 14 fields
+record	struct tagLOGFONTW	layout-direct	win32::layouts	LOGFONTW	sizeof 92, _Alignof 4, 14 fields
+record	struct tagENUMLOGFONTA	layout-direct	win32::layouts	ENUMLOGFONTA	sizeof 156, _Alignof 4, 3 fields
+record	struct tagENUMLOGFONTW	layout-direct	win32::layouts	ENUMLOGFONTW	sizeof 284, _Alignof 4, 3 fields
+record	struct tagENUMLOGFONTEXA	layout-direct	win32::layouts	ENUMLOGFONTEXA	sizeof 188, _Alignof 4, 4 fields
+record	struct tagENUMLOGFONTEXW	layout-direct	win32::layouts	ENUMLOGFONTEXW	sizeof 348, _Alignof 4, 4 fields
 record	struct tagPANOSE	layout-direct	win32::layouts	PANOSE	sizeof 10, _Alignof 1, 10 fields
-record	struct tagEXTLOGFONTA	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: char elements, BYTE [64]; field elfStyle: char elements, BYTE [32]; field elfVendorId: char elements, BYTE [4]; field elfLogFont (struct tagLOGFONTA, field) -> fixed-array
-record	struct tagEXTLOGFONTW	layout-blocked		fixed-array,nested-layout-blocked	field elfFullName: wide-char elements, WCHAR [64]; field elfStyle: wide-char elements, WCHAR [32]; field elfVendorId: char elements, BYTE [4]; field elfLogFont (struct tagLOGFONTW, field) -> fixed-array
+record	struct tagEXTLOGFONTA	layout-direct	win32::layouts	EXTLOGFONTA	sizeof 192, _Alignof 4, 10 fields
+record	struct tagEXTLOGFONTW	layout-direct	win32::layouts	EXTLOGFONTW	sizeof 320, _Alignof 4, 10 fields
 record	union anon@wingdi.h:1678	layout-blocked		union	a union: its members overlap
 record	union anon@wingdi.h:1705	layout-blocked		union	a union: its members overlap
-record	struct _devicemodeA	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	field dmDeviceName: char elements, BYTE [32]; member 7: an anonymous union member (union anon@wingdi.h:1678): its members overlap the record's; field dmFormName: char elements, BYTE [32]; member 18: an anonymous union member (union anon@wingdi.h:1705): its members overlap the record's; member 7 (union anon@wingdi.h:1678, anonymous-member) -> union; member 18 (union anon@wingdi.h:1705, anonymous-member) -> union
+record	struct _devicemodeA	layout-blocked		anonymous-overlay,nested-layout-blocked	member 7: an anonymous union member (union anon@wingdi.h:1678): its members overlap the record's; member 18: an anonymous union member (union anon@wingdi.h:1705): its members overlap the record's; member 7 (union anon@wingdi.h:1678, anonymous-member) -> union; member 18 (union anon@wingdi.h:1705, anonymous-member) -> union
 record	union anon@wingdi.h:1727	layout-blocked		union	a union: its members overlap
 record	union anon@wingdi.h:1754	layout-blocked		union	a union: its members overlap
-record	struct _devicemodeW	layout-blocked		anonymous-overlay,fixed-array,nested-layout-blocked	field dmDeviceName: wide-char elements, WCHAR [32]; member 7: an anonymous union member (union anon@wingdi.h:1727): its members overlap the record's; field dmFormName: wide-char elements, WCHAR [32]; member 18: an anonymous union member (union anon@wingdi.h:1754): its members overlap the record's; member 7 (union anon@wingdi.h:1727, anonymous-member) -> union; member 18 (union anon@wingdi.h:1754, anonymous-member) -> union
-record	struct _DISPLAY_DEVICEA	layout-blocked		fixed-array	field DeviceName: char elements, CHAR [32]; field DeviceString: char elements, CHAR [128]; field DeviceID: char elements, CHAR [128]; field DeviceKey: char elements, CHAR [128]
-record	struct _DISPLAY_DEVICEW	layout-blocked		fixed-array	field DeviceName: wide-char elements, WCHAR [32]; field DeviceString: wide-char elements, WCHAR [128]; field DeviceID: wide-char elements, WCHAR [128]; field DeviceKey: wide-char elements, WCHAR [128]
+record	struct _devicemodeW	layout-blocked		anonymous-overlay,nested-layout-blocked	member 7: an anonymous union member (union anon@wingdi.h:1727): its members overlap the record's; member 18: an anonymous union member (union anon@wingdi.h:1754): its members overlap the record's; member 7 (union anon@wingdi.h:1727, anonymous-member) -> union; member 18 (union anon@wingdi.h:1754, anonymous-member) -> union
+record	struct _DISPLAY_DEVICEA	layout-direct	win32::layouts	DISPLAY_DEVICEA	sizeof 424, _Alignof 4, 6 fields
+record	struct _DISPLAY_DEVICEW	layout-direct	win32::layouts	DISPLAY_DEVICEW	sizeof 840, _Alignof 4, 6 fields
 record	struct DISPLAYCONFIG_RATIONAL	layout-direct	win32::layouts	DISPLAYCONFIG_RATIONAL	sizeof 8, _Alignof 4, 2 fields
 record	struct DISPLAYCONFIG_2DREGION	layout-direct	win32::layouts	DISPLAYCONFIG_2DREGION	sizeof 8, _Alignof 4, 2 fields
 record	struct anon@wingdi.h:2120	layout-blocked		bitfield	field videoStandard: bitfield videoStandard: UINT32 : 16; field vSyncFreqDivider: bitfield vSyncFreqDivider: UINT32 : 6; field reserved: bitfield reserved: UINT32 : 10
@@ -24135,12 +24135,12 @@ record	union anon@wingdi.h:2215	layout-blocked		bitfield,union	a union: its memb
 record	struct DISPLAYCONFIG_PATH_TARGET_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@wingdi.h:2215): its members overlap the record's; member 3 (union anon@wingdi.h:2215, anonymous-member) -> union
 record	struct DISPLAYCONFIG_PATH_INFO	layout-blocked		nested-layout-blocked	field sourceInfo (struct DISPLAYCONFIG_PATH_SOURCE_INFO, field) -> anonymous-overlay; field targetInfo (struct DISPLAYCONFIG_PATH_TARGET_INFO, field) -> anonymous-overlay
 record	struct DISPLAYCONFIG_DEVICE_INFO_HEADER	layout-direct	win32::layouts	DISPLAYCONFIG_DEVICE_INFO_HEADER	sizeof 20, _Alignof 4, 4 fields
-record	struct DISPLAYCONFIG_SOURCE_DEVICE_NAME	layout-blocked		fixed-array	field viewGdiDeviceName: wide-char elements, WCHAR [32]
+record	struct DISPLAYCONFIG_SOURCE_DEVICE_NAME	layout-direct	win32::layouts	DISPLAYCONFIG_SOURCE_DEVICE_NAME	sizeof 84, _Alignof 4, 2 fields
 record	union anon@wingdi.h:2288	layout-blocked		bitfield,union	a union: its members overlap; field friendlyNameFromEdid: bitfield friendlyNameFromEdid: UINT32 : 1; field friendlyNameForced: bitfield friendlyNameForced: UINT32 : 1; field edidIdsValid: bitfield edidIdsValid: UINT32 : 1; field reserved: bitfield reserved: UINT32 : 29
 record	struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@wingdi.h:2288): its members overlap the record's; member 1 (union anon@wingdi.h:2288, anonymous-member) -> union
-record	struct DISPLAYCONFIG_TARGET_DEVICE_NAME	layout-blocked		fixed-array,nested-layout-blocked	field monitorFriendlyDeviceName: wide-char elements, WCHAR [64]; field monitorDevicePath: wide-char elements, WCHAR [128]; field flags (struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS, field) -> anonymous-overlay
+record	struct DISPLAYCONFIG_TARGET_DEVICE_NAME	layout-blocked		nested-layout-blocked	field flags (struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS, field) -> anonymous-overlay
 record	struct DISPLAYCONFIG_TARGET_PREFERRED_MODE	layout-blocked		nested-layout-blocked	field targetMode (struct DISPLAYCONFIG_TARGET_MODE, field) -> struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO -> anonymous-overlay
-record	struct DISPLAYCONFIG_ADAPTER_NAME	layout-blocked		fixed-array	field adapterDevicePath: wide-char elements, WCHAR [128]
+record	struct DISPLAYCONFIG_ADAPTER_NAME	layout-direct	win32::layouts	DISPLAYCONFIG_ADAPTER_NAME	sizeof 276, _Alignof 4, 2 fields
 record	struct DISPLAYCONFIG_TARGET_BASE_TYPE	layout-direct	win32::layouts	DISPLAYCONFIG_TARGET_BASE_TYPE	sizeof 24, _Alignof 4, 2 fields
 record	union anon@wingdi.h:2329	layout-blocked		bitfield,union	a union: its members overlap; field bootPersistenceOn: bitfield bootPersistenceOn: UINT32 : 1; field reserved: bitfield reserved: UINT32 : 31
 record	struct DISPLAYCONFIG_SET_TARGET_PERSISTENCE	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@wingdi.h:2329): its members overlap the record's; member 2 (union anon@wingdi.h:2329, anonymous-member) -> union
@@ -24152,7 +24152,7 @@ record	union anon@wingdi.h:2376	layout-blocked		bitfield,union	a union: its memb
 record	struct _DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@wingdi.h:2376): its members overlap the record's; member 2 (union anon@wingdi.h:2376, anonymous-member) -> union
 record	struct _DISPLAYCONFIG_SDR_WHITE_LEVEL	layout-direct	win32::layouts	DISPLAYCONFIG_SDR_WHITE_LEVEL	sizeof 24, _Alignof 4, 2 fields
 record	struct _RGNDATAHEADER	layout-direct	win32::layouts	RGNDATAHEADER	sizeof 32, _Alignof 4, 5 fields
-record	struct _RGNDATA	layout-blocked		fixed-array	field Buffer: char elements, char [1]
+record	struct _RGNDATA	layout-direct	win32::layouts	RGNDATA	sizeof 36, _Alignof 4, 2 fields
 record	struct _ABC	layout-direct	win32::layouts	ABC	sizeof 12, _Alignof 4, 3 fields
 record	struct _ABCFLOAT	layout-blocked		float	field abcfA: float (FLOAT); field abcfB: float (FLOAT); field abcfC: float (FLOAT)
 record	struct _OUTLINETEXTMETRICA	layout-direct	win32::layouts	OUTLINETEXTMETRICA	sizeof 232, _Alignof 8, 32 fields
@@ -24163,28 +24163,28 @@ record	struct _FIXED	layout-direct	win32::layouts	FIXED	sizeof 4, _Alignof 2, 2 
 record	struct _MAT2	layout-direct	win32::layouts	MAT2	sizeof 16, _Alignof 2, 4 fields
 record	struct _GLYPHMETRICS	layout-direct	win32::layouts	GLYPHMETRICS	sizeof 20, _Alignof 4, 5 fields
 record	struct tagPOINTFX	layout-direct	win32::layouts	POINTFX	sizeof 8, _Alignof 2, 2 fields
-record	struct tagTTPOLYCURVE	layout-blocked		fixed-array	field apfx: record elements, POINTFX [1]
+record	struct tagTTPOLYCURVE	layout-direct	win32::layouts	TTPOLYCURVE	sizeof 12, _Alignof 2, 3 fields
 record	struct tagTTPOLYGONHEADER	layout-direct	win32::layouts	TTPOLYGONHEADER	sizeof 16, _Alignof 4, 3 fields
 record	struct tagGCP_RESULTSA	layout-direct	win32::layouts	GCP_RESULTSA	sizeof 64, _Alignof 8, 9 fields
 record	struct tagGCP_RESULTSW	layout-direct	win32::layouts	GCP_RESULTSW	sizeof 64, _Alignof 8, 9 fields
 record	struct _RASTERIZER_STATUS	layout-direct	win32::layouts	RASTERIZER_STATUS	sizeof 6, _Alignof 2, 3 fields
 record	struct tagPIXELFORMATDESCRIPTOR	layout-direct	win32::layouts	PIXELFORMATDESCRIPTOR	sizeof 40, _Alignof 4, 26 fields
 record	struct tagWCRANGE	layout-direct	win32::layouts	WCRANGE	sizeof 4, _Alignof 2, 2 fields
-record	struct tagGLYPHSET	layout-blocked		fixed-array	field ranges: record elements, WCRANGE [1]
-record	struct tagDESIGNVECTOR	layout-blocked		fixed-array	field dvValues: scalar elements, LONG [16]
-record	struct tagAXISINFOA	layout-blocked		fixed-array	field axAxisName: char elements, BYTE [16]
-record	struct tagAXISINFOW	layout-blocked		fixed-array	field axAxisName: wide-char elements, WCHAR [16]
-record	struct tagAXESLISTA	layout-blocked		fixed-array,nested-layout-blocked	field axlAxisInfo: record elements, AXISINFOA [16]; field axlAxisInfo (struct tagAXISINFOA, array-element) -> fixed-array
-record	struct tagAXESLISTW	layout-blocked		fixed-array,nested-layout-blocked	field axlAxisInfo: record elements, AXISINFOW [16]; field axlAxisInfo (struct tagAXISINFOW, array-element) -> fixed-array
-record	struct tagENUMLOGFONTEXDVA	layout-blocked		nested-layout-blocked	field elfEnumLogfontEx (struct tagENUMLOGFONTEXA, field) -> fixed-array; field elfDesignVector (struct tagDESIGNVECTOR, field) -> fixed-array
-record	struct tagENUMLOGFONTEXDVW	layout-blocked		nested-layout-blocked	field elfEnumLogfontEx (struct tagENUMLOGFONTEXW, field) -> fixed-array; field elfDesignVector (struct tagDESIGNVECTOR, field) -> fixed-array
-record	struct tagENUMTEXTMETRICA	layout-blocked		nested-layout-blocked	field etmNewTextMetricEx (struct tagNEWTEXTMETRICEXA, field) -> struct tagFONTSIGNATURE -> fixed-array; field etmAxesList (struct tagAXESLISTA, field) -> fixed-array
-record	struct tagENUMTEXTMETRICW	layout-blocked		nested-layout-blocked	field etmNewTextMetricEx (struct tagNEWTEXTMETRICEXW, field) -> struct tagFONTSIGNATURE -> fixed-array; field etmAxesList (struct tagAXESLISTW, field) -> fixed-array
+record	struct tagGLYPHSET	layout-direct	win32::layouts	GLYPHSET	sizeof 20, _Alignof 4, 5 fields
+record	struct tagDESIGNVECTOR	layout-direct	win32::layouts	DESIGNVECTOR	sizeof 72, _Alignof 4, 3 fields
+record	struct tagAXISINFOA	layout-direct	win32::layouts	AXISINFOA	sizeof 24, _Alignof 4, 3 fields
+record	struct tagAXISINFOW	layout-direct	win32::layouts	AXISINFOW	sizeof 40, _Alignof 4, 3 fields
+record	struct tagAXESLISTA	layout-direct	win32::layouts	AXESLISTA	sizeof 392, _Alignof 4, 3 fields
+record	struct tagAXESLISTW	layout-direct	win32::layouts	AXESLISTW	sizeof 648, _Alignof 4, 3 fields
+record	struct tagENUMLOGFONTEXDVA	layout-direct	win32::layouts	ENUMLOGFONTEXDVA	sizeof 260, _Alignof 4, 2 fields
+record	struct tagENUMLOGFONTEXDVW	layout-direct	win32::layouts	ENUMLOGFONTEXDVW	sizeof 420, _Alignof 4, 2 fields
+record	struct tagENUMTEXTMETRICA	layout-direct	win32::layouts	ENUMTEXTMETRICA	sizeof 488, _Alignof 4, 2 fields
+record	struct tagENUMTEXTMETRICW	layout-direct	win32::layouts	ENUMTEXTMETRICW	sizeof 748, _Alignof 4, 2 fields
 record	struct _TRIVERTEX	layout-direct	win32::layouts	TRIVERTEX	sizeof 16, _Alignof 4, 6 fields
 record	struct _GRADIENT_TRIANGLE	layout-direct	win32::layouts	GRADIENT_TRIANGLE	sizeof 12, _Alignof 4, 3 fields
 record	struct _GRADIENT_RECT	layout-direct	win32::layouts	GRADIENT_RECT	sizeof 8, _Alignof 4, 2 fields
 record	struct _BLENDFUNCTION	layout-direct	win32::layouts	BLENDFUNCTION	sizeof 4, _Alignof 1, 4 fields
-record	struct tagDIBSECTION	layout-blocked		fixed-array	field dsBitfields: scalar elements, DWORD [3]
+record	struct tagDIBSECTION	layout-direct	win32::layouts	DIBSECTION	sizeof 104, _Alignof 8, 5 fields
 record	struct tagCOLORADJUSTMENT	layout-direct	win32::layouts	COLORADJUSTMENT	sizeof 24, _Alignof 2, 12 fields
 record	struct _DOCINFOA	layout-direct	win32::layouts	DOCINFOA	sizeof 40, _Alignof 8, 5 fields
 record	struct _DOCINFOW	layout-direct	win32::layouts	DOCINFOW	sizeof 40, _Alignof 8, 5 fields
@@ -24201,9 +24201,9 @@ record	struct tagEMRSETTEXTCOLOR	layout-direct	win32::layouts	EMRSETBKCOLOR	size
 record	struct tagEMRSELECTOBJECT	layout-direct	win32::layouts	EMRSELECTOBJECT	sizeof 12, _Alignof 4, 2 fields
 record	struct tagEMRSELECTPALETTE	layout-direct	win32::layouts	EMRSELECTPALETTE	sizeof 12, _Alignof 4, 2 fields
 record	struct tagEMRRESIZEPALETTE	layout-direct	win32::layouts	EMRRESIZEPALETTE	sizeof 16, _Alignof 4, 3 fields
-record	struct tagEMRSETPALETTEENTRIES	layout-blocked		fixed-array	field aPalEntries: record elements, PALETTEENTRY [1]
+record	struct tagEMRSETPALETTEENTRIES	layout-direct	win32::layouts	EMRSETPALETTEENTRIES	sizeof 24, _Alignof 4, 5 fields
 record	struct tagEMRSETCOLORADJUSTMENT	layout-direct	win32::layouts	EMRSETCOLORADJUSTMENT	sizeof 32, _Alignof 4, 2 fields
-record	struct tagEMRGDICOMMENT	layout-blocked		fixed-array	field Data: char elements, BYTE [1]
+record	struct tagEMRGDICOMMENT	layout-direct	win32::layouts	EMRGDICOMMENT	sizeof 16, _Alignof 4, 3 fields
 record	struct tagEMREOF	layout-direct	win32::layouts	EMREOF	sizeof 20, _Alignof 4, 4 fields
 record	struct tagEMRLINETO	layout-direct	win32::layouts	EMRLINETO	sizeof 16, _Alignof 4, 2 fields
 record	struct tagEMROFFSETCLIPRGN	layout-direct	win32::layouts	EMROFFSETCLIPRGN	sizeof 16, _Alignof 4, 2 fields
@@ -24220,45 +24220,45 @@ record	struct tagEMRELLIPSE	layout-direct	win32::layouts	EMRELLIPSE	sizeof 24, _
 record	struct tagEMRROUNDRECT	layout-direct	win32::layouts	EMRROUNDRECT	sizeof 32, _Alignof 4, 3 fields
 record	struct tagEMRARC	layout-direct	win32::layouts	EMRARC	sizeof 40, _Alignof 4, 4 fields
 record	struct tagEMRANGLEARC	layout-blocked		float	field eStartAngle: float (FLOAT); field eSweepAngle: float (FLOAT)
-record	struct tagEMRPOLYLINE	layout-blocked		fixed-array	field aptl: record elements, POINTL [1]
-record	struct tagEMRPOLYLINE16	layout-blocked		fixed-array	field apts: record elements, POINTS [1]
-record	struct tagEMRPOLYDRAW	layout-blocked		fixed-array	field aptl: record elements, POINTL [1]; field abTypes: char elements, BYTE [1]
-record	struct tagEMRPOLYDRAW16	layout-blocked		fixed-array	field apts: record elements, POINTS [1]; field abTypes: char elements, BYTE [1]
-record	struct tagEMRPOLYPOLYLINE	layout-blocked		fixed-array	field aPolyCounts: scalar elements, DWORD [1]; field aptl: record elements, POINTL [1]
-record	struct tagEMRPOLYPOLYLINE16	layout-blocked		fixed-array	field aPolyCounts: scalar elements, DWORD [1]; field apts: record elements, POINTS [1]
-record	struct tagEMRINVERTRGN	layout-blocked		fixed-array	field RgnData: char elements, BYTE [1]
-record	struct tagEMRFILLRGN	layout-blocked		fixed-array	field RgnData: char elements, BYTE [1]
-record	struct tagEMRFRAMERGN	layout-blocked		fixed-array	field RgnData: char elements, BYTE [1]
-record	struct tagEMREXTSELECTCLIPRGN	layout-blocked		fixed-array	field RgnData: char elements, BYTE [1]
+record	struct tagEMRPOLYLINE	layout-direct	win32::layouts	EMRPOLYLINE	sizeof 36, _Alignof 4, 4 fields
+record	struct tagEMRPOLYLINE16	layout-direct	win32::layouts	EMRPOLYLINE16	sizeof 32, _Alignof 4, 4 fields
+record	struct tagEMRPOLYDRAW	layout-direct	win32::layouts	EMRPOLYDRAW	sizeof 40, _Alignof 4, 5 fields
+record	struct tagEMRPOLYDRAW16	layout-direct	win32::layouts	EMRPOLYDRAW16	sizeof 36, _Alignof 4, 5 fields
+record	struct tagEMRPOLYPOLYLINE	layout-direct	win32::layouts	EMRPOLYPOLYLINE	sizeof 44, _Alignof 4, 6 fields
+record	struct tagEMRPOLYPOLYLINE16	layout-direct	win32::layouts	EMRPOLYPOLYLINE16	sizeof 40, _Alignof 4, 6 fields
+record	struct tagEMRINVERTRGN	layout-direct	win32::layouts	EMRINVERTRGN	sizeof 32, _Alignof 4, 4 fields
+record	struct tagEMRFILLRGN	layout-direct	win32::layouts	EMRFILLRGN	sizeof 36, _Alignof 4, 5 fields
+record	struct tagEMRFRAMERGN	layout-direct	win32::layouts	EMRFRAMERGN	sizeof 44, _Alignof 4, 6 fields
+record	struct tagEMREXTSELECTCLIPRGN	layout-direct	win32::layouts	EMREXTSELECTCLIPRGN	sizeof 20, _Alignof 4, 4 fields
 record	struct tagEMREXTTEXTOUTA	layout-blocked		float	field exScale: float (FLOAT); field eyScale: float (FLOAT)
-record	struct tagEMRPOLYTEXTOUTA	layout-blocked		fixed-array,float	field exScale: float (FLOAT); field eyScale: float (FLOAT); field aemrtext: record elements, EMRTEXT [1]
+record	struct tagEMRPOLYTEXTOUTA	layout-blocked		float	field exScale: float (FLOAT); field eyScale: float (FLOAT)
 record	struct tagEMRBITBLT	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
 record	struct tagEMRSTRETCHBLT	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
 record	struct tagEMRMASKBLT	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
-record	struct tagEMRPLGBLT	layout-blocked		fixed-array,nested-layout-blocked	field aptlDest: record elements, POINTL [3]; field xformSrc (struct tagXFORM, field) -> float
+record	struct tagEMRPLGBLT	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
 record	struct tagEMRSETDIBITSTODEVICE	layout-direct	win32::layouts	EMRSETDIBITSTODEVICE	sizeof 76, _Alignof 4, 15 fields
 record	struct tagEMRSTRETCHDIBITS	layout-direct	win32::layouts	EMRSTRETCHDIBITS	sizeof 80, _Alignof 4, 16 fields
-record	struct tagEMREXTCREATEFONTINDIRECTW	layout-blocked		nested-layout-blocked	field elfw (struct tagEXTLOGFONTW, field) -> fixed-array
-record	struct tagEMRCREATEPALETTE	layout-blocked		nested-layout-blocked	field lgpl (struct tagLOGPALETTE, field) -> fixed-array
+record	struct tagEMREXTCREATEFONTINDIRECTW	layout-direct	win32::layouts	EMREXTCREATEFONTINDIRECTW	sizeof 332, _Alignof 4, 3 fields
+record	struct tagEMRCREATEPALETTE	layout-direct	win32::layouts	EMRCREATEPALETTE	sizeof 20, _Alignof 4, 3 fields
 record	struct tagEMRCREATEPEN	layout-direct	win32::layouts	EMRCREATEPEN	sizeof 28, _Alignof 4, 3 fields
-record	struct tagEMREXTCREATEPEN	layout-blocked		nested-layout-blocked	field elp (struct tagEXTLOGPEN, field) -> fixed-array
+record	struct tagEMREXTCREATEPEN	layout-direct	win32::layouts	EMREXTCREATEPEN	sizeof 64, _Alignof 8, 7 fields
 record	struct tagEMRCREATEBRUSHINDIRECT	layout-direct	win32::layouts	EMRCREATEBRUSHINDIRECT	sizeof 24, _Alignof 4, 3 fields
 record	struct tagEMRCREATEMONOBRUSH	layout-direct	win32::layouts	EMRCREATEMONOBRUSH	sizeof 32, _Alignof 4, 7 fields
 record	struct tagEMRCREATEDIBPATTERNBRUSHPT	layout-direct	win32::layouts	EMRCREATEDIBPATTERNBRUSHPT	sizeof 32, _Alignof 4, 7 fields
 record	struct tagEMRFORMAT	layout-direct	win32::layouts	EMRFORMAT	sizeof 16, _Alignof 4, 4 fields
-record	struct tagEMRGLSRECORD	layout-blocked		fixed-array	field Data: char elements, BYTE [1]
-record	struct tagEMRGLSBOUNDEDRECORD	layout-blocked		fixed-array	field Data: char elements, BYTE [1]
+record	struct tagEMRGLSRECORD	layout-direct	win32::layouts	EMRGLSRECORD	sizeof 16, _Alignof 4, 3 fields
+record	struct tagEMRGLSBOUNDEDRECORD	layout-direct	win32::layouts	EMRGLSBOUNDEDRECORD	sizeof 32, _Alignof 4, 4 fields
 record	struct tagEMRPIXELFORMAT	layout-direct	win32::layouts	EMRPIXELFORMAT	sizeof 48, _Alignof 4, 2 fields
-record	struct tagEMRCREATECOLORSPACE	layout-blocked		nested-layout-blocked	field lcs (struct tagLOGCOLORSPACEA, field) -> fixed-array
+record	struct tagEMRCREATECOLORSPACE	layout-direct	win32::layouts	EMRCREATECOLORSPACE	sizeof 340, _Alignof 4, 3 fields
 record	struct tagEMRSETCOLORSPACE	layout-direct	win32::layouts	EMRSETCOLORSPACE	sizeof 12, _Alignof 4, 2 fields
-record	struct tagEMREXTESCAPE	layout-blocked		fixed-array	field EscData: char elements, BYTE [1]
-record	struct tagEMRNAMEDESCAPE	layout-blocked		fixed-array	field EscData: char elements, BYTE [1]
-record	struct tagEMRSETICMPROFILE	layout-blocked		fixed-array	field Data: char elements, BYTE [1]
-record	struct tagEMRCREATECOLORSPACEW	layout-blocked		fixed-array,nested-layout-blocked	field Data: char elements, BYTE [1]; field lcs (struct tagLOGCOLORSPACEW, field) -> fixed-array
-record	struct tagCOLORMATCHTOTARGET	layout-blocked		fixed-array	field Data: char elements, BYTE [1]
+record	struct tagEMREXTESCAPE	layout-direct	win32::layouts	EMREXTESCAPE	sizeof 20, _Alignof 4, 4 fields
+record	struct tagEMRNAMEDESCAPE	layout-direct	win32::layouts	EMRNAMEDESCAPE	sizeof 24, _Alignof 4, 5 fields
+record	struct tagEMRSETICMPROFILE	layout-direct	win32::layouts	EMRSETICMPROFILE	sizeof 24, _Alignof 4, 5 fields
+record	struct tagEMRCREATECOLORSPACEW	layout-direct	win32::layouts	EMRCREATECOLORSPACEW	sizeof 612, _Alignof 4, 6 fields
+record	struct tagCOLORMATCHTOTARGET	layout-direct	win32::layouts	EMRCOLORMATCHTOTARGET	sizeof 28, _Alignof 4, 6 fields
 record	struct tagCOLORCORRECTPALETTE	layout-direct	win32::layouts	EMRCOLORCORRECTPALETTE	sizeof 24, _Alignof 4, 5 fields
 record	struct tagEMRALPHABLEND	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
-record	struct tagEMRGRADIENTFILL	layout-blocked		fixed-array	field Ver: record elements, TRIVERTEX [1]
+record	struct tagEMRGRADIENTFILL	layout-direct	win32::layouts	EMRGRADIENTFILL	sizeof 52, _Alignof 4, 6 fields
 record	struct tagEMRTRANSPARENTBLT	layout-blocked		nested-layout-blocked	field xformSrc (struct tagXFORM, field) -> float
 record	struct _POINTFLOAT	layout-blocked		float	field x: float (FLOAT); field y: float (FLOAT)
 record	struct _GLYPHMETRICSFLOAT	layout-blocked		float,nested-layout-blocked	field gmfBlackBoxX: float (FLOAT); field gmfBlackBoxY: float (FLOAT); field gmfCellIncX: float (FLOAT); field gmfCellIncY: float (FLOAT); field gmfptGlyphOrigin (struct _POINTFLOAT, field) -> float
@@ -24288,12 +24288,12 @@ record	struct tagMSG	layout-direct	win32::layouts	MSG	sizeof 48, _Alignof 8, 6 f
 record	struct tagMINMAXINFO	layout-direct	win32::layouts	MINMAXINFO	sizeof 40, _Alignof 4, 5 fields
 record	struct tagCOPYDATASTRUCT	layout-direct	win32::layouts	COPYDATASTRUCT	sizeof 24, _Alignof 8, 3 fields
 record	struct tagMDINEXTMENU	layout-direct	win32::layouts	MDINEXTMENU	sizeof 24, _Alignof 8, 3 fields
-record	struct anon@winuser.h:1313	layout-blocked		fixed-array,nested-layout-blocked	field Data: char elements, UCHAR [1]; field PowerSetting (struct _GUID, field) -> fixed-array
+record	struct anon@winuser.h:1313	layout-direct	win32::layouts	POWERBROADCAST_SETTING	sizeof 24, _Alignof 4, 3 fields
 record	struct tagWINDOWPOS	layout-direct	win32::layouts	WINDOWPOS	sizeof 40, _Alignof 8, 7 fields
-record	struct tagNCCALCSIZE_PARAMS	layout-blocked		fixed-array	field rgrc: record elements, RECT [3]
+record	struct tagNCCALCSIZE_PARAMS	layout-direct	win32::layouts	NCCALCSIZE_PARAMS	sizeof 56, _Alignof 8, 2 fields
 record	struct tagTRACKMOUSEEVENT	layout-direct	win32::layouts	TRACKMOUSEEVENT	sizeof 24, _Alignof 8, 4 fields
 record	struct tagACCEL	layout-direct	win32::layouts	ACCEL	sizeof 6, _Alignof 2, 3 fields
-record	struct tagPAINTSTRUCT	layout-blocked		fixed-array	field rgbReserved: char elements, BYTE [32]
+record	struct tagPAINTSTRUCT	layout-direct	win32::layouts	PAINTSTRUCT	sizeof 72, _Alignof 8, 6 fields
 record	struct tagCREATESTRUCTA	layout-direct	win32::layouts	CREATESTRUCTA	sizeof 80, _Alignof 8, 12 fields
 record	struct tagCREATESTRUCTW	layout-direct	win32::layouts	CREATESTRUCTW	sizeof 80, _Alignof 8, 12 fields
 record	struct tagWINDOWPLACEMENT	layout-direct	win32::layouts	WINDOWPLACEMENT	sizeof 44, _Alignof 4, 6 fields
@@ -24336,31 +24336,31 @@ record	struct tagHELPINFO	layout-direct	win32::layouts	HELPINFO	sizeof 40, _Alig
 record	struct tagMSGBOXPARAMSA	layout-direct	win32::layouts	MSGBOXPARAMSA	sizeof 80, _Alignof 8, 10 fields
 record	struct tagMSGBOXPARAMSW	layout-direct	win32::layouts	MSGBOXPARAMSW	sizeof 80, _Alignof 8, 10 fields
 record	struct anon@winuser.h:4059	layout-direct	win32::layouts	MENUITEMTEMPLATEHEADER	sizeof 4, _Alignof 2, 2 fields
-record	struct anon@winuser.h:4064	layout-blocked		fixed-array	field mtString: wide-char elements, WCHAR [1]
+record	struct anon@winuser.h:4064	layout-direct	win32::layouts	MENUITEMTEMPLATE	sizeof 6, _Alignof 2, 3 fields
 record	struct _ICONINFO	layout-direct	win32::layouts	ICONINFO	sizeof 32, _Alignof 8, 5 fields
 record	struct tagCURSORSHAPE	layout-direct	win32::layouts	CURSORSHAPE	sizeof 24, _Alignof 4, 7 fields
-record	struct _ICONINFOEXA	layout-blocked		fixed-array	field szModName: char elements, CHAR [260]; field szResName: char elements, CHAR [260]
-record	struct _ICONINFOEXW	layout-blocked		fixed-array	field szModName: wide-char elements, WCHAR [260]; field szResName: wide-char elements, WCHAR [260]
+record	struct _ICONINFOEXA	layout-direct	win32::layouts	ICONINFOEXA	sizeof 560, _Alignof 8, 9 fields
+record	struct _ICONINFOEXW	layout-direct	win32::layouts	ICONINFOEXW	sizeof 1080, _Alignof 8, 9 fields
 record	struct tagSCROLLINFO	layout-direct	win32::layouts	SCROLLINFO	sizeof 28, _Alignof 4, 7 fields
 record	struct tagMDICREATESTRUCTA	layout-direct	win32::layouts	MDICREATESTRUCTA	sizeof 56, _Alignof 8, 9 fields
 record	struct tagMDICREATESTRUCTW	layout-direct	win32::layouts	MDICREATESTRUCTW	sizeof 56, _Alignof 8, 9 fields
 record	struct tagCLIENTCREATESTRUCT	layout-direct	win32::layouts	CLIENTCREATESTRUCT	sizeof 16, _Alignof 8, 2 fields
-record	struct tagMULTIKEYHELPA	layout-blocked		fixed-array	field szKeyphrase: char elements, CHAR [1]
-record	struct tagMULTIKEYHELPW	layout-blocked		fixed-array	field szKeyphrase: wide-char elements, WCHAR [1]
-record	struct tagHELPWININFOA	layout-blocked		fixed-array	field rgchMember: char elements, CHAR [2]
-record	struct tagHELPWININFOW	layout-blocked		fixed-array	field rgchMember: wide-char elements, WCHAR [2]
+record	struct tagMULTIKEYHELPA	layout-direct	win32::layouts	MULTIKEYHELPA	sizeof 8, _Alignof 4, 3 fields
+record	struct tagMULTIKEYHELPW	layout-direct	win32::layouts	MULTIKEYHELPW	sizeof 8, _Alignof 4, 3 fields
+record	struct tagHELPWININFOA	layout-direct	win32::layouts	HELPWININFOA	sizeof 28, _Alignof 4, 7 fields
+record	struct tagHELPWININFOW	layout-direct	win32::layouts	HELPWININFOW	sizeof 28, _Alignof 4, 7 fields
 record	struct tagTouchPredictionParameters	layout-direct	win32::layouts	TOUCHPREDICTIONPARAMETERS	sizeof 16, _Alignof 4, 4 fields
-record	struct tagNONCLIENTMETRICSA	layout-blocked		nested-layout-blocked	field lfCaptionFont (struct tagLOGFONTA, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTA, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTA, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTA, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTA, field) -> fixed-array
-record	struct tagNONCLIENTMETRICSW	layout-blocked		nested-layout-blocked	field lfCaptionFont (struct tagLOGFONTW, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTW, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTW, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTW, field) -> fixed-array; field lfCaptionFont (struct tagLOGFONTW, field) -> fixed-array
+record	struct tagNONCLIENTMETRICSA	layout-direct	win32::layouts	NONCLIENTMETRICSA	sizeof 344, _Alignof 4, 16 fields
+record	struct tagNONCLIENTMETRICSW	layout-direct	win32::layouts	NONCLIENTMETRICSW	sizeof 504, _Alignof 4, 16 fields
 record	struct tagMINIMIZEDMETRICS	layout-direct	win32::layouts	MINIMIZEDMETRICS	sizeof 20, _Alignof 4, 5 fields
-record	struct tagICONMETRICSA	layout-blocked		nested-layout-blocked	field lfFont (struct tagLOGFONTA, field) -> fixed-array
-record	struct tagICONMETRICSW	layout-blocked		nested-layout-blocked	field lfFont (struct tagLOGFONTW, field) -> fixed-array
+record	struct tagICONMETRICSA	layout-direct	win32::layouts	ICONMETRICSA	sizeof 76, _Alignof 4, 5 fields
+record	struct tagICONMETRICSW	layout-direct	win32::layouts	ICONMETRICSW	sizeof 108, _Alignof 4, 5 fields
 record	struct tagANIMATIONINFO	layout-direct	win32::layouts	ANIMATIONINFO	sizeof 8, _Alignof 4, 2 fields
 record	struct tagSERIALKEYSA	layout-direct	win32::layouts	SERIALKEYSA	sizeof 40, _Alignof 8, 7 fields
 record	struct tagSERIALKEYSW	layout-direct	win32::layouts	SERIALKEYSW	sizeof 40, _Alignof 8, 7 fields
 record	struct tagHIGHCONTRASTA	layout-direct	win32::layouts	HIGHCONTRASTA	sizeof 16, _Alignof 8, 3 fields
 record	struct tagHIGHCONTRASTW	layout-direct	win32::layouts	HIGHCONTRASTW	sizeof 16, _Alignof 8, 3 fields
-record	struct _VIDEOPARAMETERS	layout-blocked		fixed-array,nested-layout-blocked	field bOEMCopyProtection: char elements, UCHAR [256]; field Guid (struct _GUID, field) -> fixed-array
+record	struct _VIDEOPARAMETERS	layout-direct	win32::layouts	VIDEOPARAMETERS	sizeof 356, _Alignof 4, 23 fields
 record	struct tagFILTERKEYS	layout-direct	win32::layouts	FILTERKEYS	sizeof 24, _Alignof 4, 6 fields
 record	struct tagSTICKYKEYS	layout-direct	win32::layouts	STICKYKEYS	sizeof 8, _Alignof 4, 2 fields
 record	struct tagMOUSEKEYS	layout-direct	win32::layouts	MOUSEKEYS	sizeof 28, _Alignof 4, 7 fields
@@ -24370,15 +24370,15 @@ record	struct tagSOUNDSENTRYW	layout-direct	win32::layouts	SOUNDSENTRYW	sizeof 5
 record	struct tagTOGGLEKEYS	layout-direct	win32::layouts	TOGGLEKEYS	sizeof 8, _Alignof 4, 2 fields
 record	struct tagMONITORINFO	layout-direct	win32::layouts	MONITORINFO	sizeof 40, _Alignof 4, 4 fields
 record	struct tagAUDIODESCRIPTION	layout-direct	win32::layouts	AUDIODESCRIPTION	sizeof 12, _Alignof 4, 3 fields
-record	struct tagMONITORINFOEXA	layout-blocked		fixed-array	field szDevice: char elements, CHAR [32]
-record	struct tagMONITORINFOEXW	layout-blocked		fixed-array	field szDevice: wide-char elements, WCHAR [32]
+record	struct tagMONITORINFOEXA	layout-direct	win32::layouts	MONITORINFOEXA	sizeof 72, _Alignof 4, 5 fields
+record	struct tagMONITORINFOEXW	layout-direct	win32::layouts	MONITORINFOEXW	sizeof 104, _Alignof 4, 5 fields
 record	struct tagGUITHREADINFO	layout-direct	win32::layouts	GUITHREADINFO	sizeof 72, _Alignof 8, 9 fields
 record	struct tagCURSORINFO	layout-direct	win32::layouts	CURSORINFO	sizeof 24, _Alignof 8, 4 fields
 record	struct tagWINDOWINFO	layout-direct	win32::layouts	WINDOWINFO	sizeof 60, _Alignof 4, 10 fields
-record	struct tagTITLEBARINFO	layout-blocked		fixed-array	field rgstate: scalar elements, DWORD [5 + 1]
-record	struct tagTITLEBARINFOEX	layout-blocked		fixed-array	field rgstate: scalar elements, DWORD [5 + 1]; field rgrect: record elements, RECT [5 + 1]
+record	struct tagTITLEBARINFO	layout-direct	win32::layouts	TITLEBARINFO	sizeof 44, _Alignof 4, 3 fields
+record	struct tagTITLEBARINFOEX	layout-direct	win32::layouts	TITLEBARINFOEX	sizeof 140, _Alignof 4, 4 fields
 record	struct tagMENUBARINFO	layout-blocked		bitfield	field fBarFocused: bitfield fBarFocused: WINBOOL : 1; field fFocused: bitfield fFocused: WINBOOL : 1
-record	struct tagSCROLLBARINFO	layout-blocked		fixed-array	field rgstate: scalar elements, DWORD [5 + 1]
+record	struct tagSCROLLBARINFO	layout-direct	win32::layouts	SCROLLBARINFO	sizeof 60, _Alignof 4, 7 fields
 record	struct tagCOMBOBOXINFO	layout-direct	win32::layouts	COMBOBOXINFO	sizeof 64, _Alignof 8, 7 fields
 record	struct tagALTTABINFO	layout-direct	win32::layouts	ALTTABINFO	sizeof 40, _Alignof 4, 9 fields
 record	struct HRAWINPUT__	layout-direct	win32::layouts	HRAWINPUT__	sizeof 4, _Alignof 4, 1 fields
@@ -24386,8 +24386,8 @@ record	struct tagRAWINPUTHEADER	layout-direct	win32::layouts	RAWINPUTHEADER	size
 record	union anon@winuser.h:6315	layout-blocked		union	a union: its members overlap
 record	struct tagRAWMOUSE	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@winuser.h:6315): its members overlap the record's; member 2 (union anon@winuser.h:6315, anonymous-member) -> union
 record	struct tagRAWKEYBOARD	layout-direct	win32::layouts	RAWKEYBOARD	sizeof 16, _Alignof 4, 6 fields
-record	struct tagRAWHID	layout-blocked		fixed-array	field bRawData: char elements, BYTE [1]
-record	union anon@winuser.h:6388	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field mouse (struct tagRAWMOUSE, union-member) -> anonymous-overlay; field hid (struct tagRAWHID, union-member) -> fixed-array
+record	struct tagRAWHID	layout-direct	win32::layouts	RAWHID	sizeof 12, _Alignof 4, 3 fields
+record	union anon@winuser.h:6388	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field mouse (struct tagRAWMOUSE, union-member) -> anonymous-overlay
 record	struct tagRAWINPUT	layout-blocked		nested-layout-blocked	field data (union anon@winuser.h:6388, field) -> union
 record	struct tagRID_DEVICE_INFO_MOUSE	layout-direct	win32::layouts	RID_DEVICE_INFO_MOUSE	sizeof 16, _Alignof 4, 4 fields
 record	struct tagRID_DEVICE_INFO_KEYBOARD	layout-direct	win32::layouts	RID_DEVICE_INFO_KEYBOARD	sizeof 24, _Alignof 4, 6 fields
@@ -24396,7 +24396,7 @@ record	union anon@winuser.h:6443	layout-blocked		union	a union: its members over
 record	struct tagRID_DEVICE_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@winuser.h:6443): its members overlap the record's; member 3 (union anon@winuser.h:6443, anonymous-member) -> union
 record	struct tagRAWINPUTDEVICE	layout-direct	win32::layouts	RAWINPUTDEVICE	sizeof 16, _Alignof 8, 4 fields
 record	struct tagRAWINPUTDEVICELIST	layout-direct	win32::layouts	RAWINPUTDEVICELIST	sizeof 16, _Alignof 8, 2 fields
-record	struct tagPOINTER_DEVICE_INFO	layout-blocked		fixed-array	field productString: wide-char elements, WCHAR [520]
+record	struct tagPOINTER_DEVICE_INFO	layout-direct	win32::layouts	POINTER_DEVICE_INFO	sizeof 1080, _Alignof 8, 7 fields
 record	struct tagPOINTER_DEVICE_PROPERTY	layout-direct	win32::layouts	POINTER_DEVICE_PROPERTY	sizeof 28, _Alignof 4, 8 fields
 record	struct tagPOINTER_DEVICE_CURSOR_INFO	layout-direct	win32::layouts	POINTER_DEVICE_CURSOR_INFO	sizeof 8, _Alignof 4, 2 fields
 record	struct tagCHANGEFILTERSTRUCT	layout-direct	win32::layouts	CHANGEFILTERSTRUCT	sizeof 8, _Alignof 4, 2 fields
@@ -24405,18 +24405,18 @@ record	struct tagGESTUREINFO	layout-direct	win32::layouts	GESTUREINFO	sizeof 56,
 record	struct tagGESTURENOTIFYSTRUCT	layout-direct	win32::layouts	GESTURENOTIFYSTRUCT	sizeof 24, _Alignof 8, 5 fields
 record	struct tagGESTURECONFIG	layout-direct	win32::layouts	GESTURECONFIG	sizeof 12, _Alignof 4, 3 fields
 record	struct tagINPUT_MESSAGE_SOURCE	layout-direct	win32::layouts	INPUT_MESSAGE_SOURCE	sizeof 8, _Alignof 4, 2 fields
-record	union anon@winuser.h:6770	layout-blocked		fixed-array,float,union	a union: its members overlap; field _11: float (float); field _12: float (float); field _13: float (float); field _14: float (float); field _21: float (float); field _22: float (float); field _23: float (float); field _24: float (float); field _31: float (float); field _32: float (float); field _33: float (float); field _34: float (float); field _41: float (float); field _42: float (float); field _43: float (float); field _44: float (float); field m: other elements, float [4][4]; field m: array element: float (float)
+record	union anon@winuser.h:6770	layout-blocked		float,union	a union: its members overlap; field _11: float (float); field _12: float (float); field _13: float (float); field _14: float (float); field _21: float (float); field _22: float (float); field _23: float (float); field _24: float (float); field _31: float (float); field _32: float (float); field _33: float (float); field _34: float (float); field _41: float (float); field _42: float (float); field _43: float (float); field _44: float (float); field m: array element: float (float)
 record	struct tagINPUT_TRANSFORM	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@winuser.h:6770): its members overlap the record's; member 1 (union anon@winuser.h:6770, anonymous-member) -> union
-record	struct _cpinfo	layout-blocked		fixed-array	field DefaultChar: char elements, BYTE [2]; field LeadByte: char elements, BYTE [12]
-record	struct _cpinfoexA	layout-blocked		fixed-array	field DefaultChar: char elements, BYTE [2]; field LeadByte: char elements, BYTE [12]; field CodePageName: char elements, CHAR [260]
-record	struct _cpinfoexW	layout-blocked		fixed-array	field DefaultChar: char elements, BYTE [2]; field LeadByte: char elements, BYTE [12]; field CodePageName: wide-char elements, WCHAR [260]
+record	struct _cpinfo	layout-direct	win32::layouts	CPINFO	sizeof 20, _Alignof 4, 3 fields
+record	struct _cpinfoexA	layout-direct	win32::layouts	CPINFOEXA	sizeof 284, _Alignof 4, 6 fields
+record	struct _cpinfoexW	layout-direct	win32::layouts	CPINFOEXW	sizeof 544, _Alignof 4, 6 fields
 record	struct _numberfmtA	layout-direct	win32::layouts	NUMBERFMTA	sizeof 40, _Alignof 8, 6 fields
 record	struct _numberfmtW	layout-direct	win32::layouts	NUMBERFMTW	sizeof 40, _Alignof 8, 6 fields
 record	struct _currencyfmtA	layout-direct	win32::layouts	CURRENCYFMTA	sizeof 48, _Alignof 8, 8 fields
 record	struct _currencyfmtW	layout-direct	win32::layouts	CURRENCYFMTW	sizeof 48, _Alignof 8, 8 fields
-record	struct _nlsversioninfo	layout-blocked		nested-layout-blocked	field guidCustomVersion (struct _GUID, field) -> fixed-array
-record	struct _nlsversioninfoex	layout-blocked		nested-layout-blocked	field guidCustomVersion (struct _GUID, field) -> fixed-array
-record	struct _FILEMUIINFO	layout-blocked		fixed-array	field pChecksum: char elements, BYTE [16]; field pServiceChecksum: char elements, BYTE [16]; field abBuffer: char elements, BYTE [8]
+record	struct _nlsversioninfo	layout-direct	win32::layouts	NLSVERSIONINFO	sizeof 32, _Alignof 4, 5 fields
+record	struct _nlsversioninfoex	layout-direct	win32::layouts	NLSVERSIONINFOEX	sizeof 32, _Alignof 4, 5 fields
+record	struct _FILEMUIINFO	layout-direct	win32::layouts	FILEMUIINFO	sizeof 80, _Alignof 4, 13 fields
 record	struct _COORD	layout-direct	win32::layouts	COORD	sizeof 4, _Alignof 2, 2 fields
 record	struct _SMALL_RECT	layout-direct	win32::layouts	SMALL_RECT	sizeof 8, _Alignof 2, 4 fields
 record	union anon@wincon.h:37	layout-blocked		union	a union: its members overlap
@@ -24433,10 +24433,10 @@ record	struct _CONSOLE_SCREEN_BUFFER_INFO	layout-direct	win32::layouts	CONSOLE_S
 record	struct _CONSOLE_CURSOR_INFO	layout-direct	win32::layouts	CONSOLE_CURSOR_INFO	sizeof 8, _Alignof 4, 2 fields
 record	struct _CONSOLE_FONT_INFO	layout-direct	win32::layouts	CONSOLE_FONT_INFO	sizeof 8, _Alignof 4, 2 fields
 record	struct _CONSOLE_SELECTION_INFO	layout-direct	win32::layouts	CONSOLE_SELECTION_INFO	sizeof 16, _Alignof 4, 3 fields
-record	struct _CONSOLE_FONT_INFOEX	layout-blocked		fixed-array	field FaceName: wide-char elements, WCHAR [32]
+record	struct _CONSOLE_FONT_INFOEX	layout-direct	win32::layouts	CONSOLE_FONT_INFOEX	sizeof 84, _Alignof 4, 6 fields
 record	struct _CONSOLE_HISTORY_INFO	layout-direct	win32::layouts	CONSOLE_HISTORY_INFO	sizeof 16, _Alignof 4, 4 fields
 record	struct _CONSOLE_READCONSOLE_CONTROL	layout-direct	win32::layouts	CONSOLE_READCONSOLE_CONTROL	sizeof 16, _Alignof 4, 4 fields
-record	struct _CONSOLE_SCREEN_BUFFER_INFOEX	layout-blocked		fixed-array	field ColorTable: scalar elements, COLORREF [16]
+record	struct _CONSOLE_SCREEN_BUFFER_INFOEX	layout-direct	win32::layouts	CONSOLE_SCREEN_BUFFER_INFOEX	sizeof 96, _Alignof 4, 9 fields
 record	struct tagVS_FIXEDFILEINFO	layout-direct	win32::layouts	VS_FIXEDFILEINFO	sizeof 52, _Alignof 4, 13 fields
 record	struct val_context	layout-direct	win32::layouts	val_context	sizeof 24, _Alignof 8, 3 fields
 record	struct pvalueA	layout-direct	win32::layouts	PVALUEA	sizeof 32, _Alignof 8, 4 fields
@@ -24456,41 +24456,41 @@ record	struct _REMOTE_NAME_INFOA	layout-direct	win32::layouts	REMOTE_NAME_INFOA	
 record	struct _REMOTE_NAME_INFOW	layout-direct	win32::layouts	REMOTE_NAME_INFOW	sizeof 24, _Alignof 8, 3 fields
 record	struct _NETINFOSTRUCT	layout-direct	win32::layouts	NETINFOSTRUCT	sizeof 40, _Alignof 8, 8 fields
 record	struct _NETCONNECTINFOSTRUCT	layout-direct	win32::layouts	NETCONNECTINFOSTRUCT	sizeof 20, _Alignof 4, 5 fields
-record	struct _VIRTUAL_STORAGE_TYPE	layout-blocked		nested-layout-blocked	field VendorId (struct _GUID, field) -> fixed-array
+record	struct _VIRTUAL_STORAGE_TYPE	layout-direct	win32::layouts	VIRTUAL_STORAGE_TYPE	sizeof 20, _Alignof 4, 2 fields
 record	struct anon@virtdisk.h:279	layout-direct	win32::layouts	ATTACH_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 4, _Alignof 4, 1 fields
 record	union anon@virtdisk.h:278	layout-blocked		union	a union: its members overlap
 record	struct _ATTACH_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:278): its members overlap the record's; member 2 (union anon@virtdisk.h:278, anonymous-member) -> union
 record	struct anon@virtdisk.h:288	layout-direct	win32::layouts	COMPACT_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 4, _Alignof 4, 1 fields
 record	union anon@virtdisk.h:287	layout-blocked		union	a union: its members overlap
 record	struct _COMPACT_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:287): its members overlap the record's; member 2 (union anon@virtdisk.h:287, anonymous-member) -> union
-record	struct anon@virtdisk.h:297	layout-blocked		nested-layout-blocked	field UniqueId (struct _GUID, field) -> fixed-array
-record	struct anon@virtdisk.h:306	layout-blocked		nested-layout-blocked	field UniqueId (struct _GUID, field) -> fixed-array; field ParentVirtualStorageType (struct _VIRTUAL_STORAGE_TYPE, field) -> struct _GUID -> fixed-array; field ParentVirtualStorageType (struct _VIRTUAL_STORAGE_TYPE, field) -> struct _GUID -> fixed-array; field UniqueId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:296	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Version1 (struct anon@virtdisk.h:297, union-member) -> struct _GUID -> fixed-array; field Version2 (struct anon@virtdisk.h:306, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:297	layout-direct	win32::layouts	CREATE_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 48, _Alignof 8, 6 fields
+record	struct anon@virtdisk.h:306	layout-direct	win32::layouts	CREATE_VIRTUAL_DISK_PARAMETERS_Version2	sizeof 112, _Alignof 8, 10 fields
+record	union anon@virtdisk.h:296	layout-blocked		union	a union: its members overlap
 record	struct _CREATE_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:296): its members overlap the record's; member 2 (union anon@virtdisk.h:296, anonymous-member) -> union
 record	struct anon@virtdisk.h:325	layout-direct	win32::layouts	EXPAND_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 8, _Alignof 8, 1 fields
 record	union anon@virtdisk.h:324	layout-blocked		union	a union: its members overlap
 record	struct _EXPAND_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:324): its members overlap the record's; member 2 (union anon@virtdisk.h:324, anonymous-member) -> union
 record	struct anon@virtdisk.h:334	layout-direct	win32::layouts	GET_VIRTUAL_DISK_INFO_Size	sizeof 24, _Alignof 8, 4 fields
-record	struct anon@virtdisk.h:341	layout-blocked		fixed-array	field ParentLocationBuffer: wide-char elements, WCHAR [1]
+record	struct anon@virtdisk.h:341	layout-direct	win32::layouts	GET_VIRTUAL_DISK_INFO_ParentLocation	sizeof 8, _Alignof 4, 2 fields
 record	struct anon@virtdisk.h:352	layout-direct	win32::layouts	GET_VIRTUAL_DISK_INFO_PhysicalDisk	sizeof 12, _Alignof 4, 3 fields
-record	struct anon@virtdisk.h:363	layout-blocked		fixed-array	field MostRecentId: wide-char elements, WCHAR [1]
-record	union anon@virtdisk.h:333	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Identifier (struct _GUID, union-member) -> fixed-array; field ParentLocation (struct anon@virtdisk.h:341, union-member) -> fixed-array; field Identifier (struct _GUID, union-member) -> fixed-array; field VirtualStorageType (struct _VIRTUAL_STORAGE_TYPE, union-member) -> struct _GUID -> fixed-array; field Identifier (struct _GUID, union-member) -> fixed-array; field ChangeTrackingState (struct anon@virtdisk.h:363, union-member) -> fixed-array
+record	struct anon@virtdisk.h:363	layout-direct	win32::layouts	GET_VIRTUAL_DISK_INFO_ChangeTrackingState	sizeof 12, _Alignof 4, 3 fields
+record	union anon@virtdisk.h:333	layout-blocked		union	a union: its members overlap
 record	struct _GET_VIRTUAL_DISK_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:333): its members overlap the record's; member 2 (union anon@virtdisk.h:333, anonymous-member) -> union
 record	struct anon@virtdisk.h:375	layout-direct	win32::layouts	MERGE_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 4, _Alignof 4, 1 fields
 record	struct anon@virtdisk.h:379	layout-direct	win32::layouts	MERGE_VIRTUAL_DISK_PARAMETERS_Version2	sizeof 8, _Alignof 4, 2 fields
 record	union anon@virtdisk.h:374	layout-blocked		union	a union: its members overlap
 record	struct _MERGE_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:374): its members overlap the record's; member 2 (union anon@virtdisk.h:374, anonymous-member) -> union
 record	struct anon@virtdisk.h:390	layout-direct	win32::layouts	OPEN_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 4, _Alignof 4, 1 fields
-record	struct anon@virtdisk.h:394	layout-blocked		nested-layout-blocked	field ResiliencyGuid (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:389	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Version2 (struct anon@virtdisk.h:394, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:394	layout-direct	win32::layouts	OPEN_VIRTUAL_DISK_PARAMETERS_Version2	sizeof 24, _Alignof 4, 3 fields
+record	union anon@virtdisk.h:389	layout-blocked		union	a union: its members overlap
 record	struct _OPEN_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:389): its members overlap the record's; member 2 (union anon@virtdisk.h:389, anonymous-member) -> union
 record	struct anon@virtdisk.h:409	layout-direct	win32::layouts	SET_VIRTUAL_DISK_INFO_ParentPathWithDepthInfo	sizeof 16, _Alignof 8, 2 fields
-record	struct anon@virtdisk.h:418	layout-blocked		nested-layout-blocked	field LinkageId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:405	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field UniqueIdentifier (struct _GUID, union-member) -> fixed-array; field UniqueIdentifier (struct _GUID, union-member) -> fixed-array; field ParentLocator (struct anon@virtdisk.h:418, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:418	layout-direct	win32::layouts	SET_VIRTUAL_DISK_INFO_ParentLocator	sizeof 24, _Alignof 8, 2 fields
+record	union anon@virtdisk.h:405	layout-blocked		union	a union: its members overlap
 record	struct _SET_VIRTUAL_DISK_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:405): its members overlap the record's; member 2 (union anon@virtdisk.h:405, anonymous-member) -> union
-record	struct _STORAGE_DEPENDENCY_INFO_TYPE_1	layout-blocked		nested-layout-blocked	field VirtualStorageType (struct _VIRTUAL_STORAGE_TYPE, field) -> struct _GUID -> fixed-array
-record	struct _STORAGE_DEPENDENCY_INFO_TYPE_2	layout-blocked		nested-layout-blocked	field VirtualStorageType (struct _VIRTUAL_STORAGE_TYPE, field) -> struct _GUID -> fixed-array
-record	union anon@virtdisk.h:448	layout-blocked		fixed-array,nested-layout-blocked,union	a union: its members overlap; field Version1Entries: record elements, STORAGE_DEPENDENCY_INFO_TYPE_1 [1]; field Version2Entries: record elements, STORAGE_DEPENDENCY_INFO_TYPE_2 [1]; field Version1Entries (struct _STORAGE_DEPENDENCY_INFO_TYPE_1, array-element) -> struct _VIRTUAL_STORAGE_TYPE -> struct _GUID -> fixed-array; field Version2Entries (struct _STORAGE_DEPENDENCY_INFO_TYPE_2, array-element) -> struct _VIRTUAL_STORAGE_TYPE -> struct _GUID -> fixed-array
+record	struct _STORAGE_DEPENDENCY_INFO_TYPE_1	layout-direct	win32::layouts	STORAGE_DEPENDENCY_INFO_TYPE_1	sizeof 28, _Alignof 4, 3 fields
+record	struct _STORAGE_DEPENDENCY_INFO_TYPE_2	layout-direct	win32::layouts	STORAGE_DEPENDENCY_INFO_TYPE_2	sizeof 64, _Alignof 8, 8 fields
+record	union anon@virtdisk.h:448	layout-blocked		union	a union: its members overlap
 record	struct _STORAGE_DEPENDENCY_INFO	layout-blocked		anonymous-overlay,nested-layout-blocked	member 3: an anonymous union member (union anon@virtdisk.h:448): its members overlap the record's; member 3 (union anon@virtdisk.h:448, anonymous-member) -> union
 record	struct _VIRTUAL_DISK_PROGRESS	layout-direct	win32::layouts	VIRTUAL_DISK_PROGRESS	sizeof 24, _Alignof 8, 3 fields
 record	struct anon@virtdisk.h:465	layout-direct	win32::layouts	MIRROR_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 8, _Alignof 8, 1 fields
@@ -24499,18 +24499,18 @@ record	struct _MIRROR_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,
 record	struct anon@virtdisk.h:474	layout-direct	win32::layouts	RESIZE_VIRTUAL_DISK_PARAMETERS_Version1	sizeof 8, _Alignof 8, 1 fields
 record	union anon@virtdisk.h:473	layout-blocked		union	a union: its members overlap
 record	struct _RESIZE_VIRTUAL_DISK_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:473): its members overlap the record's; member 2 (union anon@virtdisk.h:473, anonymous-member) -> union
-record	struct anon@virtdisk.h:487	layout-blocked		nested-layout-blocked	field SnapshotId (struct _GUID, field) -> fixed-array; field SnapshotId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:486	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Version1 (struct anon@virtdisk.h:487, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:487	layout-direct	win32::layouts	APPLY_SNAPSHOT_VHDSET_PARAMETERS_Version1	sizeof 32, _Alignof 4, 2 fields
+record	union anon@virtdisk.h:486	layout-blocked		union	a union: its members overlap
 record	struct _APPLY_SNAPSHOT_VHDSET_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:486): its members overlap the record's; member 2 (union anon@virtdisk.h:486, anonymous-member) -> union
-record	struct anon@virtdisk.h:497	layout-blocked		nested-layout-blocked	field SnapshotId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:496	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Version1 (struct anon@virtdisk.h:497, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:497	layout-direct	win32::layouts	DELETE_SNAPSHOT_VHDSET_PARAMETERS_Version1	sizeof 16, _Alignof 4, 1 fields
+record	union anon@virtdisk.h:496	layout-blocked		union	a union: its members overlap
 record	struct _DELETE_SNAPSHOT_VHDSET_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:496): its members overlap the record's; member 2 (union anon@virtdisk.h:496, anonymous-member) -> union
-record	struct anon@virtdisk.h:506	layout-blocked		nested-layout-blocked	field SnapshotId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:505	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field SnapshotPath (struct anon@virtdisk.h:506, union-member) -> struct _GUID -> fixed-array; field SnapshotId (struct _GUID, union-member) -> fixed-array
+record	struct anon@virtdisk.h:506	layout-direct	win32::layouts	MODIFY_VHDSET_PARAMETERS_SnapshotPath	sizeof 24, _Alignof 8, 2 fields
+record	union anon@virtdisk.h:505	layout-blocked		union	a union: its members overlap
 record	struct _MODIFY_VHDSET_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:505): its members overlap the record's; member 2 (union anon@virtdisk.h:505, anonymous-member) -> union
 record	struct _QUERY_CHANGES_VIRTUAL_DISK_RANGE	layout-direct	win32::layouts	QUERY_CHANGES_VIRTUAL_DISK_RANGE	sizeof 24, _Alignof 8, 3 fields
-record	struct anon@virtdisk.h:524	layout-blocked		nested-layout-blocked	field SnapshotId (struct _GUID, field) -> fixed-array
-record	union anon@virtdisk.h:523	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field Version1 (struct anon@virtdisk.h:524, union-member) -> struct _GUID -> fixed-array
+record	struct anon@virtdisk.h:524	layout-direct	win32::layouts	TAKE_SNAPSHOT_VHDSET_PARAMETERS_Version1	sizeof 16, _Alignof 4, 1 fields
+record	union anon@virtdisk.h:523	layout-blocked		union	a union: its members overlap
 record	struct _TAKE_SNAPSHOT_VHDSET_PARAMETERS	layout-blocked		anonymous-overlay,nested-layout-blocked	member 2: an anonymous union member (union anon@virtdisk.h:523): its members overlap the record's; member 2 (union anon@virtdisk.h:523, anonymous-member) -> union
 record	struct _SERVICE_DESCRIPTIONA	layout-direct	win32::layouts	SERVICE_DESCRIPTIONA	sizeof 8, _Alignof 8, 1 fields
 record	struct _SERVICE_DESCRIPTIONW	layout-direct	win32::layouts	SERVICE_DESCRIPTIONW	sizeof 8, _Alignof 8, 1 fields
@@ -24541,20 +24541,20 @@ record	struct _SERVICE_PRESHUTDOWN_INFO	layout-direct	win32::layouts	SERVICE_PRE
 record	struct _SERVICE_REQUIRED_PRIVILEGES_INFOA	layout-direct	win32::layouts	SERVICE_REQUIRED_PRIVILEGES_INFOA	sizeof 8, _Alignof 8, 1 fields
 record	struct _SERVICE_REQUIRED_PRIVILEGES_INFOW	layout-direct	win32::layouts	SERVICE_REQUIRED_PRIVILEGES_INFOW	sizeof 8, _Alignof 8, 1 fields
 record	struct _SERVICE_SID_INFO	layout-direct	win32::layouts	SERVICE_SID_INFO	sizeof 4, _Alignof 4, 1 fields
-record	struct _MODEMDEVCAPS	layout-blocked		fixed-array	field abVariablePortion: char elements, BYTE [1]
-record	struct _MODEMSETTINGS	layout-blocked		fixed-array	field abVariablePortion: char elements, BYTE [1]
+record	struct _MODEMDEVCAPS	layout-direct	win32::layouts	MODEMDEVCAPS	sizeof 80, _Alignof 4, 20 fields
+record	struct _MODEMSETTINGS	layout-direct	win32::layouts	MODEMSETTINGS	sizeof 48, _Alignof 4, 12 fields
 record	struct HIMC__	layout-direct	win32::layouts	HIMC__	sizeof 4, _Alignof 4, 1 fields
 record	struct HIMCC__	layout-direct	win32::layouts	HIMCC__	sizeof 4, _Alignof 4, 1 fields
 record	struct tagCOMPOSITIONFORM	layout-direct	win32::layouts	COMPOSITIONFORM	sizeof 28, _Alignof 4, 3 fields
 record	struct tagCANDIDATEFORM	layout-direct	win32::layouts	CANDIDATEFORM	sizeof 32, _Alignof 4, 4 fields
-record	struct tagCANDIDATELIST	layout-blocked		fixed-array	field dwOffset: scalar elements, DWORD [1]
+record	struct tagCANDIDATELIST	layout-direct	win32::layouts	CANDIDATELIST	sizeof 28, _Alignof 4, 7 fields
 record	struct tagREGISTERWORDA	layout-direct	win32::layouts	REGISTERWORDA	sizeof 16, _Alignof 8, 2 fields
 record	struct tagREGISTERWORDW	layout-direct	win32::layouts	REGISTERWORDW	sizeof 16, _Alignof 8, 2 fields
 record	struct tagRECONVERTSTRING	layout-direct	win32::layouts	RECONVERTSTRING	sizeof 32, _Alignof 4, 8 fields
-record	struct tagSTYLEBUFA	layout-blocked		fixed-array	field szDescription: char elements, CHAR [32]
-record	struct tagSTYLEBUFW	layout-blocked		fixed-array	field szDescription: wide-char elements, WCHAR [32]
-record	struct tagIMEMENUITEMINFOA	layout-blocked		fixed-array	field szString: char elements, CHAR [80]
-record	struct tagIMEMENUITEMINFOW	layout-blocked		fixed-array	field szString: wide-char elements, WCHAR [80]
+record	struct tagSTYLEBUFA	layout-direct	win32::layouts	STYLEBUFA	sizeof 36, _Alignof 4, 2 fields
+record	struct tagSTYLEBUFW	layout-direct	win32::layouts	STYLEBUFW	sizeof 68, _Alignof 4, 2 fields
+record	struct tagIMEMENUITEMINFOA	layout-direct	win32::layouts	IMEMENUITEMINFOA	sizeof 128, _Alignof 8, 9 fields
+record	struct tagIMEMENUITEMINFOW	layout-direct	win32::layouts	IMEMENUITEMINFOW	sizeof 208, _Alignof 8, 9 fields
 record	struct tagIMECHARPOSITION	layout-direct	win32::layouts	IMECHARPOSITION	sizeof 36, _Alignof 4, 5 fields
 record	struct _BEM_REFERENCE	opaque-only		incomplete	no definition: a pointee identity only
 record	struct _CONTRACT_DESCRIPTION	opaque-only		incomplete	no definition: a pointee identity only

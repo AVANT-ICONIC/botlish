@@ -222,11 +222,11 @@ record	struct bgf_coll	layout-direct	bgf::layouts	bgf_coll_struct	sizeof 4, _Ali
 record	struct bgf_kw	layout-direct	bgf::layouts	loop_	sizeof 12, _Alignof 4, 3 fields
 record	struct List	layout-direct	bgf::layouts	List_	sizeof 8, _Alignof 4, 2 fields
 record	struct bgf_multi	layout-direct	bgf::layouts	bgf_multi	sizeof 4, _Alignof 4, 1 fields
-record	struct bgf_chars	layout-blocked		fixed-array	field name: char elements, char [16]
-record	struct bgf_wide_text	layout-blocked		fixed-array	field text: wide-char elements, wchar_t [8]
-record	struct bgf_points4	layout-blocked		fixed-array	field pts: record elements, bgf_point [4]
-record	struct bgf_ptrs3	layout-blocked		fixed-array	field slots: pointer elements, void *[3]
-record	struct bgf_matrix	layout-blocked		fixed-array	field m: scalar elements, int [2][3]
+record	struct bgf_chars	layout-direct	bgf::layouts	bgf_chars	sizeof 20, _Alignof 4, 2 fields
+record	struct bgf_wide_text	layout-direct	bgf::layouts	bgf_wide_text	sizeof 20, _Alignof 4, 2 fields
+record	struct bgf_points4	layout-direct	bgf::layouts	bgf_points4	sizeof 32, _Alignof 4, 1 fields
+record	struct bgf_ptrs3	layout-direct	bgf::layouts	bgf_ptrs3	sizeof 24, _Alignof 8, 1 fields
+record	struct bgf_matrix	layout-direct	bgf::layouts	bgf_matrix	sizeof 24, _Alignof 4, 1 fields
 record	struct bgf_flex	layout-blocked		flexible-array	field items: scalar elements, int []
 record	union bgf_value	layout-blocked		union	a union: its members overlap
 record	struct bgf_tagged	layout-blocked		nested-layout-blocked	field value (union bgf_value, field) -> union
@@ -241,10 +241,10 @@ record	struct bgf_wide_field	layout-blocked		typedef-abi-mismatch	field w: typed
 record	struct bgf_float_ptr	layout-blocked		unsupported-pointer	field values: a pointer to float (float)
 record	struct bgf_bad_callback	layout-blocked		unsupported-pointer	field measure: callback argument 1: double (double) (unsupported-callback-signature); callback result: double (double) (unsupported-callback-signature)
 record	struct bgf_ms_field	layout-direct	bgf::layouts	bgf_ms_field	sizeof 16, _Alignof 8, 2 fields
-record	struct bgf_outer_blocked	layout-blocked		nested-layout-blocked	field chars (struct bgf_chars, field) -> fixed-array
-record	struct bgf_chain2	layout-blocked		nested-layout-blocked	field inner (struct bgf_outer_blocked, field) -> struct bgf_chars -> fixed-array
+record	struct bgf_outer_blocked	layout-direct	bgf::layouts	bgf_outer_blocked	sizeof 24, _Alignof 4, 2 fields
+record	struct bgf_chain2	layout-direct	bgf::layouts	bgf_chain2	sizeof 28, _Alignof 4, 2 fields
 record	struct bgf_points_ref	layout-direct	bgf::layouts	bgf_points_ref	sizeof 16, _Alignof 8, 2 fields
-record	struct bgf_mixed	layout-blocked		fixed-array,nested-layout-blocked	field name: char elements, char [4]; field u (union bgf_value, field) -> union
+record	struct bgf_mixed	layout-blocked		nested-layout-blocked	field u (union bgf_value, field) -> union
 record	struct bgf_flagged_rect	layout-blocked		nested-layout-blocked	field flag (struct bgf_flag, field) -> c-bool
 record	struct bgf_handle	opaque-only		incomplete	no definition: a pointee identity only
 record	struct bgf_other	opaque-only		incomplete	no definition: a pointee identity only

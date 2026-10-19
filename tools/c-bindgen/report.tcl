@@ -136,7 +136,7 @@ proc ::cbind::report::RecordRow {ns rec} {
 # nested (transitive: the chain to the first direct blocker), roots (every
 # direct reason it waits for), deps, pointed-by (bound APIs pointing to
 # it). A field's NAME is its Botlish name ("-" for an unnamed member),
-# CATEGORY scalar, pointer, function-pointer, nested, or its first
+# CATEGORY scalar, pointer, function-pointer, nested, array, or its first
 # blocker's reason; TYPE its Botlish type when representable; DETAIL its C
 # name, its array element and extent, its bitfield width, its blockers.
 proc ::cbind::report::layoutsTsv {model} {
@@ -172,8 +172,7 @@ proc ::cbind::report::layoutsTsv {model} {
             set cat [dict get $f kind]
             if {$cat eq "pointer" && [string match ffi::c::FnPtr* [dict get $f type]]} { set cat function-pointer }
             if {$cat eq "blocked"} { set cat [lindex [dict get $f blockers] 0 0] }
-            set type [dict get $f type]
-            if {$cat eq "nested"} { set type [dict get $recs $type layoutName] }
+            set type [expr {$cat in {scalar pointer function-pointer nested array} ? [::cbind::records::FieldText $recs $f] : [dict get $f type]}]
             set fd [list "c=[Dash [dict get $f cname]]"]
             if {[llength [dict get $f via]]} { lappend fd "promoted-from=[join [dict get $f via] ,]" }
             if {[dict exists $f array]} {

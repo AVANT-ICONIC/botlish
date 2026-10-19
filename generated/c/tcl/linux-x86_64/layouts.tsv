@@ -77,17 +77,17 @@ field	struct anon@tcl.h:846	6	deleteData	pointer	48	8	-	void *deleteData	ffi::c:
 field	struct anon@tcl.h:846	7	namespacePtr	pointer	56	8	-	Tcl_Namespace *namespacePtr	ffi::c::Ptr[Tcl_Namespace]	c=namespacePtr
 field	struct anon@tcl.h:846	8	objProc2	function-pointer	64	8	-	Tcl_ObjCmdProc2 *objProc2	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]], return: ffi::c::Int}]	c=objProc2
 field	struct anon@tcl.h:846	9	objClientData2	pointer	72	8	-	void *objClientData2	ffi::c::Ptr[ffi::c::Void]	c=objClientData2
-record	struct Tcl_DString	-	-	layout-blocked	-	224	8	struct Tcl_DString	-	typedefs=Tcl_DString; identity=tcl::ctypes::Tcl_DString; header=generic/tcl.h:877; blockers=fixed-array: field staticSpace: char elements, char [200]; roots=fixed-array; pointed-by=27
+record	struct Tcl_DString	-	Tcl_DString	layout-direct	-	224	8	struct Tcl_DString	-	typedefs=Tcl_DString; identity=tcl::ctypes::Tcl_DString; header=generic/tcl.h:877; pointed-by=27
 field	struct Tcl_DString	0	string	pointer	0	8	-	char *string	ffi::c::Ptr[ffi::c::Char]	c=string
 field	struct Tcl_DString	1	length	scalar	8	8	-	Tcl_Size length	ffi::c::Long	c=length
 field	struct Tcl_DString	2	spaceAvl	scalar	16	8	-	Tcl_Size spaceAvl	ffi::c::Long	c=spaceAvl
-field	struct Tcl_DString	3	staticSpace	fixed-array	24	200	-	char staticSpace[200]	-	c=staticSpace; element=char char; bounds=200; extent=200; blockers=fixed-array: char elements, char [200]
-record	union anon@tcl.h:1092	-	-	layout-blocked	-	8	8	__typeof__(((struct Tcl_HashEntry *)0)->key)	-	identity=-; header=generic/tcl.h:1092; blockers=union: a union: its members overlap | fixed-array: field words: scalar elements, int [1] | fixed-array: field string: char elements, char [1]; roots=fixed-array,union
+field	struct Tcl_DString	3	staticSpace	array	24	200	-	char staticSpace[200]	array 200 of ffi::c::Char	c=staticSpace; element=char char; bounds=200; extent=200
+record	union anon@tcl.h:1092	-	-	layout-blocked	-	8	8	__typeof__(((struct Tcl_HashEntry *)0)->key)	-	identity=-; header=generic/tcl.h:1092; blockers=union: a union: its members overlap; roots=union
 field	union anon@tcl.h:1092	0	oneWordValue	pointer	0	8	-	char *oneWordValue	ffi::c::Ptr[ffi::c::Char]	c=oneWordValue
 field	union anon@tcl.h:1092	1	objPtr	pointer	0	8	-	Tcl_Obj *objPtr	ffi::c::Ptr[Tcl_Obj]	c=objPtr
-field	union anon@tcl.h:1092	2	words	fixed-array	0	4	-	int words[1]	-	c=words; element=scalar int; bounds=1; extent=1; blockers=fixed-array: scalar elements, int [1]
-field	union anon@tcl.h:1092	3	string	fixed-array	0	1	-	char string[1]	-	c=string; element=char char; bounds=1; extent=1; blockers=fixed-array: char elements, char [1]
-record	struct Tcl_HashEntry	-	-	layout-blocked	-	40	8	struct Tcl_HashEntry	-	typedefs=Tcl_HashEntry; identity=tcl::ctypes::Tcl_HashEntry; header=generic/tcl.h:1085; nested=field key (union anon@tcl.h:1092, field) -> union; roots=fixed-array,union; deps=union anon@tcl.h:1092; pointed-by=4
+field	union anon@tcl.h:1092	2	words	array	0	4	-	int words[1]	array 1 of ffi::c::Int	c=words; element=scalar int; bounds=1; extent=1
+field	union anon@tcl.h:1092	3	string	array	0	1	-	char string[1]	array 1 of ffi::c::Char	c=string; element=char char; bounds=1; extent=1
+record	struct Tcl_HashEntry	-	-	layout-blocked	-	40	8	struct Tcl_HashEntry	-	typedefs=Tcl_HashEntry; identity=tcl::ctypes::Tcl_HashEntry; header=generic/tcl.h:1085; nested=field key (union anon@tcl.h:1092, field) -> union; roots=union; deps=union anon@tcl.h:1092; pointed-by=4
 field	struct Tcl_HashEntry	0	nextPtr	pointer	0	8	-	Tcl_HashEntry *nextPtr	ffi::c::Ptr[Tcl_HashEntry]	c=nextPtr
 field	struct Tcl_HashEntry	1	tablePtr	pointer	8	8	-	Tcl_HashTable *tablePtr	ffi::c::Ptr[Tcl_HashTable]	c=tablePtr
 field	struct Tcl_HashEntry	2	hash	scalar	16	8	-	size_t hash	ffi::c::ULong	c=hash
@@ -100,9 +100,9 @@ field	struct Tcl_HashKeyType	2	hashKeyProc	function-pointer	8	8	-	Tcl_HashKeyPro
 field	struct Tcl_HashKeyType	3	compareKeysProc	function-pointer	16	8	-	Tcl_CompareHashKeysProc *compareKeysProc	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_HashEntry]], return: ffi::c::Int}]	c=compareKeysProc
 field	struct Tcl_HashKeyType	4	allocEntryProc	function-pointer	24	8	-	Tcl_AllocHashEntryProc *allocEntryProc	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[Tcl_HashTable], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[Tcl_HashEntry]}]	c=allocEntryProc
 field	struct Tcl_HashKeyType	5	freeEntryProc	function-pointer	32	8	-	Tcl_FreeHashEntryProc *freeEntryProc	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[Tcl_HashEntry]], return: unit}]	c=freeEntryProc
-record	struct Tcl_HashTable	-	-	layout-blocked	-	104	8	struct Tcl_HashTable	-	typedefs=Tcl_HashTable; identity=tcl::ctypes::Tcl_HashTable; header=generic/tcl.h:1179; blockers=fixed-array: field staticBuckets: pointer elements, Tcl_HashEntry *[4]; roots=fixed-array; pointed-by=6
+record	struct Tcl_HashTable	-	Tcl_HashTable	layout-direct	-	104	8	struct Tcl_HashTable	-	typedefs=Tcl_HashTable; identity=tcl::ctypes::Tcl_HashTable; header=generic/tcl.h:1179; pointed-by=6
 field	struct Tcl_HashTable	0	buckets	pointer	0	8	-	Tcl_HashEntry **buckets	ffi::c::Ptr[ffi::c::Ptr[Tcl_HashEntry]]	c=buckets
-field	struct Tcl_HashTable	1	staticBuckets	fixed-array	8	32	-	Tcl_HashEntry *staticBuckets[4]	-	c=staticBuckets; element=pointer Tcl_HashEntry *; bounds=4; extent=4; blockers=fixed-array: pointer elements, Tcl_HashEntry *[4]
+field	struct Tcl_HashTable	1	staticBuckets	array	8	32	-	Tcl_HashEntry *staticBuckets[4]	array 4 of ffi::c::Ptr[Tcl_HashEntry]	c=staticBuckets; element=pointer Tcl_HashEntry *; bounds=4; extent=4
 field	struct Tcl_HashTable	2	numBuckets	scalar	40	8	-	Tcl_Size numBuckets	ffi::c::Long	c=numBuckets
 field	struct Tcl_HashTable	3	numEntries	scalar	48	8	-	Tcl_Size numEntries	ffi::c::Long	c=numEntries
 field	struct Tcl_HashTable	4	rebuildSize	scalar	56	8	-	Tcl_Size rebuildSize	ffi::c::Long	c=rebuildSize
@@ -195,7 +195,7 @@ field	struct Tcl_Token	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
 field	struct Tcl_Token	1	start	pointer	8	8	-	const char *start	ffi::c::Ptr[ffi::c::Char]	c=start
 field	struct Tcl_Token	2	size	scalar	16	8	-	Tcl_Size size	ffi::c::Long	c=size
 field	struct Tcl_Token	3	numComponents	scalar	24	8	-	Tcl_Size numComponents	ffi::c::Long	c=numComponents
-record	struct Tcl_Parse	-	-	layout-blocked	-	744	8	struct Tcl_Parse	-	typedefs=Tcl_Parse; identity=tcl::ctypes::Tcl_Parse; header=generic/tcl.h:1901; blockers=fixed-array: field staticTokens: record elements, Tcl_Token [20]; roots=fixed-array; deps=struct Tcl_Token; pointed-by=6
+record	struct Tcl_Parse	-	Tcl_Parse	layout-direct	-	744	8	struct Tcl_Parse	-	typedefs=Tcl_Parse; identity=tcl::ctypes::Tcl_Parse; header=generic/tcl.h:1901; deps=struct Tcl_Token; pointed-by=6
 field	struct Tcl_Parse	0	commentStart	pointer	0	8	-	const char *commentStart	ffi::c::Ptr[ffi::c::Char]	c=commentStart
 field	struct Tcl_Parse	1	commentSize	scalar	8	8	-	Tcl_Size commentSize	ffi::c::Long	c=commentSize
 field	struct Tcl_Parse	2	commandStart	pointer	16	8	-	const char *commandStart	ffi::c::Ptr[ffi::c::Char]	c=commandStart
@@ -210,7 +210,7 @@ field	struct Tcl_Parse	10	string	pointer	72	8	-	const char *string	ffi::c::Ptr[f
 field	struct Tcl_Parse	11	end	pointer	80	8	-	const char *end	ffi::c::Ptr[ffi::c::Char]	c=end
 field	struct Tcl_Parse	12	interp	pointer	88	8	-	Tcl_Interp *interp	ffi::c::Ptr[Tcl_Interp]	c=interp
 field	struct Tcl_Parse	13	term	pointer	96	8	-	const char *term	ffi::c::Ptr[ffi::c::Char]	c=term
-field	struct Tcl_Parse	14	staticTokens	fixed-array	104	640	-	Tcl_Token staticTokens[20]	-	c=staticTokens; element=record Tcl_Token; bounds=20; extent=20; blockers=fixed-array: record elements, Tcl_Token [20]
+field	struct Tcl_Parse	14	staticTokens	array	104	640	-	Tcl_Token staticTokens[20]	array 20 of Tcl_Token	c=staticTokens; element=record Tcl_Token; bounds=20; extent=20
 record	struct Tcl_EncodingType	-	Tcl_EncodingType	layout-direct	-	48	8	struct Tcl_EncodingType	-	typedefs=Tcl_EncodingType; identity=tcl::ctypes::Tcl_EncodingType; header=generic/tcl.h:1967; pointed-by=1
 field	struct Tcl_EncodingType	0	encodingName	pointer	0	8	-	const char *encodingName	ffi::c::Ptr[ffi::c::Char]	c=encodingName
 field	struct Tcl_EncodingType	1	toUtfProc	function-pointer	8	8	-	Tcl_EncodingConvertProc *toUtfProc	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::Int, ffi::c::Ptr[ffi::c::Ptr[Tcl_EncodingState_]], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::Ptr[ffi::c::Int], ffi::c::Ptr[ffi::c::Int], ffi::c::Ptr[ffi::c::Int]], return: ffi::c::Int}]	c=toUtfProc

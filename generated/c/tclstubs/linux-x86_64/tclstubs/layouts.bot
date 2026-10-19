@@ -107,6 +107,15 @@ layout Tcl_CmdInfo:
     field objProc2: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[tclstubs::ctypes::Tcl_Obj]]], return: ffi::c::Int}] at 64  # Tcl_ObjCmdProc2 *objProc2
     field objClientData2: ffi::c::Ptr[ffi::c::Void] at 72                 # void *objClientData2
 
+# struct Tcl_DString, typedef Tcl_DString (generic/tcl.h:877): sizeof 224, _Alignof 8
+layout Tcl_DString:
+    size 224
+    align 8
+    field string: ffi::c::Ptr[ffi::c::Char] at 0        # char *string
+    field length: ffi::c::Long at 8                     # Tcl_Size length
+    field spaceAvl: ffi::c::Long at 16                  # Tcl_Size spaceAvl
+    field staticSpace: array 200 of ffi::c::Char at 24  # char staticSpace[200]
+
 # struct Tcl_HashKeyType, typedef Tcl_HashKeyType (generic/tcl.h:1134): sizeof 40, _Alignof 8
 layout Tcl_HashKeyType:
     size 40
@@ -117,6 +126,22 @@ layout Tcl_HashKeyType:
     field compareKeysProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]], return: ffi::c::Int}] at 16  # Tcl_CompareHashKeysProc *compareKeysProc
     field allocEntryProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_HashTable], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]}] at 24  # Tcl_AllocHashEntryProc *allocEntryProc
     field freeEntryProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]], return: unit}] at 32  # Tcl_FreeHashEntryProc *freeEntryProc
+
+# struct Tcl_HashTable, typedef Tcl_HashTable (generic/tcl.h:1179): sizeof 104, _Alignof 8
+layout Tcl_HashTable:
+    size 104
+    align 8
+    field buckets: ffi::c::Ptr[ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]] at 0  # Tcl_HashEntry **buckets
+    field staticBuckets: array 4 of ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry] at 8  # Tcl_HashEntry *staticBuckets[4]
+    field numBuckets: ffi::c::Long at 40                                  # Tcl_Size numBuckets
+    field numEntries: ffi::c::Long at 48                                  # Tcl_Size numEntries
+    field rebuildSize: ffi::c::Long at 56                                 # Tcl_Size rebuildSize
+    field mask: ffi::c::ULong at 64                                       # size_t mask
+    field downShift: ffi::c::Int at 72                                    # int downShift
+    field keyType: ffi::c::Int at 76                                      # int keyType
+    field findProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_HashTable], ffi::c::Ptr[ffi::c::Char]], return: ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]}] at 80  # Tcl_HashEntry *(*findProc)(Tcl_HashTable *tablePtr, const char *key)
+    field createProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_HashTable], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Int]], return: ffi::c::Ptr[tclstubs::ctypes::Tcl_HashEntry]}] at 88  # Tcl_HashEntry *(*createProc)(Tcl_HashTable *tablePtr, const char *key, int *newPtr)
+    field typePtr: ffi::c::Ptr[tclstubs::ctypes::Tcl_HashKeyType] at 96   # const Tcl_HashKeyType *typePtr
 
 # struct Tcl_HashSearch, typedef Tcl_HashSearch (generic/tcl.h:1219): sizeof 24, _Alignof 8
 layout Tcl_HashSearch:
@@ -236,6 +261,26 @@ layout Tcl_Token:
     field start: ffi::c::Ptr[ffi::c::Char] at 8  # const char *start
     field size: ffi::c::Long at 16               # Tcl_Size size
     field numComponents: ffi::c::Long at 24      # Tcl_Size numComponents
+
+# struct Tcl_Parse, typedef Tcl_Parse (generic/tcl.h:1901): sizeof 744, _Alignof 8
+layout Tcl_Parse:
+    size 744
+    align 8
+    field commentStart: ffi::c::Ptr[ffi::c::Char] at 0              # const char *commentStart
+    field commentSize: ffi::c::Long at 8                            # Tcl_Size commentSize
+    field commandStart: ffi::c::Ptr[ffi::c::Char] at 16             # const char *commandStart
+    field commandSize: ffi::c::Long at 24                           # Tcl_Size commandSize
+    field numWords: ffi::c::Long at 32                              # Tcl_Size numWords
+    field tokenPtr: ffi::c::Ptr[tclstubs::ctypes::Tcl_Token] at 40  # Tcl_Token *tokenPtr
+    field numTokens: ffi::c::Long at 48                             # Tcl_Size numTokens
+    field tokensAvailable: ffi::c::Long at 56                       # Tcl_Size tokensAvailable
+    field errorType: ffi::c::Int at 64                              # int errorType
+    field incomplete: ffi::c::Int at 68                             # int incomplete
+    field string: ffi::c::Ptr[ffi::c::Char] at 72                   # const char *string
+    field end: ffi::c::Ptr[ffi::c::Char] at 80                      # const char *end
+    field interp: ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp] at 88   # Tcl_Interp *interp
+    field term: ffi::c::Ptr[ffi::c::Char] at 96                     # const char *term
+    field staticTokens: array 20 of Tcl_Token at 104                # Tcl_Token staticTokens[20]
 
 # struct Tcl_EncodingType, typedef Tcl_EncodingType (generic/tcl.h:1967): sizeof 48, _Alignof 8
 layout Tcl_EncodingType:

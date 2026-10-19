@@ -86,6 +86,27 @@ layout SDL_Palette:
     field version: ffi::c::UInt at 16                        # Uint32 version
     field refcount: ffi::c::Int at 20                        # int refcount
 
+# struct SDL_PixelFormatDetails, typedef SDL_PixelFormatDetails (include/SDL3/SDL_pixels.h:1154): sizeof 32, _Alignof 4
+layout SDL_PixelFormatDetails:
+    size 32
+    align 4
+    field format: ffi::c::UInt at 0               # SDL_PixelFormat format
+    field bits_per_pixel: ffi::c::UChar at 4      # Uint8 bits_per_pixel
+    field bytes_per_pixel: ffi::c::UChar at 5     # Uint8 bytes_per_pixel
+    field padding: array 2 of ffi::c::UChar at 6  # Uint8 padding[2]
+    field Rmask: ffi::c::UInt at 8                # Uint32 Rmask
+    field Gmask: ffi::c::UInt at 12               # Uint32 Gmask
+    field Bmask: ffi::c::UInt at 16               # Uint32 Bmask
+    field Amask: ffi::c::UInt at 20               # Uint32 Amask
+    field Rbits: ffi::c::UChar at 24              # Uint8 Rbits
+    field Gbits: ffi::c::UChar at 25              # Uint8 Gbits
+    field Bbits: ffi::c::UChar at 26              # Uint8 Bbits
+    field Abits: ffi::c::UChar at 27              # Uint8 Abits
+    field Rshift: ffi::c::UChar at 28             # Uint8 Rshift
+    field Gshift: ffi::c::UChar at 29             # Uint8 Gshift
+    field Bshift: ffi::c::UChar at 30             # Uint8 Bshift
+    field Ashift: ffi::c::UChar at 31             # Uint8 Ashift
+
 # struct SDL_Point, typedef SDL_Point (include/SDL3/SDL_rect.h:49): sizeof 8, _Alignof 4
 layout SDL_Point:
     size 8
@@ -132,6 +153,50 @@ layout SDL_DialogFileFilter:
     align 8
     field name: ffi::c::Ptr[ffi::c::Char] at 0     # const char *name
     field pattern: ffi::c::Ptr[ffi::c::Char] at 8  # const char *pattern
+
+# struct SDL_GUID, typedef SDL_GUID (include/SDL3/SDL_guid.h:61): sizeof 16, _Alignof 1
+layout SDL_GUID:
+    size 16
+    align 1
+    field data: array 16 of ffi::c::UChar at 0  # Uint8 data[16]
+
+# struct SDL_VirtualJoystickTouchpadDesc, typedef SDL_VirtualJoystickTouchpadDesc (include/SDL3/SDL_joystick.h:433): sizeof 8, _Alignof 2
+layout SDL_VirtualJoystickTouchpadDesc:
+    size 8
+    align 2
+    field nfingers: ffi::c::UShort at 0            # Uint16 nfingers
+    field padding: array 3 of ffi::c::UShort at 2  # Uint16 padding[3]
+
+# struct SDL_VirtualJoystickDesc, typedef SDL_VirtualJoystickDesc (include/SDL3/SDL_joystick.h:465): sizeof 136, _Alignof 8
+layout SDL_VirtualJoystickDesc:
+    size 136
+    align 8
+    field version: ffi::c::UInt at 0                                      # Uint32 version
+    field type_: ffi::c::UShort at 4                                      # Uint16 type
+    field padding: ffi::c::UShort at 6                                    # Uint16 padding
+    field vendor_id: ffi::c::UShort at 8                                  # Uint16 vendor_id
+    field product_id: ffi::c::UShort at 10                                # Uint16 product_id
+    field naxes: ffi::c::UShort at 12                                     # Uint16 naxes
+    field nbuttons: ffi::c::UShort at 14                                  # Uint16 nbuttons
+    field nballs: ffi::c::UShort at 16                                    # Uint16 nballs
+    field nhats: ffi::c::UShort at 18                                     # Uint16 nhats
+    field ntouchpads: ffi::c::UShort at 20                                # Uint16 ntouchpads
+    field nsensors: ffi::c::UShort at 22                                  # Uint16 nsensors
+    field padding2: array 2 of ffi::c::UShort at 24                       # Uint16 padding2[2]
+    field button_mask: ffi::c::UInt at 28                                 # Uint32 button_mask
+    field axis_mask: ffi::c::UInt at 32                                   # Uint32 axis_mask
+    field name: ffi::c::Ptr[ffi::c::Char] at 40                           # const char *name
+    field touchpads: ffi::c::Ptr[sdl3::ctypes::SDL_VirtualJoystickTouchpadDesc] at 48  # const SDL_VirtualJoystickTouchpadDesc *touchpads
+    field sensors: ffi::c::Ptr[sdl3::ctypes::SDL_VirtualJoystickSensorDesc] at 56  # const SDL_VirtualJoystickSensorDesc *sensors
+    field userdata: ffi::c::Ptr[ffi::c::Void] at 64                       # void *userdata
+    field Update: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] at 72  # void (*Update)(void *userdata)
+    field SetPlayerIndex: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Int], return: unit}] at 80  # void (*SetPlayerIndex)(void *userdata, int player_index)
+    field Rumble: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::UShort, ffi::c::UShort], return: ffi::c::Bool}] at 88  # _Bool (*Rumble)(void *userdata, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble)
+    field RumbleTriggers: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::UShort, ffi::c::UShort], return: ffi::c::Bool}] at 96  # _Bool (*RumbleTriggers)(void *userdata, Uint16 left_rumble, Uint16 right_rumble)
+    field SetLED: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::UChar, ffi::c::UChar, ffi::c::UChar], return: ffi::c::Bool}] at 104  # _Bool (*SetLED)(void *userdata, Uint8 red, Uint8 green, Uint8 blue)
+    field SendEffect: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Void], ffi::c::Int], return: ffi::c::Bool}] at 112  # _Bool (*SendEffect)(void *userdata, const void *data, int size)
+    field SetSensorsEnabled: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Bool], return: ffi::c::Bool}] at 120  # _Bool (*SetSensorsEnabled)(void *userdata, _Bool enabled)
+    field Cleanup: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] at 128  # void (*Cleanup)(void *userdata)
 
 # an anonymous struct (include/SDL3/SDL_gamepad.h:275): sizeof 12, _Alignof 4
 layout SDL_GamepadBinding_input_axis:
@@ -601,6 +666,82 @@ layout SDL_GPUVulkanOptions:
     field instance_extension_count: ffi::c::UInt at 40                    # Uint32 instance_extension_count
     field instance_extension_names: ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]] at 48  # const char **instance_extension_names
 
+# struct SDL_HapticDirection, typedef SDL_HapticDirection (include/SDL3/SDL_haptic.h:566): sizeof 16, _Alignof 4
+layout SDL_HapticDirection:
+    size 16
+    align 4
+    field type_: ffi::c::UChar at 0         # SDL_HapticDirectionType type
+    field dir: array 3 of ffi::c::Int at 4  # Sint32 dir[3]
+
+# struct SDL_HapticConstant, typedef SDL_HapticConstant (include/SDL3/SDL_haptic.h:586): sizeof 40, _Alignof 4
+layout SDL_HapticConstant:
+    size 40
+    align 4
+    field type_: ffi::c::UShort at 0           # SDL_HapticEffectType type
+    field direction: SDL_HapticDirection at 4  # SDL_HapticDirection direction
+    field length: ffi::c::UInt at 20           # Uint32 length
+    field delay: ffi::c::UShort at 24          # Uint16 delay
+    field button: ffi::c::UShort at 26         # Uint16 button
+    field interval: ffi::c::UShort at 28       # Uint16 interval
+    field level: ffi::c::Short at 30           # Sint16 level
+    field attack_length: ffi::c::UShort at 32  # Uint16 attack_length
+    field attack_level: ffi::c::UShort at 34   # Uint16 attack_level
+    field fade_length: ffi::c::UShort at 36    # Uint16 fade_length
+    field fade_level: ffi::c::UShort at 38     # Uint16 fade_level
+
+# struct SDL_HapticPeriodic, typedef SDL_HapticPeriodic (include/SDL3/SDL_haptic.h:672): sizeof 48, _Alignof 4
+layout SDL_HapticPeriodic:
+    size 48
+    align 4
+    field type_: ffi::c::UShort at 0           # SDL_HapticEffectType type
+    field direction: SDL_HapticDirection at 4  # SDL_HapticDirection direction
+    field length: ffi::c::UInt at 20           # Uint32 length
+    field delay: ffi::c::UShort at 24          # Uint16 delay
+    field button: ffi::c::UShort at 26         # Uint16 button
+    field interval: ffi::c::UShort at 28       # Uint16 interval
+    field period: ffi::c::UShort at 30         # Uint16 period
+    field magnitude: ffi::c::Short at 32       # Sint16 magnitude
+    field offset: ffi::c::Short at 34          # Sint16 offset
+    field phase: ffi::c::UShort at 36          # Uint16 phase
+    field attack_length: ffi::c::UShort at 38  # Uint16 attack_length
+    field attack_level: ffi::c::UShort at 40   # Uint16 attack_level
+    field fade_length: ffi::c::UShort at 42    # Uint16 fade_length
+    field fade_level: ffi::c::UShort at 44     # Uint16 fade_level
+
+# struct SDL_HapticCondition, typedef SDL_HapticCondition (include/SDL3/SDL_haptic.h:728): sizeof 68, _Alignof 4
+layout SDL_HapticCondition:
+    size 68
+    align 4
+    field type_: ffi::c::UShort at 0                   # SDL_HapticEffectType type
+    field direction: SDL_HapticDirection at 4          # SDL_HapticDirection direction
+    field length: ffi::c::UInt at 20                   # Uint32 length
+    field delay: ffi::c::UShort at 24                  # Uint16 delay
+    field button: ffi::c::UShort at 26                 # Uint16 button
+    field interval: ffi::c::UShort at 28               # Uint16 interval
+    field right_sat: array 3 of ffi::c::UShort at 30   # Uint16 right_sat[3]
+    field left_sat: array 3 of ffi::c::UShort at 36    # Uint16 left_sat[3]
+    field right_coeff: array 3 of ffi::c::Short at 42  # Sint16 right_coeff[3]
+    field left_coeff: array 3 of ffi::c::Short at 48   # Sint16 left_coeff[3]
+    field deadband: array 3 of ffi::c::UShort at 54    # Uint16 deadband[3]
+    field center: array 3 of ffi::c::Short at 60       # Sint16 center[3]
+
+# struct SDL_HapticRamp, typedef SDL_HapticRamp (include/SDL3/SDL_haptic.h:767): sizeof 44, _Alignof 4
+layout SDL_HapticRamp:
+    size 44
+    align 4
+    field type_: ffi::c::UShort at 0           # SDL_HapticEffectType type
+    field direction: SDL_HapticDirection at 4  # SDL_HapticDirection direction
+    field length: ffi::c::UInt at 20           # Uint32 length
+    field delay: ffi::c::UShort at 24          # Uint16 delay
+    field button: ffi::c::UShort at 26         # Uint16 button
+    field interval: ffi::c::UShort at 28       # Uint16 interval
+    field start: ffi::c::Short at 30           # Sint16 start
+    field end: ffi::c::Short at 32             # Sint16 end
+    field attack_length: ffi::c::UShort at 34  # Uint16 attack_length
+    field attack_level: ffi::c::UShort at 36   # Uint16 attack_level
+    field fade_length: ffi::c::UShort at 38    # Uint16 fade_length
+    field fade_level: ffi::c::UShort at 40     # Uint16 fade_level
+
 # struct SDL_HapticLeftRight, typedef SDL_HapticLeftRight (include/SDL3/SDL_haptic.h:806): sizeof 12, _Alignof 4
 layout SDL_HapticLeftRight:
     size 12
@@ -609,6 +750,25 @@ layout SDL_HapticLeftRight:
     field length: ffi::c::UInt at 4              # Uint32 length
     field large_magnitude: ffi::c::UShort at 8   # Uint16 large_magnitude
     field small_magnitude: ffi::c::UShort at 10  # Uint16 small_magnitude
+
+# struct SDL_HapticCustom, typedef SDL_HapticCustom (include/SDL3/SDL_haptic.h:836): sizeof 56, _Alignof 8
+layout SDL_HapticCustom:
+    size 56
+    align 8
+    field type_: ffi::c::UShort at 0               # SDL_HapticEffectType type
+    field direction: SDL_HapticDirection at 4      # SDL_HapticDirection direction
+    field length: ffi::c::UInt at 20               # Uint32 length
+    field delay: ffi::c::UShort at 24              # Uint16 delay
+    field button: ffi::c::UShort at 26             # Uint16 button
+    field interval: ffi::c::UShort at 28           # Uint16 interval
+    field channels: ffi::c::UChar at 30            # Uint8 channels
+    field period: ffi::c::UShort at 32             # Uint16 period
+    field samples: ffi::c::UShort at 34            # Uint16 samples
+    field data: ffi::c::Ptr[ffi::c::UShort] at 40  # Uint16 *data
+    field attack_length: ffi::c::UShort at 48      # Uint16 attack_length
+    field attack_level: ffi::c::UShort at 50       # Uint16 attack_level
+    field fade_length: ffi::c::UShort at 52        # Uint16 fade_length
+    field fade_level: ffi::c::UShort at 54         # Uint16 fade_level
 
 # struct SDL_hid_device_info, typedef SDL_hid_device_info (include/SDL3/SDL_hidapi.h:113): sizeof 80, _Alignof 8
 layout SDL_hid_device_info:
@@ -652,6 +812,12 @@ layout SDL_MessageBoxColor:
     field r: ffi::c::UChar at 0  # Uint8 r
     field g: ffi::c::UChar at 1  # Uint8 g
     field b: ffi::c::UChar at 2  # Uint8 b
+
+# struct SDL_MessageBoxColorScheme, typedef SDL_MessageBoxColorScheme (include/SDL3/SDL_messagebox.h:118): sizeof 15, _Alignof 1
+layout SDL_MessageBoxColorScheme:
+    size 15
+    align 1
+    field colors: array 5 of SDL_MessageBoxColor at 0  # SDL_MessageBoxColor colors[SDL_MESSAGEBOX_COLOR_COUNT]
 
 # struct SDL_MessageBoxData, typedef SDL_MessageBoxData (include/SDL3/SDL_messagebox.h:128): sizeof 56, _Alignof 8
 layout SDL_MessageBoxData:

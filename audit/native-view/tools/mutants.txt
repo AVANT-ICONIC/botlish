@@ -24,13 +24,9 @@
 @@ offset-ignored-lowering native lowering reads every field of a view at the view's (folded) base, ignoring the field's own offset
 ## native/lower.tcl
 <<<<
-    lassign $field name offset kind
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
-    switch -- $kind {
+    return [NativeRepr fn $e $view [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
 ====
-    lassign $field name offset kind
-    set at [Assign fn "int $base" $e]
-    switch -- $kind {
+    return [NativeRepr fn $e $view [lrange $field 2 end] $base]
 >>>>
 
 @@ offset-zero-runtime the runtime's native load ignores its offset operand: every field is read from the view's address itself
@@ -86,19 +82,21 @@
 @@ pointer-width-hardcoded a pointer field is 4 bytes wide whatever the target says
 ## hir/layouts.tcl
 <<<<
-            set width [PointerWidth]
+        set width [PointerWidth]
+        if {$width eq ""} {
+            Fail $typeSpan "$what $aPointer, whose width
 ====
-            set width 4
+        set width 4
+        if {$width eq ""} {
+            Fail $typeSpan "$what $aPointer, whose width
 >>>>
-
-# --- nested base address -----------------------------------------------------
 
 @@ nested-base-dropped-fold a nested view's field read in a chain drops the nested layout's offset
 ## native/lower.tcl
 <<<<
-                return [list $view [expr {$base + [lindex $entry 1]}]]
+                    return [list $view [BasePlus fn $arg $base [lindex $entry 1]]]
 ====
-                return [list $view $base]
+                    return [list $view $base]
 >>>>
 
 @@ nested-base-dropped-runtime the runtime's nested view (cptroffset) is the outer view's address
@@ -114,12 +112,10 @@
 @@ nested-base-dropped-load binary::load reads a nested layout's fields at the outer layout's base
 ## native/lower.tcl
 <<<<
-            lappend registers [NativeDecode fn $e $view [lindex $field 3] [expr {$base + $offset}]]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
 ====
-            lappend registers [NativeDecode fn $e $view [lindex $field 3] $base]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [expr {[lindex $field 2] eq "layout" ? $base : [BasePlus fn $e $base [lindex $field 1]]}]]
 >>>>
-
-# --- layout size ---------------------------------------------------------------
 
 @@ pointer-bounds-ignored a pointer field may extend past the layout's size (its bounds are not checked)
 ## hir/layouts.tcl
@@ -142,18 +138,15 @@
 @@ nested-pointer-not-native-only a pointer field inside a nested layout does not make the outer layout native-only
 ## hir/layouts.tcl
 <<<<
-            layout {
-                set inner [PointerField [dict get $field layout]]
-                if {$inner ne ""} {
-                    return "[dict get $field name].$inner"
-                }
-            }
+        layout {
+            set inner [PointerField [dict get $repr layout]]
+            return [expr {$inner eq "" ? "none" : ".$inner"}]
+        }
 ====
-            layout {
-            }
+        layout {
+            return none
+        }
 >>>>
-
-# --- native pointer fields --------------------------------------------------
 
 @@ pointer-retagged the runtime's pointer field read is a C address word of another address
 ## native/src/runtime/nview.rs
@@ -176,10 +169,10 @@
 @@ pointer-as-int native lowering reads a pointer field as an unsigned 64-bit Int, not a pointer
 ## native/lower.tcl
 <<<<
-            set w [Assign fn "int $width" $e]
+            set w [Assign fn "int [lindex $repr 1]" $e]
             return [Assign fn "op nativeloadptr $view $at $w" $e]
 ====
-            set w [Assign fn "int $width" $e]
+            set w [Assign fn "int [lindex $repr 1]" $e]
             return [Assign fn "op nativeload $view $at $w" $e]
 >>>>
 
@@ -225,17 +218,15 @@
 @@ copy-per-read every field read through a view first makes a byte storage of the field's offset (an allocation per read)
 ## native/lower.tcl
 <<<<
-    lassign $field name offset sign width endian
+    lassign $repr sign width endian
     set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
     return [Assign fn "op nativeload $view $at $code" $e]
 ====
-    lassign $field name offset sign width endian
+    lassign $repr sign width endian
     Assign fn "op byteszeroed $at" $e
     set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
     return [Assign fn "op nativeload $view $at $code" $e]
 >>>>
-
-# --- directness / authority -------------------------------------------------
 
 @@ view-not-direct binary::native is not designated direct: a view needs no acknowledged authority
 ## core/binary.tcl

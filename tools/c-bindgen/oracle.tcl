@@ -38,22 +38,42 @@
 namespace eval ::cbind::oracle {}
 
 # The leaves of layout NAME of LAYOUTS (name -> {size align fields}) with
-# MEMBERS ({layout field} -> C member): {{BOTPATH CPATH TYPE} ...}, nested
-# layouts flattened (a.b, a.b).
-proc ::cbind::oracle::Leaves {layouts members name {bot ""} {c ""}} {
+# MEMBERS ({layout field} -> C member): {{BOTPATH CPATH TYPE READ PARSE} ...},
+# nested layouts flattened (a.b, a.b), fixed arrays element by element
+# (FIXED-LAYOUT-ARRAYS.md): BOTPATH a static designator (a.items[2].x), CPATH
+# the C designator, READ the Botlish expression reading the leaf through
+# the view `v` (binary::element(v.a.items, 2).x) and PARSE the one reading
+# it from the LayoutStruct `s` (list::at(s.a.items, 2).x). An array of more
+# than four elements in a dimension is sampled there -- its first two, its
+# middle and its last -- and every element left out is a byte no check
+# covers: C checks it untouched.
+proc ::cbind::oracle::Leaves {layouts members name {bot ""} {c ""} {read v} {parse s}} {
     set out {}
     foreach f [lindex [dict get $layouts $name] 2] {
         lassign $f fname type offset
         set cm [dict get $members [list $name $fname]]
         set bp [expr {$bot eq "" ? $fname : "$bot.$fname"}]
         set cp [expr {$c eq "" ? $cm : "$c.$cm"}]
-        if {[dict exists $layouts $type]} {
-            lappend out {*}[Leaves $layouts $members $type $bp $cp]
-        } else {
-            lappend out [list $bp $cp $type]
-        }
+        lappend out {*}[Elements $layouts $members $type $bp $cp "$read.$fname" "$parse.$fname"]
     }
     return $out
+}
+
+# The leaves of a field of type TYPE at BOT / C / READ / PARSE (Leaves').
+proc ::cbind::oracle::Elements {layouts members type bot c read parse} {
+    if {[regexp {^array ([0-9]+) of (.*)$} $type -> n element]} {
+        set indices [expr {$n <= 4 ? [lsearch -all [lrepeat $n x] x] : [lsort -integer -unique [list 0 1 [expr {$n / 2}] [expr {$n - 1}]]]}]
+        set out {}
+        foreach i $indices {
+            lappend out {*}[Elements $layouts $members $element "$bot\[$i\]" "$c\[$i\]" \
+                "binary::element($read, $i)" "list::at($parse, $i)"]
+        }
+        return $out
+    }
+    if {[dict exists $layouts $type]} {
+        return [Leaves $layouts $members $type $bot $c $read $parse]
+    }
+    return [list [list $bot $c $type $read $parse]]
 }
 
 # A deterministic value of an integer of BITS bits (SIGNED 0|1) for leaf I
@@ -94,7 +114,7 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
     append c "static char orc_anchor\[256\];\n"
     append c "#define ORC_ANCHOR(T, k) ((T)(__UINTPTR_TYPE__)&orc_anchor\[(k)\])\n"
     set ext "# The C oracle's functions (tools/c-bindgen/oracle.tcl): test tooling.\nimport ffi::c\nimport ${ns}::ctypes\n\nextern c library \"botlish_layout_oracle\"\n"
-    set bot "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport ${ns}::layouts\nimport orc\n"
+    set bot "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport list\nimport ${ns}::layouts\nimport orc\n"
     set calls {}
     set n 0
     foreach name $names {
@@ -129,7 +149,7 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
         set botParse ""
         set i 0
         foreach leaf $leaves {
-            lassign $leaf bp cp type
+            lassign $leaf bp cp type read parse
             set ct "__typeof__(((($T *)0)->$cp))"
             if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
                 set ka [expr {($n * 7 + $i) % 200}]
@@ -142,7 +162,7 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
                 append init "    { $ct t = ORC_ANCHOR($ct, $ka); __builtin_memcpy((void *)&r->$cp, &t, sizeof t); }\n"
                 append checkEdit "    if (r->$cp != ORC_ANCHOR($ct, $kb)) return [expr {$i + 1}];\n"
                 append checkBytes "    if (r.$cp != ORC_ANCHOR($ct, $kc)) return [expr {$i + 1}];\n"
-                append botRead "    q$i = v.$bp\n    r$i = orc::orc_${id}_is_$i\(q$i, $ka)\n"
+                append botRead "    q$i = $read\n    r$i = orc::orc_${id}_is_$i\(q$i, $ka)\n"
                 lappend reads r$i
                 append botStore "    a$i = orc::orc_${id}_anchor_$i\($kb)\n    binary::store(e, $L.$bp, a$i)\n"
                 append botWrite "    b$i = orc::orc_${id}_anchor_$i\($kc)\n    d[expr {$i + 1}] = binary::write_foreign(d$i, $L.$bp, b$i)\n"
@@ -157,12 +177,12 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
                 append init "    { $ct t = ($ct)${pa}ULL; __builtin_memcpy((void *)&r->$cp, &t, sizeof t); }\n"
                 append checkEdit "    if (r->$cp != ($ct)${pb}ULL) return [expr {$i + 1}];\n"
                 append checkBytes "    if (r.$cp != ($ct)${pc}ULL) return [expr {$i + 1}];\n"
-                append botRead "    r$i = if v.$bp == $va:\n        0\n    else:\n        1\n"
+                append botRead "    r$i = if $read == $va:\n        0\n    else:\n        1\n"
                 lappend reads r$i
                 append botStore "    binary::store(e, $L.$bp, $vb)\n"
                 append botWrite "    d[expr {$i + 1}] = binary::write(d$i, $L.$bp, $vc)\n"
                 if {$pointerFree} {
-                    append botParse "    s$i = if s.$bp == $vc:\n        0\n    else:\n        1\n"
+                    append botParse "    s$i = if $parse == $vc:\n        0\n    else:\n        1\n"
                     lappend parses s$i
                 }
             }
@@ -179,7 +199,7 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
         append ext "extern c fn orc_${id}_check_edit(p: ffi::c::Ptr\[ffi::c::Void\]) -> ffi::c::Int\n"
         append ext "extern c fn orc_${id}_check_bytes(\n    b: ffi::c::Ptr\[ffi::c::UChar\] read noescape,\n    n: ffi::c::ULong\n) -> ffi::c::Int\n"
         # Botlish.
-        set fn "\n# $name ($T)\nfn check_$id\() -> List\[int\] errors NativeViewNull, NativeEditNull, LayoutLengthMismatch:\n"
+        set fn "\n# $name ($T)\nfn check_$id\() -> List\[int\] errors NativeViewNull, NativeEditNull, LayoutLengthMismatch, IndexNotFound:\n"
         append fn "    size = if orc::orc_${id}_size() == binary::layout_length($L):\n        0\n    else:\n        1\n"
         append fn "    align = if orc::orc_${id}_align() == binary::layout_alignment($L):\n        0\n    else:\n        1\n"
         append fn "    p = orc::orc_${id}_init()\n    v = binary::native::view($L, p)\n$botRead"
@@ -201,8 +221,8 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
                 "$name: C reads every leaf Botlish wrote in byte storage, padding zero"] \
             [expr {$pointerFree ? [lmap leaf $leaves {string cat $name "." [lindex $leaf 0] ": binary::parse of the bytes"}] : {}}]]
     }
-    append bot "\nfn run() -> List\[any\] errors NativeViewNull, NativeEditNull, LayoutLengthMismatch:\n    \[[join [lmap k $calls {string cat $k "()"}] {, }]\]\n"
-    append bot "\nr = run():\n    on NativeViewNull:\n        \[\"view of null\"\]\n    on NativeEditNull:\n        \[\"edit of null\"\]\n    on LayoutLengthMismatch:\n        \[\"length mismatch\"\]\nr\n"
+    append bot "\nfn run() -> List\[any\] errors NativeViewNull, NativeEditNull, LayoutLengthMismatch, IndexNotFound:\n    \[[join [lmap k $calls {string cat $k "()"}] {, }]\]\n"
+    append bot "\nr = run():\n    on NativeViewNull:\n        \[\"view of null\"\]\n    on NativeEditNull:\n        \[\"edit of null\"\]\n    on LayoutLengthMismatch:\n        \[\"length mismatch\"\]\n    on IndexNotFound:\n        \[\"index not found\"\]\nr\n"
     return [dict create c $c ext $ext bot $bot expected $expected labels $checkLabels names $names]
 }
 
