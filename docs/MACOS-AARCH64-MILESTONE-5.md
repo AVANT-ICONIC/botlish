@@ -29,7 +29,7 @@ valid Mach-O arm64 object (section 4).
 
 **After** (every run from
 [39322480804](https://github.com/mwagner-webdev/botlish/actions/runs/39322480804)
-on): the same program links in 0.4 s into a `Mach-O 64-bit executable
+on): the same program links in well under a second into a `Mach-O 64-bit executable
 arm64` -- PIE, signed ad hoc by the linker, loading only
 `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib` -- that prints
 its value when moved out of its build directory, its source deleted and its
@@ -379,9 +379,11 @@ capability's: `nativeLinux` 84 (Linux syscalls), `linuxX86_64` 45 and
 `linuxAarch64` 2 (an instruction set's transport), `stubLinker` 7 and
 `rustcAvailable` 1 (the stub linker), `nvCFixture`/`neCFixture` 7 (a C
 fixture linked with C), `readelf` 1, `singleExecutable` 1. The jobs took 37
-and 30 minutes, 7 and 3 more than milestone 4's final run (30 and 26,
-run 39304487542): the executables now linked on the runner, about 0.4 s
-each, and run.
+and 30 minutes here, 36 and 29 at 5310075 and 21 and 20 at ee967c8, the
+same tests each time; milestone 4's final run took 30 and 26 (run
+39304487542), and the audit records 17 to 27 for earlier ones. The runners'
+own variation is larger than anything linking the executables (about
+0.4-0.6 s each) could add, so these times say nothing about its cost.
 
 What those files run as executables on macOS, against the in-process
 backends (each, in its own harness, moved and with its source gone, and
@@ -412,15 +414,25 @@ again under `BOTLISH_NATIVE_GC_STRESS=1`):
 
 ## 12. GC-stress results
 
-Pending at this commit: the final macOS run's Tier C (section 22) runs
-native-executable.test, workload-2048.test, application-modules.test,
-argv.test, coroutines.test and native-stack-overflow.test under
-`BOTLISH_NATIVE_GC_STRESS=1`, and this container runs the first four the
-same way on Linux x86-64. What already ran under GC stress: aot-facts.tcl's
-`standalone-gc-stress` and `standalone-coroutine-gc` in every smoke job
-from run 39322480804 on, and the executable tests that set the variable
-themselves (`native-executable-roots`, the 2048 executable, argv's
-`argv-standalone-gc-stress-invalid`, ...) in every acceptance tier.
+`BOTLISH_NATIVE_GC_STRESS=1` (a collection before every allocation)
+reaches every executable a test runs: the harness passes the variable on,
+the driver inherits it, and an executable's runtime reads it at startup.
+
+| Where | What ran under GC stress | Result |
+|---|---|---|
+| macOS arm64, Tier C of run [39333085905](https://github.com/mwagner-webdev/botlish/actions/runs/39333085905) (job [118335801824](https://github.com/mwagner-webdev/botlish/actions/runs/39333085905/job/118335801824), ee967c8) | native-executable.test, workload-2048.test, application-modules.test, argv.test, coroutines.test, native-stack-overflow.test, on interp and on compile | 211 tests each pass: 208 passed, 3 skipped (`nativeLinux`), 0 failed (327 s and 319 s) |
+| macOS arm64, every smoke job from run 39322480804 on | aot-facts.tcl's `standalone-gc-stress` (the probe program) and `standalone-coroutine-gc`, moved executables with an empty environment | `[6765, 100, 42]` and `[10, 7]`, exit 0, nothing on standard error |
+| macOS arm64, every acceptance tier | the executable tests that set the variable themselves: `native-executable-roots` (100 allocating ancestor frames), `exact-callable-executable`'s capturing closures, `loop-collecting`'s lockstep, the 2048 executable, argv's `argv-standalone-gc-stress-invalid` and 600-argument runs | passed (section 11) |
+| Linux x86-64, this container (the final code) | native-executable.test 18, workload-2048.test 8, argv.test 65, application-modules.test 21 | 112 of 112 passed |
+| Linux AArch64, tests-arm64.yml's `native GC-stress` job (section 24) | the whole Tcl suite under GC stress, every executable test file among them | success (83.8 min) |
+
+What GC stress checks in an executable is that the stack maps the
+startup installs (`set_framemap`) find every Botlish frame's roots, a
+coroutine's frames included (`standalone-coroutine-gc`): a mutant that installs none is
+killed by these runs alone (section 20, `startup-no-stack-maps`). Under
+stress the overflow tests still end in exactly the NATIVE LIMIT STACK line
+(native-stack-overflow.test and `native-executable-stack-overflow` in the
+Tier C run).
 
 ## 13. Standalone NATIVE LIMIT STACK results
 
@@ -649,31 +661,31 @@ Only enough to rule out a catastrophe, on one host at a time (no
 comparison across hosts: the runner is a 3-CPU virtualized M1, this
 container a 4-CPU x86-64):
 
-| Measure | macOS arm64 (run 39328290265) | Linux x86-64 (this container) |
+| Measure | macOS arm64 (runs 39328290265 and 39333085905) | Linux x86-64 (this container) |
 |---|---:|---:|
-| program object, probe program | 93 ms | 81-83 ms |
-| link (rustc + platform linker), probe program | 399 ms (run 39322480804) | 534-572 ms |
+| program object, probe program | 56-93 ms | 81-83 ms |
+| link (rustc + platform linker), probe program | 399 and 643 ms (runs 39322480804, 39333085905) | 534-572 ms |
 | executable size | 809 KB | 8.9 MB (debug info linked in) |
-| first run of the moved executable | 30-37 ms | 4-5 ms |
-| a trivial executable's whole process, median of five | 3.2 ms | 2.1-2.9 ms |
-| `fib(25)` and 2000 String concatenations, best of 20: JIT | 409 us | 549-708 us |
-| the same, inside its executable | 429 us (1.05) | 518-590 us (0.83-0.94) |
+| first run of the moved executable | 30-44 ms | 4-5 ms |
+| a trivial executable's whole process, median of five | 3.2-4.3 ms | 2.1-2.9 ms |
+| `fib(25)` and 2000 String concatenations, best of 20: JIT | 409-425 us | 549-708 us |
+| the same, inside its executable | 428-429 us (1.01-1.05) | 518-590 us (0.83-0.94) |
 
 - **Compute is the same code.** The JIT and the executable run the same
   NIR through the same Cranelift backend; the executable's ISA has the
   target's baseline features where the JIT may use the host's
   (`builder_with_options(!pic)`), and its helpers are reached through the
   GOT. On both hosts the two are within the run-to-run noise of these
-  machines (5% on macOS, the executable faster on Linux).
+  machines (1-5% on macOS, the executable faster on Linux).
 - **Linking is rustc compiling the startup crate and the platform linker
-  linking the runtime**, about 0.4-0.6 s a program on either host; the
-  executable tests' linking is what lengthened the acceptance jobs by 3-7
-  minutes (section 11). Nothing is cached between links and nothing needs
-  to be: the work directory is per link, and rustc compiles only the
-  generated startup.
+  linking the runtime**, about 0.4-0.6 s a program on either host. The
+  acceptance jobs' times vary more from run to run than that adds up to
+  (section 11). Nothing is cached between links and nothing needs to be:
+  the work directory is per link, and rustc compiles only the generated
+  startup.
 - **Startup** is dyld (or ld.so) and the worker thread: a few
   milliseconds. The first run of a freshly linked macOS executable took
-  30-37 ms, about ten times a later process of a (smaller) executable; the
+  30-44 ms, about ten times a later process of a (smaller) executable; the
   cause was not measured (a new file's first exec includes its page-ins
   and the kernel's check of its signature).
 - No compiler optimization was made in response to these numbers.
@@ -691,11 +703,12 @@ interpret-trailers --parse`):
 | [39321178300](https://github.com/mwagner-webdev/botlish/actions/runs/39321178300) | 45f6b47 | Gate A/B: aot-facts.tcl against the unchanged backend | smoke **failed as intended** (2.7 min: every object check passed, `executable-link` the old refusal); linux control success; acceptance cancelled by the next push |
 | [39322480804](https://github.com/mwagner-webdev/botlish/actions/runs/39322480804) | 8a0140c | Gates C-D: executables on macOS, the executable tests in the acceptance tier | success: smoke 2.3 min, acceptance 37.0 and 29.5 min, linux control 1.3 min |
 | [39328290265](https://github.com/mwagner-webdev/botlish/actions/runs/39328290265) | 5310075 | the mutation harness and the link-command check, `[ci-full]` with `CI-Tests: native-aot-mutants native-executable.test workload-2048.test argv.test application-modules.test` | success: smoke 2.1 min, acceptance 35.9 and 29.4 min, Tier C 9.3 min (the mutants, section 20; the four files on interp and compile, 110 of 112 passed, 2 skipped by `nativeLinux`), linux control 1.2 min |
-| [39333085905](https://github.com/mwagner-webdev/botlish/actions/runs/39333085905) | ee967c8 | the final code: aot-facts.tcl last in the smoke job, `[ci-full]` with `CI-Tests: native-executable.test workload-2048.test application-modules.test argv.test coroutines.test native-stack-overflow.test`, `CI-GC-Stress: 1` | pending at this commit (section 12) |
+| [39333085905](https://github.com/mwagner-webdev/botlish/actions/runs/39333085905) | ee967c8 | the final code: aot-facts.tcl last in the smoke job, `[ci-full]` with `CI-Tests: native-executable.test workload-2048.test application-modules.test argv.test coroutines.test native-stack-overflow.test`, `CI-GC-Stress: 1` | success: smoke 2.8 min (aot-facts.tcl, now last in the job, every check `ok`: the object's header flags 0x2000, `MH_SUBSECTIONS_VIA_SYMBOLS`; the executable's 0xa00085, `MH_NOUNDEFS`, `MH_DYLDLINK`, `MH_TWOLEVEL`, `MH_PIE`, `MH_HAS_TLV_DESCRIPTORS`; the link command without rustc's `env` prefix, 42 arguments), acceptance 21.1 and 20.2 min, Tier C 12.9 min (section 12), linux control 1.1 min |
 
 No run used the shared Apple Silicon development machine, and none was
 re-run (every run's attempt is 1). These and the two Linux dispatches
-(sections 23 and 24) are all six runs of the branch.
+(sections 23 and 24) are all six runs of the branch; the commit of this
+report changes only Markdown, which the workflow ignores.
 
 ## 23. Linux x86-64 CI results
 
@@ -724,11 +737,22 @@ among them.
 
 ## 24. Linux AArch64 CI results
 
-`tests-arm64.yml` dispatched on the branch at 5310075: run
-[39328975035](https://github.com/mwagner-webdev/botlish/actions/runs/39328975035).
-Pending at this commit: the golden shards 1-4 (2.8-4.2 min) and the native
-Rust unit tests (0.9 min) passed; interp, compile, the cranelift and
-cranelift-generic coverage and the native GC-stress job were running.
+`tests-arm64.yml` dispatched on the branch at 5310075 (ubuntu-24.04-arm):
+run [39328975035](https://github.com/mwagner-webdev/botlish/actions/runs/39328975035), **success**.
+
+| Job | Result | Time |
+|---|---|---:|
+| arm64 tests (interp) | success | 40.7 min |
+| arm64 tests (compile) | success | 38.0 min |
+| arm64 tests (cranelift coverage) | success | 37.3 min |
+| arm64 tests (cranelift-generic coverage) | success | 39.6 min |
+| arm64 tests (native GC-stress) | success | 83.8 min |
+| arm64 tests (native Rust unit tests) | success | 0.9 min |
+| arm64 golden suites, shards 1-4 | success | 2.8-4.2 min each |
+
+Linux AArch64 executables are linked by rustc as before (the stub linker
+is x86-64's only); the executable test files, the new tests among them,
+ran in every Tcl job and under GC stress.
 
 ## 25. Single-executable packaging status
 
