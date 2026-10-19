@@ -327,12 +327,22 @@ value test of `tests/float64.test` and the golden suite, and must agree.
 * the C fixture round trip (SysV: xmm registers, stack beyond eight
   doubles, interleaved with integer registers).
 
-**Covered by CI on this branch:**
+**Passed in CI on this change's branch:**
 
-* Linux AArch64: `tests-arm64.yml`, AAPCS64 d-registers.
-* macOS AArch64: `macos-arm64.yml`, Apple AArch64. C calls are refused
-  there before linking, as for every C call (the C-call port belongs to the
-  macOS roadmap), so the C double tests are Linux-only by constraint.
+* Linux x86-64: `tests.yml`, every job. That includes the whole Tcl suite
+  on interp and compile, its cranelift and cranelift-generic coverage,
+  every golden suite on every backend beside its Tcl originals, the stub
+  linker, the warning gate and the native Rust tests.
+* Linux AArch64: `tests-arm64.yml`, every job. That includes the C double
+  round trip in AAPCS64's d-registers, the golden suites on all four
+  backends, the native Rust tests (also under GC stress) and the whole
+  suite under `BOTLISH_NATIVE_GC_STRESS=1`.
+* macOS AArch64: `macos-arm64.yml`'s Tier A smoke and Tier B acceptance
+  (Apple AArch64). C calls are refused there before linking, as for every
+  C call (the C-call port belongs to the macOS roadmap), so the C double
+  tests are Linux-only by constraint.
+* `static-decisions.yml`: every golden suite, `float64.bot` included,
+  decided alike by the batched and the sequential scheduler.
 
 **Not run:** Windows x86-64 (no runner). `float-target-independent`
 compiles the same program for every target of the C ABI table, the Windows
