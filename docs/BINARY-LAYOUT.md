@@ -849,7 +849,8 @@ From `examples/binary/c-structs.bot`'s `raw_input_device` and `to_raw`.
     NATIVE-LAYOUT-VIEWS.md.) A zero-copy `View[L]` over borrowed storage reading fields
     lazily -- a separate abstraction with a lifetime, never what
     `LayoutStruct` silently becomes (it retains nothing by design).
-69. **Mutable views.** Writing fields into foreign or shared storage in
+69. **Mutable views.** (Native memory's came first: `NativeEdit[L]`, and
+    field writes into a `MutableBytes`, NATIVE-LAYOUT-WRITES.md.) Writing fields into foreign or shared storage in
     place: needs the view and an ownership story for the storage
     (MutableBytes-like values, affinity), not a mutable `LayoutStruct`.
 70. **Streaming.** Records imprinted one at a time from a byte stream: a

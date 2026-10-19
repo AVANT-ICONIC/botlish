@@ -820,8 +820,16 @@ checkout's). A change to native stack switching or its GC walk also needs a
 `bench/coroutines.tcl` regenerates the performance report.
 
 Native coroutines switch stacks with hand-written x86-64 and AArch64
-assembly and exist on Linux x86-64 and AArch64 only; elsewhere the native
-backend reports them unsupported (the Tcl backends run them everywhere).
+assembly and exist on Linux x86-64, Linux AArch64 and macOS AArch64
+(MACOS-AARCH64-MILESTONE-3.md); elsewhere the native backend reports them
+unsupported (the Tcl backends run them everywhere). The AArch64 switch is
+one text (`aarch64_switch!`, `aarch64_trampoline!` in
+runtime/coroutine.rs) in ELF and Mach-O spelling: change it for both, run
+the coroutine Rust tests on Linux AArch64 (CI's arm64 workflow, or
+qemu-user) and on macOS (the macOS workflow's smoke job runs them), and
+never touch x18. A Tcl test that needs coroutines, the collector around
+them or native counters carries `nativeCoroutines` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`.
 
 ## Linux AArch64
 
@@ -1316,9 +1324,9 @@ description language. Keep it so:
   `LAYOUT-NATIVE-ONLY`). Never let byte storage, an Int or a layout make a
   pointer, and never add pointer arithmetic, `Ptr <-> Int` or a dereference
   outside the view's field reads.
-* Views are read-only: no setter, write, writable view, native allocation or
-  native record (a later milestone designs them, section 16). The only
-  memory-writing native op is the test fixture's private copy.
+* Views are read-only: no setter, write or writable view; writing is a
+  separate capability, `NativeEdit[L]` (next section), never a view's. No
+  native allocation or native record.
 * `NativeView[L]` is its own nominal type: never a pointer, a LayoutStruct
   or another layout's view; unrestricted, with no equality. A field read is
   elaborated after the checks to `binary#view_field(v, FIELD)` with the
@@ -1343,6 +1351,73 @@ mutates, keeping it a mutant of the same rule) and `cargo test --release
 --manifest-path native/Cargo.toml --lib nview`, plus the binary-layout
 harnesses (above) for a change to the layout registry or the descriptor.
 `bench/native-view.tcl` regenerates the performance report.
+
+## Native layout writes
+
+The write half (NATIVE-LAYOUT-WRITES.md) has two deliberately different
+mechanisms: `binary::native::edit(L, p)` is `NativeEdit[L]`, write authority
+over live native memory (`binary::store(e, L.f, v)`: one store of the field's
+width at its offset), and `binary::write(d, L.f, v)` /
+`binary::write_foreign(d, L.p, q)` write one field of a
+`abi::bytes::MutableBytes` as a new value. A write names its field by a
+static designator, `L.f` or a path `L.inner.x`, resolved to a constant with
+the leaf's absolute offset and encoding. Keep it so:
+
+* `NativeEdit[L]` is `{nedit L}`: its own nominal type, never a
+  `NativeView[L]` with a flag, a subtype of one either way, a pointer, a
+  `MutableBytes` or a struct. A view never becomes an edit (no upgrade, no
+  conversion); write authority is made from a pointer by
+  `binary::native::edit`, which is `binary::native`'s and so direct; storing
+  through an edit someone made, and every byte write, are not.
+* Native memory is raw: one layout's integer field and another's pointer
+  field can alias an address, so a holder of write authority can pun bits
+  into a pointer (`ne-native-memory-is-raw`). That is why making an edit is
+  direct: never make it ordinary, and never let byte storage (Botlish
+  values) decode into a pointer, which is the law that holds.
+* An edit is unrestricted, non-owning authority: never add affinity,
+  uniqueness, a borrow rule, pinning, lifetime regions or ownership of the
+  memory, and never claim exclusive access. A store is an ordinary store:
+  no volatile, atomic or fenced access, never cached or merged (each one a
+  runtime call).
+* A store or write touches exactly its field's bytes: never the record, its
+  padding or a neighbour; a store never copies the record through bytes,
+  allocates or reads a `LayoutStruct` (one `nativestore`/`nativestoreptr`
+  with constant operands). Scalar encoding is ops.rs's `bin_encode`, shared
+  with `binstore`, and checks the range before anything is written.
+* The value is held to the field's type statically (`VerifyWriteValue`): a
+  scalar proven in its domain, a pointer field exactly its declared
+  `Ptr`/`FnPtr` type -- no C conversion, truncation, implicit erasure or Int.
+  A pointer stored or encoded is observed, never moved; nothing records a
+  dependency on it or keeps it alive (lifetime protocols are a wrapper's).
+* `MutableBytes` stays a value: a write returns a fresh storage and never
+  writes its operand (MUTABLE-BYTES.md); its size must be exactly the
+  layout's (`LayoutLengthMismatch`). Pointers enter bytes only through the
+  explicit `binary::write_foreign`, into a pointer field: an ordinary
+  `binary::write` or `binary::emit` of one stays `LAYOUT-NATIVE-ONLY`, and
+  `binary::parse` of a pointer layout stays rejected whatever the bytes hold.
+  Never add `Ptr -> Int`, `Ptr -> Bytes` or any decoding of a pointer from
+  bytes.
+* No native record allocation, `extern c struct`, layout guarantee for an
+  ordinary struct, arrays, unions, bitfields or `ffi::c::Bool` fields here
+  (NATIVE-LAYOUT-WRITES.md section 22 records what a generated layout will
+  need).
+* `ffi_fixture::memory_bytes(p, n)` (the oracle of a native write) is a test
+  process's own, like `ffi_fixture::memory`.
+
+If you change any of that (NATIVE-LAYOUT-WRITES.md, "What to run when
+changing this", lists the files), run `tests/native-edit.test` (its C
+oracle, tests/cffi/nedit-fixture.c, needs `cc`), `tests/native-view.test`,
+`tests/binary-layout.test`, `tests/c-abi-types.test`,
+`tests/c-pointer-borrowing.test`, `tests/direct-modules.test`,
+`audit/native-edit/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`,
+once with `-backends "interp compile cranelift-generic cranelift"`),
+`audit/native-edit/tools/mutate.tcl` (every mutant in its `mutants.txt` must
+still apply and be killed: update a mutant's text when you change the code it
+mutates, keeping it a mutant of the same rule) and `cargo test --release
+--manifest-path native/Cargo.toml --lib nview`, plus the native-view and
+binary-layout harnesses for a change to code they share (`bin_encode`,
+`ViewBase`, the native types' subtype rule). `bench/native-edit.tcl`
+regenerates the performance report.
 
 ## C ABI types and imprinting
 

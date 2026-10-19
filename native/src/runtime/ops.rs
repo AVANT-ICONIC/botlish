@@ -89,7 +89,10 @@ use super::ffifixture::{
     rt_ffi_fixture_read_reentrant,
 };
 use super::ffi::{rt_ffi_bad_address, rt_ffi_bad_bool, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
-use super::nview::{rt_cptr_fixture_memory, rt_cptr_offset, rt_native_load, rt_native_load_ptr};
+use super::nview::{
+    rt_cptr_fixture_bytes, rt_cptr_fixture_memory, rt_cptr_offset, rt_mbytes_write, rt_mbytes_write_ptr, rt_native_load,
+    rt_native_load_ptr, rt_native_store, rt_native_store_ptr,
+};
 use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
@@ -129,6 +132,11 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // A native view's 64-bit field read outside the small-Int range
             // is a BigInt (NATIVE-LAYOUT-VIEWS.md).
             | NativeLoad
+            // A layout write into byte storage makes a fresh storage (the
+            // MutableBytes rule), the fixture's byte copy a List
+            // (NATIVE-LAYOUT-WRITES.md); a store through a native edit
+            // allocates nothing.
+            | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -201,6 +209,11 @@ pub fn op_may_error(op: OpCode) -> bool {
         // address no C address word can hold (NATIVE ADDRESS, like a C
         // call's pointer result). The fixture's: a non-storage operand.
         | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory
+        // Native layout writes (runtime/nview.rs): likewise an operand a
+        // checked program never produces -- a value outside its field's
+        // encoding (checked before anything is written), no C address word,
+        // a storage of another kind -- or a pointer no field width holds.
+        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here. (On
@@ -980,13 +993,32 @@ pub(super) fn bin_decode(p: *mut Vm, bytes: &[u8], signed: bool, big: bool) -> V
 /// in encoding C. RANGE (never a truncation) if V is outside the encoding.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: Value, value: Value) -> Value {
-    use num_traits::ToPrimitive;
     let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::emit") {
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
+    let bytes = match bin_encode(p, value, width, signed, big, "binary::emit") {
+        Ok(bytes) => bytes,
+        Err(failed) => return failed,
+    };
+    // SAFETY: STORAGE is the fresh, non-empty storage `byteszeroed` made for
+    // this emission (native/lower.tcl's LayoutEmit): no value holds it yet,
+    // and the range was checked above.
+    unsafe { BytesObj::payload_mut(storage)[at..at + width].copy_from_slice(&bytes[..width]) };
+    UNIT
+}
+
+/// The WIDTH-byte encoding of the Int VALUE, SIGNED two's complement or
+/// unsigned, BIG-endian or little, in the first WIDTH bytes of the result:
+/// `binstore`'s encoding, shared with the layout writes of a native edit and
+/// of byte storage (runtime/nview.rs, NATIVE-LAYOUT-WRITES.md). A value
+/// outside the encoding is a RANGE error (CONTEXT names the operation),
+/// raised before the caller writes anything: never a truncation, a wrap or a
+/// reinterpretation.
+pub(super) fn bin_encode(p: *mut Vm, value: Value, width: usize, signed: bool, big: bool, context: &str) -> Result<[u8; 8], Value> {
+    use num_traits::ToPrimitive;
     if !is_small(value) && heap_kind(value) != KIND_BIGINT {
-        return vm(p).fail(RtError::Type { context: "binary::emit".to_string(), expected: Kind::Int, got: value });
+        return Err(vm(p).fail(RtError::Type { context: context.to_string(), expected: Kind::Int, got: value }));
     }
     // Every encoding's range lies inside i128, so the check needs no BigInt
     // for a small Int (the common case: no allocation per store); a BigInt
@@ -1005,21 +1037,16 @@ pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: 
         (0, (1i128 << bits) - 1)
     };
     if n < lo || n > hi {
-        let message = format!("binary::emit: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
-        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+        let message = format!("{context}: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
+        return Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }));
     }
     // The low 64 bits: two's complement for a negative N, N itself otherwise.
     let word = n as u64;
     let mut bytes = word.to_le_bytes();
-    let field = &mut bytes[..width];
     if big {
-        field.reverse();
+        bytes[..width].reverse();
     }
-    // SAFETY: STORAGE is the fresh, non-empty storage `byteszeroed` made for
-    // this emission (native/lower.tcl's LayoutEmit): no value holds it yet,
-    // and the range was checked above.
-    unsafe { BytesObj::payload_mut(storage)[at..at + width].copy_from_slice(field) };
-    UNIT
+    Ok(bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -2630,7 +2657,11 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // A native view's loads, likewise (one statically known layout's
         // field reads, NATIVE-LAYOUT-VIEWS.md); the memory fixture is an
         // imprinted native, never a value.
-        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory => {
+        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory
+        // A native edit's stores and the layout writes into byte storage
+        // likewise (NATIVE-LAYOUT-WRITES.md); the byte fixture is an
+        // ordinary-looking native of the test fixture, never a value.
+        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -2725,6 +2756,11 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_native_load_ptr, 4),
         h!(rt_cptr_offset, 3),
         h!(rt_cptr_fixture_memory, 2),
+        h!(rt_native_store, 5),
+        h!(rt_native_store_ptr, 5),
+        h!(rt_mbytes_write, 5),
+        h!(rt_mbytes_write_ptr, 5),
+        h!(rt_cptr_fixture_bytes, 3),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),
         h!(rt_str_region_is_tcl_alpha, 4),
@@ -3911,13 +3947,48 @@ mod tests {
     fn bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes() {
         let mut vm = vm();
         let p: *mut Vm = &mut *vm;
-        let l = bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
+        // Rooted, as compiled code roots a call's operands for the whole
+        // call (codegen::roots's `call_argument_is_rooted_during_the_call`):
+        // under BOTLISH_NATIVE_GC_STRESS=1 the allocation inside
+        // rt_bytes_from_list collects first, and an unrooted L is swept
+        // there. Its block is then free for the result to take (Apple's
+        // allocator handed it back at once; glibc's did not), and
+        // `assert_ne!(b, l)` compared the result with a dead object.
+        let l = rooted!(vm, bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]));
         let b = rt_bytes_from_list(p, l);
         assert_eq!(heap_kind(b), KIND_BYTES);
         assert_eq!(bytes_of(b), &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
         assert_eq!(rt_bytes_len(p, b), make_small(7));
-        // Eager copy: the storage is its own allocation, not the List.
+        // Eager copy: the storage is its own allocation, not the List. Both
+        // are live, so they cannot share an address whatever the allocator.
         assert_ne!(b, l);
+    }
+
+    /// The same call with the collection made certain and observed, not left
+    /// to the environment or to the allocator: a collection is forced before
+    /// every allocation, so one runs inside the call (the collector's cycle
+    /// count rises); the rooted List survives it (no List is reclaimed); and
+    /// once the caller lets go of the List, the next collection reclaims it
+    /// while the storage, now the rooted one, stays exact.
+    #[test]
+    fn bytes_from_list_survives_its_own_collection_and_the_list_is_reclaimed_after_it() {
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let expected = [0x41u8, 0, 0x42, 0xff, 0x80, 0, 0];
+        let l = rooted!(vm, bytes_list(&mut vm, &expected.map(i64::from)));
+        let cycles = vm.metrics.gc_cycles.len();
+        let lists_swept = vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects;
+        let b = rt_bytes_from_list(p, l);
+        assert!(vm.metrics.gc_cycles.len() > cycles, "no collection ran inside the call");
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept, "a rooted List was swept");
+        assert_eq!(bytes_of(b), &expected);
+        // The caller is done with the List: unroot it, root the storage.
+        vm.temp_roots.pop();
+        vm.temp_roots.push(b);
+        vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept + 1, "the dead List was not reclaimed");
+        assert_eq!(bytes_of(b), &expected);
     }
 
     #[test]

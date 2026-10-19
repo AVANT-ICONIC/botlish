@@ -196,8 +196,12 @@
 ## native/lower.tcl
 <<<<
             Emit fn "br $null $bad $good" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeViewNull] [Quote NativeViewNull]" $e
 ====
             Emit fn "br $null $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeViewNull] [Quote NativeViewNull]" $e
 >>>>
 
 @@ null-check-missing-tcl the Tcl backends refuse a view of the null pointer (NATIVE-ONLY) instead of NativeViewNull
@@ -245,21 +249,19 @@ core::native::declareDirectNamespace binary::native
 @@ views-structural two native views are compatible when both are views, whatever their layouts
 ## hir/types.tcl
 <<<<
-        # ($a eq $b). A view is never a pointer, though its run-time word is
-        # one: no pointer operation (null?, clone, a C argument) takes it.
+        # authority's, and an edit is not silently narrowed into a view.
         return 0
 ====
-        # ($a eq $b). A view is never a pointer, though its run-time word is
-        # one: no pointer operation (null?, clone, a C argument) takes it.
+        # authority's, and an edit is not silently narrowed into a view.
         return [expr {[IsNativeView $a] && [IsNativeView $b]}]
 >>>>
 
 @@ view-is-a-pointer a native view is accepted where a pointer operation's C address is required
 ## hir/cabi.tcl
 <<<<
-            if {[hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+            if {[hir::types::IsNativeMemory $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
 ====
-            if {0 && [hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+            if {0 && [hir::types::IsNativeMemory $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
 >>>>
 
 @@ untyped-receiver-accepted a field read through a view whose type is not static (an untyped function's instance) is accepted
@@ -272,7 +274,7 @@ core::native::declareDirectNamespace binary::native
 @@ view-field-shape-lost an instance's re-inference types a view's field read as `any` (the field-type result shape is gone)
 ## hir/types.tcl
 <<<<
-            set id [hir::layouts::OfViewType [lindex $argTypes $v]]
+            set id [hir::layouts::OfNativeType [lindex $argTypes $v]]
 ====
             set id ""
 >>>>
@@ -280,10 +282,11 @@ core::native::declareDirectNamespace binary::native
 @@ pointer-field-read-unowned a pointer read through a view is exempt from the affine rules of its use (taken for a move out of the view)
 ## hir/affine.tcl
 <<<<
-    if {[hir::types::IsNativeView [hir::typeOf $hir $receiver]]} {
-        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) is a
-        # load from memory: a fresh value (a pointer field's own owner), never
-        # a move out of the view, which owns nothing.
+    if {[hir::types::IsNativeMemory [hir::typeOf $hir $receiver]]} {
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) or edit
+        # (NATIVE-LAYOUT-WRITES.md) is a load from memory: a fresh value (a
+        # pointer field's own owner), never a move out of the view, which
+        # owns nothing.
         return 0
     }
 ====

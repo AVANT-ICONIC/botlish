@@ -2118,6 +2118,17 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         NativeLoadPtr => ("rt_native_load_ptr", None, true, None),
                         CPtrOffset => ("rt_cptr_offset", None, true, None),
                         CPtrFixtureMemory => ("rt_cptr_fixture_memory", None, true, None),
+                        // Native layout writes (NATIVE-LAYOUT-WRITES.md,
+                        // runtime/nview.rs): one helper call per field
+                        // written; a store through a native edit allocates
+                        // nothing (no safepoint), a write into byte storage
+                        // one fresh storage (the MutableBytes rule), the
+                        // fixture's byte copy one List.
+                        NativeStore => ("rt_native_store", None, true, None),
+                        NativeStorePtr => ("rt_native_store_ptr", None, true, None),
+                        MBytesWrite => ("rt_mbytes_write", None, true, Some(("mbyteswrite", KIND_MUTBYTES))),
+                        MBytesWritePtr => ("rt_mbytes_write_ptr", None, true, Some(("mbyteswriteptr", KIND_MUTBYTES))),
+                        CPtrFixtureBytes => ("rt_cptr_fixture_bytes", None, true, Some(("cptrfixturebytes", KIND_LIST))),
                         // The writable byte storage (MUTABLE-BYTES.md): new /
                         // from / set / clone allocate one object, freeze and
                         // freeze_prefix one immutable one (all fallible, all

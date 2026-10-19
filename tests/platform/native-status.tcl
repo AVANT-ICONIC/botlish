@@ -139,7 +139,7 @@ set expected [dict create \
         jit {value 6765} \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
         stack-overflow {error {NATIVE BUG} {native backend failed: child killed: SIGABRT*has overflowed its stack*}} \
-        coroutine {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for x86-64 Linux only*}} \
+        coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
         c-call {error {NATIVE LINK} {*executable emission requires Linux glibc on x86_64 or aarch64*}} \
         executable {error {NATIVE AOT} {executable emission requires Linux glibc on x86_64 or aarch64}} \

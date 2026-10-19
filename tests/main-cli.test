@@ -80,6 +80,13 @@ test cli-help-overview {-help alone prints Compilerpedia's overview on stdout an
         [dict get $r err]
 } -cleanup {unset -nocomplain r} -result {0 1 1 {}}
 
+test cli-help-overview-newcomer-line {the overview names the one query for a newcomer, and that query finds the page that answers it} -body {
+    set out [dict get [runMain -help] out]
+    set line [lindex [regexp -inline -line {^New to Botlish\?  .* -help "best practices"$} $out] 0]
+    set r [runMain -help best practices]
+    list [expr {$line ne ""}] [lindex [split [dict get $r out] \n] 0]
+} -cleanup {unset -nocomplain out line r} -result {1 principle.idiomatic-botlish}
+
 test cli-help-spellings {--help and -h are -help} -body {
     list [expr {[dict get [runMain --help] out] eq [dict get [runMain -help] out]}] \
         [expr {[dict get [runMain -h warnings] out] eq [dict get [runMain -help warnings] out]}]

@@ -157,6 +157,21 @@
 #                                   Unrestricted: a non-owning window that
 #                                   confers nothing its copy does not; like
 #                                   a callable it has no equality
+#   {nedit L}                       a native edit NativeEdit[L]
+#                                   (NATIVE-LAYOUT-WRITES.md): live native
+#                                   memory read AND written through layout
+#                                   L, the address word of the pointer it
+#                                   was made from (runtime kind cptr). Its
+#                                   reads are a view's (a nested layout's
+#                                   a NativeEdit[INNER]); binary::store
+#                                   writes through it. Nominal and distinct
+#                                   from NativeView[L] in both directions
+#                                   (write authority is never implied by
+#                                   read authority, nor made from it), never
+#                                   a pointer. Unrestricted like a view: a
+#                                   non-owning capability whose copies prove
+#                                   nothing about other aliases of the
+#                                   memory; no equality
 #   {imprint T}                     an imprint variable (hir/imprint.tcl):
 #                                   in a function's declared signature, the
 #                                   type a call imprints as T. Rigid in the
@@ -249,7 +264,7 @@ namespace eval hir::types {
     # NativeView (NATIVE-LAYOUT-VIEWS.md) likewise: its argument is a layout
     # (hir::layouts::ResolveNativeView).
     variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1 \
-        NativeView 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
+        NativeView 1 NativeEdit 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -399,7 +414,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
             # ResolveFnPtr), never from a resolved argument type.
             error "internal compiler error: $ctor is resolved by hir::cabi"
         }
-        LayoutStruct - NativeView {
+        LayoutStruct - NativeView - NativeEdit {
             # Only from a resolved argument type (never a layout): see
             # hir::layouts::ResolveLayoutStruct and ResolveNativeView.
             return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
@@ -414,7 +429,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview nedit})}]
 }
 
 # C ABI pointer forms (C-ABI-TYPES.md; the header's {cptr ...}/{cfnptr ...}).
@@ -432,6 +447,16 @@ proc hir::types::IsCAddress {type} {
 # {nview L}).
 proc hir::types::IsNativeView {type} {
     return [expr {[llength $type] == 2 && [lindex $type 0] eq "nview"}]
+}
+# A native edit NativeEdit[L] (NATIVE-LAYOUT-WRITES.md; the header's
+# {nedit L}).
+proc hir::types::IsNativeEdit {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "nedit"}]
+}
+# Native memory read through a layout: a NativeView[L] or a NativeEdit[L],
+# whose reads are the same.
+proc hir::types::IsNativeMemory {type} {
+    return [expr {[IsNativeView $type] || [IsNativeEdit $type]}]
 }
 # An imprint variable (hir/imprint.tcl).
 proc hir::types::IsImprint {type} {
@@ -1479,10 +1504,13 @@ proc hir::types::subtype {a b} {
     if {$b eq "never"} {
         return 0
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
         # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
         # ($a eq $b). A view is never a pointer, though its run-time word is
         # one: no pointer operation (null?, clone, a C argument) takes it.
+        # A NativeEdit[L] and a NativeView[L] are not each other's subtypes
+        # either way (NATIVE-LAYOUT-WRITES.md): write authority is never read
+        # authority's, and an edit is not silently narrowed into a view.
         return 0
     }
     if {[IsList $b]} {
@@ -1624,10 +1652,11 @@ proc hir::types::lub {a b} {
         # do.
         return [MakeMutArray [lub [lindex $a 1] [lindex $b 1]] 0]
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
         # Nominal (NATIVE-LAYOUT-VIEWS.md): views of two layouts, or a view
         # and anything else, have no useful join -- never the bare pointer
-        # kind their words share, which is affine.
+        # kind their words share, which is affine. (A view and an edit of
+        # one layout neither: NATIVE-LAYOUT-WRITES.md.)
         return any
     }
     if {[IsEnum $a] || [IsEnum $b]} {
@@ -1761,7 +1790,7 @@ proc hir::types::narrow {current fact} {
         return $fact
     }
     if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]
-            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeView $fact]} {
+            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeMemory $fact]} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
@@ -1818,8 +1847,9 @@ proc hir::types::IsEqualityTotal {type} {
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
 proc hir::types::kindOf {type} {
-    if {[IsCFnPtr $type] || [IsNativeView $type]} {
-        # (A native view's value is the address word of its pointer.)
+    if {[IsCFnPtr $type] || [IsNativeMemory $type]} {
+        # (A native view's or edit's value is the address word of its
+        # pointer.)
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1838,7 +1868,7 @@ proc hir::types::kindOf {type} {
 
 # The core type (core/type.tcl) a static type implies.
 proc hir::types::semantic {type} {
-    if {[IsCFnPtr $type] || [IsNativeView $type]} {
+    if {[IsCFnPtr $type] || [IsNativeMemory $type]} {
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1964,6 +1994,10 @@ proc hir::types::show {type} {
                 # A native view, by its layout's identity
                 # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown.
                 return "NativeView\[[lindex $type 1]\]"
+            }
+            nedit {
+                # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
+                return "NativeEdit\[[lindex $type 1]\]"
             }
             imprint {
                 # An imprint variable, by its name (hir/imprint.tcl).
@@ -2246,16 +2280,31 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             }
             return $result
         }
+        native-edit {
+            # binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): a
+            # NativeEdit[L], L the layout argument I's descriptor constant
+            # describes.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+                if {$id ne "" && [hir::layouts::declared $id]} {
+                    return [hir::layouts::editType $id]
+                }
+            }
+            return $result
+        }
         view-field {
             # binary#view_field(v, FIELD), the elaborated field read of a
             # native view: the field's view type (hir::layouts::
             # ViewFieldType) when V's static type is a view -- what an
             # instance's re-inference recovers (hir/specialize.tcl).
+            # (Through a NativeEdit[L] a nested layout is an edit too:
+            # NATIVE-LAYOUT-WRITES.md.)
             lassign $shape _ v f
-            set id [hir::layouts::OfViewType [lindex $argTypes $v]]
+            set id [hir::layouts::OfNativeType [lindex $argTypes $v]]
             set arg [lindex $argExprs $f]
             if {$id ne "" && $arg ne "" && [hir::kind $hir $arg] eq "const"} {
-                set t [hir::layouts::ViewFieldType $id [lindex [lindex [hir::get $hir $arg literal] end] 0]]
+                set t [hir::layouts::NativeFieldType [lindex $argTypes $v] [lindex [lindex [hir::get $hir $arg literal] end] 0]]
                 if {$t ne ""} {
                     return $t
                 }
@@ -2264,8 +2313,8 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         view-struct {
             # binary::load(v): the LayoutStruct[L] of argument I's static
-            # NativeView[L] type.
-            set id [hir::layouts::OfViewType [lindex $argTypes [lindex $shape 1]]]
+            # NativeView[L] (or NativeEdit[L]) type.
+            set id [hir::layouts::OfNativeType [lindex $argTypes [lindex $shape 1]]]
             if {$id ne ""} {
                 return [hir::layouts::structType $id]
             }
@@ -2917,12 +2966,13 @@ proc hir::types::Project {hirVar ctxVar e} {
         }
         return [ProjectionFailed hir $ctx $e]
     }
-    set layout [hir::layouts::OfViewType $receiver]
+    set layout [hir::layouts::OfNativeType $receiver]
     if {$layout ne ""} {
         # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
         # field's view type, read at run time from the memory the view
-        # addresses.
-        set t [hir::layouts::ViewFieldType $layout $name]
+        # addresses. (Through a native edit the same read; a nested layout
+        # an edit of it: NATIVE-LAYOUT-WRITES.md.)
+        set t [hir::layouts::NativeFieldType $receiver $name]
         if {$t ne ""} {
             return $t
         }
