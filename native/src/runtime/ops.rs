@@ -650,6 +650,66 @@ fn fnv1a(h: u64, bytes: &[u8]) -> u64 {
     h
 }
 
+/// "00", "01", ..., "99": two digits per division halve the dependent
+/// division chain of a number's text.
+const DECIMAL_PAIRS: &[u8; 200] = b"0001020304050607080910111213141516171819\
+2021222324252627282930313233343536373839\
+4041424344454647484950515253545556575859\
+6061626364656667686970717273747576777879\
+8081828384858687888990919293949596979899";
+
+/// Writes N's decimal digits, at least MIN_DIGITS of them (zero-padded),
+/// into BUF ending before END; returns where they start.
+#[inline]
+fn put_decimal_digits(buf: &mut [u8], mut end: usize, mut n: u64, min_digits: usize) -> usize {
+    let stop = end - min_digits;
+    while n >= 100 {
+        let pair = 2 * (n % 100) as usize;
+        n /= 100;
+        end -= 2;
+        buf[end..end + 2].copy_from_slice(&DECIMAL_PAIRS[pair..pair + 2]);
+    }
+    if n >= 10 {
+        let pair = 2 * n as usize;
+        end -= 2;
+        buf[end..end + 2].copy_from_slice(&DECIMAL_PAIRS[pair..pair + 2]);
+    } else {
+        end -= 1;
+        buf[end] = b'0' + n as u8;
+    }
+    while end > stop {
+        end -= 1;
+        buf[end] = b'0';
+    }
+    end
+}
+
+/// The canonical decimal text of the integer of magnitude MAG, negative when
+/// NEG (never for zero): an optional '-', then the digits, without leading
+/// zeros ("0" for zero) -- exactly the bytes `to_string()` gives an i64, a
+/// u32 or a BigInt of that value (`tests::decimal_text_is_to_string`),
+/// which is core/hashing.tcl's `Utf8Bytes` of an Int's or a code point's
+/// text. Written into BUF, never the heap: hashing an Int or a UnicodeChar
+/// used to format through `to_string`, one malloc and free per hash. 40
+/// bytes hold u128::MAX's 39 digits and a sign; a magnitude beyond 64 bits
+/// is cut into 19-digit chunks, so only those few rare values divide a u128.
+#[inline]
+fn decimal_text(neg: bool, mut mag: u128, buf: &mut [u8; 40]) -> &[u8] {
+    const CHUNK: u128 = 10_000_000_000_000_000_000;
+    let mut start = buf.len();
+    while mag > u64::MAX as u128 {
+        let rest = mag / CHUNK;
+        start = put_decimal_digits(buf, start, (mag - rest * CHUNK) as u64, 19);
+        mag = rest;
+    }
+    start = put_decimal_digits(buf, start, mag as u64, 1);
+    if neg {
+        start -= 1;
+        buf[start] = b'-';
+    }
+    &buf[start..]
+}
+
 /// H folded with V's kind tag and payload, recursing into List elements and
 /// a Result payload exactly as `equal` recurses (see ops.rs's `equal`).
 fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
@@ -681,12 +741,21 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
     Ok(match kind {
         // Canonical decimal text, matching how core::value::equal treats
         // textual identity as numeric equality for every Int, small or big.
+        // Formatted on the stack (`decimal_text`); a BigInt of more than 128
+        // bits, by num-bigint from the object's own value (no clone).
         Kind::Int => {
-            let text = match int_small(v) {
-                Some(n) => n.to_string(),
-                None => int_to_big(v).to_string(),
-            };
-            fnv1a(h, text.as_bytes())
+            let mut buf = [0u8; 40];
+            match int_small(v) {
+                Some(n) => fnv1a(h, decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf)),
+                None => {
+                    use num_traits::ToPrimitive;
+                    let n = big_of(v);
+                    match n.magnitude().to_u128() {
+                        Some(mag) => fnv1a(h, decimal_text(n.is_negative(), mag, &mut buf)),
+                        None => fnv1a(h, n.to_str_radix(10).as_bytes()),
+                    }
+                }
+            }
         }
         // Evidence is metadata, not part of the value (equal ignores it too).
         Kind::Str => fnv1a(h, str_of(v).as_bytes()),
@@ -709,7 +778,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         }
         // Canonical decimal codepoint text, matching how Int's own text is
         // hashed above (core/hashing.tcl's identical choice).
-        Kind::UnicodeChar => fnv1a(h, char_of(v).to_string().as_bytes()),
+        Kind::UnicodeChar => fnv1a(h, decimal_text(false, char_of(v) as u128, &mut [0u8; 40])),
         // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
         // declaration identity text, a 0xFF separator, the case's declared
         // name -- never the numbers the word carries.
@@ -742,19 +811,22 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
             // core/hashing.tcl's struct case, byte for byte: the declaration
             // identity text (empty for an anonymous struct), the field
             // count, then each slot's name text and sub-hash in slot order.
+            // The shape is borrowed for the whole fold, never cloned: a
+            // field's sub-hash (a nested struct's or enum's) borrows the
+            // program again, and RefCell's shared borrows nest (only
+            // `Vm::new` borrows it mutably, and hashing makes no Vm).
             let obj = struct_of(v);
-            let (name, fields) = current_program(|prog| {
+            current_program(|prog| {
                 let shape = &prog.shapes[obj.shape as usize];
-                (shape.name.clone().unwrap_or_default(), shape.fields.clone())
-            });
-            let mut h = fnv1a(h, name.as_bytes());
-            h = fnv1a(h, &(fields.len() as u64).to_le_bytes());
-            for (field, item) in fields.iter().zip(obj.fields().iter()) {
-                h = fnv1a(h, field.as_bytes());
-                let sub = hash_mix(p, FNV_OFFSET, *item)?;
-                h = fnv1a(h, &sub.to_le_bytes());
-            }
-            h
+                let mut h = fnv1a(h, shape.name.as_deref().unwrap_or("").as_bytes());
+                h = fnv1a(h, &(shape.fields.len() as u64).to_le_bytes());
+                for (field, item) in shape.fields.iter().zip(obj.fields().iter()) {
+                    h = fnv1a(h, field.as_bytes());
+                    let sub = hash_mix(p, FNV_OFFSET, *item)?;
+                    h = fnv1a(h, &sub.to_le_bytes());
+                }
+                Ok(h)
+            })?
         }
         Kind::ImmutableSet => {
             // Order-independent (XOR-combined member sub-hashes), matching
@@ -2966,6 +3038,174 @@ mod tests {
         assert_eq!(h(&mut vm, one), h(&mut vm, two));
         assert_ne!(h(&mut vm, one), h(&mut vm, other));
         assert_ne!(h(&mut vm, other), h(&mut vm, named));
+    }
+
+    // -----------------------------------------------------------------------
+    // hash's byte encoding is formatted without the heap (decimal_text) and
+    // folds borrowed shapes; the bytes are the ones `to_string()` and the
+    // shape's own strings always gave (core/hashing.tcl's, byte for byte).
+
+    /// Interesting magnitudes: every power of ten and of two in range, each
+    /// minus one and plus one, and a deterministic spread in between.
+    fn decimal_samples() -> Vec<u128> {
+        let mut out = vec![0, 1, 9, 10, 11, 99, 100, 101, u64::MAX as u128, u128::MAX];
+        let mut p: u128 = 1;
+        while let Some(next) = p.checked_mul(10) {
+            out.extend([p - 1, p, p + 1]);
+            p = next;
+        }
+        out.extend([p - 1, p, p + 1]);
+        for bit in 1..128 {
+            let q = 1u128 << bit;
+            out.extend([q - 1, q, q + 1]);
+        }
+        let mut x: u128 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..20000 {
+            x = x.wrapping_mul(0x2545_F491_4F6C_DD1D_9E37_79B9_7F4A_7C15).wrapping_add(1442695040888963407);
+            out.push(x >> (x % 127) as u32);
+        }
+        out
+    }
+
+    #[test]
+    fn decimal_text_is_to_string() {
+        let mut buf = [0u8; 40];
+        for mag in decimal_samples() {
+            for neg in [false, true] {
+                if neg && mag == 0 {
+                    continue;
+                }
+                let big = if neg { -BigInt::from(mag) } else { BigInt::from(mag) };
+                assert_eq!(decimal_text(neg, mag, &mut buf), big.to_string().as_bytes(), "{big}");
+                if let Ok(n) = i64::try_from(&big) {
+                    assert_eq!(decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf), n.to_string().as_bytes());
+                }
+            }
+        }
+        for n in [i64::MIN, i64::MIN + 1, i64::MAX, SMALL_MIN, SMALL_MIN - 1, SMALL_MAX, SMALL_MAX + 1, -1, 0] {
+            assert_eq!(decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf), n.to_string().as_bytes());
+        }
+        for cp in (0..=0x10FFFFu32).filter(|cp| !(0xD800..=0xDFFF).contains(cp)) {
+            assert_eq!(decimal_text(false, cp as u128, &mut buf), cp.to_string().as_bytes());
+        }
+    }
+
+    /// hash_mix as it was before decimal_text and the borrowed shapes (every
+    /// Int and code point through `to_string()`, every BigInt through a
+    /// clone, every shape's strings cloned), for the kinds those changed:
+    /// the reference the allocation-free implementation must equal.
+    fn reference_mix(v: Value) -> u64 {
+        let tagged = |tag: u8| fnv1a(FNV_OFFSET, &[tag]);
+        match kind_of(v) {
+            Kind::Int => {
+                let text = match int_small(v) {
+                    Some(n) => n.to_string(),
+                    None => int_to_big(v).to_string(),
+                };
+                fnv1a(tagged(0), text.as_bytes())
+            }
+            Kind::Str => fnv1a(tagged(1), str_of(v).as_bytes()),
+            Kind::UnicodeChar => fnv1a(tagged(6), char_of(v).to_string().as_bytes()),
+            Kind::List => {
+                let items = list_of(v).items();
+                let mut h = fnv1a(tagged(4), &(items.len() as u64).to_le_bytes());
+                for item in items {
+                    h = fnv1a(h, &reference_mix(*item).to_le_bytes());
+                }
+                h
+            }
+            Kind::Enum => {
+                let (e, c) = enum_parts(v);
+                let (name, case) = current_program(|prog| {
+                    let info = &prog.enums[e as usize];
+                    (info.name.clone(), info.cases[c as usize].clone())
+                });
+                fnv1a(fnv1a(fnv1a(tagged(11), name.as_bytes()), &[0xFF]), case.as_bytes())
+            }
+            Kind::Struct => {
+                let obj = struct_of(v);
+                let (name, fields) = current_program(|prog| {
+                    let shape = &prog.shapes[obj.shape as usize];
+                    (shape.name.clone().unwrap_or_default(), shape.fields.clone())
+                });
+                let mut h = fnv1a(tagged(8), name.as_bytes());
+                h = fnv1a(h, &(fields.len() as u64).to_le_bytes());
+                for (field, item) in fields.iter().zip(obj.fields().iter()) {
+                    h = fnv1a(h, field.as_bytes());
+                    h = fnv1a(h, &reference_mix(*item).to_le_bytes());
+                }
+                h
+            }
+            other => panic!("reference_mix: no {other:?} here"),
+        }
+    }
+
+    fn reference_hash(v: Value) -> Value {
+        make_small((reference_mix(v) & HASH_MASK) as i64)
+    }
+
+    #[test]
+    fn int_and_char_hashes_are_their_to_string_bytes() {
+        let mut vm = vm();
+        for mag in decimal_samples() {
+            for neg in [false, true] {
+                let big = if neg { -BigInt::from(mag) } else { BigInt::from(mag) };
+                let v = rooted!(vm, vm.new_big(big.clone()));
+                assert_eq!(rt_hash(&mut *vm, v), reference_hash(v), "hash({big})");
+                // Beyond 128 bits: num-bigint's own text of the borrowed value.
+                let wide = rooted!(vm, vm.new_big(big.clone() * BigInt::from(u128::MAX) + 7));
+                assert_eq!(rt_hash(&mut *vm, wide), reference_hash(wide), "hash({big} * (2^128-1) + 7)");
+            }
+        }
+        for n in [0, -1, 7, SMALL_MIN, SMALL_MAX, (1 << 61) - 1, 1 << 61, -(1 << 61)] {
+            assert_eq!(rt_hash(&mut *vm, small(n)), reference_hash(small(n)), "hash({n})");
+        }
+        for cp in [0u32, 0x61, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x1F642, 0x10FFFF] {
+            assert_eq!(rt_hash(&mut *vm, make_char(cp)), reference_hash(make_char(cp)), "hash(char {cp})");
+        }
+        // core/hashing.tcl's values of 7, i64::MIN (a BigInt here) and 2^80
+        // (tests/native-hashing.test's hash-parity-kinds-1 compares many
+        // more with interp).
+        assert_eq!(rt_hash(&mut *vm, small(7)), small(590693963425087288));
+        let min = rooted!(vm, vm.new_big(BigInt::from(i64::MIN)));
+        assert_eq!(rt_hash(&mut *vm, min), small(707785774613091011));
+        let two80 = rooted!(vm, vm.new_big(BigInt::from(1u128 << 80)));
+        assert_eq!(rt_hash(&mut *vm, two80), small(999613055982882793));
+    }
+
+    #[test]
+    fn nested_struct_hashes_borrow_their_shapes() {
+        use crate::runtime::vm::{EnumInfo, ShapeInfo};
+        // shape 0: P {x, y}; 1: Q {a, b, c}; 2: anonymous {p, q, e}.
+        let shape = |name: Option<&str>, fields: &[&str]| ShapeInfo {
+            name: name.map(String::from),
+            fields: fields.iter().map(|f| f.to_string()).collect(),
+            opaque: false,
+        };
+        let mut vm = Vm::new(
+            std::rc::Rc::new(ProgramInfo {
+                functions: Vec::new(),
+                natives: Vec::new(),
+                shapes: vec![shape(Some("P"), &["x", "y"]), shape(Some("m::Q"), &["a", "b", "c"]), shape(None, &["p", "q", "e"])],
+                enums: vec![EnumInfo { name: "Color".to_string(), cases: vec!["Red".to_string(), "Green".to_string()] }],
+            }),
+            AllocMode::Summary,
+        );
+        let s = rooted!(vm, str_val(&mut vm, "h\u{e9}llo \u{1F642}"));
+        let p = rooted!(vm, vm.new_struct(0, vec![small(-5), small(SMALL_MAX)]));
+        let list = rooted!(vm, vm.new_list(vec![p, make_char(0x1F642), make_enum(0, 1)]));
+        let q = rooted!(vm, vm.new_struct(1, vec![p, list, s]));
+        let anon = rooted!(vm, vm.new_struct(2, vec![p, q, make_enum(0, 0)]));
+        for v in [p, q, anon, list] {
+            assert_eq!(rt_hash(&mut *vm, v), reference_hash(v));
+        }
+        // A failing field's sub-hash leaves the borrow unwound, the next
+        // hash borrows again.
+        let array = rooted!(vm, vm.new_mutarray(1));
+        let bad = rooted!(vm, vm.new_struct(0, vec![small(1), array]));
+        assert_eq!(rt_hash(&mut *vm, bad), NO_VALUE);
+        assert!(vm.error.take().is_some());
+        assert_eq!(rt_hash(&mut *vm, anon), reference_hash(anon));
     }
 
     #[test]

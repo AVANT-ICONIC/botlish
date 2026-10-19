@@ -184,6 +184,53 @@ test hash-parity-nested-1 {hash of nested aggregates matches across every backen
     parity {hash([1, "two", [3, unit], ok("x")])}
 } -result same
 
+# Every kind hash covers, at the edges of each native representation: small
+# Ints and BigInts on both sides of +-2^62, i64, u64, u128 and beyond (literal
+# and computed), code points of every UTF-8 width, named, anonymous and
+# nested structs (an enum and a List inside), byte storage and sets. The
+# native runtime writes an Int's and a code point's decimal text on the stack
+# and folds a struct's borrowed shape (ops.rs's decimal_text, rt_hash), and
+# must still fold core/hashing.tcl's bytes, bit for bit, on every backend.
+test hash-parity-kinds-1 {hash of values of every kind and representation edge matches across every backend} -body {
+    set program {import abi
+import abi::bytes
+import str
+import immutable_set
+
+struct P:
+    x: int
+    y: int
+
+enum Color:
+    Red,
+    Green,
+
+struct Q:
+    a: P
+    b: str
+    c: Color
+
+fn mk(s: str):
+    abi::bytes::from_list(str::encode_utf8(s))
+
+fn hashes(xs):
+    loop x in xs:
+        hash(x)
+
+small = [0, 1, -1, 7, 9, 10, -10, 99, 100, -100, 123456789, 999999999999999999, 1000000000000000000, -1000000000000000000, 2305843009213693951, 2305843009213693952, -2305843009213693952, 4611686018427387903, -4611686018427387904]
+big = [4611686018427387904, -4611686018427387905, 9223372036854775807, 9223372036854775808, -9223372036854775808, -9223372036854775809, 9999999999999999999, 10000000000000000000, 18446744073709551615, 18446744073709551616, -18446744073709551616, 100000000000000000005, 1208925819614629174706176, 340282366920938463463374607431768211455, 340282366920938463463374607431768211456, -340282366920938463463374607431768211456, 100000000000000000000000000000000000007, 123456789012345678901234567890123456789012345678901234567890]
+computed = [shift_left(1, 61) - 1, shift_left(1, 62) - 1, shift_left(1, 62), 0 - shift_left(1, 62), 0 - shift_left(1, 62) - 1, shift_left(1, 63), shift_left(1, 64) - 1, shift_left(1, 127), shift_left(1, 128) - 1, shift_left(1, 128), 0 - shift_left(1, 200)]
+chars = ['a', 'Z', '0', ' ', 'é', '☃', '🙂', '􏿿']
+others = ["", "a", "1", "héllo ☃", "🙂 quick brown fox", true, false, unit, [], [1, 2], [2, 1], [[1], ["a", 'b']], [-7, 'x', 4611686018427387904]]
+structs = [P {x: 1, y: 2}, P {x: -1, y: 4611686018427387903}, P {x: 4611686018427387904, y: 0}, Q {a: P {x: 3, y: 4}, b: "s", c: Color::Green}, {x: 1, y: "a"}, {y: "a", x: 1}, {}, {p: P {x: 1, y: 2}, e: Color::Red}, {q: Q {a: P {x: 0, y: 0}, b: "", c: Color::Red}, l: [P {x: 5, y: 6}, 'c']}, [P {x: 1, y: 2}, Color::Red], Color::Red, Color::Green]
+stores = [mk(""), mk("AB"), mk("héllo"), abi::bytes::from_bytes(mk("k1")), immutable_set::from_list([1, 2, 3]), immutable_set::from_list([P {x: 1, y: 2}, 'q', "s", 4611686018427387904])]
+
+[hashes(small), hashes(big), hashes(computed), hashes(chars), hashes(others), hashes(structs), hashes(stores)]
+}
+    # Agreement, and on a value: four identical failures would agree too.
+    list [parity $program] [lindex [outcomeUnder interp [sourceIR $program]] 0]
+} -result {same value}
+
 # ---------------------------------------------------------------------------
 # Zero-allocation: mod and hash of ordinary small/short values never allocate
 # a managed object (mod's result fits small by construction when |b| is
