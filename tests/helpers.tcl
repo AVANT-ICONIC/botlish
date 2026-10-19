@@ -131,6 +131,21 @@ testConstraint nativeCoroutines [expr {[core::cabi::hostTarget] in {linux-x86_64
 # x86-64 and AArch64 and macOS AArch64.
 testConstraint nativeStackGuard [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
 
+# Standalone executables (native::executable, native/src/codegen/aot.rs): the
+# native backend links them on Linux x86-64 and AArch64 (ELF) and on macOS
+# AArch64 (Mach-O, MACOS-AARCH64-MILESTONE-5.md), with the rustc linker
+# everywhere and the stub linker on Linux x86-64 too. A capability, not an
+# operating system: a test that builds and runs an executable of a portable
+# program carries this one; one whose program needs Linux syscalls keeps
+# nativeLinux, one that reads ELF or needs the stub linker its own
+# constraint, and a program that calls C is linked on Linux only (C-FFI.md's
+# tests say so themselves).
+testConstraint executableAot [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
+# binaryHeader PATH and hostBinaryHeader KIND: what a program object or an
+# executable is, and what this host's are.
+source [file join $::projectRoot tests binary-header.tcl]
+
 # Native coverage (tests/native-coverage.tcl): NATIVE_COVERAGE=FILE appends
 # one line per test: {NAME PASSED NATIVE-RUNS UNSUPPORTED-ERRORS}.
 if {[info exists ::env(NATIVE_COVERAGE)] && [info commands ::CoverageTest] eq ""} {

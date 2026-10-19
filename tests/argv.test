@@ -662,10 +662,9 @@ test argv-large-vector {thousands of arguments and hundreds of KB of text: all b
 } -result [list 1 1 "\[2501, \"arg-2499-[string repeat ä [expr {2499 % 40}]]\U0001F600\", 13\]"]
 
 # ---------------------------------------------------------------------------
-# Standalone executables: the real Linux argument vector, one build, many runs
+# Standalone executables: the real process argument vector, one build, many
+# runs
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint bashLauncher [expr {[auto_execok bash] ne ""}]
 
 set aotDir [makeDirectory argv-aot]

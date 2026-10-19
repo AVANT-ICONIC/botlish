@@ -4163,6 +4163,10 @@ tests/native-executable.test native-executable-runtime-error pass
 tests/native-executable.test native-executable-source-refinements pass
 tests/native-executable.test native-executable-stack-overflow pass
 tests/native-executable.test native-executable-values pass
+tests/native-executable.test native-executable-cli-paths pass
+tests/native-executable.test native-executable-coroutines pass
+tests/native-executable.test native-executable-format pass
+tests/native-executable.test native-executable-linker-diagnostics pass
 tests/native-hashing.test hash-alloc-1 pass
 tests/native-hashing.test hash-alloc-2 pass
 tests/native-hashing.test hash-callables-1 pass
@@ -7931,6 +7935,7 @@ tests/web-unreserved.test web-unreserved-set-exact-members pass
 tests/web-unreserved.test web-unreserved-user-fn-wraps-module-closure pass
 tests/workload-2048.test workload-2048-application-module pass
 tests/workload-2048.test workload-2048-bench-checksum pass
+tests/workload-2048.test workload-2048-bench-executable pass
 tests/workload-2048.test workload-2048-demo-executable pass
 tests/workload-2048.test workload-2048-demo-main-native pass
 tests/workload-2048.test workload-2048-golden-suite pass

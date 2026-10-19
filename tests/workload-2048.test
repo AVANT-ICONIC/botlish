@@ -34,8 +34,6 @@ if {![info exists ::env(CORE_BACKEND)]} {
 set nativeSuite [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inline -not -glob $workloadBackends cranelift*]}]
 testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
@@ -182,6 +180,37 @@ test workload-2048-demo-executable {the demo as a standalone executable prints t
         removeDirectory workload-2048-demo
     }
 } -result {1 1}
+
+# The benchmark as a standalone executable, as an application is built and
+# shipped: bench.bot and its application module game2048.bot copied out of
+# the checkout, compiled by main.tcl from another directory, the executable
+# moved away and the copy deleted -- no source, no checkout path, an empty
+# PATH -- and its 200-move checksum is the one every in-process backend
+# computes (workload-2048-bench-checksum), under GC stress too. bench.bot
+# imports no platform namespace, so every host that links executables runs
+# it (macOS too: MACOS-AARCH64-MILESTONE-5.md).
+test workload-2048-bench-executable {bench.bot and game2048.bot, copied out of the checkout and compiled from another directory, as a moved standalone executable whose application directory is gone: the checksum, under GC stress too} -constraints executableAot -body {
+    set dir [makeDirectory {workload-2048 bench executable}]
+    try {
+        set app [file join $dir {application copy}]
+        set elsewhere [file join $dir elsewhere]
+        set run [file join $dir {run dir}]
+        file mkdir $app $elsewhere $run
+        file copy [file join $gameDir game2048.bot] $app
+        regsub -line {^benchmark\(\d+, (.*)\)$} [core::ReadFile [file join $gameDir bench.bot]] "benchmark(200, \\1)" text
+        set channel [open [file join $app bench.bot] w]
+        fconfigure $channel -encoding utf-8 -translation lf
+        puts -nonewline $channel $text
+        close $channel
+        set built [exec /bin/sh -c {cd "$1" && shift && exec "$@"} sh $elsewhere [info nameofexecutable] \
+            [file join $::projectRoot main.tcl] -warnings off -emit-native-executable "../application copy/bench.bot"]
+        file rename [file join $app bench] [file join $run bench]
+        file delete -force $app
+        list $built [exec env PATH= [file join $run bench]] [exec env PATH= BOTLISH_NATIVE_GC_STRESS=1 [file join $run bench]]
+    } finally {
+        removeDirectory {workload-2048 bench executable}
+    }
+} -result {{executable: ../application copy/bench} 2002720 2002720}
 
 # S4 and S15 together: `main.tcl -backend cranelift demo.bot` used to need the
 # private library to compile, and then showed only `value: unit`. Now it

@@ -31,11 +31,11 @@ core::cabi::installTestFixture
 # A native view needs only the native backend (the JIT): those tests run on
 # every host it is built for, macOS arm64 included. Allocation counts and GC
 # stress need the native runtime on Linux (as in binary-layout.test), and a
-# standalone executable a Linux glibc host.
+# standalone executable a host that links them (tests/helpers.tcl).
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64} && [testConstraint nativeBuilt]}]
-testConstraint executableAot [expr {[testConstraint nativeLinux]}]
+testConstraint executableAot [expr {[testConstraint executableAot] && [testConstraint nativeBuilt]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
 
 set nvBackends {interp compile cranelift-generic cranelift}

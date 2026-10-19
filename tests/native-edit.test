@@ -38,7 +38,7 @@ core::cabi::installTestFixture
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64} && [testConstraint nativeBuilt]}]
-testConstraint executableAot [expr {[testConstraint nativeLinux]}]
+testConstraint executableAot [expr {[testConstraint executableAot] && [testConstraint nativeBuilt]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
 
 set neBackends {interp compile cranelift-generic cranelift}
