@@ -473,7 +473,7 @@ Fuzzers (no disagreement in any run):
 
 | fuzzer | runs | programs |
 |---|---|---:|
-| audit/layout-arrays/tools/fuzz.tcl, all four backends | seeds 1, 2, 3 | 30 each |
+| audit/layout-arrays/tools/fuzz.tcl, all four backends (every other program without arrays of records) | seeds 1, 2, 3 | 30 each |
 | the same under BOTLISH_NATIVE_GC_STRESS=1 | seed 4 | 12 |
 | audit/binary-layout/tools/fuzz.tcl | seed 1 | 30 |
 | audit/native-view/tools/fuzz.tcl | seed 1 | 30 |
@@ -498,7 +498,7 @@ mutant of every harness still applies):
   reference codec, the Tcl compiler's rows, native element access and
   checks, the unrolled copy, and two of the Rust row helpers -- **24
   killed**. tests/layout-arrays.test kills 23; the golden suite 17; the
-  fuzzer 12; the Rust tests both runtime mutants. The one the Tcl tests
+  fuzzer 13; the Rust tests both runtime mutants. The one the Tcl tests
   miss, `native-store-row-written-while-encoding` (a row stored element by
   element, so an out-of-range value leaves the elements before it
   written), only the Rust test kills: a checked program proves every value
@@ -508,7 +508,12 @@ mutant of every harness still applies):
   flattened the dimensions LayoutLeaves passes on, of which only the
   product (a `binary scan` count) is used; retargeted at LayoutValueText,
   which shapes the rows, `la-three-dimensions` and the golden suite's
-  backend comparison kill it.
+  backend comparison kill it. The fuzzer did not, at first: an array of
+  records anywhere in a layout sends its parse to the reference
+  implementation, and most random layouts have one. Every other fuzzed
+  program now has none, so the Tcl compiler's own reading of rows is
+  compared with the model too (4 of 12 programs kill the mutant; the
+  seeds above are the rerun).
 * The mutants of the code arrays refactored, their texts updated to the
   new code and still mutants of the same rule: binary-layout 6, native-view
   7, native-edit 12 -- **all 25 killed** by their own harnesses.
