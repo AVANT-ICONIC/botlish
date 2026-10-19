@@ -61,7 +61,7 @@ if grep -q -e '^== ' -e '^   value:' "$work/default.out"; then fail "the no-argu
 run -help >"$work/help.out" || fail "-help"
 grep -q '^Compilerpedia' "$work/help.out" || fail "-help printed no overview"
 # QUERY=FIRST: the query, and how its page starts.
-for pair in warnings=WARNINGS METHOD-ELIGIBLE=warning.method-eligible list::at=stdlib.list::at "bounds proof=proof.list-bounds"; do
+for pair in warnings=WARNINGS METHOD-ELIGIBLE=warning.method-eligible list::at=stdlib.list::at "bounds proof=proof.list-bounds" "best practices=principle.idiomatic-botlish"; do
   query=${pair%%=*} first=${pair#*=}
   run -help "$query" >"$work/help-query.out" || fail "-help $query"
   if grep -q -e '^== ' -e '^   value:' "$work/help-query.out"; then fail "-help $query ran a program"; fi

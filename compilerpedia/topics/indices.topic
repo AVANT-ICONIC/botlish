@@ -106,13 +106,15 @@ principles the warnings serve.
 title: Programming principles
 summary: Recommended practices for Botlish programs, with the reasoning; some are backed by a warning, most are not.
 index: principles
-alias: best practices; recommended practices; coding guidelines; style guide
+alias: recommended practices; coding guidelines; style guide
 
 == ABOUT THIS INDEX
 A principle is advice, not a rule: a program that departs from one can be
 correct, and only some principles are mechanically checkable (their pages
 name the warning that checks them). The reasoning is the point: what a
-practice protects, and when it does not apply.
+practice protects, and when it does not apply. New to Botlish? Start with
+principle.idiomatic-botlish: the short list of defaults, each linked to the
+page behind it.
 
 @topic index.stdlib
 title: The standard library

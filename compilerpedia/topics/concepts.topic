@@ -452,6 +452,19 @@ counts characters, not bytes. A character literal 'a' (escapes '\n',
 '\'', '\\') is a `UnicodeChar`: one scalar value, neither an Int nor a
 one-character String.
 
+Three different abstractions, not three spellings of one thing:
+
+    str                text: an immutable sequence of Unicode scalar
+                       values (the native backends store it as UTF-8)
+    UnicodeChar        one Unicode scalar value (a code point other than
+                       a surrogate), a type of its own
+    List[UnicodeChar]  an addressable, iterable sequence of such values
+
+A UnicodeChar is not a user-perceived character or a grapheme cluster
+(`e` plus a combining accent is two), and not a one-character String. It
+is comparable to a Go rune, except that it is a type of its own. A String
+is not iterable by `loop`; a List of UnicodeChars is.
+
 After `import str`: length, concat, append_char, char_at, substring,
 lowercase, encode_utf8 (to a List of bytes). `char::scalar_value(c)`
 (`import char`) gives a character's number.
@@ -2995,7 +3008,11 @@ says `read noescape` or `write noescape`.
     is unknown, which never admits a byte exposure.
   * Pointers are affine C ABI values: no arithmetic, dereference or
     integer conversion. The memory a data pointer addresses is read only
-    through a layout's native view (binary::native::view, concept.binary-layouts).
+    through a layout's native view (binary::native::view, concept.binary-layouts)
+    and written only through its native edit (binary::native::edit,
+    binary::store). A record C expects a pointer to is built in byte
+    storage (binary::write; binary::write_foreign for its pointer fields)
+    and passed by the borrowing contract.
   * A retaining call (a pointer that may escape) is direct authority
     (concept.direct-modules).
   * tools/c-bindgen.tcl generates such declarations from real headers.
@@ -3053,13 +3070,19 @@ be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
   * binary::parse fails with LayoutLengthMismatch unless the input has
     exactly the layout's size; emit cannot fail.
   * A layout is not a value or a type: it is named only as the static
-    operand of the binary operations, in LayoutStruct[L] and in
-    NativeView[L].
+    operand of the binary operations, in LayoutStruct[L], NativeView[L]
+    and NativeEdit[L], and as the root of a field designator (L.field).
   * The same layout reads live native memory: binary::native::view(L, p)
     is a read-only NativeView[L] whose fields are read when projected, and
     binary::load(v) its LayoutStruct[L]. A field may be a C pointer; such a
     layout is native-only (LAYOUT-NATIVE-ONLY): bytes never become a
     pointer (NATIVE-LAYOUT-VIEWS.md).
+  * Writes name one field statically (L.field, L.inner.x):
+    binary::write(data, L.f, v) is a new MutableBytes with the field
+    written; binary::write_foreign encodes an existing pointer into a
+    pointer field; binary::native::edit(L, p) is a NativeEdit[L] -- live
+    native memory read like a view and written by binary::store -- write
+    authority, never ownership (NATIVE-LAYOUT-WRITES.md).
 
 == WHY
 A layout owns representation and ordinary structs own meaning: reading

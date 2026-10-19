@@ -176,8 +176,10 @@ first: end such a program with a plain `0`.
 
 ## 4. Indices, search and pages
 
-`-help` with no query prints the overview: the indices with their sizes and
-example queries. `-help NAME` with an index name (or its singular) prints
+`-help` with no query prints the overview: one line for a newcomer
+(`New to Botlish?  botlish -help "best practices"`, the topic
+`principle.idiomatic-botlish`), the indices with their sizes and example
+queries. `-help NAME` with an index name (or its singular) prints
 the index: its introduction (the topic `index.NAME`) and one line per topic
 (the standard-library index lists the modules and the hand-written topics;
 each module's page lists its symbols). An index's size counts its topics,
@@ -205,7 +207,7 @@ matters in one more place: `abi::I8` (the type) and `abi::i8` (the
 function) are both symbols, and the spelling as written decides.
 
 A single result is shown as its page (an index's introduction,
-`index.NAME`, as the whole index: `-help "best practices"` is the
+`index.NAME`, as the whole index: `-help "style guide"` is the
 principles index); several are listed best first (ties by ID), with their
 summaries; nothing found prints the near matches (edit distance on IDs,
 codes, symbols and aliases; pages whose text holds every word; topics
@@ -348,6 +350,12 @@ audit") records why each rule is as precise as it is.
   generate`); an intrinsic also needs a note in `notes/stdlib.notes`.
 * **A backend or platform fact**: `topics/backends.topic`; state only what
   the backends do today.
+* **The newcomer page** (`principle.idiomatic-botlish`, IDIOMATIC-BOTLISH.md)
+  is a map of defaults, each linked to the topic that holds the rule, the
+  reasons and the exceptions. A new item states a Botlish-specific default
+  in a sentence or two and links; it never copies a detailed page, and its
+  statement of a rule changes when that rule's topic does. A test
+  (`cp-idiomatic-shape`) keeps it short.
 * **An alias**: a phrase people type (`try catch`, `exit status`) maps to
   the topic that answers it; mappings from other languages must be
   semantically accurate (`throw` is `fail` of a declared error, not an

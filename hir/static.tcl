@@ -254,6 +254,7 @@ namespace eval hir::static {
         FOREIGN-BORROW                           ForeignBorrow
         IMPRINT                                  Imprint
         KNOWN-ERROR                              KnownError
+        LAYOUT-FOREIGN-WRITE                     LayoutForeignWrite
         LAYOUT-NATIVE-ONLY                       LayoutNativeOnly
         LAYOUT-NOT-A-TYPE                        LayoutNotAType
         LAYOUT-NOT-A-VALUE                       LayoutNotAValue

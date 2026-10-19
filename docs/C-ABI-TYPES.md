@@ -514,7 +514,10 @@ LP64 and 4 on LLP64; `ffi::c::Char` signed or unsigned by target
 > native memory (`binary::native::view`, `NativeView[L]`), where the pointer
 > is the one foreign memory holds -- the first mechanism below -- and
 > `binary::parse` / `binary::emit` of it are `LAYOUT-NATIVE-ONLY`. The
-> paragraphs below are this milestone's account.
+> paragraphs below are this milestone's account. NATIVE-LAYOUT-WRITES.md
+> then wrote them: through a native edit (`binary::store`), and into byte
+> storage only by the explicit foreign encoding of an existing pointer
+> (`binary::write_foreign`) -- still never decoded back from bytes.
 
 **Pointer fields remain deliberately unsupported** (LAYOUT-FIELD-TYPE: "a C
 pointer, not a binary scalar: imprinting arbitrary bytes into it would

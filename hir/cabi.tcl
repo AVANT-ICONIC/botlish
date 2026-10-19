@@ -325,14 +325,19 @@ proc hir::cabi::verify {hirVar} {
             set paramType [lindex $paramTypes [expr {min($index, [llength $paramTypes] - 1)}]]
             incr index
             set argType [hir::typeOf $hir $arg]
-            if {[hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+            if {[hir::types::IsNativeMemory $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
                     && [dict get [core::native::metadata $name] imprint] eq ""} {
                 # (An imprinted native's signature rejects it itself: IMPRINT.)
                 # A native view's word is its pointer's, but a view is no
                 # pointer and no Int (NATIVE-LAYOUT-VIEWS.md): no pointer
                 # operation (null?, clone, ...) and no other native takes one.
-                hir::Diagnose hir TYPE [format \
-                    {argument %d of %s is %s, a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value} \
+                if {[hir::types::IsNativeEdit $argType]} {
+                    # (A native edit, NATIVE-LAYOUT-WRITES.md, likewise.)
+                    set what "a native edit, where %s requires %s: a native edit is a window onto native memory, read by its fields (or binary::load) and written by binary::store, never a pointer, an Int or any other value"
+                } else {
+                    set what "a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value"
+                }
+                hir::Diagnose hir TYPE [format "argument %d of %s is %s, $what" \
                     $index $name [hir::types::show $argType] $name [core::type::show $paramType]] $arg
                 continue
             }

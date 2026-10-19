@@ -220,11 +220,11 @@ proc core::binary::Encode {descriptor value bytes base} {
 ## native/src/runtime/ops.rs
 <<<<
     if big {
-        field.reverse();
+        bytes[..width].reverse();
     }
 ====
     if !big {
-        field.reverse();
+        bytes[..width].reverse();
     }
 >>>>
 
@@ -399,10 +399,10 @@ proc hir::types::subtype {a b} {
 ## native/src/runtime/ops.rs
 <<<<
     if n < lo || n > hi {
-        let message = format!("binary::emit: {} is outside
+        let message = format!("{context}: {} is outside
 ====
     if n < lo && n > hi {
-        let message = format!("binary::emit: {} is outside
+        let message = format!("{context}: {} is outside
 >>>>
 
 @@ elaboration-skipped binary::emit is never elaborated to binary#emit with its value's static layout

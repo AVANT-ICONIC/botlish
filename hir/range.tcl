@@ -1434,9 +1434,9 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
-            || [hir::types::IsNativeView $declared]} {
+            || [hir::types::IsNativeMemory $declared]} {
         # A native view (NATIVE-LAYOUT-VIEWS.md) only by the view of the same
-        # layout.
+        # layout, a native edit (NATIVE-LAYOUT-WRITES.md) by the edit.
         #
         # A C pointer (C-ABI-TYPES.md) only by its identical pointer type
         # (pointee identity is invariant; no Range fact is one of a
@@ -1735,6 +1735,9 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         } else {
             VerifyImprintedNative hir $ranges $e $node $name
             hir::borrow::VerifyPointerKinds hir $e $node $name
+            # A layout write's value, held to its field's type
+            # (NATIVE-LAYOUT-WRITES.md).
+            hir::layouts::VerifyWriteValue hir $ranges $e $node $name
         }
         return
     }

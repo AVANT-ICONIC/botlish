@@ -112,7 +112,7 @@
     if {$b eq "never"} {
         return 0
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
 ====
     if {$b eq "never"} {
         return 0
@@ -120,7 +120,7 @@
     if {[IsView $a] && [subtype [ViewWitness $a] $b]} {
         return 1
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
 >>>>
 
 @@ strengthen-view allow trait -> concrete strengthening (a fact about a view's value narrows it)

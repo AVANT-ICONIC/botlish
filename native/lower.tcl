@@ -169,6 +169,7 @@ namespace eval native::lower {
         ffi_fixture::function_address {op cptrfixture} \
         ffi_fixture::address_of       {op cptrfixtureaddress} \
         ffi_fixture::memory           {op cptrfixturememory} \
+        ffi_fixture::memory_bytes     {op cptrfixturebytes} \
         affine#drop {op affinedrop} \
         mutable_vector::from_list {op mvfromlist} \
         mutable_vector::length    {op mvlen} \
@@ -5118,6 +5119,9 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         dict lappend fn calls [list native $name]
         return [list [NativeField fn $e $view [lindex [hir::get $hir $field literal] end] $base] tagged]
     }
+    if {[hir::layouts::RoleOf $role op] in {store write write_foreign}} {
+        return [LayoutWrite fn $e $name $role $args $wantVirtual]
+    }
     set operand [lindex $args [hir::layouts::RoleOf $role operand]]
     if {[hir::kind $hir $operand] ne "const"} {
         throw {NATIVE BUG} "native lowering: the layout operand of $name ($e) is not its descriptor constant"
@@ -5216,6 +5220,23 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
             EmitLabel fn $good
             return [list $pointer tagged]
         }
+        edit {
+            # binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): exactly a
+            # view's construction -- the pointer's own word once it is known
+            # not to be null; its own declared error.
+            set pointer [Expr fn [lindex $args [hir::layouts::RoleOf $role pointer]]]
+            if {$pointer eq "never"} {
+                return {never tagged}
+            }
+            set null [Assign fn "op cptrisnull $pointer" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $null $bad $good" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeEditNull] [Quote NativeEditNull]" $e
+            EmitLabel fn $good
+            return [list $pointer tagged]
+        }
         load {
             # binary::load(v): every field read through the view, as parse
             # reads every field of its bytes, and the LayoutStruct built.
@@ -5230,6 +5251,91 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         }
     }
     throw {NATIVE BUG} "native lowering: binary operation $name ($e) has no operation"
+}
+
+# Call E of the layout write NAME (ROLE its -layout role, CALLARGS its
+# arguments; NATIVE-LAYOUT-WRITES.md): {REGISTER tagged} or {never tagged}.
+# The field designator constant holds the leaf's absolute offset and its
+# encoding (a scalar's, or a pointer's width), so every write is one op with
+# constant operands:
+#
+#   binary::store(e, L.f, v)          op nativestore %e %OFFSET %ENCODING %v
+#                                     (a pointer field: op nativestoreptr %e
+#                                     %OFFSET %WIDTH %p); a nested edit's
+#                                     base folded into the offset (ViewBase),
+#                                     so a chain of subrecords is one store
+#   binary::write(d, L.f, v)          the length check parse makes (op
+#                                     mbyteslen / ieq / br / faildeclared
+#                                     LayoutLengthMismatch), then op
+#                                     mbyteswrite %storage %OFFSET %ENCODING %v
+#                                     (a fresh storage) and its MutableBytes
+#   binary::write_foreign(d, L.p, q)  the same with op mbyteswriteptr %storage
+#                                     %OFFSET %WIDTH %q
+#
+# Every argument is evaluated, in written order, before anything is checked
+# or written; nothing reads the record, copies it into bytes or builds a
+# LayoutStruct.
+proc native::lower::LayoutWrite {fnVar e name role callArgs wantVirtual} {
+    upvar 1 $fnVar fn
+    variable hir
+    set path [lindex $callArgs [hir::layouts::RoleOf $role path]]
+    if {[hir::kind $hir $path] ne "const"} {
+        throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not its designator constant"
+    }
+    set constant [lindex [hir::get $hir $path literal] end]
+    if {[hir::layouts::PathLayout $constant] eq ""} {
+        throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not a field designator"
+    }
+    lassign $constant structId size text field
+    lassign $field fieldName offset kind width endian
+    set op [hir::layouts::RoleOf $role op]
+    if {$op eq "store"} {
+        lassign [ViewBase fn [lindex $callArgs [hir::layouts::RoleOf $role edited]]] target base
+    } else {
+        set mutableType [core::bytestore::mutableBytesType]
+        set target [StorageOf fn [lindex $callArgs [hir::layouts::RoleOf $role output]] $mutableType]
+        set base 0
+    }
+    if {$target eq "never"} {
+        return {never tagged}
+    }
+    set value [Expr fn [lindex $callArgs [hir::layouts::RoleOf $role value]]]
+    if {$value eq "never"} {
+        return {never tagged}
+    }
+    dict lappend fn calls [list native $name]
+    if {$op ne "store"} {
+        set length [Assign fn "op mbyteslen $target" $e]
+        set expected [Assign fn "int $size" $e]
+        set fits [Assign fn "op ieq $length $expected" $e]
+        set good [NewLabel fn]
+        set bad [NewLabel fn]
+        Emit fn "br $fits $good $bad" $e
+        EmitLabel fn $bad
+        Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
+        EmitLabel fn $good
+    }
+    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    if {$kind eq "ptr"} {
+        set code [Assign fn "int $width" $e]
+        set suffix ptr
+    } else {
+        set code [Assign fn "int [LayoutEncoding $kind $width $endian]" $e]
+        set suffix ""
+    }
+    if {$op eq "store"} {
+        return [list [Assign fn "op nativestore$suffix $target $at $code $value" $e] tagged]
+    }
+    set storage [Assign fn "op mbyteswrite$suffix $target $at $code $value" $e]
+    if {$wantVirtual ne ""} {
+        # Held as its one field (hir::escape's recognized construction of
+        # the MutableBytes a write returns): the fresh storage itself.
+        if {$wantVirtual != 1} {
+            throw {NATIVE BUG} "native lowering: expected a one-field MutableBytes at $e"
+        }
+        return [list [list $storage] virtual]
+    }
+    return [list [Assign fn "structnew [ShapeIndex $mutableType [hir::structs::names $mutableType]] $storage" $e] tagged]
 }
 
 # {REGISTER BASE} of the native view expression ARG, evaluated here: a

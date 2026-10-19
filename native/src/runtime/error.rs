@@ -77,10 +77,11 @@ pub const SEMANTIC_KINDS: &[&str] = &[
     // Coroutine lifecycle states a checked program cannot reach (the affine
     // discipline, COROUTINES.md), kept as defensive runtime checks.
     "COROUTINE-RUNNING", "COROUTINE-STATE", "YIELD-OUTSIDE-COROUTINE",
-    // A -strict 0 program's rejected binary operation or native view
-    // (BINARY-LAYOUT.md, NATIVE-LAYOUT-VIEWS.md), replayed at run time
+    // A -strict 0 program's rejected binary operation, native view or
+    // layout write (BINARY-LAYOUT.md, NATIVE-LAYOUT-VIEWS.md,
+    // NATIVE-LAYOUT-WRITES.md), replayed at run time
     // (native::lower::LayoutCall).
-    "BINARY-OPERAND", "LAYOUT-NATIVE-ONLY",
+    "BINARY-OPERAND", "LAYOUT-NATIVE-ONLY", "LAYOUT-FOREIGN-WRITE", "LAYOUT-OPERAND",
 ];
 
 pub fn semantic_kind(name: &str) -> Option<&'static str> {
