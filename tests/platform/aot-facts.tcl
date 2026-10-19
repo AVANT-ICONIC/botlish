@@ -43,6 +43,7 @@
 set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname $here]]
 source [file join $root native native.tcl]
+source [file join $root tests binary-header.tcl]
 
 set verbose 0
 foreach {option value} $argv {
@@ -240,32 +241,6 @@ proc tool {args} {
     return "$stdout$stderr"
 }
 
-# {FORMAT ARCHITECTURE KIND} of the object or executable at PATH, read from
-# its header: elf (class 64, little-endian) or macho (64-bit, thin) or fat.
-proc header {path} {
-    set channel [open $path rb]
-    set bytes [read $channel 32]
-    close $channel
-    if {[string range $bytes 0 3] eq "\x7fELF"} {
-        binary scan $bytes @4cc@16ss class data type machine
-        set arch [dict get {62 x86_64 183 aarch64} $machine]
-        set kind [dict get {1 relocatable 2 executable 3 shared} $type]
-        return [list [expr {$class == 2 && $data == 1 ? "elf" : "elf$class-$data"}] $arch $kind]
-    }
-    binary scan $bytes iu magic
-    if {$magic == 0xfeedfacf} {
-        binary scan $bytes @4iu@12iu cpu type
-        set arch [dict get [dict create [expr {0x0100000c}] arm64 [expr {0x01000007}] x86_64] $cpu]
-        set kind [dict get {1 object 2 execute 6 dylib} $type]
-        return [list macho $arch $kind]
-    }
-    binary scan $bytes Iu fat
-    if {$fat == 0xcafebabe} {
-        return {fat {} {}}
-    }
-    return [list unknown [binary encode hex [string range $bytes 0 3]] {}]
-}
-
 # The Mach-O header flags of PATH (MH_PIE is 0x200000), or "".
 proc machoFlags {path} {
     set channel [open $path rb]
@@ -303,8 +278,8 @@ proc checks {} {
     set started [clock microseconds]
     native::object $hir $object
     set objectMs [expr {([clock microseconds] - $started) / 1000}]
-    set objectHeader [header $object]
-    check object-header [expr {$objectHeader eq [dict get $facts object]}] "$objectHeader ([file size $object] bytes, $objectMs ms)"
+    set objectHeader [binaryHeader $object]
+    check object-header [expr {$objectHeader eq [dict get $facts object] && $objectHeader eq [hostBinaryHeader object]}] "$objectHeader ([file size $object] bytes, $objectMs ms)"
     set described [string trim [string range [tool file -b $object] 0 end]]
     check object-file [string match [dict get $facts objectFile] $described] $described
 
@@ -377,12 +352,13 @@ proc checks {} {
         return
     }
     check executable-link [file executable $executable] "linked in $linkMs ms ([file size $executable] bytes), mode [file attributes $executable -permissions]"
-    set executableHeader [header $executable]
+    set executableHeader [binaryHeader $executable]
     set pie ""
     if {[lindex $executableHeader 0] eq "macho"} {
         set pie [expr {[machoFlags $executable] & 0x200000 ? " pie" : " not pie"}]
     }
-    check executable-header [expr {$executableHeader eq [dict get $facts executable] && $pie ne " not pie"}] "$executableHeader$pie"
+    check executable-header [expr {$executableHeader eq [dict get $facts executable]
+        && $executableHeader eq [hostBinaryHeader executable] && $pie ne " not pie"}] "$executableHeader$pie"
     set described [string trim [tool file -b $executable]]
     check executable-file [string match [dict get $facts executableFile] $described] $described
     if {$macos} {
