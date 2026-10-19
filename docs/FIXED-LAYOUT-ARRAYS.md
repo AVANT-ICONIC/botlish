@@ -518,9 +518,18 @@ mutant of every harness still applies):
 * The mutants of the code arrays refactored, their texts updated to the
   new code and still mutants of the same rule: binary-layout 6, native-view
   7, native-edit 12 -- **all 25 killed** by their own harnesses.
-* **audit/c-bindgen/tools/mutate.tcl**, the 22 layout mutants (the three new
-  array ones among them: an inner dimension dropped, an array of a blocked
-  element emitted, the last element's check off by one): CBINDGEN-RESULTS.
+* **audit/c-bindgen/tools/mutate.tcl**, its 24 layout and pressure mutants
+  (the three new array ones among them: an inner dimension dropped, an
+  array of a blocked record emitted, the last element's check off by one;
+  `layout-array-flattened` reworded for arrays that are layout fields
+  now): **all 24 killed, each by a test of behavior or a fuzzer**, not only
+  by the pinned comparison with the committed bindings. One was not, at
+  first: `layout-array-of-blocked-emitted` (an array of a blocked record
+  taken for no dependency) changed only the committed bindings, because
+  neither the fixture nor the layout fuzzer held an array of a blocked
+  record. `cb-layout-array-of-blocked` now generates the fixture with three
+  such records added (a scratch copy of its headers), and the layout fuzzer
+  draws them; the test kills it.
 
 Static decisions: the batched scheduler and the sequential reference agree
 on both layout suites (`static-decisions.yml` on the branch:
@@ -537,8 +546,10 @@ the native coverage, the golden check beside the Tcl originals, the Rust
 tests, the stub-linked executables, the warning gate), `c-bindgen` (68 of 68
 tests, none skipped: the BoringSSL and SDL3 layout oracles run against the
 built libraries; every committed binding current; both fuzzers on all four
-targets) and `tests (macos arm64)` pass; `tests (linux arm64)`:
-ARM64-RESULT.
+targets) and `tests (macos arm64)` pass; on Linux arm64
+(`tests-arm64.yml`) the Tcl suite on interp and compile, its cranelift and
+cranelift-generic coverage, the golden suites and the Rust tests (also
+under GC stress) pass; its full GC-stress run: ARM64-GC.
 
 ## 15. Exclusions
 
