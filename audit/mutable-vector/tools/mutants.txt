@@ -248,11 +248,13 @@ proc hir::mutvec::ShareDescriptor {type} {
 
 # ---------------------------------------------------------------------------
 # Last uses per path (hir/mutvec.tcl's NoLaterUse, LaterIn, ReadsPath,
-# UseMap): a read-out moves its header only when no later use may read a
-# header at its path. The first nine are unsound (a later use observes the
-# moved header: tests/mutable-vector.test's mv-path-last-use-semantics, the
-# fuzzer's struct family); the last two only copy more than they must (the
-# copy counts of mv-path-last-use-copies pin the moves).
+# UseMap, Leaves): a read-out moves its header only when no later use may
+# read a header at its path. Those not marked economic are unsound (a later
+# use observes the moved header: tests/mutable-vector.test's
+# mv-path-last-use-semantics and mv-break-continue-last-use, the fuzzer's
+# struct family); the economic ones only copy more than they must (the copy
+# counts of mv-path-last-use-copies and mv-break-continue-last-use pin the
+# moves).
 
 @@ path-prefix-use-ignored a later use of a prefix of the moved path (the binding itself, an enclosing struct field) does not count: `T {keys: t.keys, ...}` moves t.keys while `t` is still read whole afterwards
 ## hir/mutvec.tcl
@@ -359,6 +361,43 @@ proc hir::mutvec::ShareDescriptor {type} {
                     return [BoundInside $hir $parent $b $p]
 ====
                     return 1
+>>>>
+
+@@ path-break-ends-walk a `break` or `continue` after a read-out ends the walk like a `return`: a vector moved into a mutating callee just before `break` (or `continue`) is changed for the code after the loop (or the next iteration)
+## hir/mutvec.tcl
+<<<<
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+====
+        continue
+        if {$target ni $loops} {
+>>>>
+
+@@ path-continue-as-break a `continue` is taken as a `break`: only what follows the loop is looked at, not its next iteration, which reads the vector a mutating callee was handed
+## hir/mutvec.tcl
+<<<<
+                    if {"continue" in $kinds} {
+                        return 0
+                    }
+====
+>>>>
+
+@@ path-break-copies (economic) a `break` makes every read-out before it a copy, also when nothing after the loop reads the path
+## hir/mutvec.tcl
+<<<<
+                    set x $loop
+                    continue
+====
+                    return 0
+>>>>
+
+@@ path-iteration-binding-break-copies (economic) a binding of the loop's iteration is not taken as done with at a `break` or `continue`: its read-out before a `continue` is copied
+## hir/mutvec.tcl
+<<<<
+                    if {[BoundInside $hir $parent $b $loop]} {
+                        return 1
+                    }
+====
 >>>>
 
 @@ path-context-moved a context parameter's path moves at its last use in a function like any held path: a local taking a context member's header mutates the installed context

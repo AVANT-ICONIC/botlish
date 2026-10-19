@@ -903,9 +903,11 @@ proc hir::mutvec::ReadsPath {s b fields} {
 # the branches after a condition, the handlers after a handled call, and
 # every iteration after this one of a loop B is not bound inside. Uses of
 # paths disjoint from P (a sibling field) do not count: they read other
-# headers. A statement that never completes (a `return`, a `fail`, a
-# `break`) ends the walk: nothing after it runs. A reference from a nested
-# function is never a last use.
+# headers. A statement that never completes skips the rest of its sequence:
+# one that leaves the function (a `return`, a `fail`) ends the walk --
+# nothing after it runs -- while a `break` goes on after its loop and a
+# `continue` with the loop's next iteration (Leaves), unless B is bound
+# inside that loop. A reference from a nested function is never a last use.
 proc hir::mutvec::NoLaterUse {hir parent e b} {
     set home [dict get $hir scopes [dict get $hir bindings $b scope] invocation]
     if {[dict get $hir scopes [dict get $hir exprs $e scope] invocation] ne $home} {
@@ -920,15 +922,30 @@ proc hir::mutvec::NoLaterUse {hir parent e b} {
         }
         set p [lindex [dict get $parent $x] 0]
         if {$p eq ""} {
-            return [expr {[LaterIn $hir [dict get $hir roots] $x $b $fields] != 0}]
+            return [expr {[lindex [LaterIn $hir [dict get $hir roots] $x $b $fields] 0] in {1 2}}]
         }
         set node [dict get $hir exprs $p]
         set kind [dict get $node kind]
         set sequence [hir::coroutines::SequenceOf $hir $p $x]
         if {$sequence ne ""} {
-            switch -- [LaterIn $hir $sequence $x $b $fields] {
+            set later [LaterIn $hir $sequence $x $b $fields]
+            switch -- [lindex $later 0] {
                 0 { return 0 }
                 2 { return 1 }
+                loop {
+                    # The rest of the sequence is skipped for loop L: a
+                    # `continue` runs its next iteration, a `break` what
+                    # follows it. A binding of L's iteration is done with.
+                    lassign $later - loop kinds
+                    if {[BoundInside $hir $parent $b $loop]} {
+                        return 1
+                    }
+                    if {"continue" in $kinds} {
+                        return 0
+                    }
+                    set x $loop
+                    continue
+                }
             }
             switch -- $kind {
                 block {
@@ -1000,25 +1017,73 @@ proc hir::mutvec::NoLaterUse {hir parent e b} {
 }
 
 # What may read binding B's path FIELDS (ReadsPath) after statement X of
-# SEQUENCE: 0 a later statement may; 2 none can, because a later statement
-# never completes before any does; 1 none does.
+# SEQUENCE: 0 a later statement may; 1 none does (what follows the sequence
+# runs next); otherwise X or a later statement never completes before any
+# does, and the rest of the sequence is skipped -- 2 for good (nothing of
+# the function runs after it), or {loop L KINDS} when it goes on at loop L
+# (Leaves).
 proc hir::mutvec::LaterIn {hir sequence x b fields} {
     set at [lsearch -exact $sequence $x]
     if {$at < 0} {
         return 0
     }
     if {[hir::typeOf $hir $x] eq "never"} {
-        return 2
+        return [Leaves $hir $x]
     }
     foreach s [lrange $sequence [expr {$at + 1}] end] {
         if {[ReadsPath $s $b $fields]} {
             return 0
         }
         if {[hir::typeOf $hir $s] eq "never"} {
-            return 2
+            return [Leaves $hir $s]
         }
     }
     return 1
+}
+
+# Where the function goes on after statement S, which never completes: 2
+# nowhere (S returns, fails, or calls what never returns), or {loop L
+# KINDS} when a `break` or `continue` of S (not of a loop inside S) leaves
+# for loop L -- after L, or with L's next iteration -- KINDS the sorted
+# kinds that do; 0 (anywhere) if such exits name two loops.
+proc hir::mutvec::Leaves {hir s} {
+    set inner [dict create]
+    set exits {}
+    set work [list $s]
+    while {$work ne {}} {
+        set x [lindex $work end]
+        set work [lrange $work 0 end-1]
+        set node [dict get $hir exprs $x]
+        switch -- [dict get $node kind] {
+            block {
+                # A nested function: its exits are its own.
+                continue
+            }
+            loop - listloop - countloop - lockloop {
+                dict set inner $x 1
+            }
+            break - continue {
+                lappend exits [dict get $node kind] [dict get $node target]
+            }
+        }
+        lappend work {*}[hir::children $hir $x]
+    }
+    set loops {}
+    set kinds {}
+    foreach {kind target} $exits {
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+            lappend loops $target
+        }
+        if {$kind ni $kinds} {
+            lappend kinds $kind
+        }
+    }
+    switch -- [llength $loops] {
+        0 { return 2 }
+        1 { return [list loop [lindex $loops 0] [lsort $kinds]] }
+    }
+    return 0
 }
 
 # 1 if binding B is bound inside loop P's body (a binding of one iteration:

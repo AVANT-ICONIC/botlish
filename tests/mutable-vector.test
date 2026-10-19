@@ -989,6 +989,90 @@ fn f():
     }
 } -cleanup {unset -nocomplain case text mv} -result {{{value {[20, 21, 21]}} 0 0 0} {{value {[21021]}} 0 0 0} {{value {[190, 21, 21]}} 0 0 0} {{value {[20, 21]}} 0 0 0}}
 
+# A `break` or `continue` never completes, yet the function goes on (after
+# the loop, or with its next iteration): a read-out followed by one is its
+# path's last use only when nothing there reads the path (hir/mutvec.tcl's
+# NoLaterUse, LaterIn, Leaves). Only a `return` or a `fail` ends the walk.
+test mv-break-continue-last-use {a read-out followed by `break` is copied when its path is read after the loop, and one followed by `continue` when the next iteration (or what follows the loop) may read it -- a binding moved into a mutating callee, a struct handed to one, both directly in the loop body and in a branch -- so the caller's vector never changes; it moves (no copy) when nothing after the loop reads it, when the binding belongs to the iteration (before `break` and `continue`), and before a `return` -- on every backend, with the copies the elaboration wrote} -body {
+    lmap case {
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        x = grow1(t, 10)
+        break
+    [t.length()]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    xs = loop i from 0 to 3:
+        x = grow1(t, 10)
+        continue
+    [t.length()]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 0:
+            x = grow1(t, 10)
+            continue
+        t.length()
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            x = grow1(t, 10)
+            break
+    t.push(5)
+    [t.length()]
+}
+        {fn f():
+    t = table()
+    t.vals.push(3)
+    found = loop i from 0 to 5:
+        if i == 2:
+            r = bump_all(t, 9)
+            break
+        i
+    [t.keys.length(), t.vals.length(), t.count]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            x = grow1(t, 10)
+            break
+    [7]
+}
+        {fn f():
+    loop i from 0 to 3:
+        u = mutable_vector::from_list([i])
+        if i == 1:
+            x = grow1(u, 10)
+            break
+        u.length()
+}
+        {fn f():
+    loop i from 0 to 3:
+        u = mutable_vector::from_list([i])
+        if i == 1:
+            x = grow1(u, 10)
+            continue
+        u.length()
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            return [grow1(t, 10)]
+    [t.length()]
+}
+    } {
+        set text "${::mvPathDecls}${case}f()\n"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value {[1]}} 1} {{value {[1]}} 1} {{value {[1, 1]}} 1} {{value {[2]}} 1} {{value {[1, 2, 0]}} 1} {{value {[7]}} 0} {{value {[1]}} 0} {{value {[1, 1]}} 0} {{value {[2]}} 0}}
+
 # Demand through struct literals (hir/mutvec.tcl's ExclusivePositions): a
 # struct literal in a position that needs an exclusive header -- a place's
 # entry, a consumed parameter's argument, a demanded function's result --

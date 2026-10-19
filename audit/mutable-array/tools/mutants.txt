@@ -189,6 +189,16 @@
                 if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
 >>>>
 
+@@ break-ends-walk a `break` or `continue` after a read-out ends the walk like a `return`: a copy taken just before `break` (or `continue`) is the array itself, and the code after the loop (or the next iteration) writes it
+## hir/mutvec.tcl
+<<<<
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+====
+        continue
+        if {$target ni $loops} {
+>>>>
+
 @@ array-always-affine MutableArray is always affine: a copy of an array of Ints moves it
 ## hir/types.tcl
 <<<<

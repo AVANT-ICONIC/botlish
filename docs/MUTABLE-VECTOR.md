@@ -1195,6 +1195,18 @@ is demanded (`r = put(t, i); fill(r.table, i + 1, acc + r.old)`), and
 sees the moves: a function ending in such a rebuild is fresh, and its
 callers copy nothing either.
 
+A statement that never completes skips the rest of its sequence, but only a
+`return` or a `fail` ends the walk there. A `break` goes on after its loop
+and a `continue` with the loop's next iteration (`Leaves`: the loop a
+`break` or `continue` of the statement leaves for, not one of a loop inside
+it), so `if found: r = consume(t); break` copies `t` when the code after the
+loop reads it, and `x = grow1(t, 10); continue` when the next iteration may
+(conservatively: every iteration of a loop the binding is not bound inside
+counts, as at the end of the body); a binding of the loop's own iteration is
+done with at either (`mv-break-continue-last-use`, `ma-break-continue-copies`:
+the rule once took both for a `return`, so the moved header was the one the
+code after the loop or the next iteration read and wrote, on every backend).
+
 Remaining gaps of the same kind (all sound, all still copies): a whole
 struct passed to a consumed parameter is copied when a later argument of
 the same call reads one of its collections, even only to observe it before
@@ -1216,8 +1228,11 @@ arguments read by reference before a later argument of the same call that
 moves or pops the same path); and the
 `path-*` mutants of `audit/mutable-vector/tools/mutants.txt` (a prefix, the
 same path, a header-bearing extension, later statements, later operands,
-branches, handlers or the next iteration ignored, a context path moved; and
-two economic ones: the per-binding rule back, an Int extension counted).
+branches, handlers or the next iteration ignored, a context path moved, a
+`break` or `continue` ending the walk, a `continue` taken for a `break`;
+and four economic ones: the per-binding rule back, an Int extension
+counted, a `break` copying what nothing after its loop reads, a binding of
+the iteration kept alive across a `continue`).
 
 ## Demand through struct literals
 
