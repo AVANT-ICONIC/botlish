@@ -62,7 +62,7 @@ Gates, all on GitHub Actions runners (no shared Mac):
 Mutation testing: no survivor -- 21 of 21 applicable mutants killed on
 macOS, 17 of 17 on Linux x86-64 (section 18). Performance: no regression
 beyond noise on Linux; on macOS recursion about 30% faster without the
-depth token, coroutine resumes about 4% slower in one sample (section 22).
+depth token, coroutine resumes 3-4% slower in both samples (section 22).
 
 ## 1. Initial failure evidence
 
@@ -884,6 +884,7 @@ cancelled; each run's results below are from its completed jobs.
 | [39293822194](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194) | e9bbb03, the benchmark | smoke; Tier C `native-stack-overflow.test native-stack-map.test native-root-storage.test coroutines.test native.test rust native-stack-mutants native-stack-bench` | smoke: success. Tier C (job [118201686534](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194/job/118201686534)): the five Tcl files 208 of 210 on interp and on compile (2 skipped by host constraints, `nativeLinux` and `readelf`), the Rust tests and native_stack pass, the benchmark (section 22); its one failure was the mutation harness's two survivors (section 18) |
 | [39297872127](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127) | e0b04c5, faults inside the running stack | smoke; Tier C (the same items but the benchmark); acceptance | smoke: success, all ten faults of section 17. Tier C (job [118215508236](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508236)): success -- mutants 21 killed of 21, the five Tcl files as above, Rust tests and native_stack. Acceptance: success -- shards [1/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508310) and [2/2](https://github.com/mwagner-webdev/botlish/actions/runs/39297872127/job/118215508242): 194 Tcl test files on interp (all but tier.tcl's `notYet`, c-bindgen.test and c-ffi.test) and 94 golden suites on interp, compile, cranelift-generic and cranelift (a Linux program's native runs excluded as `NATIVE TARGET`), 0 failed |
 | [39304487542](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542) | cfdb02d, the final code (a comment in main.rs) | smoke; Tier C `native-stack-overflow.test coroutines.test native-stack-map.test native-root-storage.test native.test rust` with `CI-GC-Stress: 1`; acceptance | **success, every job**: smoke (all native_stack checks, native-status); Tier C under GC stress (job [118237876232](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237876232); section 14); acceptance shards [1/2](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237876112) and [2/2](https://github.com/mwagner-webdev/botlish/actions/runs/39304487542/job/118237875699): 194 Tcl test files on interp and 94 golden suites on four backends, 0 failed |
+| [39310885544](https://github.com/mwagner-webdev/botlish/actions/runs/39310885544) | f09275a (cfdb02d's code; a manual run, `tier: full`, `tests: native-stack-bench`) | smoke; Tier C `native-stack-bench` | smoke: success; the benchmark's second sample (section 22); then cancelled by hand, so that its acceptance jobs -- the third run of the same code -- did not take two runners for half an hour |
 
 cfdb02d is the final code: the commits after it change only this report
 (a Markdown-only push starts no macOS run, and the Linux workflows run on
@@ -959,17 +960,21 @@ drivers run the same NIR, so only the runtime and the code generator
 differ. The baseline is main's driver (8338b2b, whose native/ equals the
 branch base's), on the same host.
 
-**macOS arm64** (Tier C of run 39293822194, job 118201686534; `-baseline-rev
-main`, 20 runs x 5 rounds):
+**macOS arm64**, two samples on two runners (`-baseline-rev main`, 20 runs
+x 5 rounds each): run 39293822194's Tier C (e9bbb03, job
+[118201686534](https://github.com/mwagner-webdev/botlish/actions/runs/39293822194/job/118201686534))
+and run [39310885544](https://github.com/mwagner-webdev/botlish/actions/runs/39310885544)'s
+(the final code, job
+[118259833765](https://github.com/mwagner-webdev/botlish/actions/runs/39310885544/job/118259833765);
+a manual run for the benchmark alone, cancelled once it had run so that
+its repeated acceptance jobs did not):
 
-| Workload | main (us) | this branch (us) | ratio |
-|---|---:|---:|---:|
-| recursion | 555.0 | 381.9 | 0.688 |
-| loop | 1398.9 | 1426.0 | 1.019 |
-| allocation | 7576.7 | 7905.7 | 1.043 |
-| coroutine | 11926.5 | 12413.8 | 1.041 |
-
-@@MACPERF2@@
+| Workload | main (us) | this branch (us) | ratio | second sample: main, branch (us) | ratio |
+|---|---:|---:|---:|---:|---:|
+| recursion | 555.0 | 381.9 | 0.688 | 568.8, 380.9 | 0.670 |
+| loop | 1398.9 | 1426.0 | 1.019 | 1383.8, 1417.6 | 1.024 |
+| allocation | 7576.7 | 7905.7 | 1.043 | 7389.5, 6866.6 | 0.929 |
+| coroutine | 11926.5 | 12413.8 | 1.041 | 11887.5, 12233.2 | 1.029 |
 
 - **Recursion is about 30% faster on macOS**, and the cause is known: the
   depth token is gone (section 15). Every calling function used to bump the
@@ -978,13 +983,16 @@ main`, 20 runs x 5 rounds):
   add nothing to a frame under 4 KiB. That is the per-call cost Linux
   never had.
 - **The loop** shows no change beyond noise.
-- **The coroutine workload's 4%** is in the direction of the one cost this
-  milestone adds on macOS: two publications per resume (the coroutine's
-  stack on arrival, the resumer's when the segment returns; each a load
-  of the guard's state and three atomic stores), about 2.5 ns each
-  against 124 ns a resume. Before, macOS published nothing (it had no
-  guard). The allocation workload calls nothing the milestone changed;
-  its 4% is within what one sample can say (see the Linux noise below).
+- **The coroutine workload is 3-4% slower in both samples**, the one cost
+  this milestone adds on macOS: two publications per resume (the
+  coroutine's stack on arrival, the resumer's when the segment returns;
+  each a load of the guard's state and three atomic stores), about 2.5 ns
+  each against 122-124 ns a resume. Before, macOS published nothing (it
+  had no guard). It is not material, and it buys the attribution that
+  makes a coroutine's overflow a report instead of a crash.
+- **The allocation workload** calls nothing the milestone changed, and its
+  two samples (1.043, 0.929) show the runner's spread: differences under
+  about 7% are not distinguishable here.
 - No per-call syscall, pthread query or stack scan was added: the
   thread's stack is read when the Vm is made and when the guard is
   installed (`NativeStack::current()`, once each per driver process, not
