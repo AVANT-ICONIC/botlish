@@ -292,7 +292,8 @@ proc native::rawabi::explainAll {hir spec ranges plan} {
 #
 #   * an operand of a raw-representable native operation, with exactly the
 #     range conditions lowering uses for it (RawOpEligible: `+ - * < <= > >=`,
-#     `==` on two Ints, the proven-safe shifts);
+#     `==` on two Ints, the proven-safe shifts, `bit_and bit_or bit_xor` and
+#     `mod`, whose result always fits small when both operands do);
 #   * a slot of a self-tail loop whose raw representation lowering already
 #     forces for the whole function (native::lower::RawParams: the instance
 #     self-tail-calls and the position's final entry Range fitsSmall);
@@ -343,7 +344,8 @@ namespace eval native::rawabi {
     # The tagged native ops -> raw op, of the raw-representable family (the
     # same table native::lower::NativeCall's rawEligible branch uses).
     variable rawOps [dict create + riadd - risub * rimul < rilt <= rile > rigt >= rige \
-        == rieq shift_left rishl shift_right rishr bit_and riand bit_or rior bit_xor rixor]
+        == rieq shift_left rishl shift_right rishr bit_and riand bit_or rior bit_xor rixor \
+        mod rimod]
 }
 
 # The display label of instance ID, computed once per Demand pass.

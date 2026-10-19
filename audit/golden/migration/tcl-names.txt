@@ -4238,6 +4238,17 @@ tests/native-lockstep-rejected.test native-lockstep-rejected-nothing-evaluated p
 tests/native-lockstep-rejected.test native-lockstep-rejected-only-when-reached pass
 tests/native-lockstep-rejected.test native-lockstep-rejected-unequal pass
 tests/native-lockstep-rejected.test native-lockstep-rejected-unproven pass
+tests/native-mod-lowering.test mod-lowering-checked-nir pass
+tests/native-mod-lowering.test mod-lowering-effects pass
+tests/native-mod-lowering.test mod-lowering-loop-gc-stress pass
+tests/native-mod-lowering.test mod-lowering-mask-nir pass
+tests/native-mod-lowering.test mod-lowering-mask-tagged-nir pass
+tests/native-mod-lowering.test mod-lowering-repr-opt-off pass
+tests/native-mod-lowering.test mod-lowering-tagged-nir pass
+tests/native-mod-lowering.test mod-lowering-total-negative-range pass
+tests/native-mod-lowering.test mod-lowering-total-nir pass
+tests/native-mod-lowering.test mod-lowering-values-agree pass
+tests/native-mod-lowering.test mod-lowering-zero-divisor pass
 tests/native-mutarray.test mutarray-1 pass
 tests/native-mutarray.test mutarray-2 pass
 tests/native-mutarray.test mutarray-3 pass
@@ -4562,6 +4573,7 @@ tests/native-tiny-leaf-inline.test tiny-leaf-default-matches-explicit-on pass
 tests/native-tiny-leaf-inline.test tiny-leaf-dynamic-call-not-inlined pass
 tests/native-tiny-leaf-inline.test tiny-leaf-dynamic-call-top-level-site-still-inlines pass
 tests/native-tiny-leaf-inline.test tiny-leaf-eligible-multi-op-budget pass
+tests/native-tiny-leaf-inline.test tiny-leaf-eligible-nonzero-mod pass
 tests/native-tiny-leaf-inline.test tiny-leaf-eligible-shift-proven-count pass
 tests/native-tiny-leaf-inline.test tiny-leaf-env-precedence-matches-convention pass
 tests/native-tiny-leaf-inline.test tiny-leaf-exact-callable-param-call-inlines pass
@@ -4581,6 +4593,7 @@ tests/native-tiny-leaf-inline.test tiny-leaf-ineligible-self-recursive pass
 tests/native-tiny-leaf-inline.test tiny-leaf-ineligible-shift-unproven-count pass
 tests/native-tiny-leaf-inline.test tiny-leaf-multi-call-site-all-inline pass
 tests/native-tiny-leaf-inline.test tiny-leaf-multi-call-site-deterministic pass
+tests/native-tiny-leaf-inline.test tiny-leaf-nonzero-mod-value pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-helpers-not-separately-emitted pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-high-nibble-has-mask-and-shift pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-high-nibble-no-calls pass

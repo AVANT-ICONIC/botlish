@@ -798,3 +798,146 @@ mod packed_ascii_generic_entry_tests {
         }
     }
 }
+
+/// Euclidean mod's three native forms (native/lower.tcl's "Euclidean mod"):
+/// the raw `rimodtotal` (no zero test), the raw `rimod` (an inline zero test,
+/// rt_int_mod's ARITHMETIC error on a cold path) and the tagged `imod`
+/// (inline when both operands are small, rt_int_mod for a BigInt or a zero
+/// divisor), each JIT-compiled and called over a grid of operands against an
+/// independent reference (i128 / BigInt `rem_euclid`).
+#[cfg(test)]
+mod euclid_mod_tests {
+    use super::*;
+    use crate::runtime::error::RtError;
+    use crate::runtime::metrics::AllocMode;
+    use crate::runtime::ops::GenericEntry;
+    use crate::nir::OpCode;
+    use crate::runtime::vm::ProgramInfo;
+    use num_bigint::BigInt;
+    use num_traits::{Signed, Zero};
+    use std::rc::Rc;
+
+    const PROGRAM: &str = concat!(
+        "nir 1 call-effects=1\n\n",
+        "func 0 \"<program>\" params=0 env=0 regs=1 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = unit\n    ret %0\nend\n\n",
+        "func 1 \"total\" params=2 env=0 regs=6 pnames=\"a b\" captures=0 rawregs=\"2 3 4\"\n",
+        "    %2 = op runbox %0\n    %3 = op runbox %1\n    %4 = op rimodtotal %2 %3\n    %5 = op rbox %4\n    ret %5\nend\n\n",
+        "func 2 \"checked\" params=2 env=0 regs=6 pnames=\"a b\" captures=0 rawregs=\"2 3 4\"\n",
+        "    %2 = op runbox %0\n    %3 = op runbox %1\n    %4 = op rimod %2 %3\n    %5 = op rbox %4\n    ret %5\nend\n\n",
+        "func 3 \"tagged\" params=2 env=0 regs=3 pnames=\"a b\" captures=0 rawregs=\"\"\n",
+        "    %2 = op imod %0 %1\n    ret %2\nend\n\n",
+    );
+
+    const SMALL_MIN: i64 = -(1 << 62);
+    const SMALL_MAX: i64 = (1 << 62) - 1;
+    const SMALLS: [i64; 20] = [
+        SMALL_MIN, SMALL_MIN + 1, -(1 << 61), -1025, -1024, -1000, -7, -3, -2, -1, 0, 1, 2, 3, 7, 1023, 1024,
+        1 << 61, SMALL_MAX - 1, SMALL_MAX,
+    ];
+
+    struct Rig {
+        vm: Box<Vm>,
+        compiled: CompiledProgram,
+    }
+
+    fn rig() -> Rig {
+        let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
+        let mut vm = Vm::new(
+            Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
+            AllocMode::Summary,
+        );
+        compiled.install_constants(&mut vm);
+        vm.set_framemap(compiled.framemap.clone());
+        Rig { vm, compiled }
+    }
+
+    fn call(rig: &mut Rig, func: usize, args: &[Value]) -> Value {
+        let entry: GenericEntry = unsafe { std::mem::transmute(rig.compiled.generic_entries[func]) };
+        entry(&mut *rig.vm, 0, args.as_ptr())
+    }
+
+    fn reference(x: &BigInt, y: &BigInt) -> BigInt {
+        let r = x % y;
+        if r.is_negative() { r + y.abs() } else { r }
+    }
+
+    fn expect_division_by_zero(rig: &mut Rig) {
+        match rig.vm.error.take() {
+            Some(RtError::Semantic { kind, message }) => {
+                assert_eq!((kind, message.as_str()), ("ARITHMETIC", "mod: division by zero"))
+            }
+            other => panic!("expected the ARITHMETIC error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn raw_forms_agree_with_the_euclidean_reference_on_small_operands() {
+        let mut r = rig();
+        for &x in &SMALLS {
+            for &y in SMALLS.iter().filter(|y| **y != 0) {
+                let want = (x as i128).rem_euclid(y as i128) as i64;
+                for func in [1, 2, 3] {
+                    let got = call(&mut r, func, &[make_small(x), make_small(y)]);
+                    assert_eq!(int_small(got), Some(want), "func {func}: mod({x}, {y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_zero_divisor_raises_the_helpers_error_from_the_checked_and_tagged_forms() {
+        let mut r = rig();
+        for &x in &SMALLS {
+            for func in [2, 3] {
+                let got = call(&mut r, func, &[make_small(x), make_small(0)]);
+                assert_eq!(got, NO_VALUE, "func {func}: mod({x}, 0)");
+                expect_division_by_zero(&mut r);
+            }
+        }
+        let big = r.vm.new_big(BigInt::from(1u8) << 70u32);
+        assert_eq!(call(&mut r, 3, &[big, make_small(0)]), NO_VALUE);
+        expect_division_by_zero(&mut r);
+    }
+
+    #[test]
+    fn the_tagged_form_takes_bigint_operands_to_the_helper() {
+        let mut r = rig();
+        let wide: Vec<BigInt> = [
+            BigInt::from(SMALL_MAX) + 1,
+            BigInt::from(SMALL_MIN) - 1,
+            BigInt::from(i64::MAX),
+            BigInt::from(i64::MIN),
+            BigInt::from(1u8) << 64u32,
+            -(BigInt::from(1u8) << 70u32) + BigInt::from(5),
+            BigInt::from(7),
+            BigInt::from(-7),
+            BigInt::from(SMALL_MIN),
+        ]
+        .into_iter()
+        .collect();
+        for x in &wide {
+            for y in wide.iter().filter(|y| !y.is_zero()) {
+                let (vx, vy) = (r.vm.new_big(x.clone()), r.vm.new_big(y.clone()));
+                let got = call(&mut r, 3, &[vx, vy]);
+                assert_ne!(got, NO_VALUE, "mod({x}, {y})");
+                assert_eq!(int_to_big(got), reference(x, y), "mod({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn only_the_tagged_form_is_a_safepoint_and_only_rimodtotal_cannot_fail() {
+        use crate::runtime::ops::{op_may_allocate, op_may_error};
+        assert!(op_may_allocate(OpCode::IMod) && op_may_error(OpCode::IMod));
+        assert!(!op_may_allocate(OpCode::RIMod) && op_may_error(OpCode::RIMod));
+        assert!(!op_may_allocate(OpCode::RIModTotal) && !op_may_error(OpCode::RIModTotal));
+        let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        let effects: Vec<(bool, bool)> = program.functions.iter().map(|f| (f.may_error, f.may_gc)).collect();
+        assert_eq!(effects[1..], [(false, false), (true, false), (true, true)]);
+        for op in [OpCode::RIMod, OpCode::RIModTotal] {
+            assert!(op.raw_operands() && op.raw_result() && op.arity() == Some(2), "{op:?}");
+        }
+    }
+}
