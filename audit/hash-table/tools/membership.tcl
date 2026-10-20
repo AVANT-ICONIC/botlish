@@ -7,9 +7,12 @@
 #       ?-backend B? ?-show DOMAIN/STRATEGY/K? ?-check 1? ?-data-limit N?
 #       ?-max-chain N?
 #
-# -check 1 times nothing: it runs every program's hit and miss modes with 128
-# queries on interp, compile, cranelift and cranelift-generic and requires
-# 128 hits and 0 misses everywhere (a wrong representation fails here).
+# -check 1 times nothing: it generates every program with every member as a
+# hit query and every non-member as a miss query (programOf's FULL), runs
+# both modes once through each list on interp, compile, cranelift and
+# cranelift-generic, and requires K hits and 0 misses everywhere (a wrong
+# representation fails here). A set with no non-members (the 64-case enum's
+# K = 64) has no miss mode, timed or checked.
 #
 # For a constant set S of K values of a domain, each strategy below is a
 # generated Botlish function `member?(x) -> bool` -- a representation a
@@ -72,7 +75,9 @@ proc lcg {state} {
     return [expr {($state * 6364136223846793005 + 1442695040888963407) % (1 << 64)}]
 }
 
-# K distinct values of DOMAIN, and 64 query values not among them.
+# K distinct values of DOMAIN, and the values not among them that misses
+# query: 64 (int-sparse, the Strings), int-dense's other K of 0..2K-1, or
+# the enum's other 64 - K cases (none at K = 64).
 proc constants {domain k} {
     set seed [expr {1000 + $k}]
     switch -- $domain {
@@ -136,7 +141,6 @@ proc constants {domain k} {
             for {set i 0} {$i < 64} {incr i} {
                 if {$i < $k} { lappend members "Kw::C$i" } else { lappend others "Kw::C$i" }
             }
-            if {$others eq ""} { set others [list "Kw::C0"] }
             return [list $members $others]
         }
     }
@@ -439,19 +443,32 @@ proc trieOf {domain members} {
 # ---------------------------------------------------------------------------
 # The program
 
-proc programOf {domain strategy k} {
+# The program for DOMAIN/STRATEGY/K: {TEXT DATA GENERATE-MS MISSES}, MISSES
+# the number of miss query values (0 when every value of the domain is a
+# member). With FULL the queries are every member and every non-member,
+# each once (-check); otherwise 64 of each, cycled (timing).
+proc programOf {domain strategy k {full 0}} {
     lassign [constants $domain $k] members others
     set t0 [clock microseconds]
     set made [${strategy}Of $domain $members]
     set generateMs [expr {([clock microseconds] - $t0) / 1000.0}]
     if {$made eq ""} { return "" }
     lassign $made source data
-    # 64 query values each: hits cycle through the members, misses are
-    # absent values.
-    set hits {}
-    for {set i 0} {$i < 64} {incr i} { lappend hits [lindex $members [expr {$i % $k}]] }
-    set misses {}
-    for {set i 0} {$i < 64} {incr i} { lappend misses [lindex $others [expr {$i % [llength $others]}]] }
+    if {$full} {
+        set hits $members
+        set misses $others
+        set index j
+    } else {
+        # 64 query values each: hits cycle through the members, misses are
+        # absent values.
+        set hits {}
+        for {set i 0} {$i < 64} {incr i} { lappend hits [lindex $members [expr {$i % $k}]] }
+        set misses {}
+        if {[llength $others] > 0} {
+            for {set i 0} {$i < 64} {incr i} { lappend misses [lindex $others [expr {$i % [llength $others]}]] }
+        }
+        set index "bit_and(j, 63)"
+    }
     set type [typeOf $domain]
     set header "import list\nimport str\nimport char\n"
     if {$strategy eq "iset"} { append header "import immutable_set\n" }
@@ -497,12 +514,12 @@ fn int_of(text: str) -> int errors IndexNotFound:
 fn run_hits(${param}j: int, m: int, acc: int) -> int errors IndexNotFound:
     if j >= m:
         return acc
-    run_hits(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_hits, bit_and(j, 63)))))
+    run_hits(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_hits, $index))))
 
 fn run_misses(${param}j: int, m: int, acc: int) -> int errors IndexNotFound:
     if j >= m:
         return acc
-    run_misses(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_misses, bit_and(j, 63)))))
+    run_misses(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_misses, $index))))
 
 fn main(args: List\[str\]) -> int errors IndexNotFound:
     mode = list::get(args, 1, \"none\")
@@ -521,7 +538,7 @@ result = main(args):
         -1
 result
 "
-    return [list $text $data $generateMs]
+    return [list $text $data $generateMs [llength $misses]]
 }
 
 # ---------------------------------------------------------------------------
@@ -562,9 +579,9 @@ try {
                     puts "SKIP $domain $strategy $k: an equality chain of more than -max-chain [dict get $options -max-chain] terms"
                     continue
                 }
-                set made [programOf $domain $strategy $k]
+                set made [programOf $domain $strategy $k [dict get $options -check]]
                 if {$made eq ""} continue
-                lassign $made text data generateMs
+                lassign $made text data generateMs misses
                 # A constant table of more than DATA-LIMIT elements is not
                 # measured: native lowering of a List literal grows faster
                 # than its length (15531 elements took 173 s, 62949 ran out
@@ -588,22 +605,24 @@ try {
                 if {[dict get $options -check]} {
                     set verdict ok
                     foreach backend {interp compile cranelift cranelift-generic} {
-                        set hit [ht::run $hir $backend {hit 128}]
-                        set miss [ht::run $hir $backend {miss 128}]
-                        if {$hit ne "128" || $miss ne "0"} {
-                            set verdict "FAIL $backend hit=$hit miss=$miss"
+                        set hit [ht::run $hir $backend [list hit $k]]
+                        set miss [ht::run $hir $backend [list miss $misses]]
+                        if {$hit ne $k || $miss ne "0"} {
+                            set verdict "FAIL $backend hit=$hit/$k miss=$miss/$misses"
                             set ::failed 1
                         }
                     }
-                    puts "check $domain $strategy $k: $verdict"
+                    puts "check $domain $strategy $k: $verdict ($k members, $misses non-members)"
                     continue
                 }
                 set t0 [clock microseconds]
                 set bytes [strategyBytes $hir]
                 set lowerMs [expr {([clock microseconds] - $t0) / 1000.0}]
-                set results [ht::benchNative $hir [list {none 0} [list hit $m] [list miss $m]] [dict get $options -runs]]
+                # With no non-member there is no miss mode to time.
+                set modes [expr {$misses > 0 ? {hit miss} : {hit}}]
+                set results [ht::benchNative $hir [list {none 0} {*}[lmap mode $modes {list $mode $m}]] [dict get $options -runs]]
                 lassign [lindex $results 0] base
-                foreach mode {hit miss} result [lrange $results 1 2] {
+                foreach mode $modes result [lrange $results 1 end] {
                     lassign $result us sum
                     set row [list $domain $strategy $k $mode $m $us [format %.2f [expr {($us - $base) * 1000.0 / $m}]] \
                         $bytes $data [format %.1f $generateMs] [format %.0f $frontendMs] [format %.0f $lowerMs] $sum]

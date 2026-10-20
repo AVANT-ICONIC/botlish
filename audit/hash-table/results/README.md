@@ -48,7 +48,7 @@ measured on:
 | `lookups/policy-baseline.tsv`, `lookups/policy-combo.tsv` | the load-policy matrix | passes |
 | `mixed-*.tsv` | BFS, word frequency, memo (natural and restructured) | whole workloads |
 | `backends-baseline.tsv` | interp, compile, cranelift-generic at small sizes | first method |
-| `membership-*.tsv` | constant membership: every strategy, domain and K | ns per query, code, data, compile times |
+| `membership-*.tsv` | constant membership: every strategy, domain and K; the 64-case enum at K = 64 has no non-member, so no miss row (its rows timed hits as misses and were removed) | ns per query, code, data, compile times |
 | `ladder-a.tsv`, `ladder-c.tsv` | the prototype ladders, first round | lookups as passes, builds first method (superseded) |
 | `ladder-a2.tsv`, `ladder-c2.tsv` | the prototype ladders and the probe primitive, three alternating rounds | passes |
 | `rust-*.tsv` | the Rust reference: sweep, mixed, probe statistics, hash cost, insert spikes | its own timings and counts |
@@ -61,4 +61,5 @@ measured on:
 | `nir-*.txt` | each table's specialized functions: machine-code size, operations, facts; all three trees with the same driver, `combo` and `fixed` identical | deterministic |
 | `unrelated-*.txt`, `corpus-again.txt` | workloads unrelated to tables, both trees | timings |
 | `fuzz-fixed.txt` | every table fuzzed after the review fixes: four backends, `ht0` three (CG-3) | correctness |
+| `membership-check.txt` | every constant-membership program checked on four backends against every member and non-member (`membership.tcl -check 1`) | correctness |
 | `fuzz-large.txt`, `fuzz-policy.txt` | after the review fixes: the `large` profile on the native backends, and the 1/2 and 17/20 load-policy variants of `lpa` and `rh` | correctness |
