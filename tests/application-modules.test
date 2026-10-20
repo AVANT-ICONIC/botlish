@@ -24,8 +24,6 @@ source [file join $::projectRoot native native.tcl]
 interp recursionlimit {} 100000
 
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set mainScript [file join $::projectRoot main.tcl]
 set ::appCounter 0

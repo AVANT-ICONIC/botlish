@@ -593,11 +593,8 @@ test loop-collecting-core-ir-lockloop-shape {raw core IR validation of the new n
 
 # ---------------------------------------------------------------------------
 # Standalone native executables (tests/native-executable.test's own harness
-# shape): the same programs compiled to an ELF and run, with and without GC
+# shape): the same programs compiled to an executable and run, with and without GC
 # stress, agree with every in-process backend.
-
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 proc aotParity {text} {
     set dir [makeDirectory {collecting loops executable test}]

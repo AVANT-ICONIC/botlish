@@ -17,9 +17,6 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 interp recursionlimit {} 100000
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 set ::allBackends {interp compile cranelift-generic cranelift}
 
 # The preamble of the evaluation-order programs: probe(id, result) appends

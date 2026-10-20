@@ -120,8 +120,31 @@ testConstraint rustcLinker [expr {![info exists ::env(BOTLISH_NATIVE_LINKER)] ||
 # native backend switches stacks on Linux x86-64 and AArch64 and on macOS
 # AArch64. A capability, not an operating system: a test that needs coroutines
 # or the native collector and runtime evidence around them carries this one;
-# a test that needs Linux syscalls or the Linux stack guard keeps nativeLinux.
+# a test that needs Linux syscalls keeps nativeLinux.
 testConstraint nativeCoroutines [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
+# The native stack guard (runtime/platform/, MACOS-AARCH64-MILESTONE-4.md):
+# the runtime knows the bounds of the thread's stack and of every coroutine
+# stack, and a native run that exhausts one -- the thread's or a
+# coroutine's -- ends in NATIVE LIMIT STACK, with stack probes and no
+# shadow-stack depth token. A capability, not an operating system: Linux
+# x86-64 and AArch64 and macOS AArch64.
+testConstraint nativeStackGuard [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
+# Standalone executables (native::executable, native/src/codegen/aot.rs): the
+# native backend links them on Linux x86-64 and AArch64 (ELF) and on macOS
+# AArch64 (Mach-O, MACOS-AARCH64-MILESTONE-5.md), with the rustc linker
+# everywhere and the stub linker on Linux x86-64 too. A capability, not an
+# operating system: a test that builds and runs an executable of a portable
+# program carries this one; one whose program needs Linux syscalls keeps
+# nativeLinux, one that reads ELF or needs the stub linker its own
+# constraint, and a program that calls C is linked on Linux only (C-FFI.md's
+# tests say so themselves).
+testConstraint executableAot [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
+# binaryHeader PATH and hostBinaryHeader KIND: what a program object or an
+# executable is, and what this host's are.
+source [file join $::projectRoot tests binary-header.tcl]
 
 # Native coverage (tests/native-coverage.tcl): NATIVE_COVERAGE=FILE appends
 # one line per test: {NAME PASSED NATIVE-RUNS UNSUPPORTED-ERRORS}.

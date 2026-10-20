@@ -449,6 +449,10 @@ extern "C" fn co_body(p: *mut Vm, co: *mut CoroutineObj) -> ! {
     // SAFETY: CO is the running coroutine (rooted through Vm::co_current for
     // as long as it runs); P is the Vm every frame shares.
     unsafe {
+        // Arrived on this fresh stack (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
         let thunk = (*co).thunk;
         let result = if heap_kind(thunk) == KIND_CLOSURE {
             let c = closure_of(thunk);
@@ -589,14 +593,19 @@ unsafe fn prepare(_stack: &CoStack, _p: *mut Vm, _co: *mut CoroutineObj) -> usiz
 /// Runs one segment of CO (fresh or suspended, its transport slot already
 /// holding the message): links it into the running chain, switches to its
 /// stack, and returns its outcome when it yields or ends.
+///
+/// Stack publication (the overflow guard's, runtime::platform): each side of a
+/// switch publishes the stack it arrives on, right after the switch returns
+/// to it -- here, `co_body` and `rt_co_yield` -- and nothing publishes before
+/// switching away. bl_co_switch's pushes land on the stack it leaves, which
+/// is therefore still the published one when they could fault; and arriving
+/// code publishes before it can grow its stack past where it was (the
+/// publication is inlined atomic stores in a frame that already exists).
 unsafe fn segment(p: *mut Vm, co: *mut CoroutineObj) -> Value {
     unsafe {
         (*co).resumer = (*p).co_current;
         (*p).co_current = co;
         (*co).state = CO_RUNNING;
-        if let Some(stack) = &(*co).stack {
-            (*p).publish_active_stack(Some(stack.bounds()));
-        }
         bl_co_switch(&mut (*co).resumer_sp, (*co).saved_sp, 0);
         (*p).co_current = (*co).resumer;
         (*co).resumer = std::ptr::null_mut();
@@ -688,6 +697,10 @@ pub extern "C" fn rt_co_yield(p: *mut Vm, value: Value) -> Value {
         (*co).value = value;
         (*co).state = CO_SUSPENDED;
         bl_co_switch(&mut (*co).saved_sp, (*co).resumer_sp, 0);
+        // Resumed: arrived on this coroutine's stack again (segment's doc).
+        if let Some(stack) = &(*co).stack {
+            (*p).publish_active_stack(Some(stack.bounds()));
+        }
         (*co).value
     }
 }

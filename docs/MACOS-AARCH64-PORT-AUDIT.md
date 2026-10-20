@@ -103,7 +103,10 @@ ordinary `cargo build --release --manifest-path native/Cargo.toml`):
   pages flipped to read-execute with `mprotect`, no `MAP_JIT`) is accepted
   for the unsigned (linker-ad-hoc-signed) `botlish-native` on this runner.
 - **Executable emission is refused**, explicitly: `executable emission
-  requires Linux glibc on x86_64 or aarch64 (NATIVE AOT)`.
+  requires Linux glibc on x86_64 or aarch64 (NATIVE AOT)`. **Since
+  milestone 5** (MACOS-AARCH64-MILESTONE-5.md) it is not: an ordinary
+  program becomes a Mach-O arm64 executable through the rustc linker and
+  runs standalone; a program that calls C is still refused (NATIVE LINK).
 
 The census (section 15) has the rest: every test file and golden suite on
 this host.
@@ -154,7 +157,7 @@ details and the evidence.
 | hir/interchange.tcl `decode`; main.tcl `runFile`, `emitExecutable` | a `.hirx` records no target | posix | **resolved (milestone 2)**: the HIR records its target (`hir::cabi::targetOf`: the compilation target when the build read one, "" for a HIR every target shares), interchange carries it, `decode -target T` refuses another target's (HIR INTERCHANGE TARGET), main.tcl reads a `.hirx` for its `-target` or the host's. No format version change: the field is part of the HIR dict | low | 2 (done) | L (done) |
 | main.tcl, hir/cabi.tcl `ResolveTarget`, hir/foreign.tcl `AbiClass` | nothing compares the target with the host before a native run or link | posix | **resolved (milestone 2)**: NIR names the program's target (`target "NAME" triple="TRIPLE"`) and the driver refuses `run`, `bench`, `batch`, `object` and `executable` for another target (NATIVE TARGET: `-target windows-x86_64` on Linux no longer runs a 32-bit `long` C call); the diagnostic commands (`clif`, `vcode`, `size`, `roots`) still show the host's view | low | 2 (done) | L (done) |
 | surface/modules.tcl `LoadNamespace` | `NamespaceTypeDecls` ran before the UNKNOWN-TARGET check | posix | **resolved (milestone 2)**: checked first (`tm-unknown-host`) | low | 2 (done) | L (done) |
-| main.tcl :61-64, native/native.tcl :46-47, :316 | doc text: executables are "Linux x86_64/glibc" (main.tcl is stale: aarch64 works too) | -- | update with the milestone that adds Mach-O executables | low | 6 | L |
+| main.tcl :61-64, native/native.tcl :46-47, :316 | doc text: executables are "Linux x86_64/glibc" (main.tcl is stale: aarch64 works too) | -- | **resolved (milestone 5)**: Linux glibc ELF and macOS AArch64 Mach-O | low | 6 (done) | L (done) |
 | native/rawabi.tcl :8-9, :31-34 | a 64-bit two's complement word, tagged small Ints in [-2^62, 2^62-1] | arch | none: holds on arm64 | low | -- | L |
 | core/process.tcl :9, :55-65 | the argument vector is NUL-terminated (Linux wording) | posix | none | low | -- | L |
 
@@ -187,56 +190,59 @@ object format from the ISA. The macOS run confirms the JIT half.
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
 | codegen/mod.rs `isa` (:147-165) | none: `cranelift_native::builder_with_options` = the host triple (AppleAarch64 call conv, Mach-O on macOS); no `--target`, no cross-compilation | owned | none. Host CPU features only for the JIT (`!pic`) | low | 3 | M (JIT done) |
-| codegen/mod.rs :155-160 | stack probes (`enable_probestack`, inline) only when `native_stack_overflow_supported()`, i.e. Linux | linux | enable them with the macOS guard (milestone 5); until then a large frame can jump past the guard page -- observed: large_frame_overflow.nir ends in Rust's stack-overflow abort, not `NATIVE LIMIT STACK` (section 15). With 16 KiB pages Cranelift's probe spacing of one 4 KiB page is still conservative | high | 5 | M |
+| codegen/mod.rs :155-160 | stack probes (`enable_probestack`, inline) only when `native_stack_overflow_supported()`, i.e. Linux | linux | **resolved (milestone 4, MACOS-AARCH64-MILESTONE-4.md)**: the predicate includes macOS AArch64, so probes are on with the guard; large_frame_overflow.nir is `NATIVE LIMIT STACK` on the macOS runner. Cranelift's probe spacing of one 4 KiB page is within the 16 KiB guard | high | 4 (done) | M (done) |
 | codegen/clif.rs `signature_n`, helpers, `c_signature`; codegen/target.rs `c_call_conv` | none: every signature is `module.make_signature()` = the ISA's default convention | owned | **made explicit (milestone 2)**: a foreign C signature's convention is selected where it is built, `c_call_conv(isa.triple())` = the triple's C convention (`apple_aarch64` for aarch64-apple-darwin, observed in CLIF on the macOS runner by native-status's `c-convention` probe); Botlish-to-Botlish and helper calls keep the ISA default (AppleAarch64 on macOS, unchanged) | low | 2 (done), 3 | M (done) |
 | codegen/clif.rs `c_signature` (:199-229), `foreign_call` (:1019-1104) | narrow C arguments carry `sext`/`uext`; narrow results are re-extended by the caller | owned | Cranelift honours the extension attributes only for AppleAarch64 (`isa/aarch64/abi.rs` `get_ext_mode`), so they start to matter on macOS; its comment says sub-32-bit extension is "not implemented yet" -- test i8/i16 arguments against clang callees (tests/cffi/fixture.c `bcf_widen_*`) | high | 7 | M |
 | codegen/clif.rs :171 | comment: "x86-64 SysV here has only two integer return registers"; the result-buffer rule is portable | arch | comment only | low | 3 | L |
-| codegen/clif.rs :237, :92-123 | direct helper calls (R_X86_64_PLT32) only when the ISA is `x64` | arch | none: aarch64 objects call helpers through the GOT; Mach-O the same | low | 6 | M |
-| codegen/clif.rs :947-963, :256-262; mod.rs :353 | the context area is a Local data symbol addressed PC-relatively / through the GOT | owned | verify ld64/ld-prime accepts a GOT relocation against a non-external `_botlish_context_area` | medium | 6 | M |
+| codegen/clif.rs :237, :92-123 | direct helper calls (R_X86_64_PLT32) only when the ISA is `x64` | arch | **verified (milestone 5)**: a Mach-O object calls the runtime helpers through the GOT (`ARM64_RELOC_GOT_LOAD_PAGE21`/`PAGEOFF12`, then `blr`) and Botlish functions directly (`ARM64_RELOC_BRANCH26`); Apple's ld resolves both | low | 6 (done) | M (done) |
+| codegen/clif.rs :947-963, :256-262; mod.rs :353 | the context area is a Local data symbol addressed PC-relatively / through the GOT | owned | **verified (milestone 5)**: `_botlish_context_area` is a non-external `__DATA,__bss` symbol reached by a `GOT_LOAD` pair, and Apple's ld links it (tests/platform/aot-facts.tcl's program installs a context) | medium | 6 (done) | M (done) |
 | codegen/mod.rs `compile_actual` (:170-246) | JIT symbols: every runtime helper registered by address (`builder.symbol`); foreign C symbols bound to `rt_ffi_unlinked` (abort); fallback `dlsym` for libcalls | posix | none for the JIT; works on macOS (section 1) | low | 3 | M (done) |
 | cranelift-jit `SystemMemoryProvider` (memmap2 + region) | RW pages flipped to RX with `mprotect`, no `MAP_JIT`, no `pthread_jit_write_protect_np` | owned | works for the runner's ad-hoc-signed driver (section 1). A hardened-runtime or notarized driver would need the JIT entitlement or `MAP_JIT`: out of scope until packaging (milestone 10) | medium | 3, 10 | M |
-| codegen/mod.rs `emit_object` (:334-350) | none: cranelift-object picks Mach-O from the triple, symbols get the Mach-O `_` prefix from the object crate, `LC_BUILD_VERSION` with platform macOS | owned | verify the object with `otool`/`nm` and link it (milestone 6). No unwind tables are written on either OS (`unwind_info` false; cranelift-object has no Mach-O `.eh_frame`) | medium | 6 | M |
-| codegen/mod.rs `relax_context_got` (:372-392), `context_relocations` (:397-450); test :483-496 | an ELF64 parser rewriting R_X86_64_GOTPCREL to REX_GOTPCRELX for the context area | elf + arch | none: it returns early for non-ELF objects (a no-op on Mach-O); the test is x86-64-only | low | 6 | L |
+| codegen/mod.rs `emit_object` (:334-350) | none: cranelift-object picks Mach-O from the triple, symbols get the Mach-O `_` prefix from the object crate, `LC_BUILD_VERSION` with platform macOS | owned | **verified (milestone 5)**: `Mach-O 64-bit object arm64` (`file`), `MH_SUBSECTIONS_VIA_SYMBOLS`, `LC_BUILD_VERSION` platform 1 minos 0.0 (no linker warning), `_botlish_fn_N`/`_botlish_entry_N` external text, `_rt_*` undefined (aot-facts.tcl, every smoke job). No unwind tables are written on either OS (`unwind_info` false; cranelift-object has no Mach-O `.eh_frame`) | medium | 6 (done) | M (done) |
+| codegen/mod.rs `relax_context_got` (:372-392), `context_relocations` (:397-450); test :483-496 | an ELF64 parser rewriting R_X86_64_GOTPCREL to REX_GOTPCRELX for the context area | elf + arch | none: it returns early for non-ELF objects (a no-op on Mach-O, which keeps its GOT loads); the test is x86-64-only. Without the ELF check it would still find no section in a Mach-O object: an equivalent mutant, not in the campaign (MACOS-AARCH64-MILESTONE-5.md, section 20) | low | 6 (done) | L (done) |
 | codegen/clif.rs :631 `stack_maps`, `define` (:327-403, :378 `below_fp`), roots.rs :845 | native-frame stack maps on x64 and aarch64 (by architecture, so on macOS too); aarch64 roots are FP-relative, a rationale observed on Linux prologues (:375-377) | arch | the FP-relative scheme does not depend on where a Rust helper's frame record sits, and macOS puts it elsewhere (section 1). Verified for 400 recursive allocating frames under GC stress (build400.nir, section 15); Tier C's GC-stress acceptance is the wide check | high | 4 | M (partly done) |
-| codegen/roots.rs `plan` (:782-827, :788 `depth_reservation`) | the shadow-stack depth token is dropped only when native frames *and* the Linux guard are supported | linux | on macOS every calling function keeps a one-slot depth token, the bound on recursion until milestone 5 | medium | 5 | M |
+| codegen/roots.rs `plan` (:782-827, :788 `depth_reservation`) | the shadow-stack depth token is dropped only when native frames *and* the Linux guard are supported | linux | **resolved (milestone 4)**: dropped on macOS too, with the guard (MACOS-AARCH64-MILESTONE-4.md, "Shadow-stack depth token"); the token and the shadow array remain for hosts without a guard | medium | 4 (done) | M (done) |
 | codegen/roots.rs :75, :94, :164, :775-777; clif.rs :559-566; framemap.rs :3 | comments: the stack-map path is "x86-64 only" | arch | stale comments (aarch64 is in the code) | low | 4 | L |
 
 ## 5. Executables, the driver, the stub linker and the single executable
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| codegen/aot.rs `emit_executable` (:188-203) | `cfg!(all(target_os = "linux", target_env = "gnu", ...))`, else "executable emission requires Linux glibc on x86_64 or aarch64" | linux | the gate milestone 6 opens for `macos` + `aarch64`, for the rustc linker only | medium | 6 | M (refusal verified) |
-| codegen/aot.rs `link_rustc` (:241-296), startup crate (:63-180) | rustc links the program object with `-C link-arg=OBJ`, `-C force-frame-pointers=yes`, `-C relocation-model=pic`, no `--target`; the rlib beside the driver | owned | the same driver on macOS (rustc drives Apple ld): verify; the startup crate's `extern "C"` names match the object's `_`-prefixed symbols | medium | 6 | M |
+| codegen/aot.rs `emit_executable` (:188-203) | `cfg!(all(target_os = "linux", target_env = "gnu", ...))`, else "executable emission requires Linux glibc on x86_64 or aarch64" | linux | **resolved (milestone 5)**: `EXECUTABLES` admits `macos` + `aarch64`; the rustc linker only (the stub refuses: Linux x86-64); a program that calls C is refused on macOS before the linker runs (`C_CALLS`, NATIVE LINK) | medium | 6 (done) | M (done) |
+| codegen/aot.rs `link_rustc` (:241-296), startup crate (:63-180) | rustc links the program object with `-C link-arg=OBJ`, `-C force-frame-pointers=yes`, `-C relocation-model=pic`, no `--target`; the rlib beside the driver | owned | **verified unchanged (milestone 5)**: the same arguments; rustc runs `cc` (Apple clang), which runs Apple's ld; the startup crate's `extern "C"` names resolve to the object's `_`-prefixed symbols; the executable is `Mach-O 64-bit executable arm64`, PIE, linker-signed (ad hoc), loading only `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib` (Rust's standard library's) | medium | 6 (done) | M (done) |
 | codegen/aot.rs `link_plan_args` (:312-330), rationale :303-311, test :690-708 | `-Wl,--start-group`/`--end-group` and `-C default-linker-libraries=yes`, justified by GNU ld and glibc | linux | Apple ld resolves archives without groups and may reject the flags: a per-OS link plan, Linux's unchanged | medium | 7 | M |
 | codegen/aot.rs `linker_diagnostics` (:224-239) | filters GNU ld/lld/collect2 wording ("undefined reference", "cannot find") | linux | add Apple ld's ("Undefined symbols for architecture arm64", "library not found for -l") | low | 7 | M |
-| main.rs `run_linked` (:352-432) | a program that calls C runs as a linked executable in a temp directory | posix | none beyond `emit_executable` | low | 7 | M |
-| codegen/aot.rs `link_stub` (:333-370), runtime/aotimage.rs `Image::load`/`map_near`/`main` (:477-612), codegen/aot.rs `image`/`read_object` (:372-667), bin/botlish-aot-stub.rs | the toolchain-free stub linker: an ELF64 x86-64 reader, x86 trampolines, 4 KiB pages, `MAP_FIXED_NOREPLACE`, `/proc/self/exe` | elf + arch + linux | none planned: macOS executables use the rustc linker. A Mach-O arm64 stub would need a Mach-O reader, arm64 branch relocations and veneers, an icache flush, 16 KiB pages and code signing -- a Darwin toolchain inside Botlish, which the doctrine rules out | -- | -- | -- |
+| main.rs `run_linked` (:352-432) | a program that calls C runs as a linked executable in a temp directory | posix | none beyond `emit_executable`, which refuses the link on macOS until milestone 7 (NATIVE LINK) | low | 7 | M |
+| codegen/aot.rs `link_stub` (:333-370), runtime/aotimage.rs `Image::load`/`map_near`/`main` (:477-612), codegen/aot.rs `image`/`read_object` (:372-667), bin/botlish-aot-stub.rs | the toolchain-free stub linker: an ELF64 x86-64 reader, x86 trampolines, 4 KiB pages, `MAP_FIXED_NOREPLACE`, `/proc/self/exe` | elf + arch + linux | none: macOS executables use the rustc linker (milestone 5), and the stub's refusal names Linux x86-64. A Mach-O arm64 stub would need a Mach-O reader, arm64 branch relocations and veneers, an icache flush, 16 KiB pages and code signing -- a Darwin toolchain inside Botlish, which the doctrine rules out | -- | -- | -- |
 | single/build.sh, single/main.tcl :101-103, single/package.tcl | one Linux x86-64 glibc executable; forces the stub linker; static zipfs tclsh from source | linux + elf | out of scope (no macOS single executable in this port); package.tcl itself is portable Tcl | -- | 10 | -- |
-| main.rs :99-103, runtime/aot.rs :38-45 | Botlish runs on a spawned thread with a 1 GiB stack (`BOTLISH_NATIVE_STACK_BYTES`, at least 1 MiB) | posix | accepted on macOS (the JIT runs); its guard and bounds are milestone 5's | low | 5 | M (done) |
-| main.rs :136-153 (`--result`), :143-144 `#[cfg(target_os = "linux")] set_result_fd` | the overflow report goes to the `--result` file through a Linux-only call; the gate is looser than the platform module's (Linux riscv64 would not compile) | linux | macOS needs its own `set_result_fd` with its guard (milestone 5); align the cfg | low | 5 | L |
+| main.rs :99-103, runtime/aot.rs :38-45 | Botlish runs on a spawned thread with a 1 GiB stack (`BOTLISH_NATIVE_STACK_BYTES`, at least 1 MiB) | posix | accepted on macOS; **its bounds and guard are found since milestone 4** (libpthread's bounds, the guard confirmed below them) | low | 4 (done) | M (done) |
+| main.rs :136-153 (`--result`), :143-144 `#[cfg(target_os = "linux")] set_result_fd` | the overflow report goes to the `--result` file through a Linux-only call; the gate is looser than the platform module's (Linux riscv64 would not compile) | linux | **resolved (milestone 4)**: `runtime::platform::set_result_fd`, under the platform module's own cfg (the three hosts with a guard) | low | 4 (done) | M (done) |
 | main.rs exit statuses, `emit` (:104-131), runtime/aot.rs `driver_protocol` (:93-152) | none: driver protocol, result lines, exit status 0/1/2/3 | posix | none | low | -- | M (done) |
-| runtime/aot.rs :5-9, main.rs :26-27 | doc text: "the real Linux argument vector", "128 KiB per-argument cap" | -- | wording; the code is `std::env::args_os` | low | 6 | L |
+| runtime/aot.rs :5-9, main.rs :26-27 | doc text: "the real Linux argument vector", "128 KiB per-argument cap" | -- | **resolved (milestone 5)** for the argument vector (glibc's or libSystem's); the 128 KiB cap is Linux's and stays named as such | low | 6 (done) | L (done) |
 
 ## 6. Runtime: threads, stack bounds and overflow
 
-The only file named for Linux, `runtime/platform/linux.rs`, and everything
-that calls it, sits behind `cfg(all(target_os = "linux", any(target_arch =
-"x86_64", target_arch = "aarch64")))`; macOS compiles without it and
-silently runs without a guard.
+**Resolved (milestone 4, MACOS-AARCH64-MILESTONE-4.md).** The guard Linux
+had is now every guarded host's: `runtime/platform/guard.rs` (the handler,
+the alternate signal stack, the published running stack), with each host's
+stack discovery and thread naming in `platform/linux.rs` and
+`platform/macos.rs`. A native stack overflow -- the worker thread's or a
+coroutine's -- is `NATIVE LIMIT STACK` on the macOS runner. The table keeps
+the original findings with their resolution.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| runtime/mod.rs :20-21, native_stack.rs :26-35 (`current`, `native_stack_overflow_supported`) | the platform layer exists for Linux only | linux | a `platform/macos.rs` (or `darwin.rs`) beside linux.rs, the cfgs extended per OS; nothing else changes | medium | 5 | M |
-| platform/linux.rs `current_stack` (:8-27) | `pthread_getattr_np` + `pthread_attr_getstack` + `pthread_attr_getguardsize`; glibc's guard directly below the reported stack | linux | libc 0.2.189 declares none of the three for Apple; it has `pthread_get_stackaddr_np` (the *high* end) and `pthread_get_stacksize_np`. The guard below a secondary thread's stack must be found or made: verify Darwin's pthread guard for a `stack_size`-built thread | high | 5 | M |
-| platform/linux.rs `fault_handler` (:46-67), `OverflowGuard` (:81-143) | thread identity by `syscall(SYS_gettid)` in an `AtomicI32`; `sigaltstack` (64 KiB heap Vec), `sigaction` SIGSEGV+SIGBUS `SA_SIGINFO|SA_ONSTACK`, `si_addr`, `write` + `_exit`; unrelated faults re-raised with `SIG_DFL` | linux (tid) + posix (the rest) | no `SYS_gettid` on Apple: a per-thread identity that is async-signal-safe to read (a thread-local flag, or `pthread_threadid_np`'s u64 stored before the guard is armed); keep SIGSEGV and SIGBUS (which one a guard hit raises on macOS: verify); 64 KiB lies between Apple's MINSIGSTKSZ (32 KiB) and SIGSTKSZ (128 KiB) | high | 5 | M |
-| vm.rs :242-248, :278-301 (non-Linux branches) | without the platform layer: `native_stack: None`, a 32 MiB shadow stack (4M slots) as the depth bound, `publish_active_stack` a no-op | linux | correct fallback until milestone 5; the census records what it does to a deep recursion (section 15) | high | 5 | M |
-| main.rs :563-567, runtime/aot.rs :52-56, :101-106 | the guard is installed for JIT runs and executables on Linux only | linux | install the macOS guard at the same three points | medium | 5 | M |
+| runtime/mod.rs :20-21, native_stack.rs :26-35 (`current`, `native_stack_overflow_supported`) | the platform layer exists for Linux only | linux | **resolved**: `platform/macos.rs` beside linux.rs, the shared guard in `platform/guard.rs`, one cfg for the three hosts; `native_stack_overflow_supported()` includes macOS AArch64 | medium | 4 (done) | M (done) |
+| platform/linux.rs `current_stack` (:8-27) | `pthread_getattr_np` + `pthread_attr_getstack` + `pthread_attr_getguardsize`; glibc's guard directly below the reported stack | linux | **resolved**: `pthread_get_stackaddr_np` (the high end) and `pthread_get_stacksize_np`; the usable low bound is the first accessible address of the reported stack, the guard the run of inaccessible mappings below it, confirmed with `mach_vm_region`. Observed: a created thread's guard is one 16 KiB page directly below its stack (SIGBUS on a hit); the main thread's lowest reported page is itself inaccessible, the top of a 56 MiB inaccessible reservation (SIGSEGV on a hit) | high | 4 (done) | M (done) |
+| platform/linux.rs `fault_handler` (:46-67), `OverflowGuard` (:81-143) | thread identity by `syscall(SYS_gettid)` in an `AtomicI32`; `sigaltstack` (64 KiB heap Vec), `sigaction` SIGSEGV+SIGBUS `SA_SIGINFO|SA_ONSTACK`, `si_addr`, `write` + `_exit`; unrelated faults re-raised with `SIG_DFL` | linux (tid) + posix (the rest) | **resolved**: the handler and guard moved to `platform/guard.rs`, shared; the thread token is the host's (`gettid` on Linux, `pthread_self` on macOS, both async-signal-safe); SIGSEGV and SIGBUS both handled (macOS raises SIGBUS for a created thread's or a coroutine's guard, SIGSEGV for the main thread's); the alternate stack is `max(SIGSTKSZ, 64 KiB)` (128 KiB on macOS); an unrelated fault goes to the previous disposition | high | 4 (done) | M (done) |
+| vm.rs :242-248, :278-301 (non-Linux branches) | without the platform layer: `native_stack: None`, a 32 MiB shadow stack (4M slots) as the depth bound, `publish_active_stack` a no-op | linux | **resolved**: on macOS `native_stack` is the discovered stack, the shadow array is empty and publication is live | high | 4 (done) | M (done) |
+| main.rs :563-567, runtime/aot.rs :52-56, :101-106 | the guard is installed for JIT runs and executables on Linux only | linux | **resolved**: installed at the same three points on the three hosts (`runtime::platform::OverflowGuard`) | medium | 4 (done) | M (done) |
 
 ## 7. GC roots and the frame walk
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| runtime/framewalk.rs `current_fp`, `root_address`, `walk_from` (:105-216) | the AAPCS64 frame-record chain (x29); aarch64 roots at `caller_fp - entry`; the walk bounded by `NativeStack` | arch | compiled, unit-tested and run under GC stress on macOS (sections 1 and 15). With `native_stack = None` the walk has no address bound: it relies on the thread's outermost frame ending the chain (null or non-ascending fp), backstopped by `MAX_FRAMES`, which held in every macOS run so far. Milestone 5's stack bounds give it one | high | 4 | M (partly done) |
+| runtime/framewalk.rs `current_fp`, `root_address`, `walk_from` (:105-216) | the AAPCS64 frame-record chain (x29); aarch64 roots at `caller_fp - entry`; the walk bounded by `NativeStack` | arch | compiled, unit-tested and run under GC stress on macOS (sections 1 and 15). **Bounded since milestone 4**: the walk of the worker thread's stack reads the discovered bounds, as on Linux (a mutant halving them is killed under GC stress) | high | 4 (done) | M (done) |
 | .cargo/config.toml | `-C force-frame-pointers=yes` for `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`; no `aarch64-apple-darwin` entry | owned | rustc keeps frame records in calling functions on this target by default (section 1); an explicit entry would also cover leaf functions and state the dependence: add it in milestone 4, with the GC-stress evidence | medium | 4 | M |
 | framewalk.rs :205 | return addresses compared raw with code ranges | arch | correct for arm64 (no pointer authentication of return addresses); an arm64e build would need stripping | low | 4 | M |
 | heap.rs `collect` (:118-249), vm.rs `collect_with` (:401-468), bytesobj.rs | a non-moving mark-sweep over Rust's global allocator; no mmap, no page size | posix | none | low | 4 | M |
@@ -258,7 +264,7 @@ shared.
 | coroutine.rs switch assembly, `extern "C"` | `global_asm!` with ELF directives and bare labels | elf | **resolved**: the AArch64 instructions are one text (`aarch64_switch!`, `aarch64_trampoline!`) under two headers: ELF (`.type`/`.size`, `bl_co_switch`) and Mach-O (`_bl_co_switch`, no `.type`/`.size`). The Mach-O object was inspected: both symbols global, `bl` to `co_body` relocated. x18 is never touched; the frame record is the switch's first store; no store lies below sp | medium | 3 (done) | M (done) |
 | coroutine.rs `prepare` | the initial FPCR is 0, "the Linux default" | arch | **resolved**: a unit test (`a_new_context_starts_with_the_threads_fpcr`) asserts a new thread's FPCR is 0, and it passes on the macOS runner | low | 3 (done) | M (done) |
 | coroutine.rs non-Linux `new` | refuses: "implemented for x86-64 Linux only" | linux | **resolved**: the refusal remains for hosts without a switch (macOS x86-64, Windows) and now names the three supported ones | low | 3 (done) | M (done) |
-| shadow-stack depth token (codegen/clif.rs `prologue_depth_token`, vm.rs `ss_top`) | none on Linux: its native overflow guard replaces the token | posix | **audited (milestone 3)**: on macOS every calling function bumps `ss_top` by one slot, zeroed, and restores the absolute value on exit. Coroutine segments interleave non-LIFO, but the slots only ever hold zeros (never roots: storage is `NativeFrame` for every function) and `ss_top` only takes values some frame once saw, so the interleaving cannot make the collector read stale data. The token does not bound a recursion by a coroutine's 8 MiB stack, though: that overflow is the guard page's, i.e. milestone 5's | medium | 3 (done), 5 | M (done), L |
+| shadow-stack depth token (codegen/clif.rs `prologue_depth_token`, vm.rs `ss_top`) | none on Linux: its native overflow guard replaces the token | posix | **audited (milestone 3)**: on macOS every calling function bumps `ss_top` by one slot, zeroed, and restores the absolute value on exit. Coroutine segments interleave non-LIFO, but the slots only ever hold zeros (never roots: storage is `NativeFrame` for every function) and `ss_top` only takes values some frame once saw, so the interleaving cannot make the collector read stale data. The token does not bound a recursion by a coroutine's 8 MiB stack, though: that overflow is the guard page's. **Retired on macOS (milestone 4)**: the guard subsumes it there, as on Linux | medium | 3 (done), 4 (done) | M (done) |
 
 ## 9. Syscall transports, direct modules and contextual IO
 
@@ -299,16 +305,16 @@ native tests carry no host constraint at all.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file) | medium | 3-9 | L |
+| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file). `nativeCoroutines` (milestone 3), `nativeStackGuard` (milestone 4) and `executableAot` (milestone 5: 38 files' copies replaced by one definition) are now capabilities defined once in tests/helpers.tcl | medium | 3-9 | L |
 | `linuxX86_64` (7 files), `linuxAarch64`, `stubLinker` (3 files), `x86_64Host` (native.test :779, no OS check) | instruction-set/syscall-ABI and ELF tests | test | none: correct to skip on macOS; `x86_64Host` should also require Linux (it reads ELF with `readelf`) | low | 3 | L |
 | tests/helpers.tcl `outcomeUnder`/`outcomeUnderHir` (:234-278), `sourceAgree` (:293-302); 97 files with four-backend lists | a differential test runs every backend, cranelift included, unconditionally | test | on macOS these tests run natively and pass or fail on real behavior (section 15): the right signal | -- | 3 | M |
 | tests/helpers.tcl `linuxTarget`, `backendsFor`; 13 test files' compile helpers | (milestone 2) a test that compiles a Linux program used the host's default target | test | such a test compiles for `linuxTarget` (the host's own on Linux, so Linux runs exactly as before; `linux-aarch64` on macOS) and runs it on `backendsFor` its HIR's target (the Tcl backends on macOS); a native leg that needs the Linux runtime carries `nativeLinux` | -- | 2 (done) | M (done) |
-| tests/native-stack-overflow.test :8 | `native::binary` at top level: the file errors without a driver | test | none on macOS (the driver builds) | low | 5 | L |
-| tests/native-stack-map.test :126, :132, native-root-storage.test :180, native.test :798 | expect "no depth helper" on Linux x86-64/aarch64 and the depth helper elsewhere | test | run unconstrained on macOS, checking the "elsewhere" branch (section 15); flip with milestone 5 | low | 5 | M |
+| tests/native-stack-overflow.test :8 | `native::binary` at top level: the file errors without a driver | test | **resolved (milestone 4)**: its tests carry the capability `nativeStackGuard` (tests/helpers.tcl: linux-x86_64, linux-aarch64, macos-aarch64) and call the driver in their bodies | low | 4 (done) | M (done) |
+| tests/native-stack-map.test :126, :132, native-root-storage.test :180, native.test :798 | expect "no depth helper" on Linux x86-64/aarch64 and the depth helper elsewhere | test | **resolved (milestone 4)**: the expectation follows `nativeStackGuard` (native.test :798 is x86-64 ELF only and keeps its own) | low | 4 (done) | M (done) |
 | tests/golden/run.tcl `hosts`, `onHost`, `target` | golden hosts are `linux-x86_64`, `linux-aarch64`; `onHost` requires Linux | test | since milestone 2 a suite importing a Linux namespace (16 suites) is a Linux program: on macOS run.tcl compiles it for `linux-aarch64` (`golden::target`) and runs it on the Tcl backends, its native backends excluded with the reason. Add `macos-aarch64` to the hosts when a suite needs it | low | 9 | L |
 | tests/golden.test :32-39, tests/workload-2048.test :32-36 | drop the native backends off Linux | test | widen with milestone 3/4 | low | 3 | M |
 | tests/local.tcl `processors` (:50-53), :127-129 | `exec nproc` (falls back to 4: macOS has no `nproc`); `LANG=C.utf8` forced | test | `sysctl -n hw.ncpu` on Darwin; the locale is harmless | low | 10 | M |
-| objdump `-M intel`, `readelf`, `strace`, `ldd`, `/proc/$pid/maps`, `\x7fELF` (abi-bytes, linux-syscall, contexts, native.test :792, aot-stub-linker :240, native-executable :33, portable-io) | GNU/Linux tools and ELF | test | none: those tests are Linux-constrained or tool-constrained already, or read executables macOS does not build yet | low | 6 | L |
+| objdump `-M intel`, `readelf`, `strace`, `ldd`, `/proc/$pid/maps`, `\x7fELF` (abi-bytes, linux-syscall, contexts, native.test :792, aot-stub-linker :240, native-executable :33, portable-io) | GNU/Linux tools and ELF | test | none: those tests are Linux-constrained or tool-constrained already; native-executable.test's `\x7fELF` became the host's format (tests/binary-header.tcl: ELF or Mach-O; milestone 5) | low | 6 (done) | L |
 | tests/argv.test :821-828 | argc == 0 (Linux >= 5.18 behaviour) | test | constrained by `pythonLauncher`; recheck with executables | low | 6 | M |
 
 ## 12. Packaging, audit tools and benchmarks
@@ -390,6 +396,20 @@ there (the Linux programs excepted, as in milestone 2): the census
 `c-ffi.test`, milestone 7's. The tables that follow are the milestone 1
 census as it was; MACOS-AARCH64-MILESTONE-3.md has the new numbers, and
 `native-status.tcl` records the coroutine probe as a value.
+
+**Update (milestone 5).** Executables are no longer refused on macOS: the
+`executableAot` tests (131 skipped in the census below) run there, in the
+acceptance tier, with one capability defined in tests/helpers.tcl, and
+native-status records the Mach-O executable's header and value and a
+program object's header (MACOS-AARCH64-MILESTONE-5.md). A C call is still
+refused, now with its own reason (NATIVE LINK, "C calls are linked on Linux
+glibc only"), and c-ffi.test stays in `notYet`.
+
+**Update (milestone 4).** The native stack overflow rows below are history:
+since milestone 4 a native overflow of the worker thread's stack or of a
+coroutine's is `NATIVE LIMIT STACK` on macOS (MACOS-AARCH64-MILESTONE-4.md
+has the before and after), and `native-status.tcl` records both probes as
+that error. No native capability crashes the driver any more.
 
 What the repository's own tests do on a `macos-15` runner with the native
 backend built: run 2 of the workflow (at aac30aa, before main's later
@@ -567,7 +587,7 @@ secret or a self-hosted runner.
 
 | Job | Tier | Runner | What | Typical time |
 |---|---|---|---|---|
-| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `.github/actions/setup-macos` (tests/platform/setup-macos.sh: Tcl 9.0.1 from source, cached; stable Rust); `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
+| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `.github/actions/setup-macos` (tests/platform/setup-macos.sh: Tcl 9.0.1 from source, cached; stable Rust); `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `cargo test --test native_stack` (the stack facts and the guard, in child processes; since milestone 4); `tests/platform/native-status.tcl`; `tests/platform/aot-facts.tcl` (a program object and an executable as the host's tools see them, the standalone runs; since milestone 5); `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
 | `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | 20 and 27 min (run 4), 23 and 17 (run 7) |
 | `linux-control` | A | `ubuntu-latest` | the smoke commands on Linux x86-64 at the same commit | 1-4 min |
 | `full` (3 shards) | C | `macos-15` | opt-in (below) | 4-5 min for a dozen named files (runs 4 and 5); 4 s for a shard with nothing to run; the default payload was not run in milestone 1 |
@@ -601,6 +621,7 @@ workflow only adds the macOS host.
 tests/platform/toolchain-smoke.sh            # the host's C and Rust toolchains, not Botlish
 tclsh9.0 tests/platform/cabi-facts.tcl       # core::cabi's host row against the C compiler
 tclsh9.0 tests/platform/native-status.tcl    # each native capability as recorded for this host
+tclsh9.0 tests/platform/aot-facts.tcl        # the object and the executable, with the host's tools
 tclsh9.0 tests/platform/tier.tcl smoke       # the sample programs and a dozen front-end test files
 tclsh9.0 tests/platform/tier.tcl X.test Y.bot   # any test file or golden suite, as CI runs it
 CORE_BACKEND=interp tclsh9.0 tests/X.test    # one file directly (exits 0 even on failures: read it)
@@ -635,7 +656,8 @@ Co-Authored-By: ...
 ```
 
 - `CI-Tests:` names tier.tcl items, space-separated: test files, golden
-  suites, `smoke`, `acceptance`, `all`, `rust`, `examples`, `cabi`. Named
+  suites, `smoke`, `acceptance`, `all`, `rust`, `examples`, `cabi`,
+  `native-stack-mutants`, `native-aot-mutants`, `native-stack-bench`. Named
   files and suites run in shard 1 (shards 2 and 3 stop after one step); a
   tier is split in three.
 - `CI-GC-Stress: 1` runs the named items under GC stress (the default
@@ -801,6 +823,16 @@ carried out from. Mach-O and C calls (milestones 6 and 7) and stack bounds
 
 ### 5. Runtime stack bounds and overflow handling
 
+**Done (milestone 4, MACOS-AARCH64-MILESTONE-4.md)**: the worker thread's
+bounds and guard are discovered (and the main thread's), a native overflow
+of the thread's stack or a coroutine's is `NATIVE LIMIT STACK` from the
+guard, stack probes are on and the depth token is gone on macOS; the guard
+became one module the three hosts share, and coroutine switches publish
+the stack they arrive on (a Linux gap closed with it). The entry below is
+the plan it was carried out from. Its report is numbered 4: the reports
+number milestones in the order they were carried out, this roadmap as it
+was first planned.
+
 - **Files:** runtime/platform/ (a macOS module beside linux.rs),
   runtime/native_stack.rs, runtime/vm.rs, main.rs (:143, :563),
   runtime/aot.rs (:52, :101), codegen/mod.rs (stack probes),
@@ -817,6 +849,14 @@ carried out from. Mach-O and C calls (milestones 6 and 7) and stack bounds
   decide Linux's code too: the predicate may only grow.
 
 ### 6. Mach-O AOT, native driver and standalone executable
+
+**Done (milestone 5, MACOS-AARCH64-MILESTONE-5.md)**: `-emit-native-executable`
+produces a Mach-O arm64 executable through the rustc linker and Apple's ld
+that runs standalone; native-status's `executable` expectation is its value
+(and header); the `executableAot` tests run on macOS (one capability in
+tests/helpers.tcl); the stub linker stays Linux x86-64; a C call is still
+refused on macOS, before the link. The entry below is the plan it was
+carried out from; the report is numbered 5.
 
 - **Files:** codegen/aot.rs (`emit_executable`'s gate, `link_rustc`),
   codegen/mod.rs (`emit_object`), runtime/aot.rs; the `executableAot`

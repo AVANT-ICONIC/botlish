@@ -44,9 +44,11 @@
 #                                       to a whole number
 #   native::object HIR PATH ?OPTIONS?   writes an object file (AOT smoke test)
 #   native::targetFacts TRIPLE          how the driver reads a target triple
-#   native::executable HIR PATH ?OPTIONS?  links a standalone Linux glibc (x86_64,
-#                                         or aarch64 with the rustc linker)
-#                                         executable; rejects non-closed HIR.
+#   native::executable HIR PATH ?OPTIONS?  links a standalone executable: Linux
+#                                         glibc (x86_64; aarch64 with the
+#                                         rustc linker) or macOS aarch64
+#                                         (Mach-O, the rustc linker); rejects
+#                                         non-closed HIR.
 #                                         BOTLISH_NATIVE_LINKER picks the
 #                                         linker: rustc (default) or stub
 #                                         (no toolchain, SINGLE-EXECUTABLE.md)
@@ -86,7 +88,7 @@
 # through the driver (evalHir, measure, ...) gets the snapshot of the enclosing
 # core::process::withArgv -- raw bytes, so invalid UTF-8 is expressible -- or the
 # synthetic default `botlish-runner`; it never sees this Tcl process's own argv.
-# A standalone executable reads the real Linux argument vector of every run.
+# A standalone executable reads the real process argument vector of every run.
 #
 # Errors: Botlish errors keep their {CORE SEMANTIC KIND} codes. The backend's
 # own failures are {NATIVE UNSUPPORTED ...} (a construct native lowering does
@@ -331,8 +333,9 @@ proc native::evalHir {hir args} {
     return [Outcome [RunDriver $output run [nir $hir {*}$args] {}]]
 }
 
-# Compile closed, specialized HIR to a standalone Linux glibc ELF (x86_64, or
-# aarch64 with the rustc linker).
+# Compile closed, specialized HIR to a standalone executable: a Linux glibc
+# ELF (x86_64, or aarch64 with the rustc linker) or a macOS aarch64 Mach-O
+# (the rustc linker), for the host's own target.
 # Readiness is the public -aot-spec contract, checked before expanding native
 # implementations (which are runtime support, like the Rust helpers). Never
 # run the program while compiling it, and never fall back to another backend.

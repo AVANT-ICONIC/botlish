@@ -14,9 +14,6 @@ source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 100000
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 proc dedent {text} {
     set lines [split $text \n]
     set indent 1000

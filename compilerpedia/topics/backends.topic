@@ -128,28 +128,37 @@ faster.
 
 @topic backend.native-executable
 title: Standalone native executables
-summary: -emit-native-executable FILE.bot compiles the program into a standalone Linux executable beside the source; it runs without Tcl, Rust, a checkout or a JIT, and prints its output and then its value.
+summary: -emit-native-executable FILE.bot compiles the program into a standalone executable (ELF, or Mach-O on macOS) that runs without Tcl, Rust or a checkout and prints its output, then its value.
 index: backends
 alias: native executable; standalone executable; emit-native-executable; compile to binary
-keywords: executable, ELF, AOT, stub linker, rustc, emit
+keywords: executable, ELF, Mach-O, AOT, stub linker, rustc, emit, macOS
 related: backend.cranelift backend.single-executable backend.platforms cli.exit-status concept.argv
-docs: README.md SINGLE-EXECUTABLE.md ARGV.md
+docs: README.md SINGLE-EXECUTABLE.md ARGV.md MACOS-AARCH64-MILESTONE-5.md
 
 == WHAT IT IS
 `-emit-native-executable game.bot` writes ./game (the input's name without
 its extension) and does not run the program. The executable prints what the
 program prints, then the program's final value on its own line (`unit` for
 a program ending in unit), and exits 0; a run-time error goes to stderr with
-a nonzero exit status. Its argv() is its real process arguments.
+a nonzero exit status. Its argv() is its real process arguments. It is an
+ordinary command-line program of the host: an ELF executable linked
+against glibc on Linux, a Mach-O arm64 executable linked against libSystem
+(and signed ad hoc by the linker, as every arm64 executable is) on macOS.
+It needs no source file, Botlish checkout or compiler to run, only the
+system's own libraries.
 
 == REQUIREMENTS
 Every function instance the program uses must be closed (fully known to the
 ahead-of-time compiler); otherwise NATIVE AOT NOT-READY names the cause
 (-aot-spec explains). A .ir file is rejected (NATIVE AOT INPUT): executables
 are built from .bot, .hir or .hirx. Linking: in a checkout the default
-linker uses rustc and the system C linker (BOTLISH_NATIVE_LINKER=rustc);
-the `stub` linker (BOTLISH_NATIVE_LINKER=stub, what the single executable
-uses) needs no toolchain and is x86-64 only.
+linker uses rustc and the system C linker (BOTLISH_NATIVE_LINKER=rustc),
+on Linux x86-64 and AArch64 and on macOS AArch64; the `stub` linker
+(BOTLISH_NATIVE_LINKER=stub, what the single executable uses) needs no
+toolchain and is Linux x86-64 only. A program that calls C links on Linux
+only (macOS refuses it: NATIVE LINK). The executable's machine code uses
+the target's baseline instruction set, whichever native backend the
+command line names: it is always the closed, specialized program.
 
 @topic backend.single-executable
 title: The single-file compiler
@@ -242,7 +251,7 @@ A program cannot set its process exit status
 
 @topic backend.platforms
 title: Platforms and what runs where
-summary: The Tcl backends need only Tcl 9; the native backend is tested on Linux x86-64 and AArch64 (coroutines also on macOS AArch64); syscalls and executables are Linux-only; stub linking is x86-64 only.
+summary: The Tcl backends need only Tcl 9; the native backend runs on Linux x86-64 and AArch64 and macOS AArch64; syscalls and C calls are Linux-only; stub linking is Linux x86-64 only.
 index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, Tcl 9, coroutines, stub
@@ -253,8 +262,9 @@ docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
 and builds the single executable on Linux x86-64. A separate workflow runs
-the native JIT and native coroutines on Apple Silicon macOS. Nothing here is
-a promise about other platforms.
+the native JIT, native coroutines, the native stack guard and standalone
+executables on Apple Silicon macOS. Nothing here is a promise about other
+platforms.
 
 == PER COMPONENT
     interp, compile          Tcl 9.0 or newer (Unicode-correct strings);
@@ -266,13 +276,20 @@ a promise about other platforms.
                              (hand-written stack switching); elsewhere
                              NATIVE UNSUPPORTED; the Tcl backends run
                              coroutines everywhere
+    native stack overflow    NATIVE LIMIT STACK, for the thread's stack
+                             and a coroutine's, on Linux x86-64 and
+                             AArch64 and macOS AArch64
+                             (error.native-limit-stack)
     Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
                              AArch64 through linux::abi::aarch64 (one
                              portable surface: linux, linux::io, io);
                              the linux namespaces compile for Linux
                              targets only (error.unsupported-platform)
-    executables              Linux, glibc; rustc linker on x86-64 and
-                             AArch64, stub linker x86-64 only
+    executables              Linux, glibc, ELF: rustc linker on x86-64
+                             and AArch64, stub linker x86-64 only; macOS
+                             AArch64, Mach-O: rustc linker
+    C calls (extern c fn)    Linux, glibc; macOS refuses them (NATIVE
+                             LINK) until they are validated there
     single executable        Linux x86-64
 
 @topic backend.targets

@@ -26,10 +26,14 @@ source [file join $::projectRoot native native.tcl]
 
 core::cabi::installTestFixture
 
+# Live arrays need only the native backend (the JIT): those tests run on
+# every host it is built for. Allocation counts and GC stress need the native
+# runtime on Linux (as in native-view.test), and a standalone executable a
+# host that links them (tests/helpers.tcl).
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64} && [testConstraint nativeBuilt]}]
-testConstraint executableAot [expr {[testConstraint nativeLinux]}]
+testConstraint executableAot [expr {[testConstraint executableAot] && [testConstraint nativeBuilt]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
 
 set laBackends {interp compile cranelift-generic cranelift}

@@ -1,31 +1,221 @@
-# Linux x86-64 native stack guard integration.
+# native-stack-overflow.test -- the native stack guard (runtime/platform/,
+# MACOS-AARCH64-MILESTONE-4.md): a native run whose nested calls exhaust a
+# native stack -- the thread's own or a coroutine's -- ends in NATIVE LIMIT
+# STACK through the driver's ordinary result line, never in a crash, and a
+# recursion that fits returns its value. A capability (nativeStackGuard:
+# Linux x86-64 and AArch64, macOS AArch64), not an operating system.
+#
+# Every test runs the program in the driver's own process (native::evalHir,
+# exec of botlish-native), so a crash is a failed test: native::RunDriver
+# raises NATIVE BUG for a driver killed by a signal, and exec raises an error
+# for one that exits otherwise than with its result line. The exact error
+# code is compared, never a message that merely mentions a stack.
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
-
-testConstraint nativeStackGuard [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+source [file join $::projectRoot surface surface.tcl]
 
 set fixtureDir [file join $::projectRoot native tests fixtures]
-set binary [native::binary]
+
+# NAME set to VALUE while BODY runs (an empty VALUE unsets it).
+proc withEnv {settings body} {
+    set saved {}
+    foreach {name value} $settings {
+        lappend saved $name [expr {[info exists ::env($name)] ? [list $::env($name)] : {}}]
+        if {$value eq ""} { unset -nocomplain ::env($name) } else { set ::env($name) $value }
+    }
+    try {
+        uplevel 1 $body
+    } finally {
+        foreach {name value} $saved {
+            if {$value eq {}} { unset -nocomplain ::env($name) } else { set ::env($name) [lindex $value 0] }
+        }
+    }
+}
+
+# The outcome of running source TEXT natively: {value V}, or the error code
+# of a NATIVE error (with the driver's message for anything but LIMIT STACK,
+# so that a crash shows what killed the driver).
+proc nsOutcome {text args} {
+    set hir [surface::compile $text t.bot -warnings off]
+    if {[catch {native::evalHir $hir {*}$args} result options]} {
+        set code [dict get $options -errorcode]
+        if {$code eq {NATIVE LIMIT STACK}} { return $code }
+        return [list $code $result]
+    }
+    return [list value [core::formatValue $result]]
+}
+
+# nsOutcome of TEXT on both native backends: cranelift, then
+# cranelift-generic (-specialize 0).
+proc nsBoth {text} {
+    return [list [nsOutcome $text] [nsOutcome $text -specialize 0]]
+}
+
+# Botlish sources the tests share (a program using keep starts with
+# "import str"). down: a tiny non-tail recursion. keep: an allocating
+# recursion that holds a String across its recursive call. wide:
+# six Ints live across the call (each level contributes 0). viaFn: a
+# recursion through a function value.
+set down "fn down(n: int) -> int:\n    if n == 0:\n        return 0\n    1 + down(n - 1)\n"
+set keep "fn keep(n: int, s: str) -> int:\n    if n == 0:\n        return 0\n    t = str::concat(s, \"x\")\n    k = keep(n - 1, s)\n    k + str::length(t)\n"
+set wide "fn wide(n: int) -> int:\n    if n == 0:\n        return 0\n    a = n + 1\n    b = a * 2\n    c = b + 3\n    d = c * 5\n    e = d + 7\n    f = e * 11\n    k = wide(n - 1)\n    k + a + b + c + d + e + f - 135 * n - 417\n"
+set viaFn "fn apply(f: Fn{args: \[int\], return: int}, n: int) -> int:\n    f(n)\nfn rec(n: int) -> int:\n    if n == 0:\n        return 0\n    1 + apply(rec, n - 1)\n"
+set messages "struct V:\n    n: int\nstruct M:\n    n: int\n"
+
+# ---------------------------------------------------------------------------
+# The driver on hand-written NIR
 
 test native-stack-shallow-1 {ordinary recursive calls remain ABI-valid} -constraints nativeStackGuard -body {
-    exec $binary run [file join $fixtureDir fib.nir]
+    exec [native::binary] run [file join $fixtureDir fib.nir]
 } -match glob -result {value *}
 
 test native-stack-overflow-1 {two separate exhausted stacks report the same controlled error} -constraints nativeStackGuard -body {
     set path [file join $fixtureDir stack_overflow.ir]
-    set first [exec env BOTLISH_NATIVE_STACK_BYTES=4194304 $binary run $path]
-    set second [exec env BOTLISH_NATIVE_STACK_BYTES=4194304 $binary run $path]
+    set first [exec env BOTLISH_NATIVE_STACK_BYTES=4194304 [native::binary] run $path]
+    set second [exec env BOTLISH_NATIVE_STACK_BYTES=4194304 [native::binary] run $path]
     list $first $second
 } -result [list {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}}                 {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}}]
 
 test native-stack-overflow-wide-1 {a large native frame probes each page before exhausting the guard} -constraints nativeStackGuard -body {
-    exec env BOTLISH_NATIVE_STACK_BYTES=4194304 $binary run [file join $fixtureDir large_frame_overflow.nir]
+    exec env BOTLISH_NATIVE_STACK_BYTES=4194304 [native::binary] run [file join $fixtureDir large_frame_overflow.nir]
 } -result {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}}
 
 test native-stack-gc-1 {400 live recursive allocating frames survive forced GC} -constraints nativeStackGuard -body {
-    set output [exec env BOTLISH_NATIVE_GC_STRESS=1 $binary run [file join $fixtureDir build400.nir]]
+    set output [exec env BOTLISH_NATIVE_GC_STRESS=1 [native::binary] run [file join $fixtureDir build400.nir]]
     set value [lindex [lindex $output 1] 1]
     expr {$value eq [string repeat xy 400]}
 } -result 1
+
+test native-stack-overflow-default-size {the default 1 GiB thread stack: the tiny recursion of stack_overflow.ir exhausts it, not a recursion counter} -constraints nativeStackGuard -body {
+    exec [native::binary] run [file join $fixtureDir stack_overflow.ir]
+} -result {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}}
+
+# ---------------------------------------------------------------------------
+# The thread's own stack, from Botlish source, on both native backends
+
+test ns-main-shapes {four recursion shapes exhaust the thread's stack: a tiny frame, a String held across the call, six Ints held across it, a call through a function value} -constraints nativeStackGuard -body {
+    list [nsBoth "${down}down(100000000)\n"] [nsBoth "import str\n${keep}keep(100000000, \"ab\")\n"] \
+        [nsBoth "${wide}wide(100000000)\n"] [nsBoth "${viaFn}rec(100000000)\n"]
+} -result [lrepeat 4 [lrepeat 2 {NATIVE LIMIT STACK}]]
+
+test ns-main-finite {the same shapes, deep but within the stack, return their values} -constraints nativeStackGuard -body {
+    list [nsBoth "${down}down(1000000)\n"] [nsBoth "import str\n${keep}keep(100000, \"ab\")\n"] \
+        [nsBoth "${wide}wide(1000000)\n"] [nsBoth "${viaFn}rec(100000)\n"]
+} -result [list [lrepeat 2 {value 1000000}] [lrepeat 2 {value 300000}] [lrepeat 2 {value 0}] [lrepeat 2 {value 100000}]]
+
+test ns-main-small-stack {a 1 MiB thread stack (BOTLISH_NATIVE_STACK_BYTES): 1000 levels fit, 10^8 exhaust it} -constraints nativeStackGuard -body {
+    withEnv {BOTLISH_NATIVE_STACK_BYTES 1048576} {
+        list [nsBoth "import str\n${keep}keep(1000, \"ab\")\n"] [nsBoth "import str\n${keep}keep(100000000, \"ab\")\n"]
+    }
+} -result [list [lrepeat 2 {value 3000}] [lrepeat 2 {NATIVE LIMIT STACK}]]
+
+test ns-main-with-suspended-coroutines {the thread's stack overflows while two coroutines are suspended on stacks of their own: its own guard, not theirs} -constraints nativeStackGuard -body {
+    nsBoth "${messages}${down}fn w(n: int, resume M) -> V:\n    m = yield V {n: n}\n    return V {n: m.n}\ncoroutine {step: s1, first: f1} = w(1)\ncoroutine {step: s2, first: f2} = w(2)\ndown(100000000) + f1.n + f2.n\n"
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+# ---------------------------------------------------------------------------
+# A coroutine's own stack (8 MiB by default): it overflows while the
+# thread's stack has ample room, so the guard that faults is the
+# coroutine's, and only the active stack's guard is an overflow.
+
+test ns-co-fresh {a coroutine overflows its stack at its eager start, before its first yield} -constraints nativeStackGuard -body {
+    nsBoth "${messages}${down}fn w(n: int, resume M) -> V:\n    k = down(n)\n    m = yield V {n: k}\n    return V {n: m.n}\ncoroutine {step, first} = w(100000000)\nfirst.n\n"
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+test ns-co-after-yields {a coroutine overflows after two yields, in ordinary computation of a later segment} -constraints nativeStackGuard -body {
+    nsBoth "${messages}${down}fn w(n: int, resume M) -> V:\n    m = yield V {n: n}\n    m2 = yield V {n: m.n}\n    return V {n: down(m2.n)}\ncoroutine {step, first} = w(1)\na = step(M {n: 2})\nb = step(M {n: 100000000})\na.n + b.n\n"
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+test ns-co-resumer-holds-references {the resumer holds a String, a List and a struct across the resume that overflows; the coroutine's recursion allocates} -constraints nativeStackGuard -body {
+    nsBoth "import str\n${messages}${keep}fn w(n: int, resume M) -> V:\n    m = yield V {n: n}\n    return V {n: keep(m.n, \"cd\")}\nfn main() -> int:\n    s = str::concat(\"held\", \"!\")\n    l = \[s, \"two\"\]\n    v = V {n: 5}\n    coroutine {step, first} = w(1)\n    b = step(M {n: 100000000})\n    b.n + str::length(s) + v.n + first.n\nmain()\n"
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+# main -> a -> b -> c, each suspended and resumed at least once.
+set nested "${messages}${down}fn c(n: int, resume M) -> V:
+    m = yield V {n: n}
+    m2 = yield V {n: m.n + 1}
+    return V {n: down(m2.n)}
+fn b(n: int, resume M) -> V:
+    coroutine {step: stepc, first: firstc} = c(n)
+    m = yield V {n: firstc.n}
+    r = stepc(M {n: m.n})
+    m2 = yield V {n: r.n}
+    r2 = stepc(M {n: m2.n})
+    return V {n: r2.n + BTAIL}
+fn a(n: int, resume M) -> V:
+    coroutine {step: stepb, first: firstb} = b(n)
+    m = yield V {n: firstb.n}
+    r = stepb(M {n: m.n})
+    m2 = yield V {n: r.n}
+    r2 = stepb(M {n: m2.n})
+    return V {n: r2.n}
+coroutine {step: stepa, first: firsta} = a(1)
+x = stepa(M {n: 3})
+y = stepa(M {n: CDEPTH})
+\[firsta.n, x.n, y.n\]
+"
+
+test ns-co-nested-deepest {main -> a -> b -> c, suspended and resumed at every level: c overflows its own stack while a and b are running} -constraints nativeStackGuard -body {
+    nsBoth [string map {CDEPTH 100000000 BTAIL 0} $nested]
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+test ns-co-nested-middle {c completes, then b -- active again after c's stack was released -- overflows its own stack} -constraints nativeStackGuard -body {
+    nsBoth [string map {CDEPTH 10 BTAIL {down(100000000)}} $nested]
+} -result [lrepeat 2 {NATIVE LIMIT STACK}]
+
+test ns-co-nested-finite {the same hierarchy within its stacks returns its value} -constraints nativeStackGuard -body {
+    nsBoth [string map {CDEPTH 20000 BTAIL {down(20000)}} $nested]
+} -result [lrepeat 2 {value {[1, 4, 40000]}}]
+
+# The largest depth D of down that returns inside a coroutine (to within 64
+# levels), found by bisection: every probe either returns its depth or is
+# NATIVE LIMIT STACK, whatever instruction the stack ends at.
+proc nsCoroutineEdge {backendOptions} {
+    set lo 1000
+    set hi 100000000
+    set probes {}
+    while {$hi - $lo > 64} {
+        set mid [expr {($lo + $hi) / 2}]
+        set outcome [nsOutcome "$::messages$::down[string map [list DEPTH $mid] {fn w(n: int, resume M) -> V:
+    m = yield V {n: n}
+    return V {n: down(m.n)}
+coroutine {step, first} = w(1)
+b = step(M {n: DEPTH})
+b.n
+}]" {*}$backendOptions]
+        if {$outcome eq [list value $mid]} {
+            set lo $mid
+        } elseif {$outcome eq {NATIVE LIMIT STACK}} {
+            set hi $mid
+        } else {
+            return [list unexpected $mid $outcome]
+        }
+    }
+    return [list $lo $hi]
+}
+
+test ns-co-edge {at the edge of a coroutine's stack every depth either returns or is NATIVE LIMIT STACK, and the edge lies between a thousand and ten million levels} -constraints nativeStackGuard -body {
+    lmap options {{} {-specialize 0}} {
+        lassign [nsCoroutineEdge $options] lo hi
+        expr {[string is integer -strict $lo] && $lo > 1000 && $hi < 10000000 ? "edge" : [list $lo $hi]}
+    }
+} -result {edge edge}
+
+# ---------------------------------------------------------------------------
+# Under GC stress (a collection before every allocation), with small stacks
+# so that each collection's walk of the whole stack stays cheap: the frame
+# walk is bounded by the stack, and it reaches the guard.
+
+test ns-gc-stress-main {under GC stress, an allocating recursion fills a 1 MiB thread stack and is NATIVE LIMIT STACK; 500 levels return their value} -constraints nativeStackGuard -body {
+    withEnv {BOTLISH_NATIVE_GC_STRESS 1 BOTLISH_NATIVE_STACK_BYTES 1048576} {
+        list [nsBoth "import str\n${keep}keep(500, \"ab\")\n"] [nsBoth "import str\n${keep}keep(100000000, \"ab\")\n"]
+    }
+} -result [list [lrepeat 2 {value 1500}] [lrepeat 2 {NATIVE LIMIT STACK}]]
+
+test ns-gc-stress-coroutine {under GC stress, with 128 KiB coroutine stacks: a coroutine whose resumer holds references recurses, allocating, within its stack (the value) and beyond it (NATIVE LIMIT STACK)} -constraints nativeStackGuard -body {
+    set text "import str\n${messages}${keep}fn w(n: int, resume M) -> V:\n    m = yield V {n: n}\n    return V {n: keep(m.n, \"cd\")}\nfn main(depth: int) -> int:\n    s = str::concat(\"held\", \"!\")\n    l = \[s, \"two\"\]\n    coroutine {step, first} = w(1)\n    coroutine {step: other, first: o} = w(2)\n    b = step(M {n: depth})\n    b.n + str::length(s) + first.n + o.n\nmain(DEPTH)\n"
+    withEnv {BOTLISH_NATIVE_GC_STRESS 1 BOTLISH_NATIVE_COROUTINE_STACK_BYTES 131072} {
+        list [nsBoth [string map {DEPTH 100} $text]] [nsBoth [string map {DEPTH 100000000} $text]]
+    }
+} -result [list [lrepeat 2 {value 308}] [lrepeat 2 {NATIVE LIMIT STACK}]]
 
 cleanupTests

@@ -1,7 +1,9 @@
-//! Linux glibc executable linking (x86-64; AArch64 with the `rustc` linker).
-//! Cranelift emits the program object; a linker turns it and the runtime into
-//! an executable. The executable needs neither Tcl, rustc, the source nor this
-//! checkout.
+//! Standalone executable linking: Linux glibc on x86-64 (both linkers) and
+//! AArch64 (the `rustc` linker), ELF; macOS on AArch64 (the `rustc` linker),
+//! Mach-O (MACOS-AARCH64-MILESTONE-5.md). Cranelift emits the program object
+//! in the host triple's format; a linker turns it and the runtime into an
+//! executable. The executable needs neither Tcl, rustc, the source nor this
+//! checkout: only the system's own libraries.
 //!
 //! Two linkers, chosen by `BOTLISH_NATIVE_LINKER` (SINGLE-EXECUTABLE.md):
 //!
@@ -25,8 +27,14 @@
 //! library, inside one `--start-group`/`--end-group`, so the order of the
 //! declarations never decides a static link, and `-LDIR` for every
 //! `--link-dir` search directory -- after the program object. The `stub`
-//! linker links no native library and refuses such a program. An ordinary
-//! program's link is unchanged.
+//! linker links no native library and refuses such a program, and so does
+//! macOS for now (`C_CALLS`). An ordinary program's link is unchanged.
+//!
+//! On macOS nothing in the link is Mach-O-specific code of ours: rustc drives
+//! the platform linker (the C compiler driver, Apple's ld) with the same
+//! arguments, the object's symbols carry Mach-O's `_` prefix because the
+//! object crate writes it, and the linker signs the executable ad hoc, as it
+//! signs every arm64 executable it links.
 use super::{Const, ObjectProgram, emit_object};
 use crate::nir::Program;
 use botlish_native::runtime::aotimage::{self, Fixup, FunctionCode, Image, Target};
@@ -185,9 +193,33 @@ pub fn calls_c(program: &Program) -> bool {
     !program.foreigns.is_empty() || !program.links.is_empty()
 }
 
+/// Whether this host links executables: Linux glibc on x86-64 and AArch64
+/// (ELF), macOS on AArch64 (Mach-O, MACOS-AARCH64-MILESTONE-5.md). On every
+/// one the program object is Cranelift's, in the host triple's object
+/// format, and the rustc linker links it through the platform's own linker.
+const EXECUTABLES: bool = cfg!(any(
+    all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
+    all(target_os = "macos", target_arch = "aarch64")
+));
+
+/// Whether this host links a program that calls C (C-FFI.md): Linux glibc
+/// only. macOS links ordinary programs, whose only native libraries are the
+/// ones rustc links for the runtime; a C call there -- the Apple C ABI
+/// against real callees, a link plan for Apple's ld -- is not validated yet
+/// (the C FFI milestone of MACOS-AARCH64-PORT-AUDIT.md's roadmap), so its
+/// link is refused before the linker runs, as it was before macOS linked
+/// anything.
+const C_CALLS: bool = cfg!(target_os = "linux");
+
 pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
-    if !cfg!(all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64"))) {
-        return Err("executable emission requires Linux glibc on x86_64 or aarch64".into());
+    if !EXECUTABLES {
+        return Err("executable emission requires Linux glibc on x86_64 or aarch64, or macOS on aarch64".into());
+    }
+    if calls_c(program) && !C_CALLS {
+        return Err(format!(
+            "native link failed: this program calls C or declares a C library ({}), and C calls are linked on Linux glibc only: on this host executables of programs that call no C are supported, C calls not yet (MACOS-AARCH64-PORT-AUDIT.md, C FFI)",
+            describe_link_plan(program)
+        ));
     }
     let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
     match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
@@ -333,9 +365,10 @@ fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
 fn link_stub(program: &Program, destination: &Path) -> Result<(), String> {
     // `image` lays out and relocates an ELF x86-64 object (its relocation
     // types and call trampolines are x86-64's), and the stub's loader is
-    // built for x86-64 Linux only (runtime/aotimage.rs).
-    if !cfg!(target_arch = "x86_64") {
-        return Err("the stub linker supports x86_64 only: use BOTLISH_NATIVE_LINKER=rustc".into());
+    // built for x86-64 Linux only (runtime/aotimage.rs). No Mach-O stub:
+    // macOS executables are the system linker's.
+    if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        return Err("the stub linker supports x86_64 Linux only: use BOTLISH_NATIVE_LINKER=rustc".into());
     }
     let stub = match std::env::var_os("BOTLISH_NATIVE_AOT_STUB") {
         Some(path) => PathBuf::from(path),

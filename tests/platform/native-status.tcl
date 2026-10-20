@@ -4,8 +4,9 @@
 #   tclsh9.0 tests/platform/native-status.tcl ?-verbose 0|1?
 #
 # Runs one small probe per native capability -- the JIT, the GC's frame walk
-# under stress, a native stack overflow, coroutines, a Linux syscall, a C
-# call and a standalone executable -- and of the target boundary (the
+# under stress, a native stack overflow (of the thread's stack and of a
+# coroutine's), coroutines, a Linux syscall, a C call, a program object and
+# a standalone executable -- and of the target boundary (the
 # driver's reading of the host target's triple, the C calling convention of
 # a foreign signature, a program built for the other operating system of the
 # host's architecture) and compares each outcome with the expectation
@@ -22,6 +23,7 @@
 set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname $here]]
 source [file join $root native native.tcl]
+source [file join $root tests binary-header.tcl]
 
 set verbose 0
 foreach {option value} $argv {
@@ -36,8 +38,11 @@ foreach {option value} $argv {
 
 # The probes: NAME {KIND ARGUMENT ENVIRONMENT}. KIND driver runs
 # botlish-native on a NIR fixture of native/tests/fixtures; program runs a
-# Botlish program with native::evalHir; executable links it with
-# native::executable and runs the executable; target asks the driver how it
+# Botlish program with native::evalHir; object writes its program object
+# (native::object) and reports the object's header {FORMAT ARCHITECTURE
+# KIND} (tests/binary-header.tcl); executable links it with
+# native::executable, runs the executable and reports its header and the
+# value it prints; target asks the driver how it
 # reads the host target's triple (botlish-native target TRIPLE: its object
 # format, C calling convention and whether code for it runs here);
 # convention compiles the program to CLIF (native::clif: no C call runs) and
@@ -57,6 +62,22 @@ fib(20)
 } {}] \
     gc-frame-walk [list driver build400.nir {BOTLISH_NATIVE_GC_STRESS 1}] \
     stack-overflow [list driver stack_overflow.ir {BOTLISH_NATIVE_STACK_BYTES 4194304}] \
+    coroutine-stack-overflow [list program {struct Event:
+    value: int
+
+fn down(n: int) -> int:
+    if n == 0:
+        return 0
+
+    1 + down(n - 1)
+
+fn worker(depth: int) -> Event:
+    yield Event {value: 0}
+    return Event {value: down(depth)}
+
+coroutine {step, first} = worker(100000000)
+step().value
+} {}] \
     coroutine [list program {struct Message:
     value: int
 
@@ -86,6 +107,14 @@ extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
 
 labs(-5)
 } {}] \
+    object [list object {fn fib(n):
+    if n <= 1:
+        return n
+
+    fib(n - 1) + fib(n - 2)
+
+fib(20)
+} {}] \
     executable [list executable {fn fib(n):
     if n <= 1:
         return n
@@ -111,10 +140,18 @@ f(1)
 } {}]]
 
 # The recorded outcomes: HOST-TARGET -> NAME -> {value TEXT} (exactly) or
-# {error CODE MESSAGE-GLOB}. On macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md,
-# sections 6 and 15) the stack overflow is not Botlish's: with no guard of
-# its own the driver dies in Rust's stack-overflow abort -- the one recorded
-# outcome that is a crash, kept here so that milestone 5 has to change it.
+# {error CODE MESSAGE-GLOB}. A program object is the host's object format
+# and architecture everywhere, and so is a standalone executable, which
+# prints its value: on macos-aarch64 a Mach-O executable since milestone 5
+# (MACOS-AARCH64-MILESTONE-5.md), where until then emission was refused
+# (`executable emission requires Linux glibc on x86_64 or aarch64 (NATIVE
+# AOT)`). A C call is linked on Linux only: on macos-aarch64 it is still
+# refused before the linker runs (NATIVE LINK), now with its own reason
+# rather than the executable refusal. A native stack overflow is NATIVE LIMIT STACK on
+# every host, the thread's stack and a coroutine's alike: on macos-aarch64
+# since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
+# driver died in Rust's stack-overflow abort (the thread's stack) or of
+# SIGBUS (a coroutine's).
 #
 # Since milestone 2 (MACOS-AARCH64-MILESTONE-2.md) a program importing a
 # Linux namespace does not compile for macos-aarch64 at all
@@ -125,24 +162,32 @@ set linux [dict create \
     jit {value 6765} \
     gc-frame-walk [list value [list str [string repeat xy 400]]] \
     stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+    coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
     coroutine {value {[10, 7]}} \
     linux-syscall {value 0} \
     c-call {value 5} \
-    executable {value 6765} \
     target {value {format elf c-call-conv system_v runs 1}} \
     c-convention {value {labs system_v abs system_v}} \
     other-target {error {NATIVE TARGET} {this program was built for target macos-* and native code runs only on its own target's host*matching architecture is not a matching target*}}]
 set expected [dict create \
-    linux-x86_64 $linux \
-    linux-aarch64 $linux \
+    linux-x86_64 [dict merge $linux {
+        object {value {elf x86_64 relocatable}}
+        executable {value {{elf x86_64 shared} 6765}}
+    }] \
+    linux-aarch64 [dict merge $linux {
+        object {value {elf aarch64 relocatable}}
+        executable {value {{elf aarch64 shared} 6765}}
+    }] \
     macos-aarch64 [dict create \
         jit {value 6765} \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
-        stack-overflow {error {NATIVE BUG} {native backend failed: child killed: SIGABRT*has overflowed its stack*}} \
+        stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+        coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
-        c-call {error {NATIVE LINK} {*executable emission requires Linux glibc on x86_64 or aarch64*}} \
-        executable {error {NATIVE AOT} {executable emission requires Linux glibc on x86_64 or aarch64}} \
+        c-call {error {NATIVE LINK} {*this program calls C or declares a C library*C calls are linked on Linux glibc only*}} \
+        object {value {macho arm64 object}} \
+        executable {value {{macho arm64 execute} 6765}} \
         target {value {format macho c-call-conv apple_aarch64 runs 1}} \
         c-convention {value {labs apple_aarch64 abs apple_aarch64}} \
         other-target {error {NATIVE TARGET} {this program was built for target linux-aarch64 (aarch64-unknown-linux-gnu)*Both are aarch64, but a matching architecture is not a matching target*}}]]
@@ -205,12 +250,24 @@ proc observe {name} {
                 core::formatValue [native::evalHir [surface::compile $argument -warnings off -target $other]]
             }]
         }
+        object {
+            set work [file tempdir botlish-native-status]
+            try {
+                return [outcome $environment {
+                    set path [file join $work probe.o]
+                    native::object [surface::compile $argument -warnings off] $path
+                    binaryHeader $path
+                }]
+            } finally {
+                file delete -force $work
+            }
+        }
         executable {
             set work [file tempdir botlish-native-status]
             try {
                 return [outcome $environment {
                     set path [native::executable [surface::compile $argument -warnings off] [file join $work probe]]
-                    string trim [exec $path]
+                    list [binaryHeader $path] [string trim [exec $path]]
                 }]
             } finally {
                 file delete -force $work

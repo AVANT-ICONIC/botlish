@@ -240,7 +240,16 @@ the test suite, still install the `.deb`s.
 * Standalone executables have two linkers, chosen by `BOTLISH_NATIVE_LINKER`:
   `rustc` (the default) and `stub` (no toolchain: `botlish-aot-stub` with the
   program image appended, `native/src/runtime/aotimage.rs`; the single
-  executable uses it). A test that reads a rustc-linked executable's
+  executable uses it). The stub is Linux x86-64's only; macOS AArch64
+  executables are Mach-O, linked by rustc through Apple's ld
+  (MACOS-AARCH64-MILESTONE-5.md): never extend the stub, or write a linker,
+  loader or signing step, for Mach-O. A program that calls C is linked on
+  Linux only (`codegen/aot.rs`'s `C_CALLS`) until macOS C calls are
+  validated. If you change which hosts link (`EXECUTABLES`, `C_CALLS`), the
+  rustc link, the generated startup or `runtime::aot::run`, also run
+  `tests/native-executable.test`, `tests/platform/aot-facts.tcl` and
+  `audit/native-aot/tools/mutate.tcl` (every mutant in its `mutants.txt`
+  that applies to the host must still apply and be killed). A test that reads a rustc-linked executable's
   `botlish_fn_N` symbols (objdump, `strace -k`) or tests rustc's invocation
   carries the `rustcLinker` constraint (`tests/helpers.tcl`). CI's
   `stub-linker` job runs every executable test file with the stub linker.
@@ -831,13 +840,61 @@ never touch x18. A Tcl test that needs coroutines, the collector around
 them or native counters carries `nativeCoroutines` (tests/helpers.tcl), a
 capability of the host target, not `nativeLinux`.
 
+## The native stack guard
+
+A native run that exhausts a stack -- the worker thread's or a coroutine's
+-- ends in `NATIVE LIMIT STACK` on every host the native backend runs on
+(MACOS-AARCH64-MILESTONE-4.md, NATIVE-STACK-OVERFLOW.md): Linux x86-64 and
+AArch64 and macOS AArch64, `native_stack_overflow_supported()`. One guard
+serves them all, `runtime/platform/guard.rs`; a host adds only how the
+current thread's stack and guard are found and how a thread is named
+(`platform/linux.rs`: glibc's report; `platform/macos.rs`: libpthread's
+bounds, the usable low bound and the guard confirmed with `mach_vm_region`).
+Keep it so:
+
+* The handler only classifies and reports: an address in the guard of the
+  stack *published* as running, on the guarded thread, writes the result
+  line and `_exit`s. It never resumes, unwinds, allocates or touches the
+  runtime, and it uses nothing but lock-free atomics stored before the
+  fault and async-signal-safe calls. Any other fault goes to the
+  disposition the process had before the guard; never relabel one.
+* A guard is confirmed, never assumed from a reported stack end: a host
+  that cannot confirm one reports none (`guard_low == low_bound`) and
+  install refuses it. The macOS main thread's lowest reported page is
+  itself inaccessible: its usable bound is above the reported one.
+* Every coroutine switch publishes the stack it *arrives* on, after the
+  switch (runtime/coroutine.rs's `segment`, `co_body`, `rt_co_yield`), never
+  the one it is about to switch to: bl_co_switch's pushes land on the stack
+  it leaves. Publication stays inlined atomic stores (no frame of its own).
+* NATIVE LIMIT STACK is terminal: no in-process recovery, no Botlish
+  handler, no new error. Its line is RtError::StackOverflow's.
+
+A Tcl test of an overflow carries `nativeStackGuard` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`. If you change the guard,
+a host's stack discovery, publication or the switch, the stack probes or
+`native_stack_overflow_supported()`, run `cargo test --release
+--manifest-path native/Cargo.toml --test native_stack` (it runs every
+faulting check in a child process: never fault in a test's own process),
+the Rust tests (also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`tests/native-stack-overflow.test`, `tests/coroutines.test`,
+`tests/platform/native-status.tcl`,
+`audit/native-stack/tools/mutate.tcl` (every mutant in its `mutants.txt`
+that applies to the host must still apply and be killed: update a mutant's
+text when you change the code it mutates, keeping it a mutant of the same
+rule; a mutant of `platform/macos.rs` runs on macOS only), and the macOS
+smoke job and `CI-Tests: native-stack-overflow.test rust
+native-stack-mutants` on a branch (macOS facts are CI's: the shared Mac is
+not used). `bench/native-stack-guard.tcl` compares a driver against a
+baseline build (`-baseline-rev main`; the tier item `native-stack-bench`
+on a macOS runner).
+
 ## Linux AArch64
 
 The native backend runs on Linux AArch64 (the `tests-arm64.yml` CI jobs) with
 the x86-64 feature set except what is tied to the x86-64 instruction set:
 the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
 map entry is a root's distance below its own frame's FP, codegen::clif's
-`define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
+`define`), the stack-overflow guard (runtime/platform/), coroutines
 and rustc-linked executables, and Linux syscalls through the AArch64
 transport (next section). The `stub` linker remains x86-64 only: the Tcl
 tests that need it carry `stubLinker`. A Tcl test that needs the native
@@ -870,7 +927,8 @@ and no acceptance depends on one.
   -- not Homebrew's newer Tcl, whose Unicode 17 case tables break the Tcl
   backends' Unicode 16 semantics -- `tests/platform/cabi-facts.tcl`, the
   native build and its Rust unit tests, `tests/platform/native-status.tcl`,
-  `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
+  `tests/platform/aot-facts.tcl` (the program object and an executable as
+  the host's tools see them), `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
   shards) and the same smoke on ubuntu as a control. Locally, `tclsh9.0
   tests/platform/tier.tcl smoke` takes seconds, and `tier.tcl X.test
   Y.bot` runs any file or suite the way CI does.

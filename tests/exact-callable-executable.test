@@ -1,6 +1,6 @@
 # exact-callable-executable.test -- EXACT-CALLABLE-CLOSED-CALLER.md, standalone
 # executable parity: exact-callable-keyed code (direct calls through callable
-# parameters) compiled to an ELF agrees with every in-process backend and
+# parameters) compiled to an executable agrees with every in-process backend and
 # survives GC stress when run relocated with an empty PATH, for an exact
 # Botlish block, an exact native, a value-capturing exact block and the
 # refined-checks scan (the benchmark the milestone repairs).
@@ -15,9 +15,6 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 1000000
-
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 # As tests/native-executable.test's aotParity: every in-process backend, then
 # the compiled executable (moved, input deleted, empty PATH), then the same
