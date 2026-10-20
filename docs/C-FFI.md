@@ -1056,6 +1056,39 @@ observable only if a collection runs while the exposure is open, and no
 collection can run inside a real C call (section 20); the borrowing
 milestone's synthetic reentrant test guards the liveness itself.
 
+**The macOS Apple Silicon mutants** (MACOS-AARCH64-MILESTONE-6.md, section
+25): 17 more, for the link plan per platform, Apple's argument extension and
+stack packing, the scalar and pointer transport and the fixture. A mutant of
+code one host compiles differently carries a `%% TARGET ...` line and is
+SKIPPED elsewhere, never counted as killed; the tool runs on macOS through
+tier.tcl's `c-ffi-mutants` item. On macOS all 44 are killed (run
+39379524425); on Linux x86-64 the 10 new ones that apply there are.
+
+| mutant | Linux x86-64 | macOS arm64 |
+|---|---|---|
+| `macos-link-plan-is-gnus` | skipped | 53 tests, the fuzzer, `ffi_link_plan_flavor_is_the_hosts` |
+| `apple-plan-has-group` | `ffi_link_plan_apple_has_no_gnu_flags` | 53 tests, the fuzzer, the same |
+| `apple-default-libraries-dropped` | `ffi_link_plan_apple_has_no_gnu_flags` | the same only (section 11) |
+| `link-dirs-dropped` | 51 tests, the fuzzer, 2 Rust tests | the same |
+| `apple-linker-diagnostics-dropped` | `ffi_linker_diagnostics_keep_the_linkers_words` | `cf-undefined-symbol`, the same |
+| `apple-stack-parameters-extended` | skipped | `cf-clif-stack-parameters`, `ffi_apple_stack_arguments_stored_at_their_width` |
+| `apple-register-boundary-off-by-one` | skipped | 3 `cf-abi-*` tests, the fuzzer, the same Rust test |
+| `apple-convention-is-linuxs` | skipped | 14 tests, the fuzzer, both `apple_tests` |
+| `signed-argument-zero-extended` | 5 tests | 10 tests, the fuzzer, `ffi_apple_stack_arguments_stored_at_their_width` |
+| `unsigned-argument-sign-extended` | 4 tests | 9 tests, the fuzzer, the same |
+| `short-class-is-int` | 3 tests, the fuzzer | 9 tests, the fuzzer, both `apple_tests` |
+| `pointer-argument-truncated` | 13 tests, the fuzzer | 12 tests, the fuzzer |
+| `pointer-result-truncated` | 6 tests, the fuzzer | 4 tests, the fuzzer |
+| `macos-plain-char-unsigned` | skipped | 6 tests, the fuzzer |
+| `mach-o-symbol-double-prefixed` | skipped | 53 tests, the fuzzer |
+| `link-failure-removes-earlier` | `cf-link-failure-keeps-executable` | the same |
+| `fixture-wrong-architecture` | skipped | 48 tests |
+
+`apple-stack-parameters-extended` is caught only statically: the defect it
+puts back (an extended narrow stack argument stored at register width)
+leaves every argument's bytes right, so no test that runs the call sees it,
+`cf-abi-stack-tail-frame` included.
+
 ## 23. Regression
 
 On this checkout (Linux x86-64, Tcl 9.0.1, rustc 1.97.0):

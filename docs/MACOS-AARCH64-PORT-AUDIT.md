@@ -309,7 +309,7 @@ native tests carry no host constraint at all.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file). `nativeCoroutines` (milestone 3), `nativeStackGuard` (milestone 4) and `executableAot` (milestone 5: 38 files' copies replaced by one definition) are now capabilities defined once in tests/helpers.tcl | medium | 3-9 | L |
+| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file). `nativeCoroutines` (milestone 3), `nativeStackGuard` (milestone 4), `executableAot` (milestone 5: 38 files' copies replaced by one definition) and `nativeCCalls` (milestone 6: c-ffi.test's `linuxNative`, c-bindgen.test's `nativeRun`, the C oracles of native-view, native-edit and layout-arrays) are now capabilities defined once in tests/helpers.tcl | medium | 3-9 | L |
 | `linuxX86_64` (7 files), `linuxAarch64`, `stubLinker` (3 files), `x86_64Host` (native.test :779, no OS check) | instruction-set/syscall-ABI and ELF tests | test | none: correct to skip on macOS; `x86_64Host` should also require Linux (it reads ELF with `readelf`) | low | 3 | L |
 | tests/helpers.tcl `outcomeUnder`/`outcomeUnderHir` (:234-278), `sourceAgree` (:293-302); 97 files with four-backend lists | a differential test runs every backend, cranelift included, unconditionally | test | on macOS these tests run natively and pass or fail on real behavior (section 15): the right signal | -- | 3 | M |
 | tests/helpers.tcl `linuxTarget`, `backendsFor`; 13 test files' compile helpers | (milestone 2) a test that compiles a Linux program used the host's default target | test | such a test compiles for `linuxTarget` (the host's own on Linux, so Linux runs exactly as before; `linux-aarch64` on macOS) and runs it on `backendsFor` its HIR's target (the Tcl backends on macOS); a native leg that needs the Linux runtime carries `nativeLinux` | -- | 2 (done) | M (done) |
@@ -650,9 +650,11 @@ share.
 
 **Tier C, exhaustive, opt-in.** The default payload is the acceptance tier
 on both Tcl backends under `BOTLISH_NATIVE_GC_STRESS=1`, in three shards.
-Named items replace it; `all` is the census (every file, every suite on
-every backend, the Rust tests), which fails on macOS as section 15 says
-until the port is done.
+Named items replace it -- test files, golden suites and tier.tcl's check
+items (since milestone 6 also `c-ffi-fuzz`, `c-ffi-mutants[=NAMES]` and
+`c-ffi-bench`); `all` is the census (every file, every suite on every
+backend, the Rust tests). Since milestone 6 `notYet` is empty; the census
+itself has not been rerun since milestone 3 (section 15).
 
 ### Requesting Tier C from a feature branch
 
