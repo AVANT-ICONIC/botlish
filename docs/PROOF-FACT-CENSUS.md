@@ -652,17 +652,44 @@ legality side, which has none by design.
 `tests/hir-range.test`.
 
 * **Hypothesis it can express:** "p moves from its initial value toward B by
-  exactly ±1 per self-tail call and stops when it equals B". Hence
+  exactly ±1 per self call and stops when it equals B". Hence
   `p ∈ [init.min, B.max]` (or the mirror for a decreasing step). It also
   records `monotone`, so the continuing `p != B` branch narrows to `p < B`.
 * **How it is established:**
-  * Every self-tail call passes `p ± c` with the same literal `c`
-    (`ClassifyParam`, `183`).
-  * An `if p == B` guard dominates every self-tail call, either at the top
-    level or under "harmless wrapper" `if`s (`Guard`, `327`).
+  * Every self call, tail or not, passes `p` unchanged or `p ± c`, with
+    one literal `c` for all of them (`Advance`). A non-tail self call enters
+    the instance like a tail one, and `ExternalSeeds` counts no self call.
+    The proof once read the tail calls only, and `x = f(i + 3, ...)` then
+    left a lock the program broke: a mask computed a wrong value and a
+    `rimodtotal` divided by zero (`range-induction-nontail-self-call`,
+    `mod-lowering-nontail-self-call`). A call passing `p` unchanged starts
+    an invocation at a `p` the squeeze already covers
+    (`range-induction-nontail-identity-call`).
+  * An `if p == B` guard dominates every self call, either at the top
+    level or under "harmless wrapper" `if`s (`Guard`, `327`): a tail call
+    is a statement of the guard's continuing side, any other self call is
+    inside it (`CoversAll`).
   * `|c| = 1`.
-  * B is stable: a literal, a context-free native call, or a parameter
-    passed through unchanged (`BoundRange`, `209`).
+  * B is stable, one value for the whole recursion: a literal, a parameter
+    passed through unchanged, or a call with a registered result Range
+    whose value is the same in every invocation (`BoundRange`,
+    `Invariant`). That is a call determined by its argument values (a
+    native classified so, `hir::repeatable::Native`, or registered
+    `-mutation-stable`, its result fixed however the mutable values behind
+    its arguments are mutated in place, like `mutable_array::capacity`; or a
+    function whose body is determined by its arguments,
+    `hir::repeatable::Block`) over invariant arguments: literals, unchanged
+    parameters, root bindings, context parameters (one installed value per
+    context type, installed once at the top level), locals bound to
+    invariant values, fields of invariant values, structs and `if` values
+    built of invariant parts, closures the invocation makes over invariant
+    captures, and bindings from outside the function (captured, top-level,
+    module-static) when every self call invokes the running closure
+    (`SameClosure`: through the function's own binding).
+    A registered result Range alone is not enough: `i == char::scalar_value(c)`
+    with `c` recomputed every step can be stepped past, and so can a
+    captured `c` when a self call reaches another closure of the same
+    function (`mod-lowering-other-closure-bound`).
   * The initial value starts on the correct side of B. It is read from
     `ExternalSeeds`, the literal arguments of known direct callers.
 * **How recursive calls are analyzed:** the proven override is *locked* (it
@@ -672,13 +699,18 @@ legality side, which has none by design.
 * **What does not cross:**
   * relations (`p < length(text)` becomes the constant `B.max`);
   * other parameters' facts;
-  * non-tail recursion;
+  * recursion with no self tail call (not attempted);
+  * a non-tail self call with another step, or outside the guard's
+    continuing side (it is counted, and the proof declines);
+  * a bound read through a native neither classified repeatable nor
+    registered `-mutation-stable`, even over an unchanged argument
+    (`mutable_vector::length`, which a push in the body changes; `hash`);
   * steps of 2 or more ("step may skip equality terminator",
     `range-induction-3`);
   * caller-propagated (non-literal) seeds.
 * **Generality:** it is specific to one recurrence family (`==`
-  termination, unit step, self-tail) but structural. It is not keyed by
-  name.
+  termination, unit step, a self tail call) but structural. It is not
+  keyed by name.
 * **Fix S3:** it is no longer attempted for open instances (§I).
 * **Consumers:**
   * range → raw-Int decisions, e.g. `reverse_from`'s `index` stays raw;

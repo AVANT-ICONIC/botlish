@@ -801,6 +801,30 @@ Not prototyped.
   A fact "capacity >= 8", the table's own invariant, would make these
   `rimodtotal` and inlinable. That fact is CP-5's kind of struct
   invariant.
+* **The facts it trusts.** The mask, `rimodtotal` and the leaf rule read
+  the divisor's Range with no runtime check, so an unsound Range is now a
+  wrong value or a SIGFPE where the tagged `imod` used to be right. A
+  review found two such Ranges, both from hir/induction.tcl and both older
+  than CG-2 (they had misled branch decisions on the baseline):
+  * the proof read only the self *tail* calls, so a non-tail self call
+    (`x = f(i + 3, 2)`) was a way into the instance it never saw;
+  * an `==` bound that is a native call with a registered Range
+    (`char::scalar_value(c)`) was taken as stable whatever its argument,
+    so a `c` recomputed every step was a different bound each time.
+
+  Both are fixed in the proof, not the lowering: every self call is a step
+  of the proof (the same step or none, inside the guard's continuing side),
+  and a call bound must be determined by arguments that are themselves
+  invariant -- unchanged parameters, context parameters, fields of them,
+  structs, `if` values and closures built from them, and bindings from
+  outside the function only when every self call runs the same closure (a
+  self call through a parameter can reach another closure, with another
+  captured bound) -- through natives classified repeatable or registered
+  `-mutation-stable` (an array's capacity, which no mutation changes)
+  (PROOF-FACT-CENSUS.md, F.2). `tests/hir-range.test` and
+  `tests/native-mod-lowering.test` have the reproducers, and the fuzzer
+  generates both shapes (a non-tail self call; a varying or invariant
+  native bound, checked against a model at 1114112 calls deep).
 * **Cost.** Cheap.
 
 ### BUG-2. A divisor beyond 64 bits aborted the front end

@@ -819,7 +819,8 @@ proc hir::range::SeedRange {hir e} {
 
 # InstanceId -> list of Range, one per parameter: the join of the literal
 # argument ranges every *other* used instance's direct calls pass it.
-# Self-recursive calls are excluded (Analyze below feeds those back).
+# Self-recursive calls are excluded, tail or not: hir/induction.tcl, the one
+# reader, counts every one of them as a step of its own proof.
 #
 # A dormant caller (DormantInstances) passes nothing.
 proc hir::range::ExternalSeeds {hir spec} {

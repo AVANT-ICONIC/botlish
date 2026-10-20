@@ -378,8 +378,13 @@ core::native::register mutable_array::generate -arity 2 -impl core::mutarray::ge
     -param-types {int any} -result-type mutarray -runtime mutarray-alloc -completion 1 \
     -result-shape {mutarray-generate 1} -errors-from 1 -result-length {int 0} \
     -drop-form {mutable_array#generate_drop result} -ownership {observe factory}
+# capacity is -mutation-stable: nothing changes the length of an array a
+# binding holds (there is no push, pop or clear, a copy-on-write detach keeps
+# the length, and a consuming loop drains only an affine array it moved, which
+# no binding holds any more).
 core::native::register mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
-    -param-types {mutarray} -result-type int -result-range collection-length -ownership {observe}
+    -param-types {mutarray} -result-type int -result-range collection-length -ownership {observe} \
+    -mutation-stable 1
 core::native::register mutable_array::at -arity 2 -impl core::mutarray::at \
     -param-types {mutarray int} -result-type any -runtime range-check \
     -result-shape {mutarray-element 0} -errors IndexNotFound -bounds {index mutarray 0 1} \

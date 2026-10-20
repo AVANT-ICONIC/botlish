@@ -35,6 +35,20 @@
 # fixed body list; TerminatingBranch and CoversAll are exactly as narrow as
 # they always were, just callable at any depth reached this way.
 #
+# The proof is attempted for an instance with a self tail call (the counted
+# recursion above), and then every self call counts, not only the tail
+# ones: a non-tail self call (`x = f(i + 3, ...)`) enters the instance
+# exactly as a tail call does, and hir::range::ExternalSeeds counts no self
+# call. So every self call must pass i unchanged or by the one common step
+# (Advance over all of them: a call passing i unchanged starts an invocation
+# at an i the proof already covers) and lie on the guard's continuing side (a
+# tail call as a statement of it, any other self call anywhere inside it:
+# CoversAll), or nothing is proven. And B must be one value for the whole
+# recursion (BoundRange, Invariant): a literal, a parameter every self call
+# passes unchanged, or a call with a registered result Range whose value is
+# the same in every invocation -- a registered Range alone bounds B, but a B
+# that changes every step can be stepped past.
+#
 # When every soundness condition below holds, i's Range is concluded to be
 # [i0, B.max] (or, decreasing, [B.min, i0]) for hir/range.tcl's fixpoint to
 # use as i's *fixed* starting assumption (see analyze's -- er, hir::range::
@@ -52,13 +66,13 @@
 # the loop.
 #
 # Dominance (the milestone's #8-#9): a nested guard mints i's induction fact
-# only when every one of i's self-tail calls is unconditionally reached
-# through the guard's own continuing side (its `else`, or the sibling code
-# after an elseless guard) -- never merely *somewhere* in the instance. Guard
-# establishes this the same way at every nesting level: at each body it
-# looks at, either the classic top-level shape matches directly (checked
-# first, unchanged), or exactly one statement of that body can reach any of
-# the self-tail calls at all (Reaches/AnyReaches, a plain "does this
+# only when every one of i's self calls (tail or not) is unconditionally
+# reached through the guard's own continuing side (its `else`, or the
+# sibling code after an elseless guard) -- never merely *somewhere* in the
+# instance. Guard establishes this the same way at every nesting level: at
+# each body it looks at, either the classic top-level shape matches directly
+# (checked first, unchanged), or exactly one statement of that body can
+# reach any of the self calls at all (Reaches/AnyReaches, a plain "does this
 # subtree mention one of these expression ids" search -- deliberately not
 # itself a soundness argument) and that one statement is an `if` whose
 # branches split the same way (exactly one live). A wrapper's *dead* branch
@@ -83,7 +97,7 @@
 # through anything but literal `i + c` / `i - c` / `i` unchanged, accept a
 # step other than +-1, descend into a `loop` or a nested `block` (a
 # different invocation) while looking for a wrapper's live branch, or
-# recognize two self-tail calls whose updates disagree (ClassifyParam,
+# recognize two self calls whose updates disagree (ClassifyParam,
 # unchanged, already forces "other" the moment call sites disagree, well
 # before Guard ever runs). Anything else safely produces no fact;
 # hir/range.tcl's ordinary (and, since an earlier milestone, narrowing-
@@ -99,6 +113,9 @@ namespace eval hir::induction {
     # pathological recursion in the analysis itself"): generous enough for
     # several harmless wrappers, never unbounded.
     variable maxNestingDepth 16
+    # Invariant's recursion depth cap: a bound written deeper than this is
+    # simply not proven invariant.
+    variable maxInvariantDepth 64
 }
 
 # ---------------------------------------------------------------------------
@@ -176,10 +193,13 @@ proc hir::induction::ClassifyArg {hir argExpr p} {
     return other
 }
 
-# How EVERY self-tail call (CALLS, a list of their argument-expression
-# lists, one per call site, positionally aligned with PARAMS) treats
+# How EVERY self call (CALLS, a list of their argument-expression lists,
+# one per call site, positionally aligned with PARAMS: analyze passes every
+# self call, tail or not; hir/traversal.tcl its self tail calls) treats
 # candidate parameter binding P: the single classification every call site
 # agrees on, or "other" if any disagree or any site classifies it "other".
+# analyze reads "identity" from it (a parameter every self call passes
+# unchanged); its induction candidates are Advance's.
 proc hir::induction::ClassifyParam {hir calls index p} {
     set result ""
     foreach args $calls {
@@ -196,30 +216,307 @@ proc hir::induction::ClassifyParam {hir calls index p} {
     return $result
 }
 
+# How the self calls CALLS (as for ClassifyParam) advance candidate
+# parameter P: {{step C} UPDATEEXPR} when every call passes P unchanged or
+# as P + C, for one literal C, and at least one passes P + C (UPDATEEXPR the
+# first such argument, for the provenance report); "" otherwise. A call
+# passing P unchanged is no step at all: on the guard's continuing side it
+# starts an invocation at the P that reached it, which already lies between
+# P's initial value and B, so it leaves the proof's squeeze intact.
+proc hir::induction::Advance {hir calls index p} {
+    set step ""
+    set update ""
+    foreach args $calls {
+        set arg [lindex $args $index]
+        set c [ClassifyArg $hir $arg $p]
+        if {$c eq "identity"} {
+            continue
+        }
+        if {$c eq "other" || ($step ne "" && $step ne $c)} {
+            return ""
+        }
+        if {$step eq ""} {
+            set step $c
+            set update $arg
+        }
+    }
+    if {$step eq ""} {
+        return ""
+    }
+    return [list $step $update]
+}
+
 # ---------------------------------------------------------------------------
 # The bound term
 
 # The Range of expression E when used as a stable upper/lower bound: a
-# context-free native-metadata fact (hir::range::SeedRange: a literal, or a
-# direct str::length(...)/list::length(...)-shaped call) or, if E refers to one of
-# this instance's own parameters, that parameter's *external* seed (spec
-# #20-21's stability requirement: PARAMS/CLASSIFICATIONS must show it is
-# passed unchanged -- "identity" -- on every self-tail call, so its value
+# literal, a direct native call with a registered result Range
+# (hir::range::SeedRange: a str::length(...)/list::length(...)-shaped call)
+# whose value is the same in every invocation (Invariant), or, if E refers
+# to one of this instance's own parameters, that parameter's *external* seed
+# (spec #20-21's stability requirement: CTX's classifications must show it
+# is passed unchanged -- "identity" -- on every self call, so its value
 # during the loop is always its external seed). Anything else: unknown.
-proc hir::induction::BoundRange {hir e params classifications seeds} {
-    set r [hir::range::SeedRange $hir $e]
-    if {![hir::range::isUnknown $r]} {
-        return $r
+# CTX describes the instance (analyze): params, classifications (each
+# parameter's ClassifyParam over every self call), bodyScope (its block's)
+# and sameClosure (SameClosure of its self calls).
+#
+# A registered Range bounds every result of the native, but the proof needs
+# one value B that P meets: `i == char::scalar_value(c)` with a C that
+# changes every step is a different B each time, and P can step past all of
+# them. So a call is a bound only when Invariant holds of it.
+proc hir::induction::BoundRange {hir e ctx seeds} {
+    switch -- [hir::kind $hir $e] {
+        const {
+            return [hir::range::SeedRange $hir $e]
+        }
+        call {
+            set memo [dict create]
+            if {![Invariant $hir $e $ctx memo]} {
+                return [hir::range::unknown]
+            }
+            return [hir::range::SeedRange $hir $e]
+        }
+        ref {
+            set b [hir::get $hir $e binding]
+            set index [lsearch -exact [dict get $ctx params] $b]
+            if {$index < 0 || [lindex [dict get $ctx classifications] $index] ne "identity"} {
+                return [hir::range::unknown]
+            }
+            return [lindex $seeds $index]
+        }
     }
-    if {[hir::kind $hir $e] ne "ref"} {
-        return [hir::range::unknown]
+    return [hir::range::unknown]
+}
+
+# 1 if expression E, written in the body of the instance CTX describes
+# (BoundRange), has the same value in every invocation a chain of its self
+# calls makes. Bindings never change (only a native can read a mutable
+# object behind one, and the rule for calls below admits only natives no
+# mutation can mislead), so the question is which binding each invocation
+# reads (InvariantBinding) and whether what it computes from them is
+# determined by them:
+#
+#   * a literal;
+#   * a reference to an invariant binding (InvariantBinding);
+#   * a projection of an invariant value (a field of a struct, which never
+#     changes);
+#   * a struct built of invariant field values;
+#   * an `if` (a local bound to one) whose condition and every expression of
+#     both branches are invariant: every invocation takes the same branch to
+#     the same value (a branch that leaves -- return, break, fail -- is not);
+#   * a closure the invocation makes, when every binding it captures is
+#     invariant (the same function over the same values in every
+#     invocation; its own binding, which a recursive closure captures, is
+#     the closure itself);
+#   * a call whose result is determined by its argument values -- a native
+#     classified so (hir::repeatable::Native: context-free, no mutation; or
+#     registered -mutation-stable, its result fixed by its arguments however
+#     the mutable values behind them are mutated in place: StableNative), or
+#     a function whose body is (hir::repeatable::Block) called through an
+#     invariant callee -- over invariant arguments.
+#
+# Anything else may differ from one invocation to the next. MEMO (upvar)
+# holds InvariantBinding's answers for this query: a binding is asked once
+# however many expressions read it.
+proc hir::induction::Invariant {hir e ctx memoVar {depth 0}} {
+    upvar 1 $memoVar memo
+    variable maxInvariantDepth
+    if {$depth > $maxInvariantDepth} {
+        return 0
+    }
+    set inner [expr {$depth + 1}]
+    switch -- [hir::kind $hir $e] {
+        const {
+            return 1
+        }
+        ref {
+            return [InvariantBinding $hir [hir::get $hir $e binding] $ctx memo $inner]
+        }
+        struct {
+            foreach field [hir::get $hir $e fields] {
+                if {![Invariant $hir $field $ctx memo $inner]} {
+                    return 0
+                }
+            }
+            return 1
+        }
+        if {
+            foreach child [hir::children $hir $e] {
+                if {![Invariant $hir $child $ctx memo $inner]} {
+                    return 0
+                }
+            }
+            return 1
+        }
+        bind {
+            # A statement of such a branch: its local is one of the
+            # invocation's own (InvariantBinding reads its value the same way).
+            return [Invariant $hir [hir::get $hir $e value] $ctx memo $inner]
+        }
+        block {
+            foreach b [hir::get $hir $e captures] {
+                set by [dict get [hir::binding $hir $b] declaredBy]
+                if {$by ne "" && [hir::kind $hir $by] eq "bind" && [hir::get $hir $by value] eq $e} {
+                    continue
+                }
+                if {![InvariantBinding $hir $b $ctx memo $inner]} {
+                    return 0
+                }
+            }
+            return 1
+        }
+        project {
+            # (A field read through a native view reads live memory; by the
+            # time this runs hir::layouts::Elaborate has made each one a call
+            # of a native the call rule rejects, and this keeps it so.)
+            set receiver [hir::get $hir $e receiver]
+            if {[hir::types::IsNativeView [hir::typeOf $hir $receiver]]} {
+                return 0
+            }
+            return [Invariant $hir $receiver $ctx memo $inner]
+        }
+        call {
+            lassign [hir::get $hir $e target] targetKind target
+            switch -- $targetKind {
+                native {
+                    set name [dict get [hir::symbol $hir $target] name]
+                    if {![hir::repeatable::Native $name] && ![StableNative $name]} {
+                        return 0
+                    }
+                }
+                block {
+                    if {![Invariant $hir [hir::get $hir $e callee] $ctx memo $inner]
+                            || ![hir::repeatable::Block $hir $target]} {
+                        return 0
+                    }
+                }
+                default {
+                    return 0
+                }
+            }
+            foreach a [hir::get $hir $e args] {
+                if {![Invariant $hir $a $ctx memo $inner]} {
+                    return 0
+                }
+            }
+            return 1
+        }
+    }
+    return 0
+}
+
+# 1 if binding B (of a reference or a capture in the body of the instance CTX
+# describes) holds the same value in every invocation a chain of its self
+# calls makes:
+#
+#   * a parameter every self call passes unchanged;
+#   * a root binding (a native, true, false, unit);
+#   * a binding declared outside the instance's block -- a captured or
+#     module-static one -- when every self call invokes the closure that is
+#     running (SameClosure): each invocation then reads the binding through
+#     the one closure, so its one value (an ambient binding is whatever the
+#     host holds when the closure runs, so never);
+#   * a local of the invocation itself, when the value of its one bind is
+#     invariant (Invariant) -- or is a context load: a context parameter
+#     holds the one installed value of its context type, which is installed
+#     once, at the entry program's top level, and never replaced
+#     (CONTEXTS.md, "Installation"), so every invocation reads that value.
+#
+# MEMO (upvar, Invariant's): BindingId -> the answer, so a binding many
+# expressions read is asked about once. A binding is entered as 0 while its
+# answer is computed, so one reached again through itself would not be
+# proven (no program reaches one so: a bind reads only earlier bindings, and
+# the closure rule skips a closure's own binding).
+proc hir::induction::InvariantBinding {hir b ctx memoVar depth} {
+    upvar 1 $memoVar memo
+    variable maxInvariantDepth
+    if {$b eq "" || $depth > $maxInvariantDepth} {
+        return 0
+    }
+    if {[dict exists $memo $b]} {
+        return [dict get $memo $b]
+    }
+    dict set memo $b 0
+    set result [BindingInvariant $hir $b $ctx memo $depth]
+    dict set memo $b $result
+    return $result
+}
+
+proc hir::induction::BindingInvariant {hir b ctx memoVar depth} {
+    upvar 1 $memoVar memo
+    set index [lsearch -exact [dict get $ctx params] $b]
+    if {$index >= 0} {
+        return [expr {[lindex [dict get $ctx classifications] $index] eq "identity"}]
+    }
+    set binding [hir::binding $hir $b]
+    switch -- [dict get $binding kind] {
+        root {
+            return 1
+        }
+        ambient {
+            return 0
+        }
+    }
+    if {![hir::scopeWithin $hir [dict get $binding scope] [dict get $ctx bodyScope]]} {
+        return [dict get $ctx sameClosure]
+    }
+    set bind [dict get $binding declaredBy]
+    if {[dict get $binding kind] ne "local" || $bind eq "" || [hir::kind $hir $bind] ne "bind"} {
+        return 0
+    }
+    set value [hir::get $hir $bind value]
+    if {[hir::contexts::isLoad $hir $value]} {
+        return 1
+    }
+    return [Invariant $hir $value $ctx memo $depth]
+}
+
+# 1 if native NAME is registered -mutation-stable (core/native.tcl): its
+# result is fixed by its argument values, and no in-place mutation of a
+# mutable value behind one changes it.
+proc hir::induction::StableNative {name} {
+    if {[catch {core::native::metadata $name} meta]} {
+        return 0
+    }
+    return [dict get $meta mutationStable]
+}
+
+# 1 if every self call in SELFCALLEXPRS invokes the closure of BLOCK that is
+# running: its callee is the binding BLOCK's own declaration binds
+# (`fn f(...)`, whose evaluation makes the closure and binds it there, so
+# the closure reads itself through it), directly or through locals bound to
+# it. A self call through anything else (a parameter, a field, a value the
+# specialization resolved to the same instance) may reach another closure of
+# BLOCK, with other captured values.
+proc hir::induction::SameClosure {hir block selfCallExprs} {
+    foreach c $selfCallExprs {
+        if {![OwnClosure $hir [hir::get $hir $c callee] $block 0]} {
+            return 0
+        }
+    }
+    return 1
+}
+
+proc hir::induction::OwnClosure {hir e block depth} {
+    variable maxNestingDepth
+    if {$depth > $maxNestingDepth || [hir::kind $hir $e] ne "ref"} {
+        return 0
     }
     set b [hir::get $hir $e binding]
-    set index [lsearch -exact $params $b]
-    if {$index < 0 || [lindex $classifications $index] ne "identity"} {
-        return [hir::range::unknown]
+    if {$b eq ""} {
+        return 0
     }
-    return [lindex $seeds $index]
+    set binding [hir::binding $hir $b]
+    set bind [dict get $binding declaredBy]
+    if {[dict get $binding kind] ne "local" || $bind eq "" || [hir::kind $hir $bind] ne "bind"} {
+        return 0
+    }
+    set value [hir::get $hir $bind value]
+    if {$value eq $block} {
+        return 1
+    }
+    return [OwnClosure $hir $value $block [expr {$depth + 1}]]
 }
 
 # ---------------------------------------------------------------------------
@@ -257,10 +554,10 @@ proc hir::induction::TerminatingBranch {hir exprs after} {
 # without crossing into a nested `block` (a different invocation this
 # proof has no business following), any expression id in SELFCALLS. This
 # is a plain "does it mention one" search, not itself a dominance argument
-# (#8-#9's actual coverage proof is CoversAll, below, always literal and
-# always at the specific body a guard's continuing side names) -- Guard
-# only ever uses it to decide which single branch of a candidate wrapper
-# to keep looking inside, never to conclude coverage by itself.
+# (#8-#9's actual coverage proof is CoversAll, below, always at the specific
+# body a guard's continuing side names) -- Guard uses it to decide which
+# single branch of a candidate wrapper to keep looking inside, and CoversAll
+# only to find a non-tail self call inside that continuing side.
 proc hir::induction::Reaches {hir e selfCallExprs} {
     if {$e in $selfCallExprs} {
         return 1
@@ -285,14 +582,21 @@ proc hir::induction::AnyReaches {hir stmts selfCallExprs} {
     return 0
 }
 
-# 1 if every one of SELFCALLEXPRS is a literal member of STMTS: the actual
-# (always sound, never approximated) coverage proof, unchanged from what
+# 1 if every one of SELFCALLEXPRS is on the continuing side STMTS: the
+# actual (always sound, never approximated) coverage proof. A self tail call
+# (in TAILCALLEXPRS) must be a literal member of STMTS, unchanged from what
 # this module always required of the classic top-level shape's own
-# siblings-after-the-guard, now also asked of an explicit guard's own
-# `else` body.
-proc hir::induction::CoversAll {stmts selfCallExprs} {
+# siblings-after-the-guard, now also asked of an explicit guard's own `else`
+# body. Any other self call (`x = f(i + 1, ...)`) must be inside one of STMTS
+# (Reaches): whatever expression it sits in, it runs only once the guard has
+# found P != B in this invocation, which is all the proof needs of it.
+proc hir::induction::CoversAll {hir stmts selfCallExprs tailCallExprs} {
     foreach c $selfCallExprs {
-        if {$c ni $stmts} {
+        if {$c in $tailCallExprs} {
+            if {$c ni $stmts} {
+                return 0
+            }
+        } elseif {![AnyReaches $hir $stmts [list $c]]} {
             return 0
         }
     }
@@ -324,7 +628,7 @@ proc hir::induction::EqualityBound {hir cond p} {
     return ""
 }
 
-proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
+proc hir::induction::Guard {hir body p selfCallExprs tailCallExprs {depth 0}} {
     variable maxNestingDepth
     if {$depth > $maxNestingDepth} {
         return ""
@@ -332,7 +636,8 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
 
     # The classic top-level shape, unchanged: an elseless `if p == B` whose
     # true branch terminates, followed by every one of P's self-tail calls
-    # as literal siblings in this same BODY.
+    # as literal siblings in this same BODY (and every other self call inside
+    # one of them: CoversAll).
     for {set i 0} {$i < [llength $body]} {incr i} {
         set stmt [lindex $body $i]
         if {[hir::kind $hir $stmt] ne "if"} {
@@ -350,7 +655,7 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
         if {$bound eq ""} {
             continue
         }
-        if {[CoversAll $after $selfCallExprs]} {
+        if {[CoversAll $hir $after $selfCallExprs $tailCallExprs]} {
             # Both the bound and the condition's own expression id: the
             # latter lets hir::range::analyze recognize, during its own walk
             # of this *same* "if" (same HIR, same expression ids), that its
@@ -419,14 +724,14 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
         # at all: whatever thenBody computes and however it completes is
         # simply not on any path this proof is making a claim about (#15).
         set bound [EqualityBound $hir [dict get $node condition] $p]
-        if {$bound ne "" && [CoversAll $elseBody $selfCallExprs]} {
+        if {$bound ne "" && [CoversAll $hir $elseBody $selfCallExprs $tailCallExprs]} {
             return [list [dict get $node condition] $bound $depth]
         }
         # STMT's own condition is not (or its `else` does not literally
         # hold every self-tail call, and this module never approximates
         # that) the guard itself: keep looking inside its `else` (#3's
         # "if guard_a: ... else: if n == 0: ..." shape).
-        return [Guard $hir $elseBody $p $selfCallExprs [expr {$depth + 1}]]
+        return [Guard $hir $elseBody $p $selfCallExprs $tailCallExprs [expr {$depth + 1}]]
     }
     # thenBody is live: by this pattern's own direction (`p == B`
     # terminates on *true*), STMT's condition can never itself soundly be
@@ -434,7 +739,7 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
     # (sum-refined's own outer `integer? acc`, or #16's further nesting).
     # elseBody, if any -- proven above to reach no self-tail call -- needs
     # no further look, whatever it computes (#14's error-branch shape).
-    return [Guard $hir $thenBody $p $selfCallExprs [expr {$depth + 1}]]
+    return [Guard $hir $thenBody $p $selfCallExprs $tailCallExprs [expr {$depth + 1}]]
 }
 
 # ---------------------------------------------------------------------------
@@ -445,7 +750,7 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
 # once, reused rather than recomputed). Returns a dict:
 #   instances  InstanceId -> {ParamIndex Range ...}   proven overrides
 #   reasons    InstanceId -> {ParamIndex Reason ...}  why an attempted
-#              (step-classified) parameter was not proven
+#              parameter (one Advance steps) was not proven
 #   guards     InstanceId -> {ParamIndex {ConditionExprId BoundExprId
 #              NestingDepth Step UpdateExprId} ...}  provenance for every
 #              proven parameter (spec #40-#41): guard/explain, below, read
@@ -457,11 +762,10 @@ proc hir::induction::Guard {hir body p selfCallExprs {depth 0}} {
 # the correct side of B" check reads SEEDS, which only join the *known*
 # direct callers' arguments, so an unknown caller (the instance escaping as a
 # value, or a call that fell back to it) could start i past B and never meet
-# the terminator. Its step-classified parameters get the reason "open
+# the terminator. Its parameters that Advance steps get the reason "open
 # instance".
 proc hir::induction::analyze {hir spec seeds {open {}}} {
-    set context [dict get $spec context]
-    set selfTails [dict get $context selfTails]
+    set selfTails [dict get $spec context selfTails]
     set instances [dict create]
     set reasons [dict create]
     set allMonotone [dict create]
@@ -472,41 +776,67 @@ proc hir::induction::analyze {hir spec seeds {open {}}} {
         if {$block eq "program"} {
             continue
         }
+        # Every call the specialization resolved to this same instance is a
+        # self call, in tail position or not: each enters the instance with
+        # the arguments it passes, and SEEDS (hir::range::ExternalSeeds)
+        # counts none of them. So every one is a step of the proof -- passing
+        # P unchanged or by the common step (Advance) and inside the guard's
+        # continuing side (Guard, CoversAll) -- or nothing is proven.
+        # A non-tail call such as `x = f(i + 3, ...)` starts a nested
+        # invocation from i + 3 exactly as a tail call would; leaving it out
+        # would lock P to a Range the program leaves. TAILCALLEXPRS are the
+        # self tail calls, whose place Guard checks as it always did. The
+        # proof is attempted where it always was, for an instance whose
+        # recursion a self tail call carries; one with only non-tail self
+        # calls is left to the ordinary fixpoint and to hir/rangerec.tcl.
         set selfCallExprs {}
+        set tailCallExprs {}
         foreach {callExpr target} [dict get $instance calls] {
-            if {$target eq $id && [dict exists $selfTails $callExpr]} {
+            if {$target eq $id} {
                 lappend selfCallExprs $callExpr
+                if {[dict exists $selfTails $callExpr]} {
+                    lappend tailCallExprs $callExpr
+                }
             }
         }
-        if {$selfCallExprs eq ""} {
+        if {$tailCallExprs eq ""} {
             continue
         }
         set params [hir::get $hir $block params]
         set n [llength $params]
         set calls [lmap c $selfCallExprs {hir::get $hir $c args}]
-        set classifications [lmap p $params {ClassifyParam $hir $calls [lsearch -exact $params $p] $p}]
+        set classifications {}
+        set advances {}
+        for {set index 0} {$index < $n} {incr index} {
+            set p [lindex $params $index]
+            lappend classifications [ClassifyParam $hir $calls $index $p]
+            lappend advances [Advance $hir $calls $index $p]
+        }
         if {[dict exists $open $id]} {
             for {set index 0} {$index < $n} {incr index} {
-                set class [lindex $classifications $index]
-                if {$class ne "" && [lindex $class 0] eq "step"} {
+                if {[lindex $advances $index] ne ""} {
                     dict set reasons $id $index "open instance"
                 }
             }
             continue
         }
+        set ctx [dict create params $params classifications $classifications \
+            bodyScope [hir::get $hir $block bodyScope] \
+            sameClosure [SameClosure $hir $block $selfCallExprs]]
         set paramSeeds [expr {[dict exists $seeds $id] ? [dict get $seeds $id] : [lrepeat $n [hir::range::unknown]]}]
         set body [hir::get $hir $block body]
         set overrides [dict create]
         set monotone [dict create]
         set guards [dict create]
         for {set index 0} {$index < $n} {incr index} {
-            set class [lindex $classifications $index]
-            if {$class eq "" || [lindex $class 0] ne "step"} {
+            set advance [lindex $advances $index]
+            if {$advance eq ""} {
                 continue
             }
+            lassign $advance class update
             set step [lindex $class 1]
             set p [lindex $params $index]
-            set guard [Guard $hir $body $p $selfCallExprs]
+            set guard [Guard $hir $body $p $selfCallExprs $tailCallExprs]
             if {$guard eq ""} {
                 dict set reasons $id $index "unsupported relational form"
                 continue
@@ -516,7 +846,7 @@ proc hir::induction::analyze {hir spec seeds {open {}}} {
                 dict set reasons $id $index "step may skip equality terminator"
                 continue
             }
-            set boundRange [BoundRange $hir $boundExpr $params $classifications $paramSeeds]
+            set boundRange [BoundRange $hir $boundExpr $ctx $paramSeeds]
             set initial [lindex $paramSeeds $index]
             if {[hir::range::isUnknown $boundRange]} {
                 dict set reasons $id $index "bound not stable"
@@ -538,7 +868,7 @@ proc hir::induction::analyze {hir spec seeds {open {}}} {
                 }
                 dict set overrides $index [dict create min [dict get $initial min] max $bmax]
                 dict set monotone $conditionExpr [list $p $step]
-                dict set guards $index [list $conditionExpr $boundExpr $guardDepth $step [lindex $calls 0 $index]]
+                dict set guards $index [list $conditionExpr $boundExpr $guardDepth $step $update]
             } else {
                 # The decreasing mirror (#19): i's best-case (smallest)
                 # initial value must not already be below B's worst-case
@@ -554,7 +884,7 @@ proc hir::induction::analyze {hir spec seeds {open {}}} {
                 }
                 dict set overrides $index [dict create min $bmin max [dict get $initial max]]
                 dict set monotone $conditionExpr [list $p $step]
-                dict set guards $index [list $conditionExpr $boundExpr $guardDepth $step [lindex $calls 0 $index]]
+                dict set guards $index [list $conditionExpr $boundExpr $guardDepth $step $update]
             }
         }
         if {[dict size $overrides]} {
