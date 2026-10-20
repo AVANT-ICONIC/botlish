@@ -3854,6 +3854,7 @@ tests/mutable-vector.test mv-show pass
 tests/mutable-vector.test mv-take-order pass
 tests/mutable-vector.test mv-type-affinity pass
 tests/mutable-vector.test mv-type-syntax pass
+tests/mutable-vector.test mv-untyped-loop pass
 tests/mutarray-construction.test mutarray-arch-1 pass
 tests/mutarray-construction.test mutarray-arg-1 pass
 tests/mutarray-construction.test mutarray-arg-2 pass

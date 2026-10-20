@@ -701,6 +701,15 @@ core::native::register mutable_vector::clear
 >>>>
 
 
+@@ unmarked-loop-drains the interpreter consumes any vector a loop meets, not only the one its consume mark names: a vector reaching an unmarked loop through a value of no collection type is drained instead of the loop's TYPE error (and a later loop over it sees it empty)
+## core/evaluator.tcl
+<<<<
+    if {[ConsumeMarked $listExpr]} {
+====
+    if {[core::value::kind $listValue] in {mutvec mutarray}} {
+>>>>
+
+
 @@ loop-aliases-element-compiled consuming iteration aliases each element: the loop variable owns it while the vector keeps it (Tcl compiler)
 ## compiler/compiler.tcl
 <<<<

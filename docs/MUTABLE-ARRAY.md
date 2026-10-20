@@ -489,7 +489,8 @@ releases are the AFFINE-VALUES.md machinery.
 the dying array first), `Generate` (factory calls through
 `core::callable::invoke`, dropping what it made on failure), `swapDrop`,
 `setDrop`, `takeFront`; counters (`created`, `shares`) for tests. The
-consuming loop (`core::forms::ConsumeVector`) drains a vector or an array
+consuming loop (`core::forms::ConsumeVector`, a `listloop` whose iterable is
+the consume mark) drains a vector or an array
 (`core::mutvec::remaining`/`drainFront`).
 
 ### 46. Tcl compiler lowering

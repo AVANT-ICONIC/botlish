@@ -266,6 +266,15 @@ test mv-cow-loop {item 49: a loop over an unrestricted vector iterates a snapsho
     mvAgree "import mutable_vector\na = mutable_vector::from_list(\[1, 2, 3\])\nxs = loop x in a:\n    a.push(x * 10)\n    x\n\[xs, a\]\n"
 } -result {value {[[1, 2, 3], <mutable-vector [1, 2, 3, 10, 20, 30]>]}}
 
+test mv-untyped-loop {item 49: a loop the compiler does not mark consuming walks a List on every backend: a vector reaching one through a value of no collection type (an untyped parameter, an `any` struct field mutated in place) is the loop's TYPE error -- the interpreter neither drains it nor iterates it, exactly like the Tcl compiler and native code} -body {
+    set untyped "import mutable_vector\nfn launder(v: any) -> any:\n    v\nfn f(xs):\n    ys = loop x in xs:\n        x\n    zs = loop x in xs:\n        x\n    \[ys, zs\]\nf(launder(mutable_vector::from_list(\[1, 2, 3\])))\n"
+    set field "import mutable_vector\nstruct Box:\n    v: any\nfn f(b: Box):\n    ys = loop x in b.v:\n        x * 10\n    mutable_vector::push(b.v, 4)\n    zs = loop x in b.v:\n        x\n    \[ys, zs\]\nf(Box {v: mutable_vector::from_list(\[1, 2, 3\])})\n"
+    lmap text [list $untyped $field] {
+        set hir [surface::compile $text -warnings off]
+        lsort -unique [lmap b {interp compile cranelift-generic cranelift} {lrange [outcomeUnderHir $b $hir] 0 1}]
+    }
+} -cleanup {unset -nocomplain untyped field text hir} -result {{{error {CORE SEMANTIC TYPE}}} {{error {CORE SEMANTIC TYPE}}}}
+
 test mv-context-member {item 44: a context struct's vector member is a place every function sharing the context mutates in place; a snapshot read out of it (in any function, mutating or not) is independent of later writes; natively the installed header is a GC root} -body {
     set text "import mutable_vector\ncontext struct CaptureIO:\n    output: MutableVector\[str\]\nfn write_text(text: str, context io: CaptureIO) -> unit:\n    io.output.push(text)\nfn count(context io: CaptureIO) -> int:\n    io.output.length()\nfn snapshot(context io: CaptureIO) -> MutableVector\[str\]:\n    io.output\nwith context CaptureIO {output: mutable_vector::from_list(\[\"s0\"\])}\nwrite_text(\"a0\")\ns1 = snapshot()\nwrite_text(\"b0\")\nwrite_text(\"c0\")\ns2 = snapshot()\n\[count(), s1, s2\]\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}]

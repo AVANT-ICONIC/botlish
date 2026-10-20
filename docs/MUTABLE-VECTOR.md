@@ -656,8 +656,11 @@ Core IR -- which keeps no element types -- still says the loop consumes
 `core/mutvec.tcl`: headers `{mutvec ID}` over `core::mutvec::store(ID)` (a
 Tcl list); `core::value` knows the kind (`show` `<mutable-vector [1, 2]>`,
 equality is `CORE SEMANTIC EQUALITY` like MutableArray's -- vector equality
-is a non-goal). The interpreter's `listloop` over a vector value drains it
-(`core::forms::ConsumeVector`).
+is a non-goal). The interpreter's `listloop` whose iterable is the consume
+mark drains the vector (`core::forms::ConsumeVector`); any other `listloop`
+requires a List, like the Tcl compiler's and native code's, so a vector
+reaching one through a value of no collection type is the loop's TYPE error,
+never drained (`mv-untyped-loop`).
 
 ### 57. Tcl compiler lowering
 
