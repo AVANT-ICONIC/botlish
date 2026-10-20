@@ -309,6 +309,9 @@ mod tests {
     fn decimal_quantize() {
         assert_eq!(quantize(0.30000000000000004, 2), Some(0.3));
         assert_eq!(quantize(1.0e20, 2), Some(1.0e20));
+        // No binary64 holds its nine-place decimal (core::decimal::Quantize
+        // agrees: decimal-rounded.test's dr-quantize).
+        assert_eq!(quantize(4873863637.854281, 9), None);
         assert_eq!(next_double(0.0, true), Some(5e-324));
         assert_eq!(next_double(5e-324, false), Some(0.0));
     }

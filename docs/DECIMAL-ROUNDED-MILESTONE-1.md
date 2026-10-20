@@ -719,7 +719,7 @@ exception.
   2, 3, 5, 7, 9, 17, 41, 99 and 123 at 300 constants each (376 cases per
   seed; per seed 64% to 71% of the constants accepted, 28% to 35%
   DECIMAL-PRECISION, 1% to 2% KNOWN-ERROR): no disagreement.
-* **`audit/decimal-rounded/tools/mutate.tcl`** with `mutants.txt`: 25
+* **`audit/decimal-rounded/tools/mutate.tcl`** with `mutants.txt`: 24
   mutants -- the rounding rule (Tcl and native), a proof claiming one place
   more, the representation always the nearest binary64, an unchecked
   quantization (Tcl and native), comparisons of representations (Tcl and
@@ -742,7 +742,14 @@ exception.
   (`golden-framework.test`, `framework-semantics.bot`) and the static-compile
   census. `tools/compilerpedia.tcl check` passes.
 
-Mutation result: RESULT-PENDING.
+Mutation result: 24 mutants, 24 killed, none survived. The test file kills
+every one; the fuzzer independently kills the ones that change a
+constant's accepted value or a comparison (round-half-up, proven-one-more,
+compare-representation in both runtimes, display-extra-place, blind-min);
+the Rust tests kill the native rounding, comparison and decay mutants. The
+native unchecked quantization was caught only by the test file
+(`dr-quantize`'s UnrepresentableDecimal case), so `decimal_quantize` now
+also checks an unrepresentable quantization.
 
 ## 20. Conservative limitations
 
