@@ -652,17 +652,28 @@ legality side, which has none by design.
 `tests/hir-range.test`.
 
 * **Hypothesis it can express:** "p moves from its initial value toward B by
-  exactly ±1 per self-tail call and stops when it equals B". Hence
+  exactly ±1 per self call and stops when it equals B". Hence
   `p ∈ [init.min, B.max]` (or the mirror for a decreasing step). It also
   records `monotone`, so the continuing `p != B` branch narrows to `p < B`.
 * **How it is established:**
-  * Every self-tail call passes `p ± c` with the same literal `c`
-    (`ClassifyParam`, `183`).
-  * An `if p == B` guard dominates every self-tail call, either at the top
-    level or under "harmless wrapper" `if`s (`Guard`, `327`).
+  * Every self call, tail or not, passes `p ± c` with the same literal `c`
+    (`ClassifyParam`, `183`). A non-tail self call enters the instance like
+    a tail one, and `ExternalSeeds` counts no self call. The proof once read
+    the tail calls only, and `x = f(i + 3, ...)` then left a lock the
+    program broke: a mask computed a wrong value and a `rimodtotal` divided
+    by zero (`range-induction-nontail-self-call`,
+    `mod-lowering-nontail-self-call`).
+  * An `if p == B` guard dominates every self call, either at the top
+    level or under "harmless wrapper" `if`s (`Guard`, `327`): a tail call
+    is a statement of the guard's continuing side, any other self call is
+    inside it (`CoversAll`).
   * `|c| = 1`.
-  * B is stable: a literal, a context-free native call, or a parameter
-    passed through unchanged (`BoundRange`, `209`).
+  * B is stable, one value for the whole recursion: a literal, a parameter
+    passed through unchanged, or a call of a native determined by its
+    argument values (`hir::repeatable::Native`) whose arguments are such
+    values in turn (`BoundRange`, `Invariant`). A registered result Range
+    alone is not enough: `i == char::scalar_value(c)` with `c` recomputed
+    every step can be stepped past.
   * The initial value starts on the correct side of B. It is read from
     `ExternalSeeds`, the literal arguments of known direct callers.
 * **How recursive calls are analyzed:** the proven override is *locked* (it
@@ -672,13 +683,15 @@ legality side, which has none by design.
 * **What does not cross:**
   * relations (`p < length(text)` becomes the constant `B.max`);
   * other parameters' facts;
-  * non-tail recursion;
+  * recursion with no self tail call (not attempted);
+  * a non-tail self call with another step, or outside the guard's
+    continuing side (it is counted, and the proof declines);
   * steps of 2 or more ("step may skip equality terminator",
     `range-induction-3`);
   * caller-propagated (non-literal) seeds.
 * **Generality:** it is specific to one recurrence family (`==`
-  termination, unit step, self-tail) but structural. It is not keyed by
-  name.
+  termination, unit step, a self tail call) but structural. It is not
+  keyed by name.
 * **Fix S3:** it is no longer attempted for open instances (§I).
 * **Consumers:**
   * range → raw-Int decisions, e.g. `reverse_from`'s `index` stays raw;

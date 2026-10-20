@@ -312,6 +312,65 @@ test range-induction-closed-instance-unchanged {the same function without the es
     inductionOf $analysis [rangeInstance $spec count_up] 0
 } -result {[0, 5]}
 
+# Every self call is a step of the proof, tail or not: a non-tail one enters
+# the instance like a tail one, and no seed counts it. f(9, 1) calls
+# f(12, 2) (not a tail call), which runs i = 12, 13, 14; i was locked to
+# [9, 10] from the tail call alone, the `if i > 9` below was decided by it,
+# and native code returned 15 instead of 104.
+test range-induction-nontail-self-call {a non-tail self call (x = f(i + 3, 2)) stepping i by another amount than the tail call is a self call the classification sees: no induction fact for i, and every backend computes 104} -body {
+    set source "fn f(i: int, d: int) -> int:\n    if i == 10:\n        d\n    else:\n        if d > 12:\n            return d\n        x = if d == 1:\n            f(i + 3, 2)\n        else:\n            0\n        y = if i > 9:\n            100\n        else:\n            1\n        f(i + 1, d + x + y)\n\nf(9, 1)"
+    lassign [rangeOf $source] hir spec analysis
+    set hir [surface::compile $source t.bot -warnings off]
+    list [inductionOf $analysis [rangeInstance $spec f] 0] \
+        [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
+} -result {{} {104 104 104 104}}
+
+test range-induction-nontail-self-call-step {a non-tail self call that is a statement of the guard's continuing side and steps i like the tail call is a step of the same proof: the fact stands} -body {
+    lassign [rangeOf "fn h(i: int, n: int, acc: int) -> int:\n    if i == n:\n        return acc\n    h(i + 1, n, 0)\n    h(i + 1, n, acc + 1)\n\nh(0, 6, 0)"] hir spec analysis
+    inductionOf $analysis [rangeInstance $spec h] 0
+} -result {[0, 6]}
+
+test range-induction-nontail-self-call-nested {a non-tail self call nested in an expression of the guard's continuing side, stepping i like the tail call, runs only once i != n: a step of the same proof, and the fact stands} -body {
+    lassign [rangeOf "fn h(i: int, n: int, acc: int) -> int:\n    if i == n:\n        return acc\n    x = h(i + 1, n, 0)\n    h(i + 1, n, acc + x)\n\nh(0, 6, 0)"] hir spec analysis
+    inductionOf $analysis [rangeInstance $spec h] 0
+} -result {[0, 6]}
+
+test range-induction-nontail-self-call-undominated {a non-tail self call before the guard runs when i == n too, so its i + 1 can pass n: it is no step of the proof, and no fact is minted though the tail call alone would give one} -body {
+    lassign [rangeOf "fn h(i: int, n: int, acc: int) -> int:\n    x = if acc == 0:\n        h(i + 1, n, 1)\n    else:\n        0\n    if i == n:\n        return acc + x\n    h(i + 1, n, acc + 1)\n\nh(0, 6, 0)"] hir spec analysis
+    inductionOf $analysis [rangeInstance $spec h] 0
+} -result {}
+
+# A native call is a bound only when it has one value for the whole
+# recursion: its native is determined by its argument values
+# (hir::repeatable::Native) and every argument is invariant. With c
+# recomputed each step, i == char::scalar_value(c) compares i against a new
+# value each time, and i steps past all of them.
+test range-induction-varying-native-bound {a native-call bound whose argument changes on the self call is not stable: no induction fact, reason "bound not stable"; with the argument passed unchanged the same bound proves i in [0, 0x10FFFF]} -body {
+    set varying [rangeOf "import char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == char::scalar_value(c):\n        i\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n)\n\nf(1114111, 'b')"]
+    set fixed [rangeOf "import char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == char::scalar_value(c):\n        i\n    else:\n        f(i + 1, c)\n\nf(0, 'z')"]
+    set out {}
+    foreach result [list $varying $fixed] {
+        lassign $result hir spec analysis
+        set id [rangeInstance $spec f]
+        lappend out [inductionOf $analysis $id 0] [hir::induction::reason [dict get $analysis induction] $id 0]
+    }
+    set out
+} -result {{} {bound not stable} {[0, 1114111]} {}}
+
+test range-induction-invariant-nested-bound {a bound call whose argument is itself a call of a native determined by its arguments, over a parameter passed unchanged, is invariant: str::length(str::concat(s, "ab")) proves i in [0, smallMax]} -body {
+    lassign [rangeOf "import str\nfn g(i: int, s: str) -> int:\n    if i == str::length(str::concat(s, \"ab\")):\n        i\n    else:\n        g(i + 1, s)\n\ng(0, \"hello\")"] hir spec analysis
+    inductionOf $analysis [rangeInstance $spec g] 0
+} -result "\[0, $hir::range::smallMax\]"
+
+test range-induction-mutable-length-bound {a bound read from a MutableVector parameter passed unchanged is not invariant: the vector is a value mutated in place between the calls (v.pop()), so its length is no single B, and mutable_vector::length is no native determined by its argument values; every backend still meets i == 2} -body {
+    set source "import mutable_vector\nfn f(i: int, v: MutableVector\[int\]) -> int:\n    if i == v.length():\n        i\n    else:\n        x = v.pop():\n            on IndexNotFound:\n                0\n        f(i + 1, v)\n\nv = mutable_vector::from_list(\[1, 2, 3, 4\])\nf(0, v)"
+    lassign [rangeOf $source] hir spec analysis
+    set id [rangeInstance $spec f]
+    set hir [surface::compile $source t.bot -warnings off]
+    list [inductionOf $analysis $id 0] [hir::induction::reason [dict get $analysis induction] $id 0] \
+        [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
+} -result {{} {bound not stable} {2 2 2 2}}
+
 # ---------------------------------------------------------------------------
 # Parameter branch narrowing (this milestone's Part A): the same
 # ComparisonNarrowing machinery hir/range.tcl already had for `local`
