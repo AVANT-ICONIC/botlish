@@ -4,6 +4,11 @@
 > arrays too -- an array field is a live array, `NativeView[array N of E]`,
 > whose elements `binary::element` reads at a checked index.
 
+> Partially superseded by LAYOUT-UNIONS.md: a view reads unions too -- a
+> field holding a union by value is a live union, `NativeView[U]`, whose
+> alternatives are read at its address (`v.u.whole`), one interpretation
+> at a time; a union has no `binary::load`.
+
 Read-only native layout views: an ordinary `layout` read from authorized
 live native memory, through `binary::native::view(L, p)` and
 `NativeView[L]`; and pointer fields in layouts.

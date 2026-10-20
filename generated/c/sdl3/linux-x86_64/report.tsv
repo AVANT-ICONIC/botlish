@@ -4855,10 +4855,10 @@ record	struct SDL_VirtualJoystickSensorDesc	layout-blocked		float	field rate: fl
 record	struct SDL_VirtualJoystickDesc	layout-direct	sdl3::layouts	SDL_VirtualJoystickDesc	sizeof 136, _Alignof 8, 26 fields
 record	struct anon@SDL_gamepad.h:276	layout-direct	sdl3::layouts	SDL_GamepadBinding_input_axis	sizeof 12, _Alignof 4, 3 fields
 record	struct anon@SDL_gamepad.h:283	layout-direct	sdl3::layouts	SDL_GamepadBinding_input_hat	sizeof 8, _Alignof 4, 2 fields
-record	union anon@SDL_gamepad.h:272	layout-blocked		union	a union: its members overlap
+record	union anon@SDL_gamepad.h:272	layout-direct	sdl3::layouts	SDL_GamepadBinding_input	sizeof 12, _Alignof 4, 3 fields
 record	struct anon@SDL_gamepad.h:296	layout-direct	sdl3::layouts	SDL_GamepadBinding_output_axis	sizeof 12, _Alignof 4, 3 fields
-record	union anon@SDL_gamepad.h:292	layout-blocked		union	a union: its members overlap
-record	struct SDL_GamepadBinding	layout-blocked		nested-layout-blocked	field input (union anon@SDL_gamepad.h:272, field) -> union; field output (union anon@SDL_gamepad.h:292, field) -> union
+record	union anon@SDL_gamepad.h:292	layout-direct	sdl3::layouts	SDL_GamepadBinding_output	sizeof 12, _Alignof 4, 2 fields
+record	struct SDL_GamepadBinding	layout-direct	sdl3::layouts	SDL_GamepadBinding	sizeof 32, _Alignof 4, 4 fields
 record	struct SDL_CursorFrameInfo	layout-direct	sdl3::layouts	SDL_CursorFrameInfo	sizeof 16, _Alignof 8, 2 fields
 record	struct SDL_Finger	layout-blocked		float	field x: float (float); field y: float (float); field pressure: float (float)
 record	struct SDL_CommonEvent	layout-direct	sdl3::layouts	SDL_CommonEvent	sizeof 16, _Alignof 8, 3 fields
@@ -4899,7 +4899,7 @@ record	struct SDL_ClipboardEvent	layout-blocked		c-bool	field owner: C _Bool (_B
 record	struct SDL_SensorEvent	layout-blocked		float	field data: array element: float (float)
 record	struct SDL_QuitEvent	layout-direct	sdl3::layouts	SDL_QuitEvent	sizeof 16, _Alignof 8, 3 fields
 record	struct SDL_UserEvent	layout-direct	sdl3::layouts	SDL_UserEvent	sizeof 40, _Alignof 8, 7 fields
-record	union SDL_Event	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field key (struct SDL_KeyboardEvent, union-member) -> c-bool; field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool; field motion (struct SDL_MouseMotionEvent, union-member) -> float; field button (struct SDL_MouseButtonEvent, union-member) -> c-bool; field wheel (struct SDL_MouseWheelEvent, union-member) -> float; field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool; field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool; field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float; field gsensor (struct SDL_GamepadSensorEvent, union-member) -> float; field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool; field sensor (struct SDL_SensorEvent, union-member) -> float; field tfinger (struct SDL_TouchFingerEvent, union-member) -> float; field pinch (struct SDL_PinchFingerEvent, union-member) -> float; field ptouch (struct SDL_PenTouchEvent, union-member) -> float; field pmotion (struct SDL_PenMotionEvent, union-member) -> float; field pbutton (struct SDL_PenButtonEvent, union-member) -> float; field paxis (struct SDL_PenAxisEvent, union-member) -> float; field drop (struct SDL_DropEvent, union-member) -> float; field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool
+record	union SDL_Event	layout-blocked		nested-layout-blocked	field key (struct SDL_KeyboardEvent, union-member) -> c-bool; field edit_candidates (struct SDL_TextEditingCandidatesEvent, union-member) -> c-bool; field motion (struct SDL_MouseMotionEvent, union-member) -> float; field button (struct SDL_MouseButtonEvent, union-member) -> c-bool; field wheel (struct SDL_MouseWheelEvent, union-member) -> float; field jbutton (struct SDL_JoyButtonEvent, union-member) -> c-bool; field gbutton (struct SDL_GamepadButtonEvent, union-member) -> c-bool; field gtouchpad (struct SDL_GamepadTouchpadEvent, union-member) -> float; field gsensor (struct SDL_GamepadSensorEvent, union-member) -> float; field adevice (struct SDL_AudioDeviceEvent, union-member) -> c-bool; field sensor (struct SDL_SensorEvent, union-member) -> float; field tfinger (struct SDL_TouchFingerEvent, union-member) -> float; field pinch (struct SDL_PinchFingerEvent, union-member) -> float; field ptouch (struct SDL_PenTouchEvent, union-member) -> float; field pmotion (struct SDL_PenMotionEvent, union-member) -> float; field pbutton (struct SDL_PenButtonEvent, union-member) -> float; field paxis (struct SDL_PenAxisEvent, union-member) -> float; field drop (struct SDL_DropEvent, union-member) -> float; field clipboard (struct SDL_ClipboardEvent, union-member) -> c-bool
 record	struct SDL_PathInfo	layout-direct	sdl3::layouts	SDL_PathInfo	sizeof 40, _Alignof 8, 5 fields
 record	struct SDL_GPUViewport	layout-blocked		float	field x: float (float); field y: float (float); field w: float (float); field h: float (float); field min_depth: float (float); field max_depth: float (float)
 record	struct SDL_GPUTextureTransferInfo	layout-direct	sdl3::layouts	SDL_GPUTextureTransferInfo	sizeof 24, _Alignof 8, 4 fields
@@ -4944,7 +4944,7 @@ record	struct SDL_HapticCondition	layout-direct	sdl3::layouts	SDL_HapticConditio
 record	struct SDL_HapticRamp	layout-direct	sdl3::layouts	SDL_HapticRamp	sizeof 44, _Alignof 4, 12 fields
 record	struct SDL_HapticLeftRight	layout-direct	sdl3::layouts	SDL_HapticLeftRight	sizeof 12, _Alignof 4, 4 fields
 record	struct SDL_HapticCustom	layout-direct	sdl3::layouts	SDL_HapticCustom	sizeof 56, _Alignof 8, 14 fields
-record	union SDL_HapticEffect	layout-blocked		union	a union: its members overlap
+record	union SDL_HapticEffect	layout-direct	sdl3::layouts	SDL_HapticEffect	sizeof 72, _Alignof 8, 7 fields
 record	struct SDL_hid_device_info	layout-direct	sdl3::layouts	SDL_hid_device_info	sizeof 80, _Alignof 8, 15 fields
 record	struct SDL_Locale	layout-direct	sdl3::layouts	SDL_Locale	sizeof 16, _Alignof 8, 2 fields
 record	struct SDL_MessageBoxButtonData	layout-direct	sdl3::layouts	SDL_MessageBoxButtonData	sizeof 16, _Alignof 8, 3 fields

@@ -1,9 +1,9 @@
 # c-bindgen layout manifest: profile boringssl, target linux-x86_64, toolchain clang x86_64-linux-gnu (Ubuntu clang version 18.1.3 (1ubuntu1)) (C-BINDGEN-LAYOUTS.md)
 kind	record	index	name	status	offset	size	align	c	type	detail
-record	union evp_aead_ctx_st_state	-	-	layout-blocked	-	560	8	union evp_aead_ctx_st_state	-	identity=-; header=include/openssl/aead.h:222; blockers=union: a union: its members overlap; roots=union
+record	union evp_aead_ctx_st_state	-	evp_aead_ctx_st_state	layout-direct	-	560	8	union evp_aead_ctx_st_state	-	identity=-; header=include/openssl/aead.h:222
 field	union evp_aead_ctx_st_state	0	opaque	array	0	560	-	uint8_t opaque[560]	array 560 of ffi::c::UChar	c=opaque; element=char uint8_t; bounds=560; extent=560
 field	union evp_aead_ctx_st_state	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
-record	struct evp_aead_ctx_st	-	-	layout-blocked	-	576	8	struct evp_aead_ctx_st	-	typedefs=EVP_AEAD_CTX; identity=boringssl::ctypes::EVP_AEAD_CTX; header=include/openssl/aead.h:229; nested=field state (union evp_aead_ctx_st_state, field) -> union; roots=union; deps=union evp_aead_ctx_st_state; pointed-by=16
+record	struct evp_aead_ctx_st	-	EVP_AEAD_CTX	layout-direct	-	576	8	struct evp_aead_ctx_st	-	typedefs=EVP_AEAD_CTX; identity=boringssl::ctypes::EVP_AEAD_CTX; header=include/openssl/aead.h:229; deps=union evp_aead_ctx_st_state; pointed-by=16
 field	struct evp_aead_ctx_st	0	aead	pointer	0	8	-	const EVP_AEAD *aead	ffi::c::Ptr[EVP_AEAD]	c=aead
 field	struct evp_aead_ctx_st	1	state	nested	8	560	-	union evp_aead_ctx_st_state state	evp_aead_ctx_st_state	c=state
 field	struct evp_aead_ctx_st	2	tag_len	scalar	568	1	-	uint8_t tag_len	ffi::c::UChar	c=tag_len
@@ -35,7 +35,7 @@ field	struct asn1_string_st	0	length	scalar	0	4	-	int length	ffi::c::Int	c=lengt
 field	struct asn1_string_st	1	type_	scalar	4	4	-	int type	ffi::c::Int	c=type
 field	struct asn1_string_st	2	data	pointer	8	8	-	unsigned char *data	ffi::c::Ptr[ffi::c::UChar]	c=data
 field	struct asn1_string_st	3	flags	scalar	16	8	-	long flags	ffi::c::Long	c=flags
-record	union anon@asn1.h:1449	-	-	layout-blocked	-	8	8	__typeof__(((struct asn1_type_st *)0)->value)	-	identity=-; header=include/openssl/asn1.h:1449; blockers=union: a union: its members overlap; roots=union
+record	union anon@asn1.h:1449	-	ASN1_TYPE_value	layout-direct	-	8	8	__typeof__(((struct asn1_type_st *)0)->value)	-	identity=-; header=include/openssl/asn1.h:1449
 field	union anon@asn1.h:1449	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
 field	union anon@asn1.h:1449	1	boolean	scalar	0	4	-	ASN1_BOOLEAN boolean	ffi::c::Int	c=boolean
 field	union anon@asn1.h:1449	2	asn1_string	pointer	0	8	-	ASN1_STRING *asn1_string	ffi::c::Ptr[ASN1_BIT_STRING]	c=asn1_string
@@ -57,7 +57,7 @@ field	union anon@asn1.h:1449	17	utf8string	pointer	0	8	-	ASN1_UTF8STRING *utf8st
 field	union anon@asn1.h:1449	18	set	pointer	0	8	-	ASN1_STRING *set	ffi::c::Ptr[ASN1_BIT_STRING]	c=set
 field	union anon@asn1.h:1449	19	sequence	pointer	0	8	-	ASN1_STRING *sequence	ffi::c::Ptr[ASN1_BIT_STRING]	c=sequence
 field	union anon@asn1.h:1449	20	asn1_value	pointer	0	8	-	ASN1_VALUE *asn1_value	ffi::c::Ptr[ASN1_VALUE]	c=asn1_value
-record	struct asn1_type_st	-	-	layout-blocked	-	16	8	struct asn1_type_st	-	typedefs=ASN1_TYPE; identity=boringssl::ctypes::ASN1_TYPE; header=include/openssl/asn1.h:1447; nested=field value (union anon@asn1.h:1449, field) -> union; roots=union; deps=union anon@asn1.h:1449; pointed-by=21
+record	struct asn1_type_st	-	ASN1_TYPE	layout-direct	-	16	8	struct asn1_type_st	-	typedefs=ASN1_TYPE; identity=boringssl::ctypes::ASN1_TYPE; header=include/openssl/asn1.h:1447; deps=union anon@asn1.h:1449; pointed-by=21
 field	struct asn1_type_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
 field	struct asn1_type_st	1	value	nested	8	8	-	union anon@asn1.h:1449 value	ASN1_TYPE_value	c=value
 record	struct ASN1_TEMPLATE_st	-	ASN1_TEMPLATE	layout-direct	-	32	8	struct ASN1_TEMPLATE_st	-	typedefs=ASN1_TEMPLATE; identity=boringssl::ctypes::ASN1_TEMPLATE; header=include/openssl/asn1t.h:277
@@ -119,10 +119,10 @@ field	struct cbb_child_st	0	base	pointer	0	8	-	struct cbb_buffer_st *base	ffi::c
 field	struct cbb_child_st	1	offset	scalar	8	8	-	size_t offset	ffi::c::ULong	c=offset
 field	struct cbb_child_st	2	pending_len_len	scalar	16	1	-	uint8_t pending_len_len	ffi::c::UChar	c=pending_len_len
 field	struct cbb_child_st	3	pending_is_asn1	bitfield	-	-	-	unsigned int pending_is_asn1	-	c=pending_is_asn1; bits=1; blockers=bitfield: bitfield pending_is_asn1: unsigned int : 1
-record	union anon@bytestring.h:510	-	-	layout-blocked	-	32	8	__typeof__(((struct cbb_st *)0)->u)	-	identity=-; header=include/openssl/bytestring.h:510; blockers=union: a union: its members overlap; nested=field base (struct cbb_buffer_st, union-member) -> bitfield | field child (struct cbb_child_st, union-member) -> bitfield; roots=bitfield,union; deps=struct cbb_buffer_st,struct cbb_child_st
+record	union anon@bytestring.h:510	-	-	layout-blocked	-	32	8	__typeof__(((struct cbb_st *)0)->u)	-	identity=-; header=include/openssl/bytestring.h:510; nested=field base (struct cbb_buffer_st, union-member) -> bitfield | field child (struct cbb_child_st, union-member) -> bitfield; roots=bitfield; deps=struct cbb_buffer_st,struct cbb_child_st
 field	union anon@bytestring.h:510	0	base	nested	0	32	-	struct cbb_buffer_st base	cbb_buffer_st	c=base
 field	union anon@bytestring.h:510	1	child	nested	0	24	-	struct cbb_child_st child	cbb_child_st	c=child
-record	struct cbb_st	-	-	layout-blocked	-	48	8	struct cbb_st	-	typedefs=CBB; identity=boringssl::ctypes::CBB; header=include/openssl/bytestring.h:504; nested=field u (union anon@bytestring.h:510, field) -> union; roots=bitfield,union; deps=union anon@bytestring.h:510; pointed-by=79
+record	struct cbb_st	-	-	layout-blocked	-	48	8	struct cbb_st	-	typedefs=CBB; identity=boringssl::ctypes::CBB; header=include/openssl/bytestring.h:504; nested=field u (union anon@bytestring.h:510, field) -> struct cbb_buffer_st -> bitfield; roots=bitfield; deps=union anon@bytestring.h:510; pointed-by=79
 field	struct cbb_st	0	child	pointer	0	8	-	CBB *child	ffi::c::Ptr[CBB]	c=child
 field	struct cbb_st	1	is_child	scalar	8	1	-	char is_child	ffi::c::Char	c=is_child
 field	struct cbb_st	2	u	nested	16	32	-	union anon@bytestring.h:510 u	CBB_u	c=u
@@ -164,19 +164,27 @@ field	struct sha512_state_st	2	md_len	scalar	66	2	-	uint16_t md_len	ffi::c::USho
 field	struct sha512_state_st	3	bytes_so_far_high	scalar	68	4	-	uint32_t bytes_so_far_high	ffi::c::UInt	c=bytes_so_far_high
 field	struct sha512_state_st	4	bytes_so_far_low	scalar	72	8	-	uint64_t bytes_so_far_low	ffi::c::ULong	c=bytes_so_far_low
 field	struct sha512_state_st	5	p	array	80	128	-	uint8_t p[128]	array 128 of ffi::c::UChar	c=p; element=char uint8_t; bounds=128; extent=128
-record	union anon@sha.h:71	-	-	layout-blocked	-	-	-	-	-	identity=-; header=include/openssl/sha.h:71; blockers=union: a union: its members overlap; roots=union
-field	union anon@sha.h:71	0	h	array	-	-	-	uint32_t h[5]	array 5 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5
-field	union anon@sha.h:71	1	h0	scalar	-	-	-	uint32_t h0	ffi::c::UInt	c=h0; promoted-from=struct anon@sha.h:73
-field	union anon@sha.h:71	2	h1	scalar	-	-	-	uint32_t h1	ffi::c::UInt	c=h1; promoted-from=struct anon@sha.h:73
-field	union anon@sha.h:71	3	h2	scalar	-	-	-	uint32_t h2	ffi::c::UInt	c=h2; promoted-from=struct anon@sha.h:73
-field	union anon@sha.h:71	4	h3	scalar	-	-	-	uint32_t h3	ffi::c::UInt	c=h3; promoted-from=struct anon@sha.h:73
-field	union anon@sha.h:71	5	h4	scalar	-	-	-	uint32_t h4	ffi::c::UInt	c=h4; promoted-from=struct anon@sha.h:73
-record	struct sha_state_st	-	-	layout-blocked	-	96	4	struct sha_state_st	-	typedefs=SHA_CTX; identity=boringssl::ctypes::SHA_CTX; header=include/openssl/sha.h:64; blockers=anonymous-overlay: member 1: an anonymous union member (union anon@sha.h:71): its members overlap the record's; nested=member 1 (union anon@sha.h:71, anonymous-member) -> union; roots=anonymous-overlay,union; deps=union anon@sha.h:71; pointed-by=4
-field	struct sha_state_st	0	member1	anonymous-overlay	-	-	-	union anon@sha.h:71	-	c=-; blockers=anonymous-overlay: an anonymous union member (union anon@sha.h:71): its members overlap the record's
+record	struct anon@sha.h:73	-	SHA_CTX_member1_member2	layout-direct	-	20	4	-	-	identity=-; header=include/openssl/sha.h:73; owner=struct sha_state_st; place=SHA_CTX.member1.member2; at=sha.h:73:5
+field	struct anon@sha.h:73	0	h0	scalar	0	4	-	uint32_t h0	ffi::c::UInt	c=h0
+field	struct anon@sha.h:73	1	h1	scalar	4	4	-	uint32_t h1	ffi::c::UInt	c=h1
+field	struct anon@sha.h:73	2	h2	scalar	8	4	-	uint32_t h2	ffi::c::UInt	c=h2
+field	struct anon@sha.h:73	3	h3	scalar	12	4	-	uint32_t h3	ffi::c::UInt	c=h3
+field	struct anon@sha.h:73	4	h4	scalar	16	4	-	uint32_t h4	ffi::c::UInt	c=h4
+record	union anon@sha.h:71	-	SHA_CTX_member1	layout-direct	-	20	4	-	-	identity=-; header=include/openssl/sha.h:71; deps=struct anon@sha.h:73; owner=struct sha_state_st; place=SHA_CTX.member1; at=sha.h:71:3
+field	union anon@sha.h:71	0	h	array	0	20	-	uint32_t h[5]	array 5 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5; extent=5
+field	union anon@sha.h:71	1	member2	nested	0	-	-	struct anon@sha.h:73	SHA_CTX_member1_member2	c=-
+record	struct sha_state_st	-	SHA_CTX	layout-direct	-	96	4	struct sha_state_st	-	typedefs=SHA_CTX; identity=boringssl::ctypes::SHA_CTX; header=include/openssl/sha.h:64; deps=union anon@sha.h:71; pointed-by=4
+field	struct sha_state_st	0	member1	nested	0	-	-	union anon@sha.h:71	SHA_CTX_member1	c=-
 field	struct sha_state_st	1	Nl	scalar	20	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
 field	struct sha_state_st	2	Nh	scalar	24	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
 field	struct sha_state_st	3	data	array	28	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
 field	struct sha_state_st	4	num	scalar	92	4	-	unsigned int num	ffi::c::UInt	c=num
+promoted	struct sha_state_st	-	member1.h	-	0	20	-	h	array 5 of ffi::c::UInt	via=union anon@sha.h:71
+promoted	struct sha_state_st	-	member1.member2.h0	-	0	4	-	h0	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h1	-	4	4	-	h1	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h2	-	8	4	-	h2	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h3	-	12	4	-	h3	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h4	-	16	4	-	h4	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
 record	struct anon@thread.h:78	-	CRYPTO_dynlock	layout-direct	-	16	8	CRYPTO_dynlock	-	typedefs=CRYPTO_dynlock; identity=-; header=include/openssl/thread.h:78
 field	struct anon@thread.h:78	0	references	scalar	0	4	-	int references	ffi::c::Int	c=references
 field	struct anon@thread.h:78	1	data	pointer	8	8	-	struct CRYPTO_dynlock_value *data	ffi::c::Ptr[CRYPTO_dynlock_value]	c=data
@@ -184,14 +192,16 @@ record	struct DES_cblock_st	-	DES_cblock	layout-direct	-	8	1	struct DES_cblock_s
 field	struct DES_cblock_st	0	bytes	array	0	8	-	uint8_t bytes[8]	array 8 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=8; extent=8
 record	struct DES_ks	-	DES_key_schedule	layout-direct	-	128	4	struct DES_ks	-	typedefs=DES_key_schedule; identity=boringssl::ctypes::DES_key_schedule; header=include/openssl/des.h:38; pointed-by=9
 field	struct DES_ks	0	subkeys	array	0	128	-	uint32_t subkeys[16][2]	array 16 of array 2 of ffi::c::UInt	c=subkeys; element=scalar uint32_t; bounds=16,2; extent=16
-record	union anon@digest.h:356	-	-	layout-blocked	-	-	-	-	-	identity=-; header=include/openssl/digest.h:356; blockers=union: a union: its members overlap; roots=union
-field	union anon@digest.h:356	0	md_data	array	-	-	-	uint8_t md_data[208]	array 208 of ffi::c::UChar	c=md_data; element=char uint8_t; bounds=208
-field	union anon@digest.h:356	1	alignment	scalar	-	-	-	uint64_t alignment	ffi::c::ULong	c=alignment
-record	struct env_md_ctx_st	-	-	layout-blocked	-	232	8	struct env_md_ctx_st	-	typedefs=EVP_MD_CTX; identity=boringssl::ctypes::EVP_MD_CTX; header=include/openssl/digest.h:354; blockers=anonymous-overlay: member 1: an anonymous union member (union anon@digest.h:356): its members overlap the record's; nested=member 1 (union anon@digest.h:356, anonymous-member) -> union; roots=anonymous-overlay,union; deps=union anon@digest.h:356; pointed-by=44
-field	struct env_md_ctx_st	0	member1	anonymous-overlay	-	-	-	union anon@digest.h:356	-	c=-; blockers=anonymous-overlay: an anonymous union member (union anon@digest.h:356): its members overlap the record's
+record	union anon@digest.h:356	-	EVP_MD_CTX_member1	layout-direct	-	208	8	-	-	identity=-; header=include/openssl/digest.h:356; owner=struct env_md_ctx_st; place=EVP_MD_CTX.member1; at=digest.h:356:3
+field	union anon@digest.h:356	0	md_data	array	0	208	-	uint8_t md_data[208]	array 208 of ffi::c::UChar	c=md_data; element=char uint8_t; bounds=208; extent=208
+field	union anon@digest.h:356	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+record	struct env_md_ctx_st	-	EVP_MD_CTX	layout-direct	-	232	8	struct env_md_ctx_st	-	typedefs=EVP_MD_CTX; identity=boringssl::ctypes::EVP_MD_CTX; header=include/openssl/digest.h:354; deps=union anon@digest.h:356; pointed-by=44
+field	struct env_md_ctx_st	0	member1	nested	0	-	-	union anon@digest.h:356	EVP_MD_CTX_member1	c=-
 field	struct env_md_ctx_st	1	digest	pointer	208	8	-	const EVP_MD *digest	ffi::c::Ptr[EVP_MD]	c=digest
 field	struct env_md_ctx_st	2	pctx	pointer	216	8	-	EVP_PKEY_CTX *pctx	ffi::c::Ptr[EVP_PKEY_CTX]	c=pctx
 field	struct env_md_ctx_st	3	pctx_ops	pointer	224	8	-	const struct evp_md_pctx_ops *pctx_ops	ffi::c::Ptr[evp_md_pctx_ops]	c=pctx_ops
+promoted	struct env_md_ctx_st	-	member1.md_data	-	0	208	-	md_data	array 208 of ffi::c::UChar	via=union anon@digest.h:356
+promoted	struct env_md_ctx_st	-	member1.alignment	-	0	8	-	alignment	ffi::c::ULong	via=union anon@digest.h:356
 record	struct DSA_SIG_st	-	DSA_SIG	layout-direct	-	16	8	struct DSA_SIG_st	-	typedefs=DSA_SIG; identity=boringssl::ctypes::DSA_SIG; header=include/openssl/dsa.h:148; pointed-by=11
 field	struct DSA_SIG_st	0	r	pointer	0	8	-	BIGNUM *r	ffi::c::Ptr[BIGNUM]	c=r
 field	struct DSA_SIG_st	1	s	pointer	8	8	-	BIGNUM *s	ffi::c::Ptr[BIGNUM]	c=s
@@ -211,12 +221,12 @@ field	struct ecdsa_method_st	5	flags	scalar	40	4	-	int flags	ffi::c::Int	c=flags
 record	struct ecdsa_sig_st	-	ECDSA_SIG	layout-direct	-	16	8	struct ecdsa_sig_st	-	typedefs=ECDSA_SIG; identity=boringssl::ctypes::ECDSA_SIG; header=include/openssl/ecdsa.h:73; pointed-by=15
 field	struct ecdsa_sig_st	0	r	pointer	0	8	-	BIGNUM *r	ffi::c::Ptr[BIGNUM]	c=r
 field	struct ecdsa_sig_st	1	s	pointer	8	8	-	BIGNUM *s	ffi::c::Ptr[BIGNUM]	c=s
-record	struct hmac_ctx_st	-	-	layout-blocked	-	704	8	struct hmac_ctx_st	-	typedefs=HMAC_CTX; identity=boringssl::ctypes::HMAC_CTX; header=include/openssl/hmac.h:123; nested=field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay | field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay | field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay; roots=anonymous-overlay,union; deps=struct env_md_ctx_st; pointed-by=14
+record	struct hmac_ctx_st	-	HMAC_CTX	layout-direct	-	704	8	struct hmac_ctx_st	-	typedefs=HMAC_CTX; identity=boringssl::ctypes::HMAC_CTX; header=include/openssl/hmac.h:123; deps=struct env_md_ctx_st; pointed-by=14
 field	struct hmac_ctx_st	0	md	pointer	0	8	-	const EVP_MD *md	ffi::c::Ptr[EVP_MD]	c=md
 field	struct hmac_ctx_st	1	md_ctx	nested	8	232	-	EVP_MD_CTX md_ctx	EVP_MD_CTX	c=md_ctx
 field	struct hmac_ctx_st	2	i_ctx	nested	240	232	-	EVP_MD_CTX i_ctx	EVP_MD_CTX	c=i_ctx
 field	struct hmac_ctx_st	3	o_ctx	nested	472	232	-	EVP_MD_CTX o_ctx	EVP_MD_CTX	c=o_ctx
-record	struct evp_hpke_ctx_st	-	-	layout-blocked	-	704	8	struct evp_hpke_ctx_st	-	typedefs=EVP_HPKE_CTX; identity=boringssl::ctypes::EVP_HPKE_CTX; header=include/openssl/hpke.h:406; nested=field aead_ctx (struct evp_aead_ctx_st, field) -> union evp_aead_ctx_st_state -> union; roots=union; deps=struct evp_aead_ctx_st; pointed-by=18
+record	struct evp_hpke_ctx_st	-	EVP_HPKE_CTX	layout-direct	-	704	8	struct evp_hpke_ctx_st	-	typedefs=EVP_HPKE_CTX; identity=boringssl::ctypes::EVP_HPKE_CTX; header=include/openssl/hpke.h:406; deps=struct evp_aead_ctx_st; pointed-by=18
 field	struct evp_hpke_ctx_st	0	kem	pointer	0	8	-	const EVP_HPKE_KEM *kem	ffi::c::Ptr[EVP_HPKE_KEM]	c=kem
 field	struct evp_hpke_ctx_st	1	aead	pointer	8	8	-	const EVP_HPKE_AEAD *aead	ffi::c::Ptr[EVP_HPKE_AEAD]	c=aead
 field	struct evp_hpke_ctx_st	2	kdf	pointer	16	8	-	const EVP_HPKE_KDF *kdf	ffi::c::Ptr[EVP_HPKE_KDF]	c=kdf
@@ -246,70 +256,70 @@ field	struct md5_state_st	1	Nl	scalar	16	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
 field	struct md5_state_st	2	Nh	scalar	20	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
 field	struct md5_state_st	3	data	array	24	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
 field	struct md5_state_st	4	num	scalar	88	4	-	unsigned int num	ffi::c::UInt	c=num
-record	union anon@mldsa.h:43	-	-	layout-blocked	-	23680	4	__typeof__(((struct MLDSA65_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:43; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:43	-	MLDSA65_private_key_opaque	layout-direct	-	23680	4	__typeof__(((struct MLDSA65_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:43
 field	union anon@mldsa.h:43	0	bytes	array	0	23680	-	uint8_t bytes[(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6)]	array 23680 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6); extent=23680
 field	union anon@mldsa.h:43	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA65_private_key	-	-	layout-blocked	-	23680	4	struct MLDSA65_private_key	-	identity=boringssl::ctypes::MLDSA65_private_key; header=include/openssl/mldsa.h:42; nested=field opaque (union anon@mldsa.h:43, field) -> union; roots=union; deps=union anon@mldsa.h:43; pointed-by=5
+record	struct MLDSA65_private_key	-	MLDSA65_private_key	layout-direct	-	23680	4	struct MLDSA65_private_key	-	identity=boringssl::ctypes::MLDSA65_private_key; header=include/openssl/mldsa.h:42; deps=union anon@mldsa.h:43; pointed-by=5
 field	struct MLDSA65_private_key	0	opaque	nested	0	23680	-	union anon@mldsa.h:43 opaque	MLDSA65_private_key_opaque	c=opaque
-record	union anon@mldsa.h:52	-	-	layout-blocked	-	6240	4	__typeof__(((struct MLDSA65_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:52; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:52	-	MLDSA65_public_key_opaque	layout-direct	-	6240	4	__typeof__(((struct MLDSA65_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:52
 field	union anon@mldsa.h:52	0	bytes	array	0	6240	-	uint8_t bytes[32 + 64 + 256 *4 *6]	array 6240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *6; extent=6240
 field	union anon@mldsa.h:52	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA65_public_key	-	-	layout-blocked	-	6240	4	struct MLDSA65_public_key	-	identity=boringssl::ctypes::MLDSA65_public_key; header=include/openssl/mldsa.h:51; nested=field opaque (union anon@mldsa.h:52, field) -> union; roots=union; deps=union anon@mldsa.h:52; pointed-by=6
+record	struct MLDSA65_public_key	-	MLDSA65_public_key	layout-direct	-	6240	4	struct MLDSA65_public_key	-	identity=boringssl::ctypes::MLDSA65_public_key; header=include/openssl/mldsa.h:51; deps=union anon@mldsa.h:52; pointed-by=6
 field	struct MLDSA65_public_key	0	opaque	nested	0	6240	-	union anon@mldsa.h:52 opaque	MLDSA65_public_key_opaque	c=opaque
-record	union anon@mldsa.h:62	-	-	layout-blocked	-	240	8	__typeof__(((struct MLDSA65_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:62; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:62	-	MLDSA65_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA65_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:62
 field	union anon@mldsa.h:62	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
 field	union anon@mldsa.h:62	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
-record	struct MLDSA65_prehash	-	-	layout-blocked	-	240	8	struct MLDSA65_prehash	-	identity=boringssl::ctypes::MLDSA65_prehash; header=include/openssl/mldsa.h:61; nested=field opaque (union anon@mldsa.h:62, field) -> union; roots=union; deps=union anon@mldsa.h:62; pointed-by=3
+record	struct MLDSA65_prehash	-	MLDSA65_prehash	layout-direct	-	240	8	struct MLDSA65_prehash	-	identity=boringssl::ctypes::MLDSA65_prehash; header=include/openssl/mldsa.h:61; deps=union anon@mldsa.h:62; pointed-by=3
 field	struct MLDSA65_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:62 opaque	MLDSA65_prehash_opaque	c=opaque
-record	union anon@mldsa.h:193	-	-	layout-blocked	-	31872	4	__typeof__(((struct MLDSA87_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:193; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:193	-	MLDSA87_private_key_opaque	layout-direct	-	31872	4	__typeof__(((struct MLDSA87_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:193
 field	union anon@mldsa.h:193	0	bytes	array	0	31872	-	uint8_t bytes[(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8)]	array 31872 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8); extent=31872
 field	union anon@mldsa.h:193	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA87_private_key	-	-	layout-blocked	-	31872	4	struct MLDSA87_private_key	-	identity=boringssl::ctypes::MLDSA87_private_key; header=include/openssl/mldsa.h:192; nested=field opaque (union anon@mldsa.h:193, field) -> union; roots=union; deps=union anon@mldsa.h:193; pointed-by=5
+record	struct MLDSA87_private_key	-	MLDSA87_private_key	layout-direct	-	31872	4	struct MLDSA87_private_key	-	identity=boringssl::ctypes::MLDSA87_private_key; header=include/openssl/mldsa.h:192; deps=union anon@mldsa.h:193; pointed-by=5
 field	struct MLDSA87_private_key	0	opaque	nested	0	31872	-	union anon@mldsa.h:193 opaque	MLDSA87_private_key_opaque	c=opaque
-record	union anon@mldsa.h:202	-	-	layout-blocked	-	8288	4	__typeof__(((struct MLDSA87_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:202; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:202	-	MLDSA87_public_key_opaque	layout-direct	-	8288	4	__typeof__(((struct MLDSA87_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:202
 field	union anon@mldsa.h:202	0	bytes	array	0	8288	-	uint8_t bytes[32 + 64 + 256 *4 *8]	array 8288 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *8; extent=8288
 field	union anon@mldsa.h:202	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA87_public_key	-	-	layout-blocked	-	8288	4	struct MLDSA87_public_key	-	identity=boringssl::ctypes::MLDSA87_public_key; header=include/openssl/mldsa.h:201; nested=field opaque (union anon@mldsa.h:202, field) -> union; roots=union; deps=union anon@mldsa.h:202; pointed-by=6
+record	struct MLDSA87_public_key	-	MLDSA87_public_key	layout-direct	-	8288	4	struct MLDSA87_public_key	-	identity=boringssl::ctypes::MLDSA87_public_key; header=include/openssl/mldsa.h:201; deps=union anon@mldsa.h:202; pointed-by=6
 field	struct MLDSA87_public_key	0	opaque	nested	0	8288	-	union anon@mldsa.h:202 opaque	MLDSA87_public_key_opaque	c=opaque
-record	union anon@mldsa.h:212	-	-	layout-blocked	-	240	8	__typeof__(((struct MLDSA87_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:212; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:212	-	MLDSA87_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA87_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:212
 field	union anon@mldsa.h:212	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
 field	union anon@mldsa.h:212	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
-record	struct MLDSA87_prehash	-	-	layout-blocked	-	240	8	struct MLDSA87_prehash	-	identity=boringssl::ctypes::MLDSA87_prehash; header=include/openssl/mldsa.h:211; nested=field opaque (union anon@mldsa.h:212, field) -> union; roots=union; deps=union anon@mldsa.h:212; pointed-by=3
+record	struct MLDSA87_prehash	-	MLDSA87_prehash	layout-direct	-	240	8	struct MLDSA87_prehash	-	identity=boringssl::ctypes::MLDSA87_prehash; header=include/openssl/mldsa.h:211; deps=union anon@mldsa.h:212; pointed-by=3
 field	struct MLDSA87_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:212 opaque	MLDSA87_prehash_opaque	c=opaque
-record	union anon@mldsa.h:340	-	-	layout-blocked	-	16512	4	__typeof__(((struct MLDSA44_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:340; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:340	-	MLDSA44_private_key_opaque	layout-direct	-	16512	4	__typeof__(((struct MLDSA44_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:340
 field	union anon@mldsa.h:340	0	bytes	array	0	16512	-	uint8_t bytes[(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4)]	array 16512 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4); extent=16512
 field	union anon@mldsa.h:340	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA44_private_key	-	-	layout-blocked	-	16512	4	struct MLDSA44_private_key	-	identity=boringssl::ctypes::MLDSA44_private_key; header=include/openssl/mldsa.h:339; nested=field opaque (union anon@mldsa.h:340, field) -> union; roots=union; deps=union anon@mldsa.h:340; pointed-by=5
+record	struct MLDSA44_private_key	-	MLDSA44_private_key	layout-direct	-	16512	4	struct MLDSA44_private_key	-	identity=boringssl::ctypes::MLDSA44_private_key; header=include/openssl/mldsa.h:339; deps=union anon@mldsa.h:340; pointed-by=5
 field	struct MLDSA44_private_key	0	opaque	nested	0	16512	-	union anon@mldsa.h:340 opaque	MLDSA44_private_key_opaque	c=opaque
-record	union anon@mldsa.h:349	-	-	layout-blocked	-	4192	4	__typeof__(((struct MLDSA44_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:349; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:349	-	MLDSA44_public_key_opaque	layout-direct	-	4192	4	__typeof__(((struct MLDSA44_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:349
 field	union anon@mldsa.h:349	0	bytes	array	0	4192	-	uint8_t bytes[32 + 64 + 256 *4 *4]	array 4192 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *4; extent=4192
 field	union anon@mldsa.h:349	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
-record	struct MLDSA44_public_key	-	-	layout-blocked	-	4192	4	struct MLDSA44_public_key	-	identity=boringssl::ctypes::MLDSA44_public_key; header=include/openssl/mldsa.h:348; nested=field opaque (union anon@mldsa.h:349, field) -> union; roots=union; deps=union anon@mldsa.h:349; pointed-by=6
+record	struct MLDSA44_public_key	-	MLDSA44_public_key	layout-direct	-	4192	4	struct MLDSA44_public_key	-	identity=boringssl::ctypes::MLDSA44_public_key; header=include/openssl/mldsa.h:348; deps=union anon@mldsa.h:349; pointed-by=6
 field	struct MLDSA44_public_key	0	opaque	nested	0	4192	-	union anon@mldsa.h:349 opaque	MLDSA44_public_key_opaque	c=opaque
-record	union anon@mldsa.h:359	-	-	layout-blocked	-	240	8	__typeof__(((struct MLDSA44_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:359; blockers=union: a union: its members overlap; roots=union
+record	union anon@mldsa.h:359	-	MLDSA44_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA44_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:359
 field	union anon@mldsa.h:359	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
 field	union anon@mldsa.h:359	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
-record	struct MLDSA44_prehash	-	-	layout-blocked	-	240	8	struct MLDSA44_prehash	-	identity=boringssl::ctypes::MLDSA44_prehash; header=include/openssl/mldsa.h:358; nested=field opaque (union anon@mldsa.h:359, field) -> union; roots=union; deps=union anon@mldsa.h:359; pointed-by=3
+record	struct MLDSA44_prehash	-	MLDSA44_prehash	layout-direct	-	240	8	struct MLDSA44_prehash	-	identity=boringssl::ctypes::MLDSA44_prehash; header=include/openssl/mldsa.h:358; deps=union anon@mldsa.h:359; pointed-by=3
 field	struct MLDSA44_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:359 opaque	MLDSA44_prehash_opaque	c=opaque
-record	union anon@mlkem.h:34	-	-	layout-blocked	-	6208	2	__typeof__(((struct MLKEM768_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:34; blockers=union: a union: its members overlap; roots=union
+record	union anon@mlkem.h:34	-	MLKEM768_public_key_opaque	layout-direct	-	6208	2	__typeof__(((struct MLKEM768_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:34
 field	union anon@mlkem.h:34	0	bytes	array	0	6208	-	uint8_t bytes[512 * (3 + 9) + 32 + 32]	array 6208 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 9) + 32 + 32; extent=6208
 field	union anon@mlkem.h:34	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
-record	struct MLKEM768_public_key	-	-	layout-blocked	-	6208	2	struct MLKEM768_public_key	-	identity=boringssl::ctypes::MLKEM768_public_key; header=include/openssl/mlkem.h:33; nested=field opaque (union anon@mlkem.h:34, field) -> union; roots=union; deps=union anon@mlkem.h:34; pointed-by=4
+record	struct MLKEM768_public_key	-	MLKEM768_public_key	layout-direct	-	6208	2	struct MLKEM768_public_key	-	identity=boringssl::ctypes::MLKEM768_public_key; header=include/openssl/mlkem.h:33; deps=union anon@mlkem.h:34; pointed-by=4
 field	struct MLKEM768_public_key	0	opaque	nested	0	6208	-	union anon@mlkem.h:34 opaque	MLKEM768_public_key_opaque	c=opaque
-record	union anon@mlkem.h:43	-	-	layout-blocked	-	7776	2	__typeof__(((struct MLKEM768_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:43; blockers=union: a union: its members overlap; roots=union
+record	union anon@mlkem.h:43	-	MLKEM768_private_key_opaque	layout-direct	-	7776	2	__typeof__(((struct MLKEM768_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:43
 field	union anon@mlkem.h:43	0	bytes	array	0	7776	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32]	array 7776 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32; extent=7776
 field	union anon@mlkem.h:43	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
-record	struct MLKEM768_private_key	-	-	layout-blocked	-	7776	2	struct MLKEM768_private_key	-	identity=boringssl::ctypes::MLKEM768_private_key; header=include/openssl/mlkem.h:42; nested=field opaque (union anon@mlkem.h:43, field) -> union; roots=union; deps=union anon@mlkem.h:43; pointed-by=4
+record	struct MLKEM768_private_key	-	MLKEM768_private_key	layout-direct	-	7776	2	struct MLKEM768_private_key	-	identity=boringssl::ctypes::MLKEM768_private_key; header=include/openssl/mlkem.h:42; deps=union anon@mlkem.h:43; pointed-by=4
 field	struct MLKEM768_private_key	0	opaque	nested	0	7776	-	union anon@mlkem.h:43 opaque	MLKEM768_private_key_opaque	c=opaque
-record	union anon@mlkem.h:132	-	-	layout-blocked	-	10304	2	__typeof__(((struct MLKEM1024_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:132; blockers=union: a union: its members overlap; roots=union
+record	union anon@mlkem.h:132	-	MLKEM1024_public_key_opaque	layout-direct	-	10304	2	__typeof__(((struct MLKEM1024_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:132
 field	union anon@mlkem.h:132	0	bytes	array	0	10304	-	uint8_t bytes[512 * (4 + 16) + 32 + 32]	array 10304 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 16) + 32 + 32; extent=10304
 field	union anon@mlkem.h:132	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
-record	struct MLKEM1024_public_key	-	-	layout-blocked	-	10304	2	struct MLKEM1024_public_key	-	identity=boringssl::ctypes::MLKEM1024_public_key; header=include/openssl/mlkem.h:131; nested=field opaque (union anon@mlkem.h:132, field) -> union; roots=union; deps=union anon@mlkem.h:132; pointed-by=4
+record	struct MLKEM1024_public_key	-	MLKEM1024_public_key	layout-direct	-	10304	2	struct MLKEM1024_public_key	-	identity=boringssl::ctypes::MLKEM1024_public_key; header=include/openssl/mlkem.h:131; deps=union anon@mlkem.h:132; pointed-by=4
 field	struct MLKEM1024_public_key	0	opaque	nested	0	10304	-	union anon@mlkem.h:132 opaque	MLKEM1024_public_key_opaque	c=opaque
-record	union anon@mlkem.h:142	-	-	layout-blocked	-	12384	2	__typeof__(((struct MLKEM1024_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:142; blockers=union: a union: its members overlap; roots=union
+record	union anon@mlkem.h:142	-	MLKEM1024_private_key_opaque	layout-direct	-	12384	2	__typeof__(((struct MLKEM1024_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:142
 field	union anon@mlkem.h:142	0	bytes	array	0	12384	-	uint8_t bytes[512 * (4 + 4 + 16) + 32 + 32 + 32]	array 12384 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 4 + 16) + 32 + 32 + 32; extent=12384
 field	union anon@mlkem.h:142	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
-record	struct MLKEM1024_private_key	-	-	layout-blocked	-	12384	2	struct MLKEM1024_private_key	-	identity=boringssl::ctypes::MLKEM1024_private_key; header=include/openssl/mlkem.h:141; nested=field opaque (union anon@mlkem.h:142, field) -> union; roots=union; deps=union anon@mlkem.h:142; pointed-by=4
+record	struct MLKEM1024_private_key	-	MLKEM1024_private_key	layout-direct	-	12384	2	struct MLKEM1024_private_key	-	identity=boringssl::ctypes::MLKEM1024_private_key; header=include/openssl/mlkem.h:141; deps=union anon@mlkem.h:142; pointed-by=4
 field	struct MLKEM1024_private_key	0	opaque	nested	0	12384	-	union anon@mlkem.h:142 opaque	MLKEM1024_private_key_opaque	c=opaque
 record	struct obj_name_st	-	OBJ_NAME	layout-direct	-	24	8	struct obj_name_st	-	typedefs=OBJ_NAME; identity=boringssl::ctypes::OBJ_NAME; header=include/openssl/obj.h:189
 field	struct obj_name_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
@@ -328,7 +338,7 @@ field	struct anon@pkcs7.h:111	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	
 record	struct anon@pkcs7.h:116	-	PKCS7_SIGN_ENVELOPE	layout-direct	-	16	8	PKCS7_SIGN_ENVELOPE	-	typedefs=PKCS7_SIGN_ENVELOPE; identity=boringssl::ctypes::PKCS7_SIGN_ENVELOPE; header=include/openssl/pkcs7.h:116
 field	struct anon@pkcs7.h:116	0	cert	pointer	0	8	-	struct stack_st_X509 *cert	ffi::c::Ptr[stack_st_X509]	c=cert
 field	struct anon@pkcs7.h:116	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	ffi::c::Ptr[stack_st_X509_CRL]	c=crl
-record	union anon@pkcs7.h:133	-	-	layout-blocked	-	8	8	__typeof__(((PKCS7 *)0)->d)	-	identity=-; header=include/openssl/pkcs7.h:133; blockers=union: a union: its members overlap; roots=union
+record	union anon@pkcs7.h:133	-	PKCS7_d	layout-direct	-	8	8	__typeof__(((PKCS7 *)0)->d)	-	identity=-; header=include/openssl/pkcs7.h:133
 field	union anon@pkcs7.h:133	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
 field	union anon@pkcs7.h:133	1	data	pointer	0	8	-	ASN1_OCTET_STRING *data	ffi::c::Ptr[ASN1_BIT_STRING]	c=data
 field	union anon@pkcs7.h:133	2	sign	pointer	0	8	-	PKCS7_SIGNED *sign	ffi::c::Ptr[PKCS7_SIGNED]	c=sign
@@ -337,7 +347,7 @@ field	union anon@pkcs7.h:133	4	signed_and_enveloped	pointer	0	8	-	PKCS7_SIGN_ENV
 field	union anon@pkcs7.h:133	5	digest	pointer	0	8	-	PKCS7_DIGEST *digest	ffi::c::Ptr[ffi::c::Void]	c=digest
 field	union anon@pkcs7.h:133	6	encrypted	pointer	0	8	-	PKCS7_ENCRYPT *encrypted	ffi::c::Ptr[ffi::c::Void]	c=encrypted
 field	union anon@pkcs7.h:133	7	other	pointer	0	8	-	ASN1_TYPE *other	ffi::c::Ptr[ASN1_TYPE]	c=other
-record	struct anon@pkcs7.h:126	-	-	layout-blocked	-	32	8	PKCS7	-	typedefs=PKCS7; identity=boringssl::ctypes::PKCS7; header=include/openssl/pkcs7.h:126; nested=field d (union anon@pkcs7.h:133, field) -> union; roots=union; deps=union anon@pkcs7.h:133; pointed-by=16
+record	struct anon@pkcs7.h:126	-	PKCS7	layout-direct	-	32	8	PKCS7	-	typedefs=PKCS7; identity=boringssl::ctypes::PKCS7; header=include/openssl/pkcs7.h:126; deps=union anon@pkcs7.h:133; pointed-by=16
 field	struct anon@pkcs7.h:126	0	ber_bytes	pointer	0	8	-	uint8_t *ber_bytes	ffi::c::Ptr[ffi::c::UChar]	c=ber_bytes
 field	struct anon@pkcs7.h:126	1	ber_len	scalar	8	8	-	size_t ber_len	ffi::c::ULong	c=ber_len
 field	struct anon@pkcs7.h:126	2	type_	pointer	16	8	-	ASN1_OBJECT *type	ffi::c::Ptr[ASN1_OBJECT]	c=type
@@ -361,7 +371,7 @@ field	struct otherName_st	1	value	pointer	8	8	-	ASN1_TYPE *value	ffi::c::Ptr[ASN
 record	struct EDIPartyName_st	-	EDIPARTYNAME	layout-direct	-	16	8	struct EDIPartyName_st	-	typedefs=EDIPARTYNAME; identity=boringssl::ctypes::EDIPARTYNAME; header=include/openssl/x509.h:2017; pointed-by=2
 field	struct EDIPartyName_st	0	nameAssigner	pointer	0	8	-	ASN1_STRING *nameAssigner	ffi::c::Ptr[ASN1_BIT_STRING]	c=nameAssigner
 field	struct EDIPartyName_st	1	partyName	pointer	8	8	-	ASN1_STRING *partyName	ffi::c::Ptr[ASN1_BIT_STRING]	c=partyName
-record	union anon@x509.h:2043	-	-	layout-blocked	-	8	8	__typeof__(((struct GENERAL_NAME_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2043; blockers=union: a union: its members overlap; roots=union
+record	union anon@x509.h:2043	-	GENERAL_NAME_d	layout-direct	-	8	8	__typeof__(((struct GENERAL_NAME_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2043
 field	union anon@x509.h:2043	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
 field	union anon@x509.h:2043	1	otherName	pointer	0	8	-	OTHERNAME *otherName	ffi::c::Ptr[OTHERNAME]	c=otherName
 field	union anon@x509.h:2043	2	rfc822Name	pointer	0	8	-	ASN1_IA5STRING *rfc822Name	ffi::c::Ptr[ASN1_BIT_STRING]	c=rfc822Name
@@ -376,7 +386,7 @@ field	union anon@x509.h:2043	10	ip	pointer	0	8	-	ASN1_OCTET_STRING *ip	ffi::c::P
 field	union anon@x509.h:2043	11	dirn	pointer	0	8	-	X509_NAME *dirn	ffi::c::Ptr[X509_NAME]	c=dirn
 field	union anon@x509.h:2043	12	ia5	pointer	0	8	-	ASN1_IA5STRING *ia5	ffi::c::Ptr[ASN1_BIT_STRING]	c=ia5
 field	union anon@x509.h:2043	13	rid	pointer	0	8	-	ASN1_OBJECT *rid	ffi::c::Ptr[ASN1_OBJECT]	c=rid
-record	struct GENERAL_NAME_st	-	-	layout-blocked	-	16	8	struct GENERAL_NAME_st	-	typedefs=GENERAL_NAME; identity=boringssl::ctypes::GENERAL_NAME; header=include/openssl/x509.h:2041; nested=field d (union anon@x509.h:2043, field) -> union; roots=union; deps=union anon@x509.h:2043; pointed-by=21
+record	struct GENERAL_NAME_st	-	GENERAL_NAME	layout-direct	-	16	8	struct GENERAL_NAME_st	-	typedefs=GENERAL_NAME; identity=boringssl::ctypes::GENERAL_NAME; header=include/openssl/x509.h:2041; deps=union anon@x509.h:2043; pointed-by=21
 field	struct GENERAL_NAME_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
 field	struct GENERAL_NAME_st	1	d	nested	8	8	-	union anon@x509.h:2043 d	GENERAL_NAME_d	c=d
 record	struct AUTHORITY_KEYID_st	-	AUTHORITY_KEYID	layout-direct	-	24	8	struct AUTHORITY_KEYID_st	-	typedefs=AUTHORITY_KEYID; identity=boringssl::ctypes::AUTHORITY_KEYID; header=include/openssl/x509.h:2175; pointed-by=4
@@ -393,10 +403,10 @@ field	struct NAME_CONSTRAINTS_st	1	excludedSubtrees	pointer	8	8	-	struct stack_s
 record	struct ACCESS_DESCRIPTION_st	-	ACCESS_DESCRIPTION	layout-direct	-	16	8	struct ACCESS_DESCRIPTION_st	-	typedefs=ACCESS_DESCRIPTION; identity=boringssl::ctypes::ACCESS_DESCRIPTION; header=include/openssl/x509.h:2255; pointed-by=12
 field	struct ACCESS_DESCRIPTION_st	0	method	pointer	0	8	-	ASN1_OBJECT *method	ffi::c::Ptr[ASN1_OBJECT]	c=method
 field	struct ACCESS_DESCRIPTION_st	1	location	pointer	8	8	-	GENERAL_NAME *location	ffi::c::Ptr[GENERAL_NAME]	c=location
-record	union anon@x509.h:2310	-	-	layout-blocked	-	8	8	__typeof__(((struct DIST_POINT_NAME_st *)0)->name)	-	identity=-; header=include/openssl/x509.h:2310; blockers=union: a union: its members overlap; roots=union
+record	union anon@x509.h:2310	-	DIST_POINT_NAME_name	layout-direct	-	8	8	__typeof__(((struct DIST_POINT_NAME_st *)0)->name)	-	identity=-; header=include/openssl/x509.h:2310
 field	union anon@x509.h:2310	0	fullname	pointer	0	8	-	GENERAL_NAMES *fullname	ffi::c::Ptr[GENERAL_NAMES]	c=fullname
 field	union anon@x509.h:2310	1	relativename	pointer	0	8	-	struct stack_st_X509_NAME_ENTRY *relativename	ffi::c::Ptr[stack_st_X509_NAME_ENTRY]	c=relativename
-record	struct DIST_POINT_NAME_st	-	-	layout-blocked	-	16	8	struct DIST_POINT_NAME_st	-	typedefs=DIST_POINT_NAME; identity=boringssl::ctypes::DIST_POINT_NAME; header=include/openssl/x509.h:2308; nested=field name (union anon@x509.h:2310, field) -> union; roots=union; deps=union anon@x509.h:2310; pointed-by=2
+record	struct DIST_POINT_NAME_st	-	DIST_POINT_NAME	layout-direct	-	16	8	struct DIST_POINT_NAME_st	-	typedefs=DIST_POINT_NAME; identity=boringssl::ctypes::DIST_POINT_NAME; header=include/openssl/x509.h:2308; deps=union anon@x509.h:2310; pointed-by=2
 field	struct DIST_POINT_NAME_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
 field	struct DIST_POINT_NAME_st	1	name	nested	8	8	-	union anon@x509.h:2310 name	DIST_POINT_NAME_name	c=name
 record	struct DIST_POINT_st	-	DIST_POINT	layout-direct	-	24	8	struct DIST_POINT_st	-	typedefs=DIST_POINT; identity=boringssl::ctypes::DIST_POINT; header=include/openssl/x509.h:2325; pointed-by=12
@@ -416,11 +426,11 @@ field	struct NOTICEREF_st	1	noticenos	pointer	8	8	-	struct stack_st_ASN1_INTEGER
 record	struct USERNOTICE_st	-	USERNOTICE	layout-direct	-	16	8	struct USERNOTICE_st	-	typedefs=USERNOTICE; identity=boringssl::ctypes::USERNOTICE; header=include/openssl/x509.h:2421; pointed-by=2
 field	struct USERNOTICE_st	0	noticeref	pointer	0	8	-	NOTICEREF *noticeref	ffi::c::Ptr[NOTICEREF]	c=noticeref
 field	struct USERNOTICE_st	1	exptext	pointer	8	8	-	ASN1_STRING *exptext	ffi::c::Ptr[ASN1_BIT_STRING]	c=exptext
-record	union anon@x509.h:2443	-	-	layout-blocked	-	8	8	__typeof__(((struct POLICYQUALINFO_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2443; blockers=union: a union: its members overlap; roots=union
+record	union anon@x509.h:2443	-	POLICYQUALINFO_d	layout-direct	-	8	8	__typeof__(((struct POLICYQUALINFO_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2443
 field	union anon@x509.h:2443	0	cpsuri	pointer	0	8	-	ASN1_IA5STRING *cpsuri	ffi::c::Ptr[ASN1_BIT_STRING]	c=cpsuri
 field	union anon@x509.h:2443	1	usernotice	pointer	0	8	-	USERNOTICE *usernotice	ffi::c::Ptr[USERNOTICE]	c=usernotice
 field	union anon@x509.h:2443	2	other	pointer	0	8	-	ASN1_TYPE *other	ffi::c::Ptr[ASN1_TYPE]	c=other
-record	struct POLICYQUALINFO_st	-	-	layout-blocked	-	16	8	struct POLICYQUALINFO_st	-	typedefs=POLICYQUALINFO; identity=boringssl::ctypes::POLICYQUALINFO; header=include/openssl/x509.h:2441; nested=field d (union anon@x509.h:2443, field) -> union; roots=union; deps=union anon@x509.h:2443; pointed-by=12
+record	struct POLICYQUALINFO_st	-	POLICYQUALINFO	layout-direct	-	16	8	struct POLICYQUALINFO_st	-	typedefs=POLICYQUALINFO; identity=boringssl::ctypes::POLICYQUALINFO; header=include/openssl/x509.h:2441; deps=union anon@x509.h:2443; pointed-by=12
 field	struct POLICYQUALINFO_st	0	pqualid	pointer	0	8	-	ASN1_OBJECT *pqualid	ffi::c::Ptr[ASN1_OBJECT]	c=pqualid
 field	struct POLICYQUALINFO_st	1	d	nested	8	8	-	union anon@x509.h:2443 d	POLICYQUALINFO_d	c=d
 record	struct POLICYINFO_st	-	POLICYINFO	layout-direct	-	16	8	struct POLICYINFO_st	-	typedefs=POLICYINFO; identity=boringssl::ctypes::POLICYINFO; header=include/openssl/x509.h:2460; pointed-by=12
@@ -499,10 +509,10 @@ field	struct RIPEMD160state_st	4	num	scalar	92	4	-	unsigned int num	ffi::c::UInt
 record	struct trust_token_st	-	TRUST_TOKEN	layout-direct	-	16	8	struct trust_token_st	-	typedefs=TRUST_TOKEN; identity=boringssl::ctypes::TRUST_TOKEN; header=include/openssl/trust_token.h:63; pointed-by=16
 field	struct trust_token_st	0	data	pointer	0	8	-	uint8_t *data	ffi::c::Ptr[ffi::c::UChar]	c=data
 field	struct trust_token_st	1	len	scalar	8	8	-	size_t len	ffi::c::ULong	c=len
-record	union anon@xwing.h:35	-	-	layout-blocked	-	7840	2	__typeof__(((struct XWING_private_key *)0)->opaque)	-	identity=-; header=include/openssl/xwing.h:35; blockers=union: a union: its members overlap; roots=union
+record	union anon@xwing.h:35	-	XWING_private_key_opaque	layout-direct	-	7840	2	__typeof__(((struct XWING_private_key *)0)->opaque)	-	identity=-; header=include/openssl/xwing.h:35
 field	union anon@xwing.h:35	0	bytes	array	0	7840	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32]	array 7840 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32; extent=7840
 field	union anon@xwing.h:35	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
-record	struct XWING_private_key	-	-	layout-blocked	-	7840	2	struct XWING_private_key	-	identity=boringssl::ctypes::XWING_private_key; header=include/openssl/xwing.h:34; nested=field opaque (union anon@xwing.h:35, field) -> union; roots=union; deps=union anon@xwing.h:35; pointed-by=5
+record	struct XWING_private_key	-	XWING_private_key	layout-direct	-	7840	2	struct XWING_private_key	-	identity=boringssl::ctypes::XWING_private_key; header=include/openssl/xwing.h:34; deps=union anon@xwing.h:35; pointed-by=5
 field	struct XWING_private_key	0	opaque	nested	0	7840	-	union anon@xwing.h:35 opaque	XWING_private_key_opaque	c=opaque
 record	struct ssl_private_key_method_st	-	SSL_PRIVATE_KEY_METHOD	layout-direct	-	24	8	struct ssl_private_key_method_st	-	typedefs=SSL_PRIVATE_KEY_METHOD; identity=boringssl::ctypes::SSL_PRIVATE_KEY_METHOD; header=include/openssl/ssl.h:1456; pointed-by=6
 field	struct ssl_private_key_method_st	0	sign	function-pointer	0	8	-	enum ssl_private_key_result_t (*sign)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, uint16_t signature_algorithm, const uint8_t *in, size_t in_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong, ffi::c::UShort, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::UInt}]	c=sign

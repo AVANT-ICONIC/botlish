@@ -38,7 +38,7 @@ opaque struct Tcl_CmdInfo:
 opaque struct Tcl_DString:
     tag: unit
 
-# struct Tcl_HashEntry (generic/tcl.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct Tcl_HashEntry (generic/tcl.h), a complete C type: its layout is tcl::layouts::Tcl_HashEntry
 opaque struct Tcl_HashEntry:
     tag: unit
 

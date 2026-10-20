@@ -26,6 +26,12 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_NESTED_UNION(T, m, offset, size, L) \
+    BOTLISH_OFFSET(T, m, offset, L); \
+    _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 13, L ": a union"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_INSIDE(T, offset, size, L) \
+    _Static_assert((offset) + (size) <= sizeof(T), L ": inside its record")
 #define BOTLISH_ARRAY(T, m, n, L) \
     _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
@@ -109,6 +115,23 @@ BOTLISH_SCALAR(struct Tcl_DString, spaceAvl, 16, 8, 1, "Tcl_DString.spaceAvl");
 BOTLISH_ARRAY(struct Tcl_DString, staticSpace, 200, "Tcl_DString.staticSpace");
 BOTLISH_OFFSET(struct Tcl_DString, staticSpace[199], 223, "Tcl_DString.staticSpace, its last element");
 BOTLISH_SCALAR(struct Tcl_DString, staticSpace[0], 24, 1, 0, "Tcl_DString.staticSpace, its first element");
+
+BOTLISH_RECORD(__typeof__(((struct Tcl_HashEntry *)0)->key), 8, 8, "Tcl_HashEntry_key");
+BOTLISH_POINTER(__typeof__(((struct Tcl_HashEntry *)0)->key), oneWordValue, 0, 8, "Tcl_HashEntry_key.oneWordValue");
+BOTLISH_POINTER(__typeof__(((struct Tcl_HashEntry *)0)->key), objPtr, 0, 8, "Tcl_HashEntry_key.objPtr");
+BOTLISH_ARRAY(__typeof__(((struct Tcl_HashEntry *)0)->key), words, 1, "Tcl_HashEntry_key.words");
+BOTLISH_OFFSET(__typeof__(((struct Tcl_HashEntry *)0)->key), words[0], 0, "Tcl_HashEntry_key.words, its last element");
+BOTLISH_SCALAR(__typeof__(((struct Tcl_HashEntry *)0)->key), words[0], 0, 4, 1, "Tcl_HashEntry_key.words, its first element");
+BOTLISH_ARRAY(__typeof__(((struct Tcl_HashEntry *)0)->key), string, 1, "Tcl_HashEntry_key.string");
+BOTLISH_OFFSET(__typeof__(((struct Tcl_HashEntry *)0)->key), string[0], 0, "Tcl_HashEntry_key.string, its last element");
+BOTLISH_SCALAR(__typeof__(((struct Tcl_HashEntry *)0)->key), string[0], 0, 1, 0, "Tcl_HashEntry_key.string, its first element");
+
+BOTLISH_RECORD(struct Tcl_HashEntry, 40, 8, "Tcl_HashEntry");
+BOTLISH_POINTER(struct Tcl_HashEntry, nextPtr, 0, 8, "Tcl_HashEntry.nextPtr");
+BOTLISH_POINTER(struct Tcl_HashEntry, tablePtr, 8, 8, "Tcl_HashEntry.tablePtr");
+BOTLISH_SCALAR(struct Tcl_HashEntry, hash, 16, 8, 0, "Tcl_HashEntry.hash");
+BOTLISH_POINTER(struct Tcl_HashEntry, clientData, 24, 8, "Tcl_HashEntry.clientData");
+BOTLISH_NESTED_UNION(struct Tcl_HashEntry, key, 32, 8, "Tcl_HashEntry.key");
 
 BOTLISH_RECORD(struct Tcl_HashKeyType, 40, 8, "Tcl_HashKeyType");
 BOTLISH_SCALAR(struct Tcl_HashKeyType, version, 0, 4, 1, "Tcl_HashKeyType.version");

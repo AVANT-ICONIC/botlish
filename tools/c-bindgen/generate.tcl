@@ -172,6 +172,14 @@ proc ::cbind::generate::run {profile target {options {}}} {
     set extra ""
     foreach u $undefs { append extra "#undef $u\n" }
     set layoutFacts [::cbind::probe::values $config $tool $entries $extra]
+    # The anonymous members' own layouts (sizeof, alignment, their members'
+    # offsets), which no C expression asks: clang's record layouts of the
+    # records that hold them (probe.tcl's anonymous).
+    set owners [::cbind::records::anonymousOwners $model $layoutFacts]
+    if {[llength $owners]} {
+        lassign [::cbind::probe::anonymous $config $tool $owners $extra] ok blocks message
+        dict set layoutFacts anon:layouts [expr {$ok ? [list ok $blocks] : [list error $message]}]
+    }
     set model [::cbind::records::resolve $model $layoutFacts]
     dict set model layoutUndefs $undefs
     dict set timing layouts [Seconds $t0]
@@ -199,6 +207,12 @@ proc ::cbind::generate::run {profile target {options {}}} {
         lassign [::chdr::toolchain::compile $config $tool $check {-w}] ok stderr
         if {!$ok} {
             error "c-bindgen: the generated layouts disagree with the C compiler (layouts-check.c):\n[string range $stderr 0 3000]"
+        }
+        # The synthetic layouts' own sizes and alignments, which no C
+        # expression asks: against clang's record layouts (verify.tcl).
+        set problems [::cbind::verify::anonymous $files [dict get $profile name] $config $tool]
+        if {[llength $problems]} {
+            error "c-bindgen: the generated layouts disagree with the C compiler's record layouts:\n[join $problems \n]"
         }
     }
     dict set timing verification [Seconds $t0]

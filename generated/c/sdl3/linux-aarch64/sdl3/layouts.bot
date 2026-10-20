@@ -213,6 +213,14 @@ layout SDL_GamepadBinding_input_hat:
     field hat: ffi::c::Int at 0       # int hat
     field hat_mask: ffi::c::Int at 4  # int hat_mask
 
+# an anonymous union (include/SDL3/SDL_gamepad.h:271): sizeof 12, _Alignof 4
+union layout SDL_GamepadBinding_input:
+    size 12
+    align 4
+    alternative button: ffi::c::Int                  # int button
+    alternative axis: SDL_GamepadBinding_input_axis  # struct {...} axis
+    alternative hat: SDL_GamepadBinding_input_hat    # struct {...} hat
+
 # an anonymous struct (include/SDL3/SDL_gamepad.h:295): sizeof 12, _Alignof 4
 layout SDL_GamepadBinding_output_axis:
     size 12
@@ -220,6 +228,22 @@ layout SDL_GamepadBinding_output_axis:
     field axis: ffi::c::Int at 0      # SDL_GamepadAxis axis
     field axis_min: ffi::c::Int at 4  # int axis_min
     field axis_max: ffi::c::Int at 8  # int axis_max
+
+# an anonymous union (include/SDL3/SDL_gamepad.h:291): sizeof 12, _Alignof 4
+union layout SDL_GamepadBinding_output:
+    size 12
+    align 4
+    alternative button: ffi::c::Int                   # SDL_GamepadButton button
+    alternative axis: SDL_GamepadBinding_output_axis  # struct {...} axis
+
+# struct SDL_GamepadBinding, typedef SDL_GamepadBinding (include/SDL3/SDL_gamepad.h:268): sizeof 32, _Alignof 4
+layout SDL_GamepadBinding:
+    size 32
+    align 4
+    field input_type: ffi::c::UInt at 0            # SDL_GamepadBindingType input_type
+    field input: SDL_GamepadBinding_input at 4     # union {...} input
+    field output_type: ffi::c::UInt at 16          # SDL_GamepadBindingType output_type
+    field output: SDL_GamepadBinding_output at 20  # union {...} output
 
 # struct SDL_CursorFrameInfo, typedef SDL_CursorFrameInfo (include/SDL3/SDL_mouse.h:138): sizeof 16, _Alignof 8
 layout SDL_CursorFrameInfo:
@@ -769,6 +793,18 @@ layout SDL_HapticCustom:
     field attack_level: ffi::c::UShort at 50       # Uint16 attack_level
     field fade_length: ffi::c::UShort at 52        # Uint16 fade_length
     field fade_level: ffi::c::UShort at 54         # Uint16 fade_level
+
+# union SDL_HapticEffect, typedef SDL_HapticEffect (include/SDL3/SDL_haptic.h:935): sizeof 72, _Alignof 8
+union layout SDL_HapticEffect:
+    size 72
+    align 8
+    alternative type_: ffi::c::UShort           # SDL_HapticEffectType type
+    alternative constant: SDL_HapticConstant    # SDL_HapticConstant constant
+    alternative periodic: SDL_HapticPeriodic    # SDL_HapticPeriodic periodic
+    alternative condition: SDL_HapticCondition  # SDL_HapticCondition condition
+    alternative ramp: SDL_HapticRamp            # SDL_HapticRamp ramp
+    alternative leftright: SDL_HapticLeftRight  # SDL_HapticLeftRight leftright
+    alternative custom: SDL_HapticCustom        # SDL_HapticCustom custom
 
 # struct SDL_hid_device_info, typedef SDL_hid_device_info (include/SDL3/SDL_hidapi.h:113): sizeof 80, _Alignof 8
 layout SDL_hid_device_info:

@@ -1494,8 +1494,10 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
         return ""
     }
     set descriptor [lindex [hir::get $hir $operand literal] end]
-    if {[hir::layouts::DescriptorLayout $descriptor] eq "" || [core::binary::PointerPath $descriptor] ne ""} {
-        # (A native-only layout: the reference implementation's refusal.)
+    if {[hir::layouts::DescriptorLayout $descriptor] eq "" || [core::binary::PointerPath $descriptor] ne ""
+            || [core::binary::UnionPath $descriptor] ne "none"} {
+        # (A native-only layout, or one holding a union, LAYOUT-UNIONS.md:
+        # the reference implementation's refusal.)
         return ""
     }
     set size [lindex $descriptor 1]

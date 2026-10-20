@@ -145,6 +145,20 @@ proc hir::format::TypeDecl {entry} {
                 }] [dict get $field offset]
         }]
         set ns [dict get $entry namespace]
+        if {[dict exists $entry union] && [dict get $entry union]} {
+            # A union layout (LAYOUT-UNIONS.md): "union layout ID ns NS size N
+            # align A alternatives A1: T1, A2: T2", every alternative at
+            # offset 0, which is therefore not printed.
+            set alternatives [lmap field [dict get $entry fields] {
+                format {%s: %s} [dict get $field name] \
+                    [if {[dict exists $field repr]} {
+                        hir::layouts::ReprText [dict get $field repr]
+                    } else {
+                        hir::layouts::FieldTypeText [dict get $field type]
+                    }]
+            }]
+            return "union layout [dict get $entry id] ns [if {$ns eq ""} {string cat "-"} else {set ns}] size [dict get $entry size] align [dict get $entry align] alternatives [join $alternatives {, }]"
+        }
         return "layout [dict get $entry id] ns [if {$ns eq ""} {string cat "-"} else {set ns}] size [dict get $entry size] align [dict get $entry align] fields [join $fields {, }]"
     }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "struct"} {

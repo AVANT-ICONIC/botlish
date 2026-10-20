@@ -3341,11 +3341,15 @@ NS::ctypes' opaque type, and a pointer field keeps its pointee's identity.
     MinGW-w64's headers and compiler for windows-x86_64-gnu (Windows x86-64,
     the GNU ABI), never for MSVC's windows-x86_64: MSVC's headers and
     layouts are not probed, and a GNU layout is never taken for MSVC's.
-  * A record with a field no layout represents yet (a fixed or flexible
-    array, a union or anonymous overlay, a bitfield, float or double, C
-    _Bool) gets no layout, and neither does a record holding one by value;
-    a pointer to it is still an ordinary typed pointer. layouts.tsv and the
-    report name each record's blockers.
+  * A fixed array is a layout field and a C union a union layout; an
+    anonymous union, or an anonymous struct inside a union, is a layout of
+    its own (OVERLAPPED_member3) held by a generated field, its size and
+    alignment clang's record layout. A record with a field no layout
+    represents yet (a flexible array, a bitfield, float or double, C
+    _Bool) gets no layout, and neither does a record or union holding one
+    by value; a pointer to it is still an ordinary typed pointer.
+    layouts.tsv and the report name each record's blockers, and map every
+    member name an anonymous member promotes to its generated path.
   * Nothing in the compiler knows a layout was generated: it is ordinary
     source, checked like any other.
 
@@ -3381,9 +3385,9 @@ title: Binary layouts: `layout`, binary::parse and binary::emit
 summary: A `layout` declares a fixed-size byte format with explicit size, alignment and field offsets; binary::parse imprints bytes into an immutable LayoutStruct[L] and binary::emit writes it back.
 index: concepts
 alias: binary layout; layout declaration; parse bytes; byte format
-keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS, array, fixed array, LayoutExtentMismatch
-related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.binary error.layout-field-bounds
-docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md FIXED-LAYOUT-ARRAYS.md
+keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS, array, fixed array, LayoutExtentMismatch, union, union layout
+related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.binary error.layout-field-bounds concept.layout-unions
+docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md FIXED-LAYOUT-ARRAYS.md LAYOUT-UNIONS.md
 
 == WHAT IT IS
     layout Header:
@@ -3432,6 +3436,11 @@ be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
     binary::element(a, i), binary::store_element(e.items, i, v) and
     binary::load(a); a designator names an element statically (L.items[3])
     (FIXED-LAYOUT-ARRAYS.md).
+  * Fields never overlap. Overlap is declared only by a union layout,
+    `union layout U:`, several interpretations of the same bytes (every
+    alternative at its first byte) held by value in one field; it has no
+    copied value, so its alternatives are read and written one at a time
+    (concept.layout-unions, LAYOUT-UNIONS.md).
 
 == WHY
 A layout owns representation and ordinary structs own meaning: reading
@@ -3475,6 +3484,116 @@ binary::layout_length(Header)
 
 == MORE
 BINARY-LAYOUT.md.
+
+@topic concept.layout-unions
+title: Union layouts: several interpretations of the same bytes
+summary: `union layout U:` declares alternatives that all start at its first byte: explicit overlap with no tag, active alternative or copied value, so each alternative is read and written alone.
+index: concepts
+alias: union; union layout; overlay; overlapping fields; alternative; C union; anonymous union
+keywords: union, alternative, overlap, overlay, interpretation, punning, NativeView, NativeEdit, binary::read, LAYOUT-UNION, OVERLAPPED, LARGE_INTEGER, tagged union, sum type, active member
+related: concept.binary-layouts stdlib.binary::read error.layout-union concept.c-bindgen-layouts concept.enums concept.c-ffi
+docs: LAYOUT-UNIONS.md BINARY-LAYOUT.md FIXED-LAYOUT-ARRAYS.md NATIVE-LAYOUT-VIEWS.md NATIVE-LAYOUT-WRITES.md
+
+== WHAT IT IS
+    union layout WORD:
+        size 4
+        align 4
+        alternative whole: binary::U32
+        alternative halves: HALVES
+        alternative bytes: array 4 of binary::U8
+
+Arrays repeat representation; unions overlap it. Each alternative is a
+representation of the union's bytes from its first byte: a scalar, a C
+pointer, a nested layout, a fixed array or another union. Choosing one is
+interpretation, never conversion: `binary::read(data, WORD.halves)` reads
+the four bytes as two U16s, `v.whole` through a native view the same
+bytes as a U32.
+
+== RULES
+  * Overlap must be declared. An ordinary layout's fields still never
+    share a byte (LAYOUT-FIELD-OVERLAP); a union's alternatives always do,
+    every one at offset 0 (an alternative states no offset).
+  * The size and alignment are explicit, never computed from the
+    alternatives: each alternative must fit (LAYOUT-FIELD-BOUNDS), and the
+    union may be larger (tail padding). Held by value, its width -- and an
+    array of unions' stride -- is its declared size.
+  * No active alternative and no tag: writing one alternative and reading
+    another reads the other's encoding of the same bytes, and nothing
+    records what was written. A union is not a sum type (concept.enums):
+    no case, discriminant, exhaustiveness or pattern match.
+  * No copied value: there is no LayoutStruct of a union or of anything
+    holding one, so binary::parse, binary::emit, binary::load and whole-
+    array writes of one are LAYOUT-UNION. Each alternative is read and
+    written alone, through a designator (L.u.alt.field) or a native view
+    or edit.
+  * Through a view or an edit a union is the live union, NativeView[U] /
+    NativeEdit[U]: an alternative read is one load at its address, a store
+    writes exactly the alternative's bytes (the rest of the union keeps
+    its bytes), and nothing is cached between reads.
+  * Pointer authority is recursive: bytes never become a pointer through
+    any alternative (binary::read of a pointer alternative is
+    LAYOUT-NATIVE-ONLY). Native memory is raw: a holder of write authority
+    may store an integer alternative and read the pointer alternative of
+    the same bytes, as C does -- which is why making an edit is direct.
+  * A generated C binding writes C unions and anonymous overlays as union
+    layouts with the C compiler's size, alignment and offsets
+    (concept.c-bindgen-layouts).
+
+== WHY
+A C union, an OVERLAPPED's anonymous union, a LARGE_INTEGER describe the
+same bytes several ways. Recording them truthfully needs explicit overlap,
+and nothing more: which interpretation a protocol means at a given moment
+is the protocol's (a tag field beside it, a call's contract), so a wrapper
+that knows the protocol reads the matching alternative.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::I16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.halves.high, -1))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.halves)]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@caption Written through one alternative, read through two
+@value [4294901760, LayoutStruct[HALVES] {low: 0, high: -1}]
+@end
+
+@example reject
+import binary
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+
+fn f(w: LayoutStruct[WORD]) -> int:
+    0
+
+0
+@caption A union has no copied value
+@error CORE SEMANTIC LAYOUT-UNION
+@end
+
+== MORE
+LAYOUT-UNIONS.md.
 
 @topic concept.specialization
 title: Generic functions, semantic instances and specialization

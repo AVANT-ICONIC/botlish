@@ -97,6 +97,7 @@ enum DiagnosticCode:
     LayoutNotAValue,
     LayoutOperand,
     LayoutStructParameter,
+    LayoutUnion,
     LockstepUnequal,
     LockstepUnproven,
     MissingContext,

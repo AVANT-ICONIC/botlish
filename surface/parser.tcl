@@ -204,6 +204,20 @@
 #                  is hir/layouts.tcl's. A field's type may be a fixed
 #                  array, `array N of TYPE` (FIXED-LAYOUT-ARRAYS.md), whose
 #                  "array" and "of" are contextual too
+#   unionDecl    = "union" "layout" IDENT ":" NEWLINE INDENT unionItem { unionItem } DEDENT
+#   unionItem    = "size" INT NEWLINE
+#                | "align" INT NEWLINE
+#                | "alternative" IDENT ":" typeExpr NEWLINE
+#                  -- LAYOUT-UNIONS.md: a union layout, several declared
+#                  interpretations of the same bytes (never a tagged sum:
+#                  no case, tag or active alternative). Every alternative
+#                  starts at the union's first byte, so it states no offset.
+#                  "union" is contextual: a declaration only as the first
+#                  word of a top-level statement directly followed by
+#                  "layout" and a name; "alternative" is a word of the union
+#                  body only. The body is a layout's otherwise: a union
+#                  layout is a `layoutdecl` node with `union 1`, whose
+#                  `fields` are its alternatives, each at offset 0
 #   structDecl   = { structModifier } "struct" IDENT ":" NEWLINE INDENT structField { structField } DEDENT
 #   structModifier = "opaque"       -- OPAQUE-STRUCTS.md; contextual (below)
 #                  | "context"      -- CONTEXTS.md; contextual (below). The
@@ -898,6 +912,12 @@ proc surface::parser::EnumDecl {pVar} {
 proc surface::parser::AtLayoutDecl {pVar} {
     upvar 1 $pVar p
     set token [Peek p]
+    if {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "union"
+            && [Kind p 1] eq "IDENT" && [dict get [Peek p 1] text] eq "layout" && [Kind p 2] eq "IDENT"} {
+        # `union layout NAME:` (LAYOUT-UNIONS.md): three names in a row are
+        # never an expression either.
+        return 1
+    }
     return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "layout"
         && [Kind p 1] eq "IDENT"}]
 }
@@ -911,23 +931,40 @@ proc surface::parser::AtLayoutDecl {pVar} {
 # with its explicit offset -- so a generator (a C-header plugin) emits it
 # mechanically and two spellings of one layout never differ. What the numbers
 # and types mean (widths, bounds, overlap, alignment) is hir/layouts.tcl's.
+#
+# `union layout NAME:` (LAYOUT-UNIONS.md) is the same node with `union 1`:
+# its body has `alternative NAME: TYPE` lines instead of fields, none with an
+# offset -- every alternative starts at the union's first byte -- and they
+# are its FIELDS, each at offset 0 (offsetSpan its name's). Overlap is the
+# declaration's meaning here, and only here: an ordinary layout's fields
+# never share a byte.
 proc surface::parser::LayoutDecl {pVar} {
     upvar 1 $pVar p
-    set start [dict get [Advance p] span]
+    set union 0
+    set first [Advance p]
+    set start [dict get $first span]
+    if {[dict get $first text] eq "union"} {
+        # (AtLayoutDecl: "layout" follows.)
+        set union 1
+        Advance p
+    }
     set name [Advance p]
     set layoutName [dict get $name value]
+    set what [expr {$union ? "union layout" : "layout"}]
+    set itemWord [expr {$union ? "alternative" : "field"}]
+    set itemForm [expr {$union ? "alternative NAME: TYPE" : "field NAME: TYPE at OFFSET"}]
     set token [Peek p]
     if {[dict get $token kind] ne ":"} {
-        Fail $token "expected \":\" after the layout name \"$layoutName\", found [Describe $token]"
+        Fail $token "expected \":\" after the $what name \"$layoutName\", found [Describe $token]"
     }
     Advance p
     set token [Peek p]
     if {[dict get $token kind] ne "NEWLINE"} {
-        Fail $token "expected a new line and an indented block of \"size\", \"align\" and \"field\" lines after \":\", found [Describe $token]"
+        Fail $token "expected a new line and an indented block of \"size\", \"align\" and \"$itemWord\" lines after \":\", found [Describe $token]"
     }
     Advance p
     if {[Kind p] ne "INDENT"} {
-        Fail [Peek p] "layout \"$layoutName\" needs an indented block: one \"size N\" line, one \"align N\" line and at least one \"field NAME: TYPE at OFFSET\" line"
+        Fail [Peek p] "$what \"$layoutName\" needs an indented block: one \"size N\" line, one \"align N\" line and at least one \"$itemForm\" line"
     }
     Advance p
     set items [dict create]
@@ -939,17 +976,41 @@ proc surface::parser::LayoutDecl {pVar} {
         }
         set word [Peek p]
         set text [dict get $word text]
-        if {[dict get $word kind] ne "IDENT" || $text ni {size align field}} {
-            Fail $word "expected \"size N\", \"align N\" or \"field NAME: TYPE at OFFSET\" in layout \"$layoutName\", found [Describe $word]"
+        if {[dict get $word kind] eq "IDENT" && $text in {field alternative} && $text ne $itemWord} {
+            # The two bodies' items are not interchangeable: overlap is
+            # declared by a union layout, never by one line of a layout.
+            if {$union} {
+                Fail $word "a union layout has alternatives, not fields: \"alternative NAME: TYPE\" (every alternative starts at the union's first byte, so it states no offset)"
+            }
+            Fail $word "a layout has fields, not alternatives: \"field NAME: TYPE at OFFSET\" (alternatives, which share bytes, belong to a union layout, `union layout NAME:`; the fields of a layout never share a byte)"
+        }
+        if {[dict get $word kind] ne "IDENT" || $text ni [list size align $itemWord]} {
+            Fail $word "expected \"size N\", \"align N\" or \"$itemForm\" in $what \"$layoutName\", found [Describe $word]"
         }
         Advance p
         if {$text in {size align}} {
             if {[dict exists $items $text]} {
-                Fail $word "layout \"$layoutName\" already has a \"$text\" line (at [surface::ast::location [dict get $items ${text}Span]]): each is written exactly once"
+                Fail $word "$what \"$layoutName\" already has a \"$text\" line (at [surface::ast::location [dict get $items ${text}Span]]): each is written exactly once"
             }
             set number [Expect p INT "an integer after \"$text\" (a byte count)"]
             dict set items $text [dict get $number value]
             dict set items ${text}Span [dict get $number span]
+        } elseif {$union} {
+            set fieldToken [Expect p IDENT "an alternative name after \"alternative\""]
+            set fieldName [dict get $fieldToken value]
+            if {[Kind p] ne ":"} {
+                Fail [Peek p] "expected \":\" and a type after the union alternative name \"$fieldName\", found [Describe [Peek p]]"
+            }
+            Advance p
+            set typeStart [dict get [Peek p] span]
+            set type [TypeExpr p "an alternative type after \":\""]
+            set typeSpan [SpanFrom p $typeStart]
+            set at [Peek p]
+            if {[dict get $at kind] eq "IDENT" && [dict get $at text] eq "at"} {
+                Fail $at "a union alternative states no offset: every alternative of union layout \"$layoutName\" starts at the union's first byte (alternative $fieldName: TYPE)"
+            }
+            lappend fields [dict create name $fieldName nameSpan [dict get $fieldToken span] \
+                type $type typeSpan $typeSpan offset 0 offsetSpan [dict get $fieldToken span]]
         } else {
             set fieldToken [Expect p IDENT "a field name after \"field\""]
             set fieldName [dict get $fieldToken value]
@@ -971,7 +1032,7 @@ proc surface::parser::LayoutDecl {pVar} {
         }
         set next [Peek p]
         if {[dict get $next kind] ni {NEWLINE DEDENT EOF}} {
-            Fail $next "expected end of line after the \"$text\" line of layout \"$layoutName\", found [Describe $next]"
+            Fail $next "expected end of line after the \"$text\" line of $what \"$layoutName\", found [Describe $next]"
         }
         if {[dict get $next kind] eq "NEWLINE"} {
             Advance p
@@ -982,16 +1043,23 @@ proc surface::parser::LayoutDecl {pVar} {
     }
     foreach required {size align} {
         if {![dict exists $items $required]} {
-            Fail $name "layout \"$layoutName\" has no \"$required N\" line: a layout states its byte size and its alignment explicitly"
+            Fail $name "$what \"$layoutName\" has no \"$required N\" line: a $what states its byte size and its alignment explicitly"
         }
     }
     if {$fields eq ""} {
+        if {$union} {
+            Fail $name "union layout \"$layoutName\" declares no alternative: a union layout needs at least one \"alternative NAME: TYPE\" line"
+        }
         Fail $name "layout \"$layoutName\" declares no field: a layout needs at least one \"field NAME: TYPE at OFFSET\" line"
     }
-    return [surface::ast::node layoutdecl [SpanFrom p $start] \
+    set node [surface::ast::node layoutdecl [SpanFrom p $start] \
         name $layoutName nameSpan [dict get $name span] \
         size [dict get $items size] sizeSpan [dict get $items sizeSpan] \
         align [dict get $items align] alignSpan [dict get $items alignSpan] fields $fields]
+    if {$union} {
+        dict set node union 1
+    }
+    return $node
 }
 
 # 1 if the next tokens start a trait declaration (TRAITS.md): the contextual
@@ -1675,10 +1743,10 @@ proc surface::parser::Statement {pVar} {
         AnonymousEnumError $token
     }
     if {[AtLayoutDecl p]} {
-        # `layout NAME:` (BINARY-LAYOUT.md): a contextual top-level
-        # declaration.
+        # `layout NAME:` (BINARY-LAYOUT.md), `union layout NAME:`
+        # (LAYOUT-UNIONS.md): a contextual top-level declaration.
         if {![dict get $p topLevel]} {
-            Fail $token "a layout declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+            Fail $token "a [expr {[dict get $token text] eq "union" ? "union layout" : "layout"}] declaration is only allowed at the top level of a module, not nested in a function/if/loop"
         }
         return [LayoutDecl p]
     }

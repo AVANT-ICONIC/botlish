@@ -90,7 +90,7 @@ opaque struct SDL_VirtualJoystickSensorDesc:
 opaque struct SDL_VirtualJoystickDesc:
     tag: unit
 
-# struct SDL_GamepadBinding (include/SDL3/SDL_gamepad.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct SDL_GamepadBinding (include/SDL3/SDL_gamepad.h), a complete C type: its layout is sdl3::layouts::SDL_GamepadBinding
 opaque struct SDL_GamepadBinding:
     tag: unit
 
@@ -202,7 +202,7 @@ opaque struct SDL_GPUStorageBufferReadWriteBinding:
 opaque struct SDL_GPUStorageTextureReadWriteBinding:
     tag: unit
 
-# union SDL_HapticEffect (include/SDL3/SDL_haptic.h), a complete C type whose layout is blocked (layouts.tsv)
+# union SDL_HapticEffect (include/SDL3/SDL_haptic.h), a complete C type: its layout is sdl3::layouts::SDL_HapticEffect
 opaque struct SDL_HapticEffect:
     tag: unit
 

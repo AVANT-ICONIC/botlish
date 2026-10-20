@@ -25,6 +25,12 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_NESTED_UNION(T, m, offset, size, L) \
+    BOTLISH_OFFSET(T, m, offset, L); \
+    _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 13, L ": a union"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_INSIDE(T, offset, size, L) \
+    _Static_assert((offset) + (size) <= sizeof(T), L ": inside its record")
 #define BOTLISH_ARRAY(T, m, n, L) \
     _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
@@ -197,6 +203,21 @@ BOTLISH_ARRAY(struct bgf_matrix, m[0], 3, "bgf_matrix.m");
 BOTLISH_OFFSET(struct bgf_matrix, m[1][2], 20, "bgf_matrix.m, its last element");
 BOTLISH_SCALAR(struct bgf_matrix, m[0][0], 0, 4, 1, "bgf_matrix.m, its first element");
 
+BOTLISH_RECORD(union bgf_value, 8, 8, "bgf_value");
+BOTLISH_SCALAR(union bgf_value, i, 0, 4, 1, "bgf_value.i");
+BOTLISH_SCALAR(union bgf_value, u, 0, 4, 0, "bgf_value.u");
+BOTLISH_POINTER(union bgf_value, p, 0, 8, "bgf_value.p");
+
+BOTLISH_RECORD(struct bgf_tagged, 16, 8, "bgf_tagged");
+BOTLISH_SCALAR(struct bgf_tagged, kind, 0, 4, 1, "bgf_tagged.kind");
+BOTLISH_NESTED_UNION(struct bgf_tagged, value, 8, 8, "bgf_tagged.value");
+
+BOTLISH_RECORD(struct bgf_overlay, 16, 8, "bgf_overlay");
+BOTLISH_SCALAR(struct bgf_overlay, kind, 0, 4, 1, "bgf_overlay.kind");
+BOTLISH_INSIDE(struct bgf_overlay, 8, 8, "bgf_overlay.member2");
+BOTLISH_SCALAR(struct bgf_overlay, i, 8, 4, 1, "bgf_overlay_member2.i");
+BOTLISH_POINTER(struct bgf_overlay, p, 8, 8, "bgf_overlay_member2.p");
+
 BOTLISH_RECORD(struct bgf_outer_blocked, 24, 4, "bgf_outer_blocked");
 BOTLISH_SCALAR(struct bgf_outer_blocked, n, 0, 4, 1, "bgf_outer_blocked.n");
 BOTLISH_NESTED(struct bgf_outer_blocked, chars, 4, 20, "bgf_outer_blocked.chars");
@@ -208,3 +229,116 @@ BOTLISH_SCALAR(struct bgf_chain2, tail, 24, 8, 1, "bgf_chain2.tail");
 BOTLISH_RECORD(struct bgf_points_ref, 16, 8, "bgf_points_ref");
 BOTLISH_POINTER(struct bgf_points_ref, points, 0, 8, "bgf_points_ref.points");
 BOTLISH_SCALAR(struct bgf_points_ref, n, 8, 4, 1, "bgf_points_ref.n");
+
+BOTLISH_RECORD(struct bgf_mixed, 16, 8, "bgf_mixed");
+BOTLISH_NESTED_UNION(struct bgf_mixed, u, 0, 8, "bgf_mixed.u");
+BOTLISH_ARRAY(struct bgf_mixed, name, 4, "bgf_mixed.name");
+BOTLISH_OFFSET(struct bgf_mixed, name[3], 11, "bgf_mixed.name, its last element");
+BOTLISH_SCALAR(struct bgf_mixed, name[0], 8, 1, 0, "bgf_mixed.name, its first element");
+
+BOTLISH_RECORD(union bgf_word, 4, 4, "bgf_word");
+BOTLISH_SCALAR(union bgf_word, whole, 0, 4, 0, "bgf_word.whole");
+BOTLISH_ARRAY(union bgf_word, halves, 2, "bgf_word.halves");
+BOTLISH_OFFSET(union bgf_word, halves[1], 2, "bgf_word.halves, its last element");
+BOTLISH_SCALAR(union bgf_word, halves[0], 0, 2, 0, "bgf_word.halves, its first element");
+BOTLISH_ARRAY(union bgf_word, bytes, 4, "bgf_word.bytes");
+BOTLISH_OFFSET(union bgf_word, bytes[3], 3, "bgf_word.bytes, its last element");
+BOTLISH_SCALAR(union bgf_word, bytes[0], 0, 1, 0, "bgf_word.bytes, its first element");
+
+BOTLISH_RECORD(union bgf_shape, 8, 8, "bgf_shape");
+BOTLISH_NESTED(union bgf_shape, pt, 0, 8, "bgf_shape.pt");
+BOTLISH_SCALAR(union bgf_shape, bits, 0, 8, 1, "bgf_shape.bits");
+BOTLISH_ARRAY(union bgf_shape, raw, 3, "bgf_shape.raw");
+BOTLISH_OFFSET(union bgf_shape, raw[2], 2, "bgf_shape.raw, its last element");
+BOTLISH_SCALAR(union bgf_shape, raw[0], 0, 1, 0, "bgf_shape.raw, its first element");
+
+BOTLISH_RECORD(struct bgf_words3, 16, 4, "bgf_words3");
+BOTLISH_SCALAR(struct bgf_words3, n, 0, 4, 1, "bgf_words3.n");
+BOTLISH_ARRAY(struct bgf_words3, words, 3, "bgf_words3.words");
+BOTLISH_OFFSET(struct bgf_words3, words[2], 12, "bgf_words3.words, its last element");
+BOTLISH_NESTED_UNION(struct bgf_words3, words[0], 4, 4, "bgf_words3.words, its first element");
+
+BOTLISH_RECORD(struct bgf_word_grid, 20, 4, "bgf_word_grid");
+BOTLISH_ARRAY(struct bgf_word_grid, grid, 2, "bgf_word_grid.grid");
+BOTLISH_ARRAY(struct bgf_word_grid, grid[0], 2, "bgf_word_grid.grid");
+BOTLISH_OFFSET(struct bgf_word_grid, grid[1][1], 12, "bgf_word_grid.grid, its last element");
+BOTLISH_NESTED_UNION(struct bgf_word_grid, grid[0][0], 0, 4, "bgf_word_grid.grid, its first element");
+BOTLISH_SCALAR(struct bgf_word_grid, tail, 16, 2, 1, "bgf_word_grid.tail");
+
+BOTLISH_RECORD(union bgf_packed_u, 7, 1, "bgf_packed_u");
+BOTLISH_NESTED(union bgf_packed_u, p, 0, 7, "bgf_packed_u.p");
+BOTLISH_ARRAY(union bgf_packed_u, raw, 7, "bgf_packed_u.raw");
+BOTLISH_OFFSET(union bgf_packed_u, raw[6], 6, "bgf_packed_u.raw, its last element");
+BOTLISH_SCALAR(union bgf_packed_u, raw[0], 0, 1, 0, "bgf_packed_u.raw, its first element");
+
+BOTLISH_RECORD(struct bgf_overlapped, 32, 8, "bgf_overlapped");
+BOTLISH_SCALAR(struct bgf_overlapped, internal, 0, 8, 0, "bgf_overlapped.internal");
+BOTLISH_SCALAR(struct bgf_overlapped, internal_high, 8, 8, 0, "bgf_overlapped.internal_high");
+BOTLISH_INSIDE(struct bgf_overlapped, 16, 8, "bgf_overlapped.member3");
+BOTLISH_INSIDE(struct bgf_overlapped, 16, 8, "bgf_overlapped_member3_union.member1");
+BOTLISH_SCALAR(struct bgf_overlapped, offset, 16, 4, 0, "bgf_overlapped_member3_member1.offset");
+BOTLISH_SCALAR(struct bgf_overlapped, offset_high, 20, 4, 0, "bgf_overlapped_member3_member1.offset_high");
+BOTLISH_POINTER(struct bgf_overlapped, pointer, 16, 8, "bgf_overlapped_member3_union.pointer");
+BOTLISH_POINTER(struct bgf_overlapped, event, 24, 8, "bgf_overlapped.event");
+
+BOTLISH_RECORD(struct bgf_overlapped_member3, 4, 4, "bgf_overlapped_member3");
+BOTLISH_SCALAR(struct bgf_overlapped_member3, z, 0, 4, 1, "bgf_overlapped_member3.z");
+
+BOTLISH_RECORD(__typeof__(((union bgf_large *)0)->u), 8, 4, "bgf_large_u");
+BOTLISH_SCALAR(__typeof__(((union bgf_large *)0)->u), low, 0, 4, 0, "bgf_large_u.low");
+BOTLISH_SCALAR(__typeof__(((union bgf_large *)0)->u), high, 4, 4, 1, "bgf_large_u.high");
+
+BOTLISH_RECORD(union bgf_large, 8, 8, "bgf_large");
+BOTLISH_INSIDE(union bgf_large, 0, 8, "bgf_large.member1");
+BOTLISH_SCALAR(union bgf_large, low, 0, 4, 0, "bgf_large_member1.low");
+BOTLISH_SCALAR(union bgf_large, high, 4, 4, 1, "bgf_large_member1.high");
+BOTLISH_NESTED(union bgf_large, u, 0, 8, "bgf_large.u");
+BOTLISH_SCALAR(union bgf_large, quad, 0, 8, 1, "bgf_large.quad");
+
+BOTLISH_RECORD(struct bgf_deep, 20, 4, "bgf_deep");
+BOTLISH_SCALAR(struct bgf_deep, tag, 0, 1, 0, "bgf_deep.tag");
+BOTLISH_SCALAR(struct bgf_deep, a, 4, 2, 1, "bgf_deep.a");
+BOTLISH_INSIDE(struct bgf_deep, 8, 4, "bgf_deep.member2_member2");
+BOTLISH_SCALAR(struct bgf_deep, b, 8, 4, 1, "bgf_deep_member2_member2.b");
+BOTLISH_ARRAY(struct bgf_deep, c, 3, "bgf_deep_member2_member2.c");
+BOTLISH_OFFSET(struct bgf_deep, c[2], 10, "bgf_deep_member2_member2.c, its last element");
+BOTLISH_SCALAR(struct bgf_deep, c[0], 8, 1, 0, "bgf_deep_member2_member2.c, its first element");
+BOTLISH_INSIDE(struct bgf_deep, 12, 8, "bgf_deep.member3");
+BOTLISH_INSIDE(struct bgf_deep, 12, 6, "bgf_deep_member3.member1");
+BOTLISH_SCALAR(struct bgf_deep, x, 12, 2, 0, "bgf_deep_member3_member1.x");
+BOTLISH_SCALAR(struct bgf_deep, y, 14, 2, 0, "bgf_deep_member3_member1.y");
+BOTLISH_INSIDE(struct bgf_deep, 16, 2, "bgf_deep_member3_member1.member3");
+BOTLISH_SCALAR(struct bgf_deep, z, 16, 1, 0, "bgf_deep_member3_member1_member3.z");
+BOTLISH_SCALAR(struct bgf_deep, zz, 16, 2, 0, "bgf_deep_member3_member1_member3.zz");
+BOTLISH_NESTED_UNION(struct bgf_deep, w, 12, 4, "bgf_deep_member3.w");
+
+BOTLISH_RECORD(union bgf_kwu, 4, 4, "bgf_kwu");
+BOTLISH_SCALAR(union bgf_kwu, fn, 0, 4, 1, "bgf_kwu.fn_");
+BOTLISH_SCALAR(union bgf_kwu, type, 0, 4, 0, "bgf_kwu.type_");
+
+BOTLISH_RECORD(union bgf_tail_u, 8, 4, "bgf_tail_u");
+BOTLISH_ARRAY(union bgf_tail_u, c, 5, "bgf_tail_u.c");
+BOTLISH_OFFSET(union bgf_tail_u, c[4], 4, "bgf_tail_u.c, its last element");
+BOTLISH_SCALAR(union bgf_tail_u, c[0], 0, 1, 0, "bgf_tail_u.c, its first element");
+BOTLISH_SCALAR(union bgf_tail_u, i, 0, 4, 1, "bgf_tail_u.i");
+
+BOTLISH_RECORD(union bgf_aligned_u, 16, 16, "bgf_aligned_u");
+BOTLISH_SCALAR(union bgf_aligned_u, i, 0, 4, 1, "bgf_aligned_u.i");
+BOTLISH_SCALAR(union bgf_aligned_u, c, 0, 1, 0, "bgf_aligned_u.c");
+
+BOTLISH_RECORD(struct bgf_anon_tail, 16, 4, "bgf_anon_tail");
+BOTLISH_SCALAR(struct bgf_anon_tail, k, 0, 1, 0, "bgf_anon_tail.k");
+BOTLISH_INSIDE(struct bgf_anon_tail, 4, 8, "bgf_anon_tail.member2");
+BOTLISH_ARRAY(struct bgf_anon_tail, c, 5, "bgf_anon_tail_member2.c");
+BOTLISH_OFFSET(struct bgf_anon_tail, c[4], 8, "bgf_anon_tail_member2.c, its last element");
+BOTLISH_SCALAR(struct bgf_anon_tail, c[0], 4, 1, 0, "bgf_anon_tail_member2.c, its first element");
+BOTLISH_SCALAR(struct bgf_anon_tail, i, 4, 4, 1, "bgf_anon_tail_member2.i");
+BOTLISH_SCALAR(struct bgf_anon_tail, after, 12, 1, 0, "bgf_anon_tail.after");
+
+BOTLISH_RECORD(struct bgf_two_anon, 16, 8, "bgf_two_anon");
+BOTLISH_INSIDE(struct bgf_two_anon, 0, 4, "bgf_two_anon.member1");
+BOTLISH_SCALAR(struct bgf_two_anon, a, 0, 1, 0, "bgf_two_anon_member1.a");
+BOTLISH_SCALAR(struct bgf_two_anon, b, 0, 4, 1, "bgf_two_anon_member1.b");
+BOTLISH_INSIDE(struct bgf_two_anon, 8, 8, "bgf_two_anon.member2");
+BOTLISH_SCALAR(struct bgf_two_anon, c, 8, 2, 1, "bgf_two_anon_member2.c");
+BOTLISH_SCALAR(struct bgf_two_anon, d, 8, 8, 1, "bgf_two_anon_member2.d");

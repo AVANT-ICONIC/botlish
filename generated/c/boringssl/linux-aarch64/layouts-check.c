@@ -124,9 +124,26 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_NESTED_UNION(T, m, offset, size, L) \
+    BOTLISH_OFFSET(T, m, offset, L); \
+    _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 13, L ": a union"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_INSIDE(T, offset, size, L) \
+    _Static_assert((offset) + (size) <= sizeof(T), L ": inside its record")
 #define BOTLISH_ARRAY(T, m, n, L) \
     _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
+
+BOTLISH_RECORD(union evp_aead_ctx_st_state, 560, 8, "evp_aead_ctx_st_state");
+BOTLISH_ARRAY(union evp_aead_ctx_st_state, opaque, 560, "evp_aead_ctx_st_state.opaque");
+BOTLISH_OFFSET(union evp_aead_ctx_st_state, opaque[559], 559, "evp_aead_ctx_st_state.opaque, its last element");
+BOTLISH_SCALAR(union evp_aead_ctx_st_state, opaque[0], 0, 1, 0, "evp_aead_ctx_st_state.opaque, its first element");
+BOTLISH_SCALAR(union evp_aead_ctx_st_state, alignment, 0, 8, 0, "evp_aead_ctx_st_state.alignment");
+
+BOTLISH_RECORD(struct evp_aead_ctx_st, 576, 8, "EVP_AEAD_CTX");
+BOTLISH_POINTER(struct evp_aead_ctx_st, aead, 0, 8, "EVP_AEAD_CTX.aead");
+BOTLISH_NESTED_UNION(struct evp_aead_ctx_st, state, 8, 560, "EVP_AEAD_CTX.state");
+BOTLISH_SCALAR(struct evp_aead_ctx_st, tag_len, 568, 1, 0, "EVP_AEAD_CTX.tag_len");
 
 BOTLISH_RECORD(struct crypto_ivec_st, 16, 8, "CRYPTO_IVEC");
 BOTLISH_POINTER(struct crypto_ivec_st, in, 0, 8, "CRYPTO_IVEC.in");
@@ -164,6 +181,33 @@ BOTLISH_SCALAR(struct asn1_string_st, length, 0, 4, 1, "ASN1_BIT_STRING.length")
 BOTLISH_SCALAR(struct asn1_string_st, type, 4, 4, 1, "ASN1_BIT_STRING.type_");
 BOTLISH_POINTER(struct asn1_string_st, data, 8, 8, "ASN1_BIT_STRING.data");
 BOTLISH_SCALAR(struct asn1_string_st, flags, 16, 8, 1, "ASN1_BIT_STRING.flags");
+
+BOTLISH_RECORD(__typeof__(((struct asn1_type_st *)0)->value), 8, 8, "ASN1_TYPE_value");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), ptr, 0, 8, "ASN1_TYPE_value.ptr");
+BOTLISH_SCALAR(__typeof__(((struct asn1_type_st *)0)->value), boolean, 0, 4, 1, "ASN1_TYPE_value.boolean");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), asn1_string, 0, 8, "ASN1_TYPE_value.asn1_string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), object, 0, 8, "ASN1_TYPE_value.object");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), integer, 0, 8, "ASN1_TYPE_value.integer");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), enumerated, 0, 8, "ASN1_TYPE_value.enumerated");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), bit_string, 0, 8, "ASN1_TYPE_value.bit_string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), octet_string, 0, 8, "ASN1_TYPE_value.octet_string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), printablestring, 0, 8, "ASN1_TYPE_value.printablestring");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), t61string, 0, 8, "ASN1_TYPE_value.t61string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), ia5string, 0, 8, "ASN1_TYPE_value.ia5string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), generalstring, 0, 8, "ASN1_TYPE_value.generalstring");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), bmpstring, 0, 8, "ASN1_TYPE_value.bmpstring");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), universalstring, 0, 8, "ASN1_TYPE_value.universalstring");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), utctime, 0, 8, "ASN1_TYPE_value.utctime");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), generalizedtime, 0, 8, "ASN1_TYPE_value.generalizedtime");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), visiblestring, 0, 8, "ASN1_TYPE_value.visiblestring");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), utf8string, 0, 8, "ASN1_TYPE_value.utf8string");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), set, 0, 8, "ASN1_TYPE_value.set");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), sequence, 0, 8, "ASN1_TYPE_value.sequence");
+BOTLISH_POINTER(__typeof__(((struct asn1_type_st *)0)->value), asn1_value, 0, 8, "ASN1_TYPE_value.asn1_value");
+
+BOTLISH_RECORD(struct asn1_type_st, 16, 8, "ASN1_TYPE");
+BOTLISH_SCALAR(struct asn1_type_st, type, 0, 4, 1, "ASN1_TYPE.type_");
+BOTLISH_NESTED_UNION(struct asn1_type_st, value, 8, 8, "ASN1_TYPE.value");
 
 BOTLISH_RECORD(struct ASN1_TEMPLATE_st, 32, 8, "ASN1_TEMPLATE");
 BOTLISH_SCALAR(struct ASN1_TEMPLATE_st, flags, 0, 4, 0, "ASN1_TEMPLATE.flags");
@@ -296,6 +340,24 @@ BOTLISH_ARRAY(struct sha512_state_st, p, 128, "SHA512_CTX.p");
 BOTLISH_OFFSET(struct sha512_state_st, p[127], 207, "SHA512_CTX.p, its last element");
 BOTLISH_SCALAR(struct sha512_state_st, p[0], 80, 1, 0, "SHA512_CTX.p, its first element");
 
+BOTLISH_RECORD(struct sha_state_st, 96, 4, "SHA_CTX");
+BOTLISH_INSIDE(struct sha_state_st, 0, 20, "SHA_CTX.member1");
+BOTLISH_ARRAY(struct sha_state_st, h, 5, "SHA_CTX_member1.h");
+BOTLISH_OFFSET(struct sha_state_st, h[4], 16, "SHA_CTX_member1.h, its last element");
+BOTLISH_SCALAR(struct sha_state_st, h[0], 0, 4, 0, "SHA_CTX_member1.h, its first element");
+BOTLISH_INSIDE(struct sha_state_st, 0, 20, "SHA_CTX_member1.member2");
+BOTLISH_SCALAR(struct sha_state_st, h0, 0, 4, 0, "SHA_CTX_member1_member2.h0");
+BOTLISH_SCALAR(struct sha_state_st, h1, 4, 4, 0, "SHA_CTX_member1_member2.h1");
+BOTLISH_SCALAR(struct sha_state_st, h2, 8, 4, 0, "SHA_CTX_member1_member2.h2");
+BOTLISH_SCALAR(struct sha_state_st, h3, 12, 4, 0, "SHA_CTX_member1_member2.h3");
+BOTLISH_SCALAR(struct sha_state_st, h4, 16, 4, 0, "SHA_CTX_member1_member2.h4");
+BOTLISH_SCALAR(struct sha_state_st, Nl, 20, 4, 0, "SHA_CTX.Nl");
+BOTLISH_SCALAR(struct sha_state_st, Nh, 24, 4, 0, "SHA_CTX.Nh");
+BOTLISH_ARRAY(struct sha_state_st, data, 64, "SHA_CTX.data");
+BOTLISH_OFFSET(struct sha_state_st, data[63], 91, "SHA_CTX.data, its last element");
+BOTLISH_SCALAR(struct sha_state_st, data[0], 28, 1, 0, "SHA_CTX.data, its first element");
+BOTLISH_SCALAR(struct sha_state_st, num, 92, 4, 0, "SHA_CTX.num");
+
 BOTLISH_RECORD(CRYPTO_dynlock, 16, 8, "CRYPTO_dynlock");
 BOTLISH_SCALAR(CRYPTO_dynlock, references, 0, 4, 1, "CRYPTO_dynlock.references");
 BOTLISH_POINTER(CRYPTO_dynlock, data, 8, 8, "CRYPTO_dynlock.data");
@@ -310,6 +372,16 @@ BOTLISH_ARRAY(struct DES_ks, subkeys, 16, "DES_key_schedule.subkeys");
 BOTLISH_ARRAY(struct DES_ks, subkeys[0], 2, "DES_key_schedule.subkeys");
 BOTLISH_OFFSET(struct DES_ks, subkeys[15][1], 124, "DES_key_schedule.subkeys, its last element");
 BOTLISH_SCALAR(struct DES_ks, subkeys[0][0], 0, 4, 0, "DES_key_schedule.subkeys, its first element");
+
+BOTLISH_RECORD(struct env_md_ctx_st, 232, 8, "EVP_MD_CTX");
+BOTLISH_INSIDE(struct env_md_ctx_st, 0, 208, "EVP_MD_CTX.member1");
+BOTLISH_ARRAY(struct env_md_ctx_st, md_data, 208, "EVP_MD_CTX_member1.md_data");
+BOTLISH_OFFSET(struct env_md_ctx_st, md_data[207], 207, "EVP_MD_CTX_member1.md_data, its last element");
+BOTLISH_SCALAR(struct env_md_ctx_st, md_data[0], 0, 1, 0, "EVP_MD_CTX_member1.md_data, its first element");
+BOTLISH_SCALAR(struct env_md_ctx_st, alignment, 0, 8, 0, "EVP_MD_CTX_member1.alignment");
+BOTLISH_POINTER(struct env_md_ctx_st, digest, 208, 8, "EVP_MD_CTX.digest");
+BOTLISH_POINTER(struct env_md_ctx_st, pctx, 216, 8, "EVP_MD_CTX.pctx");
+BOTLISH_POINTER(struct env_md_ctx_st, pctx_ops, 224, 8, "EVP_MD_CTX.pctx_ops");
 
 BOTLISH_RECORD(struct DSA_SIG_st, 16, 8, "DSA_SIG");
 BOTLISH_POINTER(struct DSA_SIG_st, r, 0, 8, "DSA_SIG.r");
@@ -334,6 +406,26 @@ BOTLISH_SCALAR(struct ecdsa_method_st, flags, 40, 4, 1, "ECDSA_METHOD.flags");
 BOTLISH_RECORD(struct ecdsa_sig_st, 16, 8, "ECDSA_SIG");
 BOTLISH_POINTER(struct ecdsa_sig_st, r, 0, 8, "ECDSA_SIG.r");
 BOTLISH_POINTER(struct ecdsa_sig_st, s, 8, 8, "ECDSA_SIG.s");
+
+BOTLISH_RECORD(struct hmac_ctx_st, 704, 8, "HMAC_CTX");
+BOTLISH_POINTER(struct hmac_ctx_st, md, 0, 8, "HMAC_CTX.md");
+BOTLISH_NESTED(struct hmac_ctx_st, md_ctx, 8, 232, "HMAC_CTX.md_ctx");
+BOTLISH_NESTED(struct hmac_ctx_st, i_ctx, 240, 232, "HMAC_CTX.i_ctx");
+BOTLISH_NESTED(struct hmac_ctx_st, o_ctx, 472, 232, "HMAC_CTX.o_ctx");
+
+BOTLISH_RECORD(struct evp_hpke_ctx_st, 704, 8, "EVP_HPKE_CTX");
+BOTLISH_POINTER(struct evp_hpke_ctx_st, kem, 0, 8, "EVP_HPKE_CTX.kem");
+BOTLISH_POINTER(struct evp_hpke_ctx_st, aead, 8, 8, "EVP_HPKE_CTX.aead");
+BOTLISH_POINTER(struct evp_hpke_ctx_st, kdf, 16, 8, "EVP_HPKE_CTX.kdf");
+BOTLISH_NESTED(struct evp_hpke_ctx_st, aead_ctx, 24, 576, "EVP_HPKE_CTX.aead_ctx");
+BOTLISH_ARRAY(struct evp_hpke_ctx_st, base_nonce, 24, "EVP_HPKE_CTX.base_nonce");
+BOTLISH_OFFSET(struct evp_hpke_ctx_st, base_nonce[23], 623, "EVP_HPKE_CTX.base_nonce, its last element");
+BOTLISH_SCALAR(struct evp_hpke_ctx_st, base_nonce[0], 600, 1, 0, "EVP_HPKE_CTX.base_nonce, its first element");
+BOTLISH_ARRAY(struct evp_hpke_ctx_st, exporter_secret, 64, "EVP_HPKE_CTX.exporter_secret");
+BOTLISH_OFFSET(struct evp_hpke_ctx_st, exporter_secret[63], 687, "EVP_HPKE_CTX.exporter_secret, its last element");
+BOTLISH_SCALAR(struct evp_hpke_ctx_st, exporter_secret[0], 624, 1, 0, "EVP_HPKE_CTX.exporter_secret, its first element");
+BOTLISH_SCALAR(struct evp_hpke_ctx_st, seq, 688, 8, 0, "EVP_HPKE_CTX.seq");
+BOTLISH_SCALAR(struct evp_hpke_ctx_st, is_sender, 696, 4, 1, "EVP_HPKE_CTX.is_sender");
 
 BOTLISH_RECORD(struct evp_hpke_key_st, 1648, 8, "EVP_HPKE_KEY");
 BOTLISH_POINTER(struct evp_hpke_key_st, kem, 0, 8, "EVP_HPKE_KEY.kem");
@@ -377,6 +469,123 @@ BOTLISH_OFFSET(struct md5_state_st, data[63], 87, "MD5_CTX.data, its last elemen
 BOTLISH_SCALAR(struct md5_state_st, data[0], 24, 1, 0, "MD5_CTX.data, its first element");
 BOTLISH_SCALAR(struct md5_state_st, num, 88, 4, 0, "MD5_CTX.num");
 
+BOTLISH_RECORD(__typeof__(((struct MLDSA65_private_key *)0)->opaque), 23680, 4, "MLDSA65_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA65_private_key *)0)->opaque), bytes, 23680, "MLDSA65_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA65_private_key *)0)->opaque), bytes[23679], 23679, "MLDSA65_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_private_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA65_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_private_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA65_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA65_private_key, 23680, 4, "MLDSA65_private_key");
+BOTLISH_NESTED_UNION(struct MLDSA65_private_key, opaque, 0, 23680, "MLDSA65_private_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA65_public_key *)0)->opaque), 6240, 4, "MLDSA65_public_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA65_public_key *)0)->opaque), bytes, 6240, "MLDSA65_public_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA65_public_key *)0)->opaque), bytes[6239], 6239, "MLDSA65_public_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_public_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA65_public_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_public_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA65_public_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA65_public_key, 6240, 4, "MLDSA65_public_key");
+BOTLISH_NESTED_UNION(struct MLDSA65_public_key, opaque, 0, 6240, "MLDSA65_public_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA65_prehash *)0)->opaque), 240, 8, "MLDSA65_prehash_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA65_prehash *)0)->opaque), bytes, 240, "MLDSA65_prehash_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA65_prehash *)0)->opaque), bytes[239], 239, "MLDSA65_prehash_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_prehash *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA65_prehash_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA65_prehash *)0)->opaque), alignment, 0, 8, 0, "MLDSA65_prehash_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA65_prehash, 240, 8, "MLDSA65_prehash");
+BOTLISH_NESTED_UNION(struct MLDSA65_prehash, opaque, 0, 240, "MLDSA65_prehash.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA87_private_key *)0)->opaque), 31872, 4, "MLDSA87_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA87_private_key *)0)->opaque), bytes, 31872, "MLDSA87_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA87_private_key *)0)->opaque), bytes[31871], 31871, "MLDSA87_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_private_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA87_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_private_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA87_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA87_private_key, 31872, 4, "MLDSA87_private_key");
+BOTLISH_NESTED_UNION(struct MLDSA87_private_key, opaque, 0, 31872, "MLDSA87_private_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA87_public_key *)0)->opaque), 8288, 4, "MLDSA87_public_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA87_public_key *)0)->opaque), bytes, 8288, "MLDSA87_public_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA87_public_key *)0)->opaque), bytes[8287], 8287, "MLDSA87_public_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_public_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA87_public_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_public_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA87_public_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA87_public_key, 8288, 4, "MLDSA87_public_key");
+BOTLISH_NESTED_UNION(struct MLDSA87_public_key, opaque, 0, 8288, "MLDSA87_public_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA87_prehash *)0)->opaque), 240, 8, "MLDSA87_prehash_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA87_prehash *)0)->opaque), bytes, 240, "MLDSA87_prehash_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA87_prehash *)0)->opaque), bytes[239], 239, "MLDSA87_prehash_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_prehash *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA87_prehash_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA87_prehash *)0)->opaque), alignment, 0, 8, 0, "MLDSA87_prehash_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA87_prehash, 240, 8, "MLDSA87_prehash");
+BOTLISH_NESTED_UNION(struct MLDSA87_prehash, opaque, 0, 240, "MLDSA87_prehash.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA44_private_key *)0)->opaque), 16512, 4, "MLDSA44_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA44_private_key *)0)->opaque), bytes, 16512, "MLDSA44_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA44_private_key *)0)->opaque), bytes[16511], 16511, "MLDSA44_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_private_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA44_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_private_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA44_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA44_private_key, 16512, 4, "MLDSA44_private_key");
+BOTLISH_NESTED_UNION(struct MLDSA44_private_key, opaque, 0, 16512, "MLDSA44_private_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA44_public_key *)0)->opaque), 4192, 4, "MLDSA44_public_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA44_public_key *)0)->opaque), bytes, 4192, "MLDSA44_public_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA44_public_key *)0)->opaque), bytes[4191], 4191, "MLDSA44_public_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_public_key *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA44_public_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_public_key *)0)->opaque), alignment, 0, 4, 0, "MLDSA44_public_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA44_public_key, 4192, 4, "MLDSA44_public_key");
+BOTLISH_NESTED_UNION(struct MLDSA44_public_key, opaque, 0, 4192, "MLDSA44_public_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLDSA44_prehash *)0)->opaque), 240, 8, "MLDSA44_prehash_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLDSA44_prehash *)0)->opaque), bytes, 240, "MLDSA44_prehash_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLDSA44_prehash *)0)->opaque), bytes[239], 239, "MLDSA44_prehash_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_prehash *)0)->opaque), bytes[0], 0, 1, 0, "MLDSA44_prehash_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLDSA44_prehash *)0)->opaque), alignment, 0, 8, 0, "MLDSA44_prehash_opaque.alignment");
+
+BOTLISH_RECORD(struct MLDSA44_prehash, 240, 8, "MLDSA44_prehash");
+BOTLISH_NESTED_UNION(struct MLDSA44_prehash, opaque, 0, 240, "MLDSA44_prehash.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLKEM768_public_key *)0)->opaque), 6208, 2, "MLKEM768_public_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLKEM768_public_key *)0)->opaque), bytes, 6208, "MLKEM768_public_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLKEM768_public_key *)0)->opaque), bytes[6207], 6207, "MLKEM768_public_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM768_public_key *)0)->opaque), bytes[0], 0, 1, 0, "MLKEM768_public_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM768_public_key *)0)->opaque), alignment, 0, 2, 0, "MLKEM768_public_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLKEM768_public_key, 6208, 2, "MLKEM768_public_key");
+BOTLISH_NESTED_UNION(struct MLKEM768_public_key, opaque, 0, 6208, "MLKEM768_public_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLKEM768_private_key *)0)->opaque), 7776, 2, "MLKEM768_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLKEM768_private_key *)0)->opaque), bytes, 7776, "MLKEM768_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLKEM768_private_key *)0)->opaque), bytes[7775], 7775, "MLKEM768_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM768_private_key *)0)->opaque), bytes[0], 0, 1, 0, "MLKEM768_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM768_private_key *)0)->opaque), alignment, 0, 2, 0, "MLKEM768_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLKEM768_private_key, 7776, 2, "MLKEM768_private_key");
+BOTLISH_NESTED_UNION(struct MLKEM768_private_key, opaque, 0, 7776, "MLKEM768_private_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLKEM1024_public_key *)0)->opaque), 10304, 2, "MLKEM1024_public_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLKEM1024_public_key *)0)->opaque), bytes, 10304, "MLKEM1024_public_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLKEM1024_public_key *)0)->opaque), bytes[10303], 10303, "MLKEM1024_public_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM1024_public_key *)0)->opaque), bytes[0], 0, 1, 0, "MLKEM1024_public_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM1024_public_key *)0)->opaque), alignment, 0, 2, 0, "MLKEM1024_public_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLKEM1024_public_key, 10304, 2, "MLKEM1024_public_key");
+BOTLISH_NESTED_UNION(struct MLKEM1024_public_key, opaque, 0, 10304, "MLKEM1024_public_key.opaque");
+
+BOTLISH_RECORD(__typeof__(((struct MLKEM1024_private_key *)0)->opaque), 12384, 2, "MLKEM1024_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct MLKEM1024_private_key *)0)->opaque), bytes, 12384, "MLKEM1024_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct MLKEM1024_private_key *)0)->opaque), bytes[12383], 12383, "MLKEM1024_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM1024_private_key *)0)->opaque), bytes[0], 0, 1, 0, "MLKEM1024_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct MLKEM1024_private_key *)0)->opaque), alignment, 0, 2, 0, "MLKEM1024_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct MLKEM1024_private_key, 12384, 2, "MLKEM1024_private_key");
+BOTLISH_NESTED_UNION(struct MLKEM1024_private_key, opaque, 0, 12384, "MLKEM1024_private_key.opaque");
+
 BOTLISH_RECORD(struct obj_name_st, 24, 8, "OBJ_NAME");
 BOTLISH_SCALAR(struct obj_name_st, type, 0, 4, 1, "OBJ_NAME.type_");
 BOTLISH_SCALAR(struct obj_name_st, alias, 4, 4, 1, "OBJ_NAME.alias");
@@ -397,6 +606,22 @@ BOTLISH_POINTER(PKCS7_SIGNED, crl, 8, 8, "PKCS7_SIGNED.crl");
 BOTLISH_RECORD(PKCS7_SIGN_ENVELOPE, 16, 8, "PKCS7_SIGN_ENVELOPE");
 BOTLISH_POINTER(PKCS7_SIGN_ENVELOPE, cert, 0, 8, "PKCS7_SIGN_ENVELOPE.cert");
 BOTLISH_POINTER(PKCS7_SIGN_ENVELOPE, crl, 8, 8, "PKCS7_SIGN_ENVELOPE.crl");
+
+BOTLISH_RECORD(__typeof__(((PKCS7 *)0)->d), 8, 8, "PKCS7_d");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), ptr, 0, 8, "PKCS7_d.ptr");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), data, 0, 8, "PKCS7_d.data");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), sign, 0, 8, "PKCS7_d.sign");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), enveloped, 0, 8, "PKCS7_d.enveloped");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), signed_and_enveloped, 0, 8, "PKCS7_d.signed_and_enveloped");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), digest, 0, 8, "PKCS7_d.digest");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), encrypted, 0, 8, "PKCS7_d.encrypted");
+BOTLISH_POINTER(__typeof__(((PKCS7 *)0)->d), other, 0, 8, "PKCS7_d.other");
+
+BOTLISH_RECORD(PKCS7, 32, 8, "PKCS7");
+BOTLISH_POINTER(PKCS7, ber_bytes, 0, 8, "PKCS7.ber_bytes");
+BOTLISH_SCALAR(PKCS7, ber_len, 8, 8, 0, "PKCS7.ber_len");
+BOTLISH_POINTER(PKCS7, type, 16, 8, "PKCS7.type_");
+BOTLISH_NESTED_UNION(PKCS7, d, 24, 8, "PKCS7.d");
 
 BOTLISH_RECORD(struct rsa_meth_st, 72, 8, "RSA_METHOD");
 BOTLISH_NESTED(struct rsa_meth_st, common, 0, 8, "RSA_METHOD.common");
@@ -421,6 +646,26 @@ BOTLISH_RECORD(struct EDIPartyName_st, 16, 8, "EDIPARTYNAME");
 BOTLISH_POINTER(struct EDIPartyName_st, nameAssigner, 0, 8, "EDIPARTYNAME.nameAssigner");
 BOTLISH_POINTER(struct EDIPartyName_st, partyName, 8, 8, "EDIPARTYNAME.partyName");
 
+BOTLISH_RECORD(__typeof__(((struct GENERAL_NAME_st *)0)->d), 8, 8, "GENERAL_NAME_d");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), ptr, 0, 8, "GENERAL_NAME_d.ptr");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), otherName, 0, 8, "GENERAL_NAME_d.otherName");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), rfc822Name, 0, 8, "GENERAL_NAME_d.rfc822Name");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), dNSName, 0, 8, "GENERAL_NAME_d.dNSName");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), x400Address, 0, 8, "GENERAL_NAME_d.x400Address");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), directoryName, 0, 8, "GENERAL_NAME_d.directoryName");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), ediPartyName, 0, 8, "GENERAL_NAME_d.ediPartyName");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), uniformResourceIdentifier, 0, 8, "GENERAL_NAME_d.uniformResourceIdentifier");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), iPAddress, 0, 8, "GENERAL_NAME_d.iPAddress");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), registeredID, 0, 8, "GENERAL_NAME_d.registeredID");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), ip, 0, 8, "GENERAL_NAME_d.ip");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), dirn, 0, 8, "GENERAL_NAME_d.dirn");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), ia5, 0, 8, "GENERAL_NAME_d.ia5");
+BOTLISH_POINTER(__typeof__(((struct GENERAL_NAME_st *)0)->d), rid, 0, 8, "GENERAL_NAME_d.rid");
+
+BOTLISH_RECORD(struct GENERAL_NAME_st, 16, 8, "GENERAL_NAME");
+BOTLISH_SCALAR(struct GENERAL_NAME_st, type, 0, 4, 1, "GENERAL_NAME.type_");
+BOTLISH_NESTED_UNION(struct GENERAL_NAME_st, d, 8, 8, "GENERAL_NAME.d");
+
 BOTLISH_RECORD(struct AUTHORITY_KEYID_st, 24, 8, "AUTHORITY_KEYID");
 BOTLISH_POINTER(struct AUTHORITY_KEYID_st, keyid, 0, 8, "AUTHORITY_KEYID.keyid");
 BOTLISH_POINTER(struct AUTHORITY_KEYID_st, issuer, 8, 8, "AUTHORITY_KEYID.issuer");
@@ -438,6 +683,14 @@ BOTLISH_POINTER(struct NAME_CONSTRAINTS_st, excludedSubtrees, 8, 8, "NAME_CONSTR
 BOTLISH_RECORD(struct ACCESS_DESCRIPTION_st, 16, 8, "ACCESS_DESCRIPTION");
 BOTLISH_POINTER(struct ACCESS_DESCRIPTION_st, method, 0, 8, "ACCESS_DESCRIPTION.method");
 BOTLISH_POINTER(struct ACCESS_DESCRIPTION_st, location, 8, 8, "ACCESS_DESCRIPTION.location");
+
+BOTLISH_RECORD(__typeof__(((struct DIST_POINT_NAME_st *)0)->name), 8, 8, "DIST_POINT_NAME_name");
+BOTLISH_POINTER(__typeof__(((struct DIST_POINT_NAME_st *)0)->name), fullname, 0, 8, "DIST_POINT_NAME_name.fullname");
+BOTLISH_POINTER(__typeof__(((struct DIST_POINT_NAME_st *)0)->name), relativename, 0, 8, "DIST_POINT_NAME_name.relativename");
+
+BOTLISH_RECORD(struct DIST_POINT_NAME_st, 16, 8, "DIST_POINT_NAME");
+BOTLISH_SCALAR(struct DIST_POINT_NAME_st, type, 0, 4, 1, "DIST_POINT_NAME.type_");
+BOTLISH_NESTED_UNION(struct DIST_POINT_NAME_st, name, 8, 8, "DIST_POINT_NAME.name");
 
 BOTLISH_RECORD(struct DIST_POINT_st, 24, 8, "DIST_POINT");
 BOTLISH_POINTER(struct DIST_POINT_st, distpoint, 0, 8, "DIST_POINT.distpoint");
@@ -459,6 +712,15 @@ BOTLISH_POINTER(struct NOTICEREF_st, noticenos, 8, 8, "NOTICEREF.noticenos");
 BOTLISH_RECORD(struct USERNOTICE_st, 16, 8, "USERNOTICE");
 BOTLISH_POINTER(struct USERNOTICE_st, noticeref, 0, 8, "USERNOTICE.noticeref");
 BOTLISH_POINTER(struct USERNOTICE_st, exptext, 8, 8, "USERNOTICE.exptext");
+
+BOTLISH_RECORD(__typeof__(((struct POLICYQUALINFO_st *)0)->d), 8, 8, "POLICYQUALINFO_d");
+BOTLISH_POINTER(__typeof__(((struct POLICYQUALINFO_st *)0)->d), cpsuri, 0, 8, "POLICYQUALINFO_d.cpsuri");
+BOTLISH_POINTER(__typeof__(((struct POLICYQUALINFO_st *)0)->d), usernotice, 0, 8, "POLICYQUALINFO_d.usernotice");
+BOTLISH_POINTER(__typeof__(((struct POLICYQUALINFO_st *)0)->d), other, 0, 8, "POLICYQUALINFO_d.other");
+
+BOTLISH_RECORD(struct POLICYQUALINFO_st, 16, 8, "POLICYQUALINFO");
+BOTLISH_POINTER(struct POLICYQUALINFO_st, pqualid, 0, 8, "POLICYQUALINFO.pqualid");
+BOTLISH_NESTED_UNION(struct POLICYQUALINFO_st, d, 8, 8, "POLICYQUALINFO.d");
 
 BOTLISH_RECORD(struct POLICYINFO_st, 16, 8, "POLICYINFO");
 BOTLISH_POINTER(struct POLICYINFO_st, policyid, 0, 8, "POLICYINFO.policyid");
@@ -548,6 +810,15 @@ BOTLISH_SCALAR(struct RIPEMD160state_st, num, 92, 4, 0, "RIPEMD160_CTX.num");
 BOTLISH_RECORD(struct trust_token_st, 16, 8, "TRUST_TOKEN");
 BOTLISH_POINTER(struct trust_token_st, data, 0, 8, "TRUST_TOKEN.data");
 BOTLISH_SCALAR(struct trust_token_st, len, 8, 8, 0, "TRUST_TOKEN.len");
+
+BOTLISH_RECORD(__typeof__(((struct XWING_private_key *)0)->opaque), 7840, 2, "XWING_private_key_opaque");
+BOTLISH_ARRAY(__typeof__(((struct XWING_private_key *)0)->opaque), bytes, 7840, "XWING_private_key_opaque.bytes");
+BOTLISH_OFFSET(__typeof__(((struct XWING_private_key *)0)->opaque), bytes[7839], 7839, "XWING_private_key_opaque.bytes, its last element");
+BOTLISH_SCALAR(__typeof__(((struct XWING_private_key *)0)->opaque), bytes[0], 0, 1, 0, "XWING_private_key_opaque.bytes, its first element");
+BOTLISH_SCALAR(__typeof__(((struct XWING_private_key *)0)->opaque), alignment, 0, 2, 0, "XWING_private_key_opaque.alignment");
+
+BOTLISH_RECORD(struct XWING_private_key, 7840, 2, "XWING_private_key");
+BOTLISH_NESTED_UNION(struct XWING_private_key, opaque, 0, 7840, "XWING_private_key.opaque");
 
 BOTLISH_RECORD(struct ssl_private_key_method_st, 24, 8, "SSL_PRIVATE_KEY_METHOD");
 BOTLISH_POINTER(struct ssl_private_key_method_st, sign, 0, 8, "SSL_PRIVATE_KEY_METHOD.sign");

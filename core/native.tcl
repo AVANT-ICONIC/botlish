@@ -75,6 +75,11 @@
 #                                     copies exactly N elements:
 #                                     FIXED-LAYOUT-ARRAYS.md); nothing for
 #                                     any other argument
+#                     path K          the extent N of the fixed array the
+#                                     field designator constant argument K
+#                                     names (binary::read of an array:
+#                                     LAYOUT-UNIONS.md); nothing for any
+#                                     other designator
 #   dropForm        "" or {NAME AT}: the operation's element-dropping variant
 #                   NAME, which takes the element drop descriptor as an extra
 #                   last argument, so that the elements the operation removes,
@@ -538,7 +543,7 @@ proc core::native::register {name args} {
         error "core::native::register: -errors-from of \"$name\" must be the index of an argument of a -completion native"
     }
     set length [dict get $options -result-length]
-    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list extent}
+    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list extent path}
             || ![string is digit -strict [lindex $length 1]] || $arity eq "*" || [lindex $length 1] >= $arity)} {
         error "core::native::register: bad -result-length \"$length\" for \"$name\""
     }
@@ -641,7 +646,9 @@ proc core::native::register {name args} {
 # storage) and write_foreign (an existing C pointer encoded into a pointer
 # field of byte storage) are NATIVE-LAYOUT-WRITES.md's; element (one
 # element of a live array read), store_element (one written) and
-# load_array (a live array copied into its List) FIXED-LAYOUT-ARRAYS.md's.
+# load_array (a live array copied into its List) FIXED-LAYOUT-ARRAYS.md's;
+# read (the one representation a designator names, imprinted from the
+# bytes of `input K`) LAYOUT-UNIONS.md's.
 proc core::native::ValidLayoutRole {role arity} {
     if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
         return 0
@@ -665,7 +672,7 @@ proc core::native::ValidLayoutRole {role arity} {
                 }
             }
             op {
-                if {$value ni {parse emit view load field edit store write write_foreign element store_element load_array}} {
+                if {$value ni {parse emit view load field edit store write write_foreign element store_element load_array read}} {
                     return 0
                 }
             }
@@ -808,6 +815,13 @@ proc core::native::ValidShape {shape count} {
         return [expr {$length == 3 && [string is digit -strict [lindex $shape 1]]
             && [string is digit -strict [lindex $shape 2]]
             && ($count eq "" || ([lindex $shape 1] < $count && [lindex $shape 2] < $count))}]
+    }
+    if {[lindex $shape 0] eq {layout-read}} {
+        # {layout-read I}: the copied type of the representation the field
+        # designator constant argument I names (binary::read,
+        # LAYOUT-UNIONS.md), resolved by hir::types::ShapeResult.
+        return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
+            && ($count eq "" || [lindex $shape 1] < $count)}]
     }
     if {[lindex $shape 0] in {native-view native-edit view-struct native-element}} {
         # {native-view I}: the result is a NativeView[L] whose layout L is

@@ -74,10 +74,10 @@ header include/SDL3/SDL_tray.h 380205fe
 header include/SDL3/SDL_version.h 19dc7d48
 header include/SDL3/SDL_video.h 8c3dde2c
 shim_library botlish_shim_sdl3_92412515
-file layouts-check.c 686 c49f92d2
-file layouts.tsv 1030 16592d72
-file report.tsv 5001 0c63c9c8
-file report.txt 166 d461cbc6
+file layouts-check.c 716 3b993478
+file layouts.tsv 1030 b346dd10
+file report.tsv 5001 0bf9cb47
+file report.txt 168 ff6a72f9
 file sdl3/assert.bot 47 8b377971
 file sdl3/asyncio.bot 82 cab0c358
 file sdl3/atomic.bot 84 43b3ce0b
@@ -86,7 +86,7 @@ file sdl3/blendmode.bot 43 680bb10c
 file sdl3/camera.bot 80 ce376155
 file sdl3/clipboard.bot 50 cdcd69c7
 file sdl3/cpuinfo.bot 66 960b0897
-file sdl3/ctypes.bot 451 12fb8d06
+file sdl3/ctypes.bot 451 2bdce235
 file sdl3/dialog.bot 50 cfc0a4b5
 file sdl3/dlopennote.bot 6 be902072
 file sdl3/endian.bot 9 af32c796
@@ -103,7 +103,7 @@ file sdl3/iostream.bot 283 9b53be9c
 file sdl3/joystick.bot 295 0473a3c0
 file sdl3/keyboard.bot 118 32c0e37d
 file sdl3/keycode.bot 282 66027dc2
-file sdl3/layouts.bot 885 16b0cae7
+file sdl3/layouts.bot 921 695fdbfa
 file sdl3/loadso.bot 21 523cb8e2
 file sdl3/locale.bot 12 4c662830
 file sdl3/log.bot 77 2d74fde2
@@ -229,22 +229,25 @@ blocked va-list 7
 blocked variadic 16
 layout_abi linux-x86_64 clang x86_64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 5
-layout_count blocked 46
-layout_count blockedDirect 42
-layout_count blockedStructs 42
+layout_count blocked 42
+layout_count blockedDirect 38
+layout_count blockedStructs 41
 layout_count blockedTransitive 4
-layout_count blockedUnions 4
-layout_count emitted 81
+layout_count blockedUnions 1
+layout_count emitted 85
+layout_count emittedSynthetic 0
+layout_count emittedUnions 3
 layout_count incomplete 43
 layout_count promoted 0
 layout_count public 127
 layout_count structs 123
+layout_count synthetic 0
 layout_count system 0
+layout_count unheld 0
 layout_count unions 4
 layout_blocked c-bool 21
 layout_blocked float 23
-layout_blocked nested-layout-blocked 7
-layout_blocked union 4
+layout_blocked nested-layout-blocked 6
 contract SDL_size_mul_check_overflow ret {escape proven-noescape access write} compiler {nocapture writeonly}
 contract SDL_size_mul_check_overflow_builtin ret {escape proven-noescape access write} compiler {nocapture writeonly}
 contract SDL_size_add_check_overflow ret {escape proven-noescape access write} compiler {nocapture writeonly}

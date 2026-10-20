@@ -264,6 +264,7 @@ namespace eval hir::static {
         LAYOUT-NOT-A-VALUE                       LayoutNotAValue
         LAYOUT-OPERAND                           LayoutOperand
         LAYOUT-STRUCT-PARAMETER                  LayoutStructParameter
+        LAYOUT-UNION                             LayoutUnion
         LOCKSTEP-UNEQUAL                         LockstepUnequal
         LOCKSTEP-UNPROVEN                        LockstepUnproven
         MISSING-CONTEXT                          MissingContext

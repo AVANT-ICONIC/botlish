@@ -8,6 +8,18 @@
 > BoringSSL, +249 Win32), and the pressure report now weighs unions, Bool,
 > floats, bitfields and flexible arrays (FIXED-LAYOUT-ARRAYS.md, section 12).
 
+> Partially superseded by LAYOUT-UNIONS.md: a C union is a `union layout`
+> and an anonymous member (an anonymous union, an anonymous struct inside a
+> union) a synthetic layout of its own, so the `union` and
+> `anonymous-overlay` blockers below are gone; an anonymous member's size
+> and alignment are clang's record layout, verified after generation. With
+> unions every binding gained the records the "unions" counterfactual
+> forecast, counted as it counted them: Tcl 34, SDL3 85 and BoringSSL 117
+> exactly, Win32 988 representable of which 985 emitted (3 anonymous members
+> whose records a bitfield blocks are not emitted: nothing reaches them);
+> anonymous structs inside unions, records of their own now, add to the
+> totals (LAYOUT-UNIONS.md, "Forecast against actual").
+
 C binding generation of native record layouts: the binding generator
 (`tools/c-bindgen.tcl`, C-BINDGEN.md) now writes an ordinary Botlish
 `layout` (BINARY-LAYOUT.md) for every complete C record whose every field the

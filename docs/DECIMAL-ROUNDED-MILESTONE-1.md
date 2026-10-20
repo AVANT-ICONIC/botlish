@@ -751,6 +751,16 @@ exception.
   golden framework's mutants (20/20 killed, run with `-suites 0`: the
   framework test file and fuzzer as detectors) after the new
   `test::code_name` cases. `tools/compilerpedia.tcl check` passes.
+* **CI** on the branch before it was merged with main (head `aad6a63`):
+  `tests.yml` (the whole Tcl suite with duplicates on interp and compile,
+  its native coverage, every golden suite beside its Tcl originals, the
+  Rust tests, the stub-linked executables, the warning gate) passed;
+  `macos-arm64.yml` (smoke and the acceptance tier, which includes
+  `decimal-rounded.test` and `decimal-rounded.bot`) passed;
+  `static-decisions.yml` (every golden suite under the batched and the
+  sequential scheduler, on `099bf70`, the same front end) passed with no
+  disagreement. The merge with main (the layout-unions milestone) changed
+  only the DiagnosticCode counts and an inventory in three tests.
 
 Mutation result: 24 mutants, 24 killed, none survived. The test file kills
 every one; the fuzzer independently kills the ones that change a

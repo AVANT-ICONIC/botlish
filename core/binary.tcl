@@ -9,6 +9,14 @@
 #                                   value's static type
 #   binary::layout_length(L)        L's size, a compile-time constant
 #   binary::layout_alignment(L)     L's alignment, likewise
+#   binary::read(data, L.path)      the value of the one representation the
+#                                   designator L.path names, imprinted from
+#                                   DATA, an abi::bytes::Bytes of exactly L's
+#                                   size (LayoutLengthMismatch otherwise): a
+#                                   scalar's Int, a nested layout's
+#                                   LayoutStruct, an array's List -- one
+#                                   alternative of a union, which has no
+#                                   copied value of its own (LAYOUT-UNIONS.md)
 #
 # L is static evidence, never a value: written as a layout name where these
 # operations take it (hir/resolve.tcl resolves it to the layout's descriptor
@@ -32,6 +40,12 @@
 #                                           (any of the forms above, after
 #                                           NAME OFFSET); its value a List of
 #                                           exactly N element values
+#         | {NAME OFFSET union DESCRIPTOR}  a union held by value (LAYOUT-
+#                                           UNIONS.md): DESCRIPTOR headed
+#                                           LayoutUnion[ID], its FIELDs the
+#                                           alternatives, all at offset 0. It
+#                                           has no copied value, so nothing
+#                                           here imprints or emits one
 #
 # This file is the reference implementation the interpreter runs, reading the
 # descriptor at run time. The Tcl compiler and native lowering read the same
@@ -69,6 +83,15 @@ proc core::binary::BytesOf {data context} {
         core::semanticError TYPE "$context: expected $bytesType, got [core::value::show $data]"
     }
     return [binary decode hex [core::value::bytestoreHex [core::value::structGet $data [core::bytestore::storageField]]]]
+}
+
+# The layout identity a descriptor head STRUCTID names: LayoutStruct[ID]
+# (a layout's struct view) or LayoutUnion[ID] (a union, LAYOUT-UNIONS.md).
+proc core::binary::LayoutName {structId} {
+    if {[string match {LayoutUnion\[*\]} $structId]} {
+        return [string range $structId 12 end-1]
+    }
+    return [string range $structId 13 end-1]
 }
 
 # The abi::bytes::Bytes holding the byte string BYTES.
@@ -119,6 +142,11 @@ proc core::binary::DecodeRepr {repr bytes at name structId} {
             # bytes never become a pointer.
             core::semanticError TYPE "binary::parse: field \"$name\" of $structId is a C pointer, which is never imprinted from bytes"
         }
+        union {
+            # Statically LAYOUT-UNION (hir/layouts.tcl): several
+            # interpretations of the same bytes are no value to imprint.
+            core::semanticError LAYOUT-UNION "field \"$name\" of $structId is the union layout [LayoutName [lindex $repr 1 0]], which has no copied value (one of its alternatives is read at a time)"
+        }
         array {
             lassign $repr - extent stride element
             set items {}
@@ -161,6 +189,10 @@ proc core::binary::EncodeRepr {operation repr value bytes at what} {
         }
         ptr {
             core::semanticError TYPE "$operation: $what is a C pointer, which is never written into bytes"
+        }
+        union {
+            # Statically LAYOUT-UNION (LAYOUT-UNIONS.md).
+            core::semanticError LAYOUT-UNION "$operation: $what is the union layout [LayoutName [lindex $repr 1 0]], which has no copied value to write (one of its alternatives is written at a time)"
         }
         array {
             lassign $repr - extent stride element
@@ -227,7 +259,7 @@ proc core::binary::HasArrays {descriptor} {
             array {
                 return 1
             }
-            layout {
+            layout - union {
                 if {[HasArrays [lindex $field 3]]} {
                     return 1
                 }
@@ -278,7 +310,7 @@ proc core::binary::ReprPointerPath {repr} {
         ptr {
             return ""
         }
-        layout {
+        layout - union {
             set inner [PointerPath [lindex $repr 1]]
             if {$inner eq ""} {
                 return none
@@ -297,11 +329,58 @@ proc core::binary::ReprPointerPath {repr} {
 }
 
 proc core::binary::RefuseNativeOnly {operation descriptor} {
+    set path [UnionPath $descriptor]
+    if {$path ne "none"} {
+        # Statically LAYOUT-UNION (LAYOUT-UNIONS.md).
+        set where [if {$path eq ""} {string cat ""} else {string cat " ($path)"}]
+        core::semanticError LAYOUT-UNION \
+            "$operation: [LayoutName [lindex $descriptor 0]] holds a union$where, which has no copied value"
+    }
     set path [PointerPath $descriptor]
     if {$path ne ""} {
         core::semanticError LAYOUT-NATIVE-ONLY \
             "$operation: field \"$path\" of [lindex $descriptor 0] is a C pointer, which bytes never become and are never written from (a layout with a pointer field is read through a native view only)"
     }
+}
+
+# The path of the first union DESCRIPTOR holds by value ("" when it is a
+# union's own descriptor, "u", "inner.u", "us[]" ...), or "none"
+# (LAYOUT-UNIONS.md).
+proc core::binary::UnionPath {descriptor} {
+    if {[string match {LayoutUnion\[*\]} [lindex $descriptor 0]]} {
+        return ""
+    }
+    foreach field [lindex $descriptor 3] {
+        set inner [ReprUnionPath [lrange $field 2 end]]
+        if {$inner ne "none"} {
+            return [lindex $field 0]$inner
+        }
+    }
+    return none
+}
+
+# The path of a union within the representation words REPR, or "none".
+proc core::binary::ReprUnionPath {repr} {
+    switch -- [lindex $repr 0] {
+        union {
+            return ""
+        }
+        layout {
+            set inner [UnionPath [lindex $repr 1]]
+            if {$inner eq "none"} {
+                return none
+            }
+            return ".$inner"
+        }
+        array {
+            set inner [ReprUnionPath [lindex $repr 3]]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
+        }
+    }
+    return none
 }
 
 proc core::binary::parse {descriptor data} {
@@ -311,9 +390,35 @@ proc core::binary::parse {descriptor data} {
     set size [lindex $descriptor 1]
     if {[string length $bytes] != $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "binary::parse: [string length $bytes] bytes given, but the layout [string range [lindex $descriptor 0] 13 end-1] has size $size"
+            "binary::parse: [string length $bytes] bytes given, but the layout [LayoutName [lindex $descriptor 0]] has size $size"
     }
     return [Decode $descriptor $bytes 0]
+}
+
+# binary::read(data, L.path) (LAYOUT-UNIONS.md): the one representation the
+# designator constant PATH names -- {STRUCTID SIZE PATH FIELD}, FIELD its
+# descriptor entry at its absolute offset -- imprinted from DATA, exactly
+# L's size. Never a pointer (LAYOUT-NATIVE-ONLY) or a union (LAYOUT-UNION):
+# both statically refused, and here too.
+proc core::binary::read {data path} {
+    set path [core::value::strOf $path]
+    lassign $path structId size text field
+    set repr [lrange $field 2 end]
+    set union [ReprUnionPath $repr]
+    if {$union ne "none"} {
+        core::semanticError LAYOUT-UNION \
+            "binary::read: [PathText $path] holds a union, which has no copied value (one of its alternatives is read at a time)"
+    }
+    if {[ReprPointerPath $repr] ne "none"} {
+        core::semanticError LAYOUT-NATIVE-ONLY \
+            "binary::read: [PathText $path] holds a C pointer, which bytes never become"
+    }
+    set bytes [BytesOf $data binary::read]
+    if {[string length $bytes] != $size} {
+        core::native::failDeclared LayoutLengthMismatch \
+            "binary::read: [string length $bytes] bytes given, but the layout [LayoutName $structId] has size $size"
+    }
+    return [DecodeRepr $repr $bytes [lindex $field 1] [lindex $field 0] $structId]
 }
 
 proc core::binary::emit {value descriptor} {
@@ -371,7 +476,7 @@ proc core::binary::nativeView {descriptor p} {
     set descriptor [core::value::strOf $descriptor]
     if {[core::cabi::addressOf $p] == 0} {
         core::native::failDeclared NativeViewNull \
-            "binary::native::view: the pointer is null, so there is no [string range [lindex $descriptor 0] 13 end-1] to read"
+            "binary::native::view: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to read"
     }
     NativeOnly binary::native::view
 }
@@ -446,14 +551,14 @@ proc core::binary::RecordBytes {operation data path} {
     set length [string length $bytes]
     if {$length != $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "$operation: $length bytes given, but the layout [string range $structId 13 end-1] has size $size"
+            "$operation: $length bytes given, but the layout [LayoutName $structId] has size $size"
     }
     return $bytes
 }
 
 # The designator PATH as written ("RECORD.origin.x").
 proc core::binary::PathText {path} {
-    return "[string range [lindex $path 0] 13 end-1].[lindex $path 2]"
+    return "[LayoutName [lindex $path 0]].[lindex $path 2]"
 }
 
 proc core::binary::write {data path value} {
@@ -542,7 +647,7 @@ proc core::binary::nativeEdit {descriptor p} {
     set address [core::cabi::addressOf $p]
     if {$address == 0} {
         core::native::failDeclared NativeEditNull \
-            "binary::native::edit: the pointer is null, so there is no [string range [lindex $descriptor 0] 13 end-1] to edit"
+            "binary::native::edit: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to edit"
     }
     NativeOnly binary::native::edit "reads and writes"
 }
@@ -604,6 +709,14 @@ core::native::register binary#emit -arity 2 -impl core::binary::emit \
     -param-types {struct str} -result-type struct -result-shape [list named-struct [core::bytestore::bytesType]] \
     -runtime {bytestore-alloc} -ownership {observe observe} -errors {LayoutExtentMismatch} -bounds {extents 0} \
     -layout {operand 1 op emit} -nomethod 1
+# binary::read(data, L.path) (LAYOUT-UNIONS.md): one designated
+# representation imprinted from bytes -- how a union's alternative is read
+# from byte storage, a union having no copied value of its own. Its result
+# is the representation's copied type (a scalar's domain, LayoutStruct[R],
+# a List); `-result-length {path 1}` states an array's extent.
+core::native::register binary::read -arity 2 -impl core::binary::read \
+    -param-types {struct str} -result-type any -result-shape {layout-read 1} -ownership {observe observe} \
+    -errors {LayoutLengthMismatch} -result-length {path 1} -layout {input 0 path 1 op read} -nomethod 1
 core::native::register binary::layout_length -arity 1 -impl {core::binary::Unelaborated binary::layout_length} \
     -param-types {any} -result-type int -layout {operand 0 query length} -nomethod 1
 core::native::register binary::layout_alignment -arity 1 -impl {core::binary::Unelaborated binary::layout_alignment} \

@@ -46,6 +46,7 @@
 #   {name F offset O kind layout layout INNER width W type T}
 #   {name F offset O kind pointer width W endian little type T}
 #   {name F offset O kind array extent N stride S width W element E type T}
+#   {name F offset O kind union layout U width W type any}
 #
 # where T is the field's consumer type -- the declared integer domain
 # (`{refined int {binary::U16}}`), `{nstruct LayoutStruct[INNER]}`, or the
@@ -68,6 +69,28 @@
 # makes it; the extent is the layout's, not the List type's). An array is
 # repetition, not a new object model: no ordinary Botlish value gains an
 # array representation, and an array of characters is not text.
+#
+# Unions (LAYOUT-UNIONS.md). Arrays repeat representation; unions overlap
+# it. A union layout (`union layout U:`, an entry with `union 1`) is a named
+# representation of SIZE bytes whose FIELDS are its *alternatives*: several
+# declared interpretations of the same bytes, every one at offset 0 (the
+# union's origin), each any representation (a scalar, a pointer, a nested
+# layout, an array, another union) no wider than the union. It is not a
+# tagged sum: there is no case, tag, discriminant or active alternative, and
+# choosing one is interpretation, never conversion. Overlap is what a union
+# declares, and only a union: an ordinary layout's fields still never share a
+# byte (LAYOUT-FIELD-OVERLAP). A field (or an array element, or another
+# union's alternative) of a union holds it by value: the representation
+# {kind union layout U width SIZE}, read through a native view or edit as
+# the live union NativeView[U] / NativeEdit[U] (one window, every
+# alternative read at its address), its alternatives named by designators
+# (`L.u.whole`). A union has no copied value: its alternatives are not
+# independent fields, so there is no LayoutStruct of a union nor of anything
+# holding one by value -- binary::parse, binary::emit, binary::load and
+# whole-array writes of such a representation are LAYOUT-UNION, and its
+# consumer type here is `any`, which no checked program ever holds. Bytes
+# are interpreted one alternative at a time through a static designator
+# (binary::read, binary::write), native memory through a view or an edit.
 #
 # Pointer fields (NATIVE-LAYOUT-VIEWS.md). A field may hold a C data or
 # function pointer: its width and placement are representation facts like a
@@ -200,6 +223,26 @@ proc hir::layouts::structId {id} {
     return "LayoutStruct\[$id\]"
 }
 
+# 1 if the registered layout ID is a union layout (LAYOUT-UNIONS.md).
+proc hir::layouts::IsUnion {id} {
+    variable registry
+    return [expr {[dict exists $registry $id] && [dict getdef [dict get $registry $id] union 0]}]
+}
+
+# The head of layout ID's descriptor: its struct view's identity, or, for a
+# union, "LayoutUnion[ID]" -- a union has no struct view (LAYOUT-UNIONS.md).
+proc hir::layouts::DescriptorHead {id} {
+    if {[IsUnion $id]} {
+        return "LayoutUnion\[$id\]"
+    }
+    return [structId $id]
+}
+
+# "layout" or "union layout": what declaration ID is, for a message.
+proc hir::layouts::Noun {id} {
+    return [expr {[IsUnion $id] ? "union layout" : "layout"}]
+}
+
 proc hir::layouts::structType {id} {
     return [list nstruct [structId $id]]
 }
@@ -212,7 +255,8 @@ proc hir::layouts::OfStructId {structId} {
         return ""
     }
     set id [string range $structId 13 end-1]
-    if {[dict exists $registry $id]} {
+    if {[dict exists $registry $id] && ![IsUnion $id]} {
+        # (A union has no struct view: LAYOUT-UNIONS.md.)
         return $id
     }
     return ""
@@ -261,25 +305,36 @@ proc hir::layouts::align {id} {
 # constant argument the binary operations carry (core/binary.tcl reads it at
 # run time on the interpreter; the Tcl compiler and native lowering read it
 # statically). One layout has exactly one descriptor text.
+#
+# A union's descriptor (LAYOUT-UNIONS.md) has the same shape, headed
+# LayoutUnion[ID]: {LayoutUnion[ID] SIZE ALIGN {ALTERNATIVE ...}}, every
+# ALTERNATIVE a FIELD at offset 0. Nothing imprints or emits one (a union
+# has no copied value); it is the words a union field's entry carries,
+# {NAME OFFSET union DESCRIPTOR}, and the alternatives a live union's
+# reads are elaborated with.
 proc hir::layouts::descriptor {id} {
     set entry [entry $id]
     set fields {}
     foreach field [dict get $entry fields] {
         lappend fields [list [dict get $field name] [dict get $field offset] {*}[ReprDescriptor $field]]
     }
-    return [list [structId $id] [dict get $entry size] [dict get $entry align] $fields]
+    return [list [DescriptorHead $id] [dict get $entry size] [dict get $entry align] $fields]
 }
 
 # The descriptor words of the representation REPR (a registry field, or an
 # array's element): {u|i WIDTH ENDIAN} a scalar, {ptr WIDTH ENDIAN} a
 # pointer, {layout DESCRIPTOR} a nested layout, {array N STRIDE ELEMENT} a
 # fixed array of N elements STRIDE bytes apart, ELEMENT its element's words
-# (FIXED-LAYOUT-ARRAYS.md). A field's descriptor entry is its name and
-# offset followed by these.
+# (FIXED-LAYOUT-ARRAYS.md), {union DESCRIPTOR} a union held by value
+# (LAYOUT-UNIONS.md). A field's descriptor entry is its name and offset
+# followed by these.
 proc hir::layouts::ReprDescriptor {repr} {
     switch -- [dict get $repr kind] {
         layout {
             return [list layout [descriptor [dict get $repr layout]]]
+        }
+        union {
+            return [list union [descriptor [dict get $repr layout]]]
         }
         pointer {
             return [list ptr [dict get $repr width] [dict get $repr endian]]
@@ -304,6 +359,7 @@ proc hir::layouts::ReprDescriptor {repr} {
 #   T                   a scalar element: its integer domain type
 #   {cptr P}, {cfnptr F} a pointer element: its pointer type
 #   {layout ID}         a nested layout element
+#   {union ID}          a union element (LAYOUT-UNIONS.md)
 #   {array N TERM}      a nested array element
 #
 # A term is structural -- two arrays of four POINTs are one type, whichever
@@ -327,9 +383,30 @@ proc hir::layouts::ArrayConsumerType {element} {
 proc hir::layouts::ReprTerm {repr} {
     switch -- [dict get $repr kind] {
         layout { return [list layout [dict get $repr layout]] }
+        union  { return [list union [dict get $repr layout]] }
         array  { return [list array [dict get $repr extent] [ReprTerm [dict get $repr element]]] }
     }
     return [dict get $repr type]
+}
+
+# The term of the registered layout ID held by value: {union ID} for a
+# union, {layout ID} for any other (the one spelling of each: a term is a
+# type's payload, so it must be canonical).
+proc hir::layouts::NamedTerm {id} {
+    return [list [expr {[IsUnion $id] ? "union" : "layout"}] $id]
+}
+
+# 1 if TERM names a registered layout or union by value ({layout ID},
+# {union ID}).
+proc hir::layouts::IsNamedTerm {term} {
+    return [expr {[llength $term] == 2 && [lindex $term 0] in {layout union}}]
+}
+
+# The consumer type of a union held by value (LAYOUT-UNIONS.md): a union has
+# no copied value, and every copy of a representation holding one is
+# LAYOUT-UNION, so no checked program holds a value of this type.
+proc hir::layouts::UnionConsumerType {} {
+    return any
 }
 
 # 1 if TERM is an array term {array N TERM}.
@@ -352,10 +429,14 @@ proc hir::layouts::ReprOfTerm {term} {
         return [dict create kind array extent $extent stride $stride width [expr {$extent * $stride}] \
             element $element type [ArrayConsumerType [dict get $element type]]]
     }
-    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+    if {[IsNamedTerm $term]} {
         set id [lindex $term 1]
-        if {![declared $id]} {
+        if {![declared $id] || [NamedTerm $id] ne $term} {
+            # (An unknown layout, or a union spelled as a record or back.)
             return ""
+        }
+        if {[IsUnion $id]} {
+            return [dict create kind union layout $id width [size $id] type [UnionConsumerType]]
         }
         return [dict create kind layout layout $id width [size $id] type [structType $id]]
     }
@@ -386,13 +467,14 @@ proc hir::layouts::OfArrayType {type} {
 # The native memory type (a view's, or an edit's when EDIT) of the
 # representation term TERM read in place: a scalar's or pointer's own type
 # for a leaf (read, not a window), NativeView[ID] / NativeEdit[ID] for a
-# nested layout, NativeView[array ...] / NativeEdit[array ...] for an array.
+# nested layout or a union (the live union, LAYOUT-UNIONS.md),
+# NativeView[array ...] / NativeEdit[array ...] for an array.
 proc hir::layouts::NativeTermType {term edit} {
     set head [expr {$edit ? "nedit" : "nview"}]
     if {[IsArrayTerm $term]} {
         return [list $head $term]
     }
-    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+    if {[IsNamedTerm $term]} {
         return [list $head [lindex $term 1]]
     }
     return $term
@@ -425,7 +507,7 @@ proc hir::layouts::ShowTerm {term} {
     if {[IsArrayTerm $term]} {
         return "array [lindex $term 1] of [ShowTerm [lindex $term 2]]"
     }
-    if {[llength $term] == 2 && [lindex $term 0] eq "layout"} {
+    if {[IsNamedTerm $term]} {
         return [lindex $term 1]
     }
     return [hir::types::show $term]
@@ -459,7 +541,7 @@ proc hir::layouts::ReprText {repr} {
         array {
             return "array [dict get $repr extent] of [ReprText [dict get $repr element]]"
         }
-        layout {
+        layout - union {
             return [dict get $repr layout]
         }
     }
@@ -468,13 +550,15 @@ proc hir::layouts::ReprText {repr} {
 
 # The path of a pointer within the representation REPR ("" for the
 # representation itself, "[]" for an array's element, "[].next" for a field
-# of a nested layout element), or "none" when REPR holds no pointer.
+# of a nested layout element, ".ptr" for a union's alternative), or "none"
+# when REPR holds no pointer. Pointer authority is recursive: through every
+# alternative of a union too (LAYOUT-UNIONS.md).
 proc hir::layouts::ReprPointerPath {repr} {
     switch -- [dict get $repr kind] {
         pointer {
             return ""
         }
-        layout {
+        layout - union {
             set inner [PointerField [dict get $repr layout]]
             if {$inner eq ""} {
                 return none
@@ -493,12 +577,113 @@ proc hir::layouts::ReprPointerPath {repr} {
 }
 
 # The layout identity a descriptor text DESCRIPTOR describes (the inner ID of
-# its STRUCTID), or "" if it is not a descriptor.
+# its STRUCTID, or of a union's LayoutUnion[ID]), or "" if it is not a
+# descriptor.
 proc hir::layouts::DescriptorLayout {descriptor} {
-    if {[catch {lindex $descriptor 0} structId] || ![string match {LayoutStruct\[*\]} $structId]} {
+    if {[catch {lindex $descriptor 0} structId]} {
         return ""
     }
-    return [string range $structId 13 end-1]
+    if {[string match {LayoutStruct\[*\]} $structId]} {
+        return [string range $structId 13 end-1]
+    }
+    if {[string match {LayoutUnion\[*\]} $structId]} {
+        return [string range $structId 12 end-1]
+    }
+    return ""
+}
+
+# ---------------------------------------------------------------------------
+# Unions held by value (LAYOUT-UNIONS.md)
+#
+# A union has no copied value, so neither has any representation holding one
+# by value: these find the union a copy would have to make, for LAYOUT-UNION.
+
+# The path of a union within the representation REPR ("" for REPR itself,
+# ".u" for a nested layout's field, "[]" for an array's element, ".alt.u"
+# for a union within a union's alternative), or "none" when REPR holds no
+# union by value. A pointer to one is no union held (a pointer field names a
+# pointee identity, never a representation).
+proc hir::layouts::ReprUnionPath {repr} {
+    switch -- [dict get $repr kind] {
+        union {
+            return ""
+        }
+        layout {
+            set inner [UnionField [dict get $repr layout]]
+            if {$inner eq ""} {
+                return none
+            }
+            return ".$inner"
+        }
+        array {
+            set inner [ReprUnionPath [dict get $repr element]]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
+        }
+    }
+    return none
+}
+
+# The path ("u", "inner.u", "us[]") of the first field of the record layout
+# ID that holds a union by value, in declared order, or "".
+proc hir::layouts::UnionField {id} {
+    foreach field [dict get [entry $id] fields] {
+        set inner [ReprUnionPath $field]
+        if {$inner ne "none"} {
+            return "[dict get $field name]$inner"
+        }
+    }
+    return ""
+}
+
+# 1 if layout ID is a union or holds one by value: it has no copied value.
+proc hir::layouts::HoldsUnion {id} {
+    return [expr {[IsUnion $id] || [UnionField $id] ne ""}]
+}
+
+# Why the representation REPR has no copied value, for LAYOUT-UNION -- or
+# "" when it has one. SUBJECT names REPR in the message ("layout OVL", "its
+# elements"); ROOT, when given, is what REPR is reached by in a designator
+# (a layout's identity for its NamedRepr, or a designator's text: "OVL",
+# "ARRS.ws"), so the message can say where the union is and name a
+# designator through it.
+proc hir::layouts::UnionRefusal {repr subject {root ""}} {
+    set path [ReprUnionPath $repr]
+    if {$path eq "none"} {
+        return ""
+    }
+    set union [ReprUnionAt $repr]
+    set example [dict get [lindex [dict get [entry $union] fields] 0] name]
+    set why "a union is several interpretations of the same bytes, never independent values, so it has no copied value"
+    if {$path eq ""} {
+        return "$union is a union layout: $why; a program reads or writes one alternative at a time ($union.$example, or through a native view or edit)"
+    }
+    if {$root ne ""} {
+        set at " at $root$path"
+        set hint "$root[string map {{[]} {[0]}} $path].$example"
+    } else {
+        set at ""
+        set hint "$union.$example"
+    }
+    return "$subject holds the union layout $union by value$at: $why; a program reads or writes it a field or an alternative at a time (a designator such as $hint, or through a native view or edit)"
+}
+
+# The union REPR holds first (its ReprUnionPath's), or "".
+proc hir::layouts::ReprUnionAt {repr} {
+    switch -- [dict get $repr kind] {
+        union { return [dict get $repr layout] }
+        array { return [ReprUnionAt [dict get $repr element]] }
+        layout {
+            foreach field [dict get [entry [dict get $repr layout]] fields] {
+                if {[ReprUnionPath $field] ne "none"} {
+                    return [ReprUnionAt $field]
+                }
+            }
+        }
+    }
+    return ""
 }
 
 # The descriptor entry of field NAME of layout ID (the FIELD of its
@@ -529,6 +714,12 @@ proc hir::layouts::PointerField {id} {
         }
     }
     return ""
+}
+
+# The representation of the registered layout ID held by value: a nested
+# layout's, or a union's (LAYOUT-UNIONS.md).
+proc hir::layouts::NamedRepr {id} {
+    return [ReprOfTerm [NamedTerm $id]]
 }
 
 # The native view type NativeView[ID].
@@ -594,7 +785,9 @@ proc hir::layouts::ViewFieldType {id name {edit 0}} {
             # (binary::load); nothing is read by the projection.
             return [NativeTermType [ReprTerm $field] $edit]
         }
-        if {[dict get $field kind] eq "layout"} {
+        if {[dict get $field kind] in {layout union}} {
+            # A nested layout, or a union held by value (the live union:
+            # LAYOUT-UNIONS.md): its window, nothing read.
             if {$edit} {
                 return [editType [dict get $field layout]]
             }
@@ -643,8 +836,15 @@ proc hir::layouts::NativeFieldType {type name} {
 # leaf (a scalar or a pointer, a field or an element) or a whole fixed
 # array (a field, or a row of one: `L.m[1]`); an element index past the
 # array's extent is LAYOUT-ARRAY-INDEX, an index of something that is no
-# array LAYOUT-OPERAND.
-proc hir::layouts::FieldPath {id names {indices {}}} {
+# array LAYOUT-OPERAND. With RECORDS 1 (binary::read, LAYOUT-UNIONS.md) it
+# may also name a nested layout, whose whole copied value a read makes.
+#
+# A union (LAYOUT-UNIONS.md) is walked like a nested layout: its
+# alternatives are its fields, all at its own offset, so `L.u.whole` is one
+# leaf at u's absolute offset. A designator never ends at a union
+# (LAYOUT-OPERAND: name one of its alternatives) -- it has no value of its
+# own to read or write.
+proc hir::layouts::FieldPath {id names {indices {}} {records 0}} {
     set layout $id
     set base 0
     set path {}
@@ -660,6 +860,10 @@ proc hir::layouts::FieldPath {id names {indices {}}} {
         }
         set written [join [concat [list $id] $path] .]
         if {$field eq ""} {
+            if {[IsUnion $layout]} {
+                return [list problem UNKNOWN-FIELD [format {%s has no alternative "%s" (union layout %s has alternatives: %s)} \
+                    $written $name $layout [join [StructNames $layout] {, }]] $index ""]
+            }
             return [list problem UNKNOWN-FIELD [format {%s has no field "%s" (layout %s has fields: %s)} \
                 $written $name $layout [join [StructNames $layout] {, }]] $index ""]
         }
@@ -684,6 +888,21 @@ proc hir::layouts::FieldPath {id names {indices {}}} {
         }
         lappend path $text
         set last [expr {$index == $count - 1}]
+        if {[dict get $repr kind] eq "union"} {
+            set union [dict get $repr layout]
+            if {$last} {
+                return [list problem LAYOUT-OPERAND [format {%s.%s is the union layout %s, several interpretations of the same bytes: a designator names one of its alternatives (%s.%s.%s), never the union itself} \
+                    $written $text $union $written $text [dict get [lindex [dict get [entry $union] fields] 0] name]] $index ""]
+            }
+            set layout $union
+            set base $offset
+            incr index
+            continue
+        }
+        if {[dict get $repr kind] eq "layout" && $last && $records} {
+            set entry [list $text $offset {*}[ReprDescriptor $repr]]
+            return [list ok [list [DescriptorHead $id] [size $id] [join $path .] $entry]]
+        }
         if {[dict get $repr kind] eq "layout"} {
             if {$last} {
                 # (A fixed array is named too, said where the layout has one.)
@@ -702,7 +921,7 @@ proc hir::layouts::FieldPath {id names {indices {}}} {
                 $written $text [ReprWhat $repr] [lindex $names [expr {$index + 1}]] $hint] [expr {$index + 1}] ""]
         }
         set entry [list $text $offset {*}[ReprDescriptor $repr]]
-        return [list ok [list [structId $id] [size $id] [join $path .] $entry]]
+        return [list ok [list [DescriptorHead $id] [size $id] [join $path .] $entry]]
     }
     error "internal compiler error: an empty field path of layout $id"
 }
@@ -714,6 +933,7 @@ proc hir::layouts::ReprWhat {repr} {
         pointer { return "a C pointer" }
         array   { return "a fixed array" }
         layout  { return "the nested layout [dict get $repr layout]" }
+        union   { return "the union layout [dict get $repr layout]" }
     }
     return "a scalar"
 }
@@ -742,7 +962,7 @@ proc hir::layouts::PathField {path} {
             return ""
         }
         if {$repr ne ""} {
-            if {[dict get $repr kind] ne "layout"} {
+            if {[dict get $repr kind] ni {layout union}} {
                 return ""
             }
             set layout [dict get $repr layout]
@@ -881,9 +1101,15 @@ proc hir::layouts::OtherDeclaration {id name} {
 #   LAYOUT-FIELD-TYPE      a field's type is unknown, or neither a scalar
 #                          domain (the header) nor a layout
 #   LAYOUT-FIELD-BOUNDS    a field does not lie inside 0..size
-#   LAYOUT-FIELD-OVERLAP   two fields share a byte (an overlay is a future
-#                          explicit union construct, never implied)
+#   LAYOUT-FIELD-OVERLAP   two fields share a byte (an overlay is declared
+#                          by a union layout, never implied)
 #   LAYOUT-CYCLE           a layout contains itself by value
+#
+# A union layout (a decl with `union 1`, LAYOUT-UNIONS.md) is validated the
+# same way but for overlap, which is its meaning: every alternative starts at
+# offset 0 and must fit in the union's size (LAYOUT-FIELD-BOUNDS); two
+# alternatives of one name are DUPLICATE-FIELD; a union with no alternative
+# is never declared (the parser's, and HIR text's, refusal).
 #
 # No alignment of a field's offset is required: the declared, resolved layout
 # is authoritative (a packed or vendor-aligned C layout is legal as stated),
@@ -921,9 +1147,13 @@ proc hir::layouts::apply {decls {structDecls {}}} {
         }
         dict set decl id $id
         dict set byId $id $decl
-        # The skeleton: a field may name any layout of the batch.
+        # The skeleton: a field may name any layout of the batch (and know
+        # at once whether it is a union, LAYOUT-UNIONS.md).
         dict set registry $id [dict create id $id name $name namespace $ns size "" align "" \
             span [dict get $decl nameSpan] fields {}]
+        if {[dict getdef $decl union 0]} {
+            dict set registry $id union 1
+        }
     }
     set done [dict create]
     foreach id [dict keys $byId] {
@@ -932,21 +1162,26 @@ proc hir::layouts::apply {decls {structDecls {}}} {
     set entries {}
     foreach id [dict keys $byId] {
         set entry [dict get $registry $id]
-        lappend entries [dict create kind layout id $id name [dict get $entry name] \
+        set source [dict create kind layout id $id name [dict get $entry name] \
             namespace [dict get $entry namespace] size [dict get $entry size] align [dict get $entry align] \
             fields [SourceFields $id]]
+        if {[IsUnion $id]} {
+            dict set source union 1
+        }
+        lappend entries $source
     }
     return $entries
 }
 
 # The `sourceTypes` fields of registered layout ID: {name F offset O type T}
-# each, and an array field's representation as `repr` (FIXED-LAYOUT-ARRAYS.md:
-# its consumer type, a List, does not say the extent HIR text prints).
+# each, and an array field's or a union field's representation as `repr`
+# (FIXED-LAYOUT-ARRAYS.md: its consumer type, a List, does not say the
+# extent HIR text prints; LAYOUT-UNIONS.md: a union has no consumer type).
 proc hir::layouts::SourceFields {id} {
     variable registry
     return [lmap f [dict get $registry $id fields] {
         set source [dict create name [dict get $f name] offset [dict get $f offset] type [dict get $f type]]
-        if {[dict get $f kind] eq "array"} {
+        if {[dict get $f kind] in {array union}} {
             dict set source repr [dict remove $f name offset]
         }
         set source
@@ -977,6 +1212,10 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
     if {![string is entier -strict $align] || ![PowerOfTwo $align] || $align > $maxAlign} {
         Fail $alignSpan "layout \"$name\" has alignment $align: an alignment is a power of two from 1 to $maxAlign" LAYOUT-ALIGNMENT
     }
+    set union [IsUnion $id]
+    if {$union && [dict get $decl fields] eq ""} {
+        Fail [dict get $decl nameSpan] "union layout \"$name\" declares no alternative: a union layout needs at least one \"alternative NAME: TYPE\" line" LAYOUT-FIELD-BOUNDS
+    }
     set fields {}
     set names [dict create]
     foreach field [dict get $decl fields] {
@@ -985,6 +1224,9 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         set typeSpan [dict getdef $field typeSpan $nameSpan]
         set offsetSpan [dict getdef $field offsetSpan $nameSpan]
         if {[dict exists $names $fieldName]} {
+            if {$union} {
+                Fail $nameSpan "duplicate alternative \"$fieldName\" in union layout \"$name\" (first declared at [Where [dict get $names $fieldName]]): a union's alternatives have distinct names" DUPLICATE-FIELD
+            }
             Fail $nameSpan "duplicate field \"$fieldName\" in layout \"$name\" (first declared at [Where [dict get $names $fieldName]]): a layout's fields have distinct names" DUPLICATE-FIELD
         }
         dict set names $fieldName $nameSpan
@@ -992,30 +1234,46 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         if {![string is entier -strict $offset] || $offset < 0} {
             Fail $offsetSpan "field \"$fieldName\" of layout \"$name\" has offset $offset: an offset is a byte count from 0" LAYOUT-FIELD-BOUNDS
         }
+        if {$union && $offset != 0} {
+            # (Neither the parser nor HIR text makes one: every alternative
+            # starts at the union's origin.)
+            Fail $offsetSpan "alternative \"$fieldName\" of union layout \"$name\" has offset $offset: every alternative of a union starts at its first byte" LAYOUT-FIELD-BOUNDS
+        }
         set repr [ResolveRepr [dict get $field type] [dict exists $field pointerText] $ns $byId done $stack \
             $id $name $fieldName $typeSpan 0]
-        lappend fields [dict merge [dict create name $fieldName offset $offset] $repr \
+        lappend fields [dict merge [dict create name $fieldName offset [expr {$offset + 0}]] $repr \
             [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
     }
     foreach field $fields {
         set end [expr {[dict get $field offset] + [dict get $field width]}]
         if {$end > $size} {
+            if {$union} {
+                # (Alternatives overlap by declaration; each must fit.)
+                Fail [dict get $field typeSpan] [format {alternative "%s" of union layout "%s" is %s bytes wide (bytes 0..%s), more than the union's size %s: every alternative lies inside the union} \
+                    [dict get $field name] $name [dict get $field width] [expr {$end - 1}] $size] LAYOUT-FIELD-BOUNDS
+            }
             Fail [dict get $field offsetSpan] [format {field "%s" of layout "%s" occupies bytes %s..%s (offset %s, width %s), outside the layout's size %s} \
                 [dict get $field name] $name [dict get $field offset] [expr {$end - 1}] [dict get $field offset] \
                 [dict get $field width] $size] LAYOUT-FIELD-BOUNDS
         }
     }
     # Overlap: any two fields sharing a byte; the later-declared field of the
-    # first such pair (in declared order) is the one located.
+    # first such pair (in declared order) is the one located. A union's
+    # alternatives overlap by declaration: that is what a union says, and
+    # nothing else may (LAYOUT-UNIONS.md).
     set index 0
-    foreach field $fields {
+    set others $fields
+    if {$union} {
+        set others {}
+    }
+    foreach field $others {
         set lo [dict get $field offset]
         set hi [expr {$lo + [dict get $field width]}]
         foreach earlier [lrange $fields 0 [expr {$index - 1}]] {
             set elo [dict get $earlier offset]
             set ehi [expr {$elo + [dict get $earlier width]}]
             if {$lo < $ehi && $elo < $hi} {
-                Fail [dict get $field offsetSpan] [format {field "%s" of layout "%s" (bytes %s..%s) overlaps field "%s" (bytes %s..%s): the fields of a layout never share a byte (an overlay would be an explicit union construct, which layouts do not have)} \
+                Fail [dict get $field offsetSpan] [format {field "%s" of layout "%s" (bytes %s..%s) overlaps field "%s" (bytes %s..%s): the fields of a layout never share a byte (bytes several interpretations share are declared by a union layout, `union layout NAME:`, held by value in one field)} \
                     [dict get $field name] $name $lo [expr {$hi - 1}] [dict get $earlier name] $elo [expr {$ehi - 1}]] LAYOUT-FIELD-OVERLAP
             }
         }
@@ -1045,12 +1303,17 @@ proc hir::layouts::ResolveRepr {typeExpr pointerText ns byId doneVar stack id na
     upvar 1 $doneVar done
     variable registry
     variable maxSize
+    if {[IsUnion $id]} {
+        set owner "alternative \"$fieldName\" of union layout \"$name\""
+    } else {
+        set owner "field \"$fieldName\" of layout \"$name\""
+    }
     if {$depth == 0} {
-        set what "field \"$fieldName\" of layout \"$name\""
+        set what $owner
         set anArray "is an array"
         set aPointer "is a C pointer"
     } else {
-        set what "the elements of [string repeat {the elements of } [expr {$depth - 1}]]field \"$fieldName\" of layout \"$name\""
+        set what "the elements of [string repeat {the elements of } [expr {$depth - 1}]]$owner"
         set anArray "are arrays"
         set aPointer "are C pointers"
     }
@@ -1076,12 +1339,18 @@ proc hir::layouts::ResolveRepr {typeExpr pointerText ns byId doneVar stack id na
             if {$nested eq $id} {
                 set chain [list $id $id]
             }
-            Fail $typeSpan "layout \"$name\" contains itself by value through [join $chain { -> }]: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)" LAYOUT-CYCLE
+            Fail $typeSpan "[Noun $id] \"$name\" contains itself by value through [join $chain { -> }]: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)" LAYOUT-CYCLE
         }
         if {[dict exists $byId $nested]} {
             Resolve $nested $byId done [concat $stack [list $id]]
         }
         set width [dict get $registry $nested size]
+        if {[IsUnion $nested]} {
+            # A union held by value (LAYOUT-UNIONS.md): its declared size is
+            # its width -- and an array's stride -- never recomputed from its
+            # alternatives.
+            return [dict create kind union layout $nested width $width type [UnionConsumerType]]
+        }
         return [dict create kind layout layout $nested width $width type [structType $nested]]
     }
     if {$pointerText || [PointerTypeExpr $typeExpr]} {
@@ -1204,7 +1473,7 @@ proc hir::layouts::UnresolvedFieldType {typeExpr ns spelled fieldName layoutName
         if {[info exists batchStructs] && [dict exists $batchStructs $id]} {
             return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: $spelled is a struct type, not an integer domain or a layout (a struct holds domain meaning, not bytes; a nested layout field names a layout)"
         }
-        return "unknown type $spelled for field \"$fieldName\" of layout \"$layoutName\": no layout, integer domain or other type of that name is visible here (a field names a fixed-width integer domain or a nested layout)"
+        return "unknown type $spelled for field \"$fieldName\" of layout \"$layoutName\": no layout, union layout, integer domain or other type of that name is visible here (a field names a fixed-width integer domain, a nested layout or a union layout)"
     }
     return "unknown or invalid type $spelled for field \"$fieldName\" of layout \"$layoutName\": $detail"
 }
@@ -1265,10 +1534,18 @@ proc hir::layouts::FieldTypeText {type} {
 # argument's surface type expression; raises a located-by-caller error
 # ({BOTLISH UNKNOWN-LAYOUT} or {BOTLISH LAYOUT-STRUCT-PARAMETER}) when ARG does
 # not designate a layout.
+#
+# A union, and a layout holding one by value, has no copied value
+# (LAYOUT-UNIONS.md): LayoutStruct of one is {BOTLISH LAYOUT-UNION}.
 proc hir::layouts::ResolveLayoutStruct {arg ns} {
     if {[llength $arg] == 1} {
         set id [lookup $arg $ns]
         if {$id ne ""} {
+            set why [UnionRefusal [NamedRepr $id] "layout $id" $id]
+            if {$why ne ""} {
+                return -code error -errorcode {BOTLISH LAYOUT-UNION} \
+                    "LayoutStruct\[$arg\] does not exist: $why"
+            }
             return [structType $id]
         }
     }
@@ -1351,7 +1628,8 @@ proc hir::layouts::ResolveArrayTerm {arg ns ctor} {
     if {[IsArrayTypeExpr $elementExpr]} {
         set element [ResolveArrayTerm $elementExpr $ns $ctor]
     } elseif {[llength $elementExpr] == 1 && [lookup $elementExpr $ns] ne ""} {
-        set element [list layout [lookup $elementExpr $ns]]
+        # A nested layout's or a union's element (LAYOUT-UNIONS.md).
+        set element [NamedTerm [lookup $elementExpr $ns]]
     } else {
         set elementText [ShowTypeExpr $elementExpr]
         if {[catch {hir::resolve::ResolveTypeExpr $elementExpr $ns} element]} {
@@ -1463,7 +1741,9 @@ proc hir::layouts::ArgumentKind {arg ns} {
 # and `op` the operation a backend performs (parse, emit; view, load,
 # field: NATIVE-LAYOUT-VIEWS.md; edit, store, write, write_foreign:
 # NATIVE-LAYOUT-WRITES.md; element, store_element, load_array:
-# FIXED-LAYOUT-ARRAYS.md).
+# FIXED-LAYOUT-ARRAYS.md; read: LAYOUT-UNIONS.md, one designated
+# representation imprinted from bytes -- its `input K` the bytes, its `path
+# K` the designator, which may also name a nested layout).
 
 # The -layout role of native NAME, or "".
 proc hir::layouts::Role {name} {
@@ -1524,6 +1804,17 @@ proc hir::layouts::CalledNative {hir e} {
 #   LAYOUT-FOREIGN-WRITE  binary::write_foreign of a field that is not a C
 #                       pointer (an ordinary scalar is written by
 #                       binary::write)
+#
+# and for unions (LAYOUT-UNIONS.md):
+#
+#   LAYOUT-UNION        a copy of a representation holding a union by
+#                       value: binary::parse, binary::emit, binary::load of
+#                       one, binary::read of one, a whole-array write of an
+#                       array of unions (a union has no copied value)
+#   LAYOUT-NATIVE-ONLY  binary::read of a C pointer, or of anything holding
+#                       one (bytes never become a pointer)
+#   LAYOUT-OPERAND      binary::store_element of a union element (written
+#                       through its alternatives, binary::element(a, i))
 #
 # The written value is held to the field's type by hir/range.tcl
 # (VerifyWriteValue).
@@ -1590,6 +1881,16 @@ proc hir::layouts::Problems {hir e name role} {
             }
         }
     }
+    if {$viewed ne "" || [RoleOf $role op] in {load load_array}} {
+        # binary::load of a live union, or of anything holding one by value
+        # (LAYOUT-UNIONS.md): it has no copied value. (Its argument 0, a
+        # view, an edit or a live array, before and after elaboration.)
+        set arg [lindex $args 0]
+        set why [NativeUnionRefusal [hir::typeOf $hir $arg]]
+        if {$why ne ""} {
+            lappend problems [list LAYOUT-UNION "$name cannot copy $why" $arg]
+        }
+    }
     if {[RoleOf $role op] eq "store_element"} {
         # One element written through a live array (FIXED-LAYOUT-ARRAYS.md):
         # the array must be write authority, and its element a scalar or a
@@ -1601,12 +1902,25 @@ proc hir::layouts::Problems {hir e name role} {
         if {$term ne "" && ![hir::types::IsNativeEdit $type]} {
             lappend problems [list BINARY-OPERAND \
                 "$name writes live native memory through a native edit; this array is [hir::types::show $type], read through a native view, which is read-only: write authority over native memory is a NativeEdit, made from a pointer by binary::native::edit (a view never becomes one)" $arg]
-        } elseif {$term ne "" && ([IsArrayTerm [lindex $term 2]]
-                || ([llength [lindex $term 2]] == 2 && [lindex $term 2 0] eq "layout"))} {
+        } elseif {$term ne "" && ([IsArrayTerm [lindex $term 2]] || [IsNamedTerm [lindex $term 2]])} {
             set element [lindex $term 2]
-            set what [expr {[IsArrayTerm $element] ? "an array" : "the nested layout [lindex $element 1]"}]
+            if {[IsArrayTerm $element]} {
+                set what "an array"
+                set parts "elements"
+                set window "array"
+            } elseif {[lindex $element 0] eq "union"} {
+                # (LAYOUT-UNIONS.md: a union is written one alternative at
+                # a time.)
+                set what "the union layout [lindex $element 1]"
+                set parts "alternatives"
+                set window "edit"
+            } else {
+                set what "the nested layout [lindex $element 1]"
+                set parts "fields"
+                set window "edit"
+            }
             lappend problems [list LAYOUT-OPERAND \
-                "$name writes one scalar or pointer element, but an element of [hir::types::show $type] is $what: write its [expr {[IsArrayTerm $element] ? "elements" : "fields"}] through binary::element(a, i), the element's own live [expr {[IsArrayTerm $element] ? "array" : "edit"}]" $arg]
+                "$name writes one scalar or pointer element, but an element of [hir::types::show $type] is $what: write its $parts through binary::element(a, i), the element's own live $window" $arg]
         }
     }
     set at [RoleOf $role edited]
@@ -1650,7 +1964,26 @@ proc hir::layouts::Problems {hir e name role} {
                 }
             }
             set pointer [expr {[dict get $field kind] eq "pointer"}]
+            set why [UnionRefusal $field $text $text]
+            if {$why ne "" && [RoleOf $role op] in {write write_foreign store read}} {
+                # A whole array of unions written from (or read into) a
+                # List of copies none can be (LAYOUT-UNIONS.md).
+                lappend problems [list LAYOUT-UNION "$name cannot [expr {[RoleOf $role op] eq "read" ? "read" : "write"}] $text whole: $why" $where]
+                set field ""
+            }
+        }
+        if {$field ne ""} {
             switch -- [RoleOf $role op] {
+                read {
+                    # Bytes are interpreted one representation at a time
+                    # (LAYOUT-UNIONS.md); a pointer is never decoded from
+                    # them.
+                    set inner [ReprPointerPath $field]
+                    if {$inner ne "none"} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+                            "$name cannot read $text from bytes: [expr {$inner eq "" ? "it is a C pointer" : "it holds a C pointer ($text$inner)"}], and arbitrary bytes never become one; a pointer is read from live native memory, through a native view or edit" $where]
+                    }
+                }
                 write {
                     if {$pointer} {
                         lappend problems [list LAYOUT-NATIVE-ONLY \
@@ -1713,7 +2046,19 @@ proc hir::layouts::Problems {hir e name role} {
                 set id [DescriptorLayout [lindex [hir::get $hir $where literal] end]]
             }
         }
-        if {$id ne "" && [declared $id] && [NativeOnly $id]} {
+        set why ""
+        if {$id ne "" && [declared $id]} {
+            set why [UnionRefusal [NamedRepr $id] "layout $id" $id]
+        }
+        if {$why ne ""} {
+            # (LAYOUT-UNIONS.md: before a pointer, which a union may hold
+            # too -- there is no copy to make at all.)
+            if {$op eq "parse"} {
+                lappend problems [list LAYOUT-UNION "$name cannot imprint [Noun $id] $id from bytes: $why" $where]
+            } else {
+                lappend problems [list LAYOUT-UNION "$name cannot emit [Noun $id] $id into bytes: $why" $where]
+            }
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
             set path [PointerField $id]
             if {$op eq "parse"} {
                 set message "$name cannot imprint layout \"$id\" from bytes: its field \"$path\" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)"
@@ -1736,6 +2081,30 @@ proc hir::layouts::Problems {hir e name role} {
     return $problems
 }
 
+# Why the native memory type TYPE -- the operand of binary::load: a live
+# layout, union or array -- has no copied value ("TYPE: " and UnionRefusal's
+# reason), or "".
+proc hir::layouts::NativeUnionRefusal {type} {
+    set term [OfArrayType $type]
+    if {$term ne ""} {
+        set repr [ReprOfTerm $term]
+        if {$repr eq ""} {
+            return ""
+        }
+        set why [UnionRefusal $repr "the array"]
+    } else {
+        set id [OfNativeType $type]
+        if {$id eq ""} {
+            return ""
+        }
+        set why [UnionRefusal [NamedRepr $id] "layout $id" $id]
+    }
+    if {$why eq ""} {
+        return ""
+    }
+    return "[hir::types::show $type]: $why"
+}
+
 # 1 if the representation REPR is a fixed array whose leaf element, under
 # every nested array, is a C pointer (FIXED-LAYOUT-ARRAYS.md: what
 # binary::write_foreign may encode, a List of existing pointers).
@@ -1754,7 +2123,7 @@ proc hir::layouts::PointerArray {repr} {
 proc hir::layouts::ReprHasArrays {repr} {
     switch -- [dict get $repr kind] {
         array  { return 1 }
-        layout { return [HasArrays [dict get $repr layout]] }
+        layout - union { return [HasArrays [dict get $repr layout]] }
     }
     return 0
 }
@@ -1826,8 +2195,10 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
     }
     set pointer [expr {[dict get $field kind] eq "pointer" || [PointerArray $field]}]
     set op [RoleOf $role op]
-    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)} {
-        # The operation does not write this kind of field (verify).
+    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)
+            || [ReprUnionPath $field] ne "none" || $op eq "read"} {
+        # The operation does not write this kind of field (verify; an array
+        # of unions has no copied value to write, LAYOUT-UNIONS.md).
         return
     }
     set declared [dict get $field type]

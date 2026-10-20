@@ -308,6 +308,14 @@ proc hir::read::StructDeclLine {content number} {
 # own), or "" if CONTENT is not a type-declaration line.
 proc hir::read::TypeDeclLine {content number} {
     set span [dict create file <hir-text> line $number column 1]
+    set union 0
+    if {[regexp {^union layout (\S+) ns (\S+) size ([0-9]+) align ([0-9]+) alternatives (.+)$} $content -> id ns size align alternativesText]} {
+        # A union layout (hir::format::TypeDecl, LAYOUT-UNIONS.md): its
+        # alternatives read as the fields of a layout line at offset 0.
+        set union 1
+        set fieldsText [join [lmap item [SplitTop $alternativesText ", "] {string cat $item " at 0"}] {, }]
+        set content "layout $id ns $ns size $size align $align fields $fieldsText"
+    }
     if {[regexp {^layout (\S+) ns (\S+) size ([0-9]+) align ([0-9]+) fields (.+)$} $content -> id ns size align fieldsText]} {
         # A layout (hir::format::TypeDecl, BINARY-LAYOUT.md): registered from
         # its canonical identity and its fields' canonical type identities by
@@ -339,8 +347,12 @@ proc hir::read::TypeDeclLine {content number} {
             }
             lappend fields $field
         }
-        return [dict create kind layout resolved 1 name $id namespace [if {$ns eq "-"} {string cat ""} else {set ns}] \
+        set decl [dict create kind layout resolved 1 name $id namespace [if {$ns eq "-"} {string cat ""} else {set ns}] \
             nameSpan $span size $size sizeSpan $span align $align alignSpan $span fields $fields span $span]
+        if {$union} {
+            dict set decl union 1
+        }
+        return $decl
     }
     if {[regexp {^refined type (\S+) carrier (.+) owner (\S+)$} $content -> name carrier owner]} {
         # A refinement type (hir::format::TypeDecl): registered from its
@@ -650,7 +662,8 @@ proc hir::read::ParseTerm {text number} {
         return [list array $extent [ParseTerm $inner $number]]
     }
     if {[hir::layouts::declared $text]} {
-        return [list layout $text]
+        # (A union's term, {union ID}, too: LAYOUT-UNIONS.md.)
+        return [hir::layouts::NamedTerm $text]
     }
     return [ParseType $text $number]
 }

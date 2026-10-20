@@ -2512,6 +2512,68 @@ fn second(data: abi::bytes::Bytes) -> int:
 @value [66, -1]
 @end
 
+@topic stdlib.binary::read
+title: binary::read -- intrinsic of namespace binary
+summary: The one representation a field designator names, imprinted from bytes of exactly L's size, binary::read(data, L.path): a scalar, a record, an array, one alternative of a union.
+index: stdlib
+symbol: binary::read
+keywords: read field from bytes; read one field; union alternative; interpret bytes as; read alternative; pick union member
+related: stdlib.module.binary stdlib.binary::write stdlib.binary::parse concept.layout-unions concept.binary-layouts
+
+== SIGNATURE
+    binary::read(struct, str) -> any
+
+== ERRORS
+    LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::read.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::read(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+data must statically be an abi::bytes::Bytes (abi::bytes::freeze a
+MutableBytes); the designator is written L.FIELD, a path through nested
+layouts and unions (L.u.alt.field) and element indices (L.items[3]),
+resolved statically to one constant offset. It is binary::write's read
+twin, and how a union is read from bytes: a union has no copied value
+(LAYOUT-UNION), so a program reads the alternative it means
+(binary::read(data, U.whole)), each alternative by its own encoding. It
+may name a nested layout (its LayoutStruct) or a fixed array (a List of
+exactly its extent, which the compiler knows); never a union itself
+(LAYOUT-OPERAND: name an alternative), a C pointer, or anything holding
+one (LAYOUT-NATIVE-ONLY: bytes never become a pointer). Runs on every
+backend. Declared nomethod. LAYOUT-UNIONS.md.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative bytes: array 4 of binary::U8
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.whole, 16909060))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.bytes), binary::read(e, WORD.bytes[3])]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@value [16909060, [4, 3, 2, 1], 1]
+@end
+
 @topic stdlib.binary::store
 title: binary::store -- intrinsic of namespace binary
 summary: One field written into live native memory through a NativeEdit[L], written binary::store(e, L.field, value): one store of the field's width at its offset, nothing else touched.
@@ -2772,6 +2834,7 @@ lib/binary.bot (import binary).
     binary::layout_length          intrinsic -- The size in bytes of layout...
     binary::load                   intrinsic -- Every field of a native vie...
     binary::parse                  intrinsic -- The LayoutStruct[L] imprint...
+    binary::read                   intrinsic -- The one representation a fi...
     binary::store                  intrinsic -- One field written into live...
     binary::store_element          intrinsic -- One scalar or pointer eleme...
     binary::write                  intrinsic -- A new abi::bytes::MutableBy...

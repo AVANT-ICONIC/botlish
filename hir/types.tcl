@@ -2357,6 +2357,38 @@ proc hir::types::AggregateOfValue {v} {
     return [ofValue $v]
 }
 
+# 1 if the binary::parse call whose arguments are ARGEXPRS (result shape
+# SHAPE, {layout-struct I}) makes no LayoutStruct: its layout is native-only
+# (a pointer field: LAYOUT-NATIVE-ONLY) or holds a union (LAYOUT-UNION,
+# LAYOUT-UNIONS.md), or is a union.
+proc hir::types::LayoutParseRefused {hir argExprs shape} {
+    set arg [lindex $argExprs [lindex $shape 1]]
+    if {$arg eq "" || [hir::kind $hir $arg] ne "const"} {
+        return 0
+    }
+    set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+    if {$id eq "" || ![hir::layouts::declared $id]} {
+        return 0
+    }
+    return [expr {[hir::layouts::NativeOnly $id] || [hir::layouts::HoldsUnion $id]}]
+}
+
+# 1 if the binary::read call whose arguments are ARGEXPRS (result shape
+# SHAPE, {layout-read I}) reads nothing: its designated representation holds
+# a C pointer (LAYOUT-NATIVE-ONLY) or a union (LAYOUT-UNION), or the
+# designator was rejected (its constant holds none).
+proc hir::types::LayoutReadRefused {hir argExprs shape} {
+    set arg [lindex $argExprs [lindex $shape 1]]
+    if {$arg eq "" || [hir::kind $hir $arg] ne "const"} {
+        return 0
+    }
+    set repr [hir::layouts::PathField [lindex [hir::get $hir $arg literal] end]]
+    if {$repr eq ""} {
+        return 1
+    }
+    return [expr {[hir::layouts::ReprPointerPath $repr] ne "none" || [hir::layouts::ReprUnionPath $repr] ne "none"}]
+}
+
 # The result type of a call of a native with -result-shape SHAPE on the
 # arguments ARG-EXPRS of types ARG-TYPES, given its declared result type
 # RESULT.
@@ -2398,7 +2430,9 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             set arg [lindex $argExprs [lindex $shape 1]]
             if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
                 set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
-                if {$id ne "" && [hir::layouts::declared $id]} {
+                if {$id ne "" && [hir::layouts::declared $id] && ![hir::layouts::HoldsUnion $id]} {
+                    # (A union, or a layout holding one, has no LayoutStruct:
+                    # LAYOUT-UNIONS.md.)
                     return [hir::layouts::structType $id]
                 }
             }
@@ -2455,12 +2489,29 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             # (FIXED-LAYOUT-ARRAYS.md).
             set argType [lindex $argTypes [lindex $shape 1]]
             set id [hir::layouts::OfNativeType $argType]
-            if {$id ne ""} {
+            if {$id ne "" && ![hir::layouts::HoldsUnion $id]} {
                 return [hir::layouts::structType $id]
+            }
+            if {$id ne ""} {
+                # (LAYOUT-UNIONS.md: no copied value.)
+                return $result
             }
             set term [hir::layouts::OfArrayType $argType]
             if {$term ne ""} {
                 return [hir::layouts::TermConsumerType $term]
+            }
+            return $result
+        }
+        layout-read {
+            # binary::read(data, L.path) (LAYOUT-UNIONS.md): the copied type
+            # of the representation the designator constant argument I
+            # names -- a scalar's domain, LayoutStruct[R], a List.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set repr [hir::layouts::PathField [lindex [hir::get $hir $arg literal] end]]
+                if {$repr ne ""} {
+                    return [dict get $repr type]
+                }
             }
             return $result
         }
@@ -3565,13 +3616,18 @@ proc hir::types::Call {hirVar ctxVar e} {
                 if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]
                         && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq ""
                                 && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
+                            || ($shapeKind eq "view-struct" && [hir::layouts::NativeUnionRefusal [lindex $argTypes 0]] ne "")
                             || ($shapeKind eq "native-element" && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
                             || ($shapeKind eq "layout-struct" && [hir::layouts::RoleOf [dict get $meta layout] op] eq "parse"
-                                && [hir::layouts::OfType $result] ne "" && [hir::layouts::NativeOnly [hir::layouts::OfType $result]]))} {
+                                && [LayoutParseRefused $hir $argExprs [dict get $meta resultShape]])
+                            || ($shapeKind eq "layout-read" && [LayoutReadRefused $hir $argExprs [dict get $meta resultShape]]))} {
                     # binary::load of a value not statically a NativeView[L]
                     # (BINARY-OPERAND), or binary::parse of a native-only
                     # layout (LAYOUT-NATIVE-ONLY: hir::layouts::verify): no
                     # LayoutStruct is ever produced (NATIVE-LAYOUT-VIEWS.md).
+                    # Nor of a union, or of anything holding one by value
+                    # (LAYOUT-UNION), and binary::read never makes a pointer
+                    # or a union (LAYOUT-UNIONS.md).
                     set result [Poison hir $e]
                 }
                 if {!$spec} {

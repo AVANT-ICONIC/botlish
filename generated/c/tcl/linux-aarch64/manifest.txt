@@ -26,14 +26,14 @@ header generic/tclOODecls.h 112ed1e0
 header generic/tclPlatDecls.h c8603094
 header generic/tclTomMathDecls.h 1ebc0288
 shim_library botlish_shim_tcl_47be8309
-file layouts-check.c 340 8fb841c8
-file layouts.tsv 1103 62fd35c5
-file report.tsv 1497 7f131468
-file report.txt 168 e74f2485
+file layouts-check.c 363 7cb833ad
+file layouts.tsv 1103 97428e6b
+file report.tsv 1497 13b39a20
+file report.txt 170 076c0d88
 file shim.c 72 47be8309
-file tcl/ctypes.bot 255 296987fd
+file tcl/ctypes.bot 255 cdf17a80
 file tcl/decls.bot 3638 057fc900
-file tcl/layouts.bot 408 3027ca57
+file tcl/layouts.bot 427 6d20d719
 file tcl/oo.bot 14 87752fc2
 file tcl/oodecls.bot 227 43c573ea
 file tcl/platdecls.bot 23 a575194a
@@ -87,21 +87,24 @@ blocked unsupported-macro 7
 blocked variadic 11
 layout_abi linux-aarch64 clang aarch64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 9
-layout_count blocked 6
-layout_count blockedDirect 4
-layout_count blockedStructs 4
-layout_count blockedTransitive 2
-layout_count blockedUnions 2
-layout_count emitted 32
+layout_count blocked 4
+layout_count blockedDirect 3
+layout_count blockedStructs 3
+layout_count blockedTransitive 1
+layout_count blockedUnions 1
+layout_count emitted 34
+layout_count emittedSynthetic 0
+layout_count emittedUnions 1
 layout_count incomplete 27
 layout_count promoted 0
 layout_count public 38
 layout_count structs 36
+layout_count synthetic 0
 layout_count system 0
+layout_count unheld 0
 layout_count unions 2
 layout_blocked double 1
-layout_blocked nested-layout-blocked 2
-layout_blocked union 2
+layout_blocked nested-layout-blocked 1
 layout_blocked unsupported-pointer 2
 contract Tcl_CreateInterp result independent manual {contract Tcl_CreateInterp}
 contract Tcl_DeleteInterp interp {escape declared-noescape} manual {contract Tcl_DeleteInterp}

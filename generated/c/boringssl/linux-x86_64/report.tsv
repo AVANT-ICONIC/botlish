@@ -11163,8 +11163,8 @@ tag	struct x509_st	opaque	boringssl::ctypes	incomplete	identity X509
 tag	struct x509_store_ctx_st	opaque	boringssl::ctypes	incomplete	identity X509_STORE_CTX
 tag	struct x509_store_st	opaque	boringssl::ctypes	incomplete	identity X509_STORE
 tag	union evp_aead_ctx_st_state	unused		complete	no bound signature points to it
-record	union evp_aead_ctx_st_state	layout-blocked		union	a union: its members overlap
-record	struct evp_aead_ctx_st	layout-blocked		nested-layout-blocked	field state (union evp_aead_ctx_st_state, field) -> union
+record	union evp_aead_ctx_st_state	layout-direct	boringssl::layouts	evp_aead_ctx_st_state	sizeof 560, _Alignof 8, 2 fields
+record	struct evp_aead_ctx_st	layout-direct	boringssl::layouts	EVP_AEAD_CTX	sizeof 576, _Alignof 8, 3 fields
 record	struct crypto_ivec_st	layout-direct	boringssl::layouts	CRYPTO_IVEC	sizeof 16, _Alignof 8, 2 fields
 record	struct crypto_iovec_st	layout-direct	boringssl::layouts	CRYPTO_IOVEC	sizeof 24, _Alignof 8, 3 fields
 record	struct aes_key_st	layout-direct	boringssl::layouts	AES_KEY	sizeof 244, _Alignof 4, 2 fields
@@ -11172,8 +11172,8 @@ record	struct buf_mem_st	layout-direct	boringssl::layouts	BUF_MEM	sizeof 24, _Al
 record	struct bn_gencb_st	layout-direct	boringssl::layouts	BN_GENCB	sizeof 16, _Alignof 8, 2 fields
 record	struct bignum_st	layout-direct	boringssl::layouts	BIGNUM	sizeof 24, _Alignof 8, 5 fields
 record	struct asn1_string_st	layout-direct	boringssl::layouts	ASN1_BIT_STRING	sizeof 24, _Alignof 8, 4 fields
-record	union anon@asn1.h:1449	layout-blocked		union	a union: its members overlap
-record	struct asn1_type_st	layout-blocked		nested-layout-blocked	field value (union anon@asn1.h:1449, field) -> union
+record	union anon@asn1.h:1449	layout-direct	boringssl::layouts	ASN1_TYPE_value	sizeof 8, _Alignof 8, 21 fields
+record	struct asn1_type_st	layout-direct	boringssl::layouts	ASN1_TYPE	sizeof 16, _Alignof 8, 2 fields
 record	struct ASN1_TEMPLATE_st	layout-direct	boringssl::layouts	ASN1_TEMPLATE	sizeof 32, _Alignof 8, 5 fields
 record	struct ASN1_ADB_st	layout-direct	boringssl::layouts	ASN1_ADB	sizeof 56, _Alignof 8, 7 fields
 record	struct ASN1_ADB_TABLE_st	layout-direct	boringssl::layouts	ASN1_ADB_TABLE	sizeof 40, _Alignof 8, 2 fields
@@ -11185,83 +11185,84 @@ record	struct bf_key_st	layout-direct	boringssl::layouts	BF_KEY	sizeof 4168, _Al
 record	struct cbs_st	layout-direct	boringssl::layouts	CBS	sizeof 16, _Alignof 8, 2 fields
 record	struct cbb_buffer_st	layout-blocked		bitfield	field can_resize: bitfield can_resize: unsigned int : 1; field error: bitfield error: unsigned int : 1
 record	struct cbb_child_st	layout-blocked		bitfield	field pending_is_asn1: bitfield pending_is_asn1: unsigned int : 1
-record	union anon@bytestring.h:510	layout-blocked		nested-layout-blocked,union	a union: its members overlap; field base (struct cbb_buffer_st, union-member) -> bitfield; field child (struct cbb_child_st, union-member) -> bitfield
-record	struct cbb_st	layout-blocked		nested-layout-blocked	field u (union anon@bytestring.h:510, field) -> union
+record	union anon@bytestring.h:510	layout-blocked		nested-layout-blocked	field base (struct cbb_buffer_st, union-member) -> bitfield; field child (struct cbb_child_st, union-member) -> bitfield
+record	struct cbb_st	layout-blocked		nested-layout-blocked	field u (union anon@bytestring.h:510, field) -> struct cbb_buffer_st -> bitfield
 record	struct cast_key_st	layout-direct	boringssl::layouts	CAST_KEY	sizeof 132, _Alignof 4, 2 fields
 record	struct evp_cipher_ctx_st	layout-direct	boringssl::layouts	EVP_CIPHER_CTX	sizeof 144, _Alignof 8, 13 fields
 record	struct evp_cipher_info_st	layout-direct	boringssl::layouts	EVP_CIPHER_INFO	sizeof 24, _Alignof 8, 2 fields
 record	struct conf_value_st	layout-direct	boringssl::layouts	CONF_VALUE	sizeof 24, _Alignof 8, 3 fields
 record	struct sha256_state_st	layout-direct	boringssl::layouts	SHA256_CTX	sizeof 112, _Alignof 4, 6 fields
 record	struct sha512_state_st	layout-direct	boringssl::layouts	SHA512_CTX	sizeof 208, _Alignof 8, 6 fields
-record	union anon@sha.h:71	layout-blocked		union	a union: its members overlap
-record	struct sha_state_st	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@sha.h:71): its members overlap the record's; member 1 (union anon@sha.h:71, anonymous-member) -> union
+record	struct anon@sha.h:73	layout-direct	boringssl::layouts	SHA_CTX_member1_member2	sizeof 20, _Alignof 4, 5 fields
+record	union anon@sha.h:71	layout-direct	boringssl::layouts	SHA_CTX_member1	sizeof 20, _Alignof 4, 2 fields
+record	struct sha_state_st	layout-direct	boringssl::layouts	SHA_CTX	sizeof 96, _Alignof 4, 5 fields
 record	struct anon@thread.h:78	layout-direct	boringssl::layouts	CRYPTO_dynlock	sizeof 16, _Alignof 8, 2 fields
 record	struct DES_cblock_st	layout-direct	boringssl::layouts	DES_cblock	sizeof 8, _Alignof 1, 1 fields
 record	struct DES_ks	layout-direct	boringssl::layouts	DES_key_schedule	sizeof 128, _Alignof 4, 1 fields
-record	union anon@digest.h:356	layout-blocked		union	a union: its members overlap
-record	struct env_md_ctx_st	layout-blocked		anonymous-overlay,nested-layout-blocked	member 1: an anonymous union member (union anon@digest.h:356): its members overlap the record's; member 1 (union anon@digest.h:356, anonymous-member) -> union
+record	union anon@digest.h:356	layout-direct	boringssl::layouts	EVP_MD_CTX_member1	sizeof 208, _Alignof 8, 2 fields
+record	struct env_md_ctx_st	layout-direct	boringssl::layouts	EVP_MD_CTX	sizeof 232, _Alignof 8, 4 fields
 record	struct DSA_SIG_st	layout-direct	boringssl::layouts	DSA_SIG	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@ec.h:457	layout-direct	boringssl::layouts	EC_builtin_curve	sizeof 16, _Alignof 8, 2 fields
 record	struct openssl_method_common_st	layout-direct	boringssl::layouts	openssl_method_common_st	sizeof 8, _Alignof 4, 2 fields
 record	struct ecdsa_method_st	layout-direct	boringssl::layouts	ECDSA_METHOD	sizeof 48, _Alignof 8, 6 fields
 record	struct ecdsa_sig_st	layout-direct	boringssl::layouts	ECDSA_SIG	sizeof 16, _Alignof 8, 2 fields
-record	struct hmac_ctx_st	layout-blocked		nested-layout-blocked	field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay; field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay; field md_ctx (struct env_md_ctx_st, field) -> anonymous-overlay
-record	struct evp_hpke_ctx_st	layout-blocked		nested-layout-blocked	field aead_ctx (struct evp_aead_ctx_st, field) -> union evp_aead_ctx_st_state -> union
+record	struct hmac_ctx_st	layout-direct	boringssl::layouts	HMAC_CTX	sizeof 704, _Alignof 8, 4 fields
+record	struct evp_hpke_ctx_st	layout-direct	boringssl::layouts	EVP_HPKE_CTX	sizeof 704, _Alignof 8, 8 fields
 record	struct evp_hpke_key_st	layout-direct	boringssl::layouts	EVP_HPKE_KEY	sizeof 1648, _Alignof 8, 4 fields
 record	struct HRSS_private_key	layout-direct	boringssl::layouts	HRSS_private_key	sizeof 1808, _Alignof 1, 1 fields
 record	struct HRSS_public_key	layout-direct	boringssl::layouts	HRSS_public_key	sizeof 1424, _Alignof 1, 1 fields
 record	struct md4_state_st	layout-direct	boringssl::layouts	MD4_CTX	sizeof 92, _Alignof 4, 5 fields
 record	struct md5_state_st	layout-direct	boringssl::layouts	MD5_CTX	sizeof 92, _Alignof 4, 5 fields
-record	union anon@mldsa.h:43	layout-blocked		union	a union: its members overlap
-record	struct MLDSA65_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:43, field) -> union
-record	union anon@mldsa.h:52	layout-blocked		union	a union: its members overlap
-record	struct MLDSA65_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:52, field) -> union
-record	union anon@mldsa.h:62	layout-blocked		union	a union: its members overlap
-record	struct MLDSA65_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:62, field) -> union
-record	union anon@mldsa.h:193	layout-blocked		union	a union: its members overlap
-record	struct MLDSA87_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:193, field) -> union
-record	union anon@mldsa.h:202	layout-blocked		union	a union: its members overlap
-record	struct MLDSA87_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:202, field) -> union
-record	union anon@mldsa.h:212	layout-blocked		union	a union: its members overlap
-record	struct MLDSA87_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:212, field) -> union
-record	union anon@mldsa.h:340	layout-blocked		union	a union: its members overlap
-record	struct MLDSA44_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:340, field) -> union
-record	union anon@mldsa.h:349	layout-blocked		union	a union: its members overlap
-record	struct MLDSA44_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:349, field) -> union
-record	union anon@mldsa.h:359	layout-blocked		union	a union: its members overlap
-record	struct MLDSA44_prehash	layout-blocked		nested-layout-blocked	field opaque (union anon@mldsa.h:359, field) -> union
-record	union anon@mlkem.h:34	layout-blocked		union	a union: its members overlap
-record	struct MLKEM768_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:34, field) -> union
-record	union anon@mlkem.h:43	layout-blocked		union	a union: its members overlap
-record	struct MLKEM768_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:43, field) -> union
-record	union anon@mlkem.h:132	layout-blocked		union	a union: its members overlap
-record	struct MLKEM1024_public_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:132, field) -> union
-record	union anon@mlkem.h:142	layout-blocked		union	a union: its members overlap
-record	struct MLKEM1024_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@mlkem.h:142, field) -> union
+record	union anon@mldsa.h:43	layout-direct	boringssl::layouts	MLDSA65_private_key_opaque	sizeof 23680, _Alignof 4, 2 fields
+record	struct MLDSA65_private_key	layout-direct	boringssl::layouts	MLDSA65_private_key	sizeof 23680, _Alignof 4, 1 fields
+record	union anon@mldsa.h:52	layout-direct	boringssl::layouts	MLDSA65_public_key_opaque	sizeof 6240, _Alignof 4, 2 fields
+record	struct MLDSA65_public_key	layout-direct	boringssl::layouts	MLDSA65_public_key	sizeof 6240, _Alignof 4, 1 fields
+record	union anon@mldsa.h:62	layout-direct	boringssl::layouts	MLDSA65_prehash_opaque	sizeof 240, _Alignof 8, 2 fields
+record	struct MLDSA65_prehash	layout-direct	boringssl::layouts	MLDSA65_prehash	sizeof 240, _Alignof 8, 1 fields
+record	union anon@mldsa.h:193	layout-direct	boringssl::layouts	MLDSA87_private_key_opaque	sizeof 31872, _Alignof 4, 2 fields
+record	struct MLDSA87_private_key	layout-direct	boringssl::layouts	MLDSA87_private_key	sizeof 31872, _Alignof 4, 1 fields
+record	union anon@mldsa.h:202	layout-direct	boringssl::layouts	MLDSA87_public_key_opaque	sizeof 8288, _Alignof 4, 2 fields
+record	struct MLDSA87_public_key	layout-direct	boringssl::layouts	MLDSA87_public_key	sizeof 8288, _Alignof 4, 1 fields
+record	union anon@mldsa.h:212	layout-direct	boringssl::layouts	MLDSA87_prehash_opaque	sizeof 240, _Alignof 8, 2 fields
+record	struct MLDSA87_prehash	layout-direct	boringssl::layouts	MLDSA87_prehash	sizeof 240, _Alignof 8, 1 fields
+record	union anon@mldsa.h:340	layout-direct	boringssl::layouts	MLDSA44_private_key_opaque	sizeof 16512, _Alignof 4, 2 fields
+record	struct MLDSA44_private_key	layout-direct	boringssl::layouts	MLDSA44_private_key	sizeof 16512, _Alignof 4, 1 fields
+record	union anon@mldsa.h:349	layout-direct	boringssl::layouts	MLDSA44_public_key_opaque	sizeof 4192, _Alignof 4, 2 fields
+record	struct MLDSA44_public_key	layout-direct	boringssl::layouts	MLDSA44_public_key	sizeof 4192, _Alignof 4, 1 fields
+record	union anon@mldsa.h:359	layout-direct	boringssl::layouts	MLDSA44_prehash_opaque	sizeof 240, _Alignof 8, 2 fields
+record	struct MLDSA44_prehash	layout-direct	boringssl::layouts	MLDSA44_prehash	sizeof 240, _Alignof 8, 1 fields
+record	union anon@mlkem.h:34	layout-direct	boringssl::layouts	MLKEM768_public_key_opaque	sizeof 6208, _Alignof 2, 2 fields
+record	struct MLKEM768_public_key	layout-direct	boringssl::layouts	MLKEM768_public_key	sizeof 6208, _Alignof 2, 1 fields
+record	union anon@mlkem.h:43	layout-direct	boringssl::layouts	MLKEM768_private_key_opaque	sizeof 7776, _Alignof 2, 2 fields
+record	struct MLKEM768_private_key	layout-direct	boringssl::layouts	MLKEM768_private_key	sizeof 7776, _Alignof 2, 1 fields
+record	union anon@mlkem.h:132	layout-direct	boringssl::layouts	MLKEM1024_public_key_opaque	sizeof 10304, _Alignof 2, 2 fields
+record	struct MLKEM1024_public_key	layout-direct	boringssl::layouts	MLKEM1024_public_key	sizeof 10304, _Alignof 2, 1 fields
+record	union anon@mlkem.h:142	layout-direct	boringssl::layouts	MLKEM1024_private_key_opaque	sizeof 12384, _Alignof 2, 2 fields
+record	struct MLKEM1024_private_key	layout-direct	boringssl::layouts	MLKEM1024_private_key	sizeof 12384, _Alignof 2, 1 fields
 record	struct obj_name_st	layout-direct	boringssl::layouts	OBJ_NAME	sizeof 24, _Alignof 8, 4 fields
 record	struct ossl_param_st	layout-direct	boringssl::layouts	OSSL_PARAM	sizeof 40, _Alignof 8, 5 fields
 record	struct anon@pkcs7.h:111	layout-direct	boringssl::layouts	PKCS7_SIGNED	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@pkcs7.h:116	layout-direct	boringssl::layouts	PKCS7_SIGN_ENVELOPE	sizeof 16, _Alignof 8, 2 fields
-record	union anon@pkcs7.h:133	layout-blocked		union	a union: its members overlap
-record	struct anon@pkcs7.h:126	layout-blocked		nested-layout-blocked	field d (union anon@pkcs7.h:133, field) -> union
+record	union anon@pkcs7.h:133	layout-direct	boringssl::layouts	PKCS7_d	sizeof 8, _Alignof 8, 8 fields
+record	struct anon@pkcs7.h:126	layout-direct	boringssl::layouts	PKCS7	sizeof 32, _Alignof 8, 4 fields
 record	struct rsa_meth_st	layout-direct	boringssl::layouts	RSA_METHOD	sizeof 72, _Alignof 8, 9 fields
 record	struct BASIC_CONSTRAINTS_st	layout-direct	boringssl::layouts	BASIC_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
 record	struct otherName_st	layout-direct	boringssl::layouts	OTHERNAME	sizeof 16, _Alignof 8, 2 fields
 record	struct EDIPartyName_st	layout-direct	boringssl::layouts	EDIPARTYNAME	sizeof 16, _Alignof 8, 2 fields
-record	union anon@x509.h:2043	layout-blocked		union	a union: its members overlap
-record	struct GENERAL_NAME_st	layout-blocked		nested-layout-blocked	field d (union anon@x509.h:2043, field) -> union
+record	union anon@x509.h:2043	layout-direct	boringssl::layouts	GENERAL_NAME_d	sizeof 8, _Alignof 8, 14 fields
+record	struct GENERAL_NAME_st	layout-direct	boringssl::layouts	GENERAL_NAME	sizeof 16, _Alignof 8, 2 fields
 record	struct AUTHORITY_KEYID_st	layout-direct	boringssl::layouts	AUTHORITY_KEYID	sizeof 24, _Alignof 8, 3 fields
 record	struct GENERAL_SUBTREE_st	layout-direct	boringssl::layouts	GENERAL_SUBTREE	sizeof 24, _Alignof 8, 3 fields
 record	struct NAME_CONSTRAINTS_st	layout-direct	boringssl::layouts	NAME_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
 record	struct ACCESS_DESCRIPTION_st	layout-direct	boringssl::layouts	ACCESS_DESCRIPTION	sizeof 16, _Alignof 8, 2 fields
-record	union anon@x509.h:2310	layout-blocked		union	a union: its members overlap
-record	struct DIST_POINT_NAME_st	layout-blocked		nested-layout-blocked	field name (union anon@x509.h:2310, field) -> union
+record	union anon@x509.h:2310	layout-direct	boringssl::layouts	DIST_POINT_NAME_name	sizeof 8, _Alignof 8, 2 fields
+record	struct DIST_POINT_NAME_st	layout-direct	boringssl::layouts	DIST_POINT_NAME	sizeof 16, _Alignof 8, 2 fields
 record	struct DIST_POINT_st	layout-direct	boringssl::layouts	DIST_POINT	sizeof 24, _Alignof 8, 3 fields
 record	struct ISSUING_DIST_POINT_st	layout-direct	boringssl::layouts	ISSUING_DIST_POINT	sizeof 32, _Alignof 8, 6 fields
 record	struct NOTICEREF_st	layout-direct	boringssl::layouts	NOTICEREF	sizeof 16, _Alignof 8, 2 fields
 record	struct USERNOTICE_st	layout-direct	boringssl::layouts	USERNOTICE	sizeof 16, _Alignof 8, 2 fields
-record	union anon@x509.h:2443	layout-blocked		union	a union: its members overlap
-record	struct POLICYQUALINFO_st	layout-blocked		nested-layout-blocked	field d (union anon@x509.h:2443, field) -> union
+record	union anon@x509.h:2443	layout-direct	boringssl::layouts	POLICYQUALINFO_d	sizeof 8, _Alignof 8, 3 fields
+record	struct POLICYQUALINFO_st	layout-direct	boringssl::layouts	POLICYQUALINFO	sizeof 16, _Alignof 8, 2 fields
 record	struct POLICYINFO_st	layout-direct	boringssl::layouts	POLICYINFO	sizeof 16, _Alignof 8, 2 fields
 record	struct POLICY_MAPPING_st	layout-direct	boringssl::layouts	POLICY_MAPPING	sizeof 16, _Alignof 8, 2 fields
 record	struct POLICY_CONSTRAINTS_st	layout-direct	boringssl::layouts	POLICY_CONSTRAINTS	sizeof 16, _Alignof 8, 2 fields
@@ -11277,8 +11278,8 @@ record	struct rand_meth_st	layout-blocked		unsupported-pointer	field add: callba
 record	struct rc4_key_st	layout-direct	boringssl::layouts	RC4_KEY	sizeof 1032, _Alignof 4, 3 fields
 record	struct RIPEMD160state_st	layout-direct	boringssl::layouts	RIPEMD160_CTX	sizeof 96, _Alignof 4, 5 fields
 record	struct trust_token_st	layout-direct	boringssl::layouts	TRUST_TOKEN	sizeof 16, _Alignof 8, 2 fields
-record	union anon@xwing.h:35	layout-blocked		union	a union: its members overlap
-record	struct XWING_private_key	layout-blocked		nested-layout-blocked	field opaque (union anon@xwing.h:35, field) -> union
+record	union anon@xwing.h:35	layout-direct	boringssl::layouts	XWING_private_key_opaque	sizeof 7840, _Alignof 2, 2 fields
+record	struct XWING_private_key	layout-direct	boringssl::layouts	XWING_private_key	sizeof 7840, _Alignof 2, 1 fields
 record	struct ssl_private_key_method_st	layout-direct	boringssl::layouts	SSL_PRIVATE_KEY_METHOD	sizeof 24, _Alignof 8, 3 fields
 record	struct ssl_ticket_aead_method_st	layout-direct	boringssl::layouts	SSL_TICKET_AEAD_METHOD	sizeof 24, _Alignof 8, 3 fields
 record	struct srtp_protection_profile_st	layout-direct	boringssl::layouts	SRTP_PROTECTION_PROFILE	sizeof 16, _Alignof 8, 2 fields

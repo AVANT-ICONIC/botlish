@@ -2121,7 +2121,10 @@ proc hir::resolve::LayoutOperand {hirVar arg native ctx} {
 # constant already. Diagnoses (the constant then holds nothing):
 #
 #   LAYOUT-OPERAND   not a LAYOUT.FIELD chain; or the path ends at a nested
-#                    layout (a write names a scalar or pointer field)
+#                    layout (a write names a scalar or pointer field; a
+#                    read, binary::read, may name one) or at a union (a
+#                    designator names one of its alternatives:
+#                    LAYOUT-UNIONS.md)
 #   UNKNOWN-LAYOUT   its root names no visible layout (LayoutOperandId)
 #   UNKNOWN-FIELD    a name that is no field of its layout, or a name after
 #                    a scalar or pointer field
@@ -2154,7 +2157,10 @@ proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
     if {$id eq ""} {
         return $placeholder
     }
-    set result [hir::layouts::FieldPath $id $names [lmap step $indices {lmap index $step {lindex $index 0}}]]
+    # A read (binary::read, LAYOUT-UNIONS.md) may also name a nested
+    # layout: it copies the whole record.
+    set records [expr {[hir::layouts::RoleOf [hir::layouts::Role $native] op] eq "read"}]
+    set result [hir::layouts::FieldPath $id $names [lmap step $indices {lmap index $step {lindex $index 0}}] $records]
     if {[lindex $result 0] eq "problem"} {
         lassign $result - kind message index element
         set origin [lindex $origins $index]

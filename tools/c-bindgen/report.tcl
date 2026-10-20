@@ -105,6 +105,10 @@ proc ::cbind::report::rows {model} {
 # every blocker, located.
 proc ::cbind::report::RecordRow {ns rec} {
     set key [dict get $rec key]
+    if {[dict get $rec status] eq "layout-direct" && [dict get $rec unheld]} {
+        return [list record $key layout-unheld "" [dict get $rec layoutName] \
+            "an anonymous member of [dict get $rec owner], whose layout is blocked: representable, not emitted"]
+    }
     switch -- [dict get $rec status] {
         layout-direct {
             return [list record $key layout-direct "${ns}::layouts" [dict get $rec layoutName] \
@@ -126,19 +130,28 @@ proc ::cbind::report::RecordRow {ns rec} {
 # considered, one `record` row each and one `field` row per member, so that
 # what a feature would unlock can be computed without the headers. Columns:
 #
-#   record KEY - LAYOUT STATUS - SIZE ALIGN CNAME - DETAIL
-#   field  KEY INDEX NAME CATEGORY OFFSET SIZE - CDECL TYPE DETAIL
+#   record   KEY - LAYOUT STATUS - SIZE ALIGN CNAME - DETAIL
+#   field    KEY INDEX NAME CATEGORY OFFSET SIZE - CDECL TYPE DETAIL
+#   promoted KEY - PATH - OFFSET SIZE - CMEMBER TYPE DETAIL
 #
 # KEY the C tag ("struct T"; an anonymous record's anon@FILE:LINE), LAYOUT
 # the emitted layout's name ("-" when none), STATUS layout-direct,
-# layout-blocked, opaque-only; CNAME the C type the probes named it by;
+# layout-blocked, opaque-only, layout-unheld (a synthetic record that is
+# representable but held by a blocked record: not emitted); CNAME the C type the probes named it by;
 # DETAIL key=value items: typedefs, identity, header, blockers (direct),
 # nested (transitive: the chain to the first direct blocker), roots (every
 # direct reason it waits for), deps, pointed-by (bound APIs pointing to
-# it). A field's NAME is its Botlish name ("-" for an unnamed member),
-# CATEGORY scalar, pointer, function-pointer, nested, array, or its first
-# blocker's reason; TYPE its Botlish type when representable; DETAIL its C
-# name, its array element and extent, its bitfield width, its blockers.
+# it); a synthetic record's (an anonymous member's, records.tcl) owner,
+# place (the generated field holding it, from its owner's layout) and at
+# (where clang locates it: FILE:LINE:COL), its CNAME "-". A field's NAME is its Botlish name (an unnamed member's its
+# place, member3), CATEGORY scalar, pointer, function-pointer, nested,
+# array, or its first blocker's reason; TYPE its Botlish type when
+# representable; DETAIL its C name, its array element and extent, its
+# bitfield width, its blockers. A `promoted` row maps a C member name an
+# anonymous member promotes into record KEY (C11: Offset of OVERLAPPED) to
+# the generated path that reaches it from KEY's layout (PATH,
+# member3.member1.Offset), with its offset in KEY (OFFSET) and the
+# anonymous members it goes through (DETAIL via=).
 proc ::cbind::report::layoutsTsv {model} {
     set p [dict get $model profile]
     set ns [dict get $p name]
@@ -165,8 +178,14 @@ proc ::cbind::report::layoutsTsv {model} {
             lappend detail "deps=[join [lsort -unique [lmap d [dict get $rec deps] {lindex $d 0}]] ,]"
         }
         if {[dict exists $users $key]} { lappend detail "pointed-by=[llength [dict get $users $key]]" }
-        set name [expr {[dict get $rec status] eq "layout-direct" ? [dict get $rec layoutName] : "-"}]
-        append out [join [lmap c [list record $key - $name [dict get $rec status] - \
+        if {[dict get $rec synthetic]} {
+            lappend detail "owner=[dict get $rec owner]" "place=[::cbind::records::Path $recs $key]"
+            if {[dict exists $rec at]} { lappend detail "at=[dict get $rec at]" }
+        }
+        set status [dict get $rec status]
+        if {$status eq "layout-direct" && [dict get $rec unheld]} { set status layout-unheld }
+        set name [expr {$status eq "layout-direct" ? [dict get $rec layoutName] : "-"}]
+        append out [join [lmap c [list record $key - $name $status - \
             [Dash [dict get $rec size]] [Dash [dict get $rec align]] [Dash [dict get $rec cname]] - [join $detail {; }]] {Clean $c}] \t]\n
         foreach f [dict get $rec fields] {
             set cat [dict get $f kind]
@@ -188,6 +207,38 @@ proc ::cbind::report::layoutsTsv {model} {
             append out [join [lmap c [list field $key [dict get $f index] [Dash [dict get $f name]] $cat \
                 [Dash [dict get $f offset]] [Dash [dict get $f size]] - $cdecl [Dash [::cbind::report::ReportType $ids $type]] [join $fd {; }]] {Clean $c}] \t]\n
         }
+        if {![dict get $rec synthetic]} {
+            foreach p [Promoted $recs $rec "" 0 {}] {
+                lassign $p path offset f via
+                set cat [dict get $f kind]
+                set type [expr {$cat in {scalar pointer nested array} ? [::cbind::records::FieldText $recs $f] : [dict get $f type]}]
+                append out [join [lmap c [list promoted $key - $path - [Dash $offset] [Dash [dict get $f size]] - \
+                    [dict get $f cname] [Dash [::cbind::report::ReportType $ids $type]] "via=[join $via ,]"] {Clean $c}] \t]\n
+            }
+        }
+    }
+    return $out
+}
+
+# The C member names the synthetic records held by REC's fields promote
+# into it, through any number of them: {PATH OFFSET FIELD VIA} each, PATH
+# the generated path (PREFIX's), OFFSET its offset in the owner (BASE plus
+# the fields' offsets; "" when one is unknown), FIELD the synthetic record's
+# field, VIA the anonymous records it goes through.
+proc ::cbind::report::Promoted {recs rec prefix base via} {
+    set out {}
+    foreach f [dict get $rec fields] {
+        set t [dict get $f type]
+        if {[dict get $f cname] ne "" || [dict get $f bits] ne "" || ![dict exists $recs $t] || ![dict get $recs $t synthetic]} continue
+        set at [expr {$base eq "" || [dict get $f offset] eq "" ? "" : $base + [dict get $f offset]}]
+        set inner [dict get $recs $t]
+        foreach g [dict get $inner fields] {
+            set path "$prefix[dict get $f name].[dict get $g name]"
+            if {[dict get $g cname] ne ""} {
+                lappend out [list $path [expr {$at eq "" || [dict get $g offset] eq "" ? "" : $at + [dict get $g offset]}] $g [concat $via [list $t]]]
+            }
+        }
+        lappend out {*}[Promoted $recs $inner "$prefix[dict get $f name]." $at [concat $via [list $t]]]
     }
     return $out
 }
@@ -199,7 +250,8 @@ proc ::cbind::report::Dash {v} {
 # The layout counts of MODEL (report.txt's and the manifest's).
 proc ::cbind::report::layoutCounts {model} {
     set c [dict create structs 0 unions 0 incomplete 0 emitted 0 blocked 0 blockedStructs 0 \
-        blockedUnions 0 blockedDirect 0 blockedTransitive 0 public 0 system 0 anonymous 0 promoted 0]
+        blockedUnions 0 blockedDirect 0 blockedTransitive 0 public 0 system 0 anonymous 0 promoted 0 \
+        emittedUnions 0 synthetic 0 emittedSynthetic 0 unheld 0]
     set reasons [dict create]
     set transitiveRoots [dict create]
     if {![dict exists $model layouts]} { dict set c reasons {}; dict set c roots {}; return $c }
@@ -211,8 +263,15 @@ proc ::cbind::report::layoutCounts {model} {
         dict incr c [expr {[dict get $rec kind] eq "union" ? "unions" : "structs"}]
         dict incr c [expr {[dict get $rec origin] eq "public" ? "public" : "system"}]
         if {[dict get $rec anonymous]} { dict incr c anonymous }
+        if {[dict get $rec synthetic]} { dict incr c synthetic }
+        if {$st eq "layout-direct" && [dict get $rec unheld]} {
+            dict incr c unheld
+            continue
+        }
         if {$st eq "layout-direct"} {
             dict incr c emitted
+            if {[dict get $rec kind] eq "union"} { dict incr c emittedUnions }
+            if {[dict get $rec synthetic]} { dict incr c emittedSynthetic }
             continue
         }
         dict incr c blocked
@@ -581,9 +640,13 @@ proc ::cbind::report::RecordSections {model apis} {
     lappend out [Line "complete unions" [dict get $c unions]]
     lappend out [Line "  of them in a system header (held by value by a public record)" [dict get $c system]]
     lappend out [Line "  of them anonymous" [dict get $c anonymous]]
+    lappend out [Line "  of them anonymous members laid out as records of their own" [dict get $c synthetic]]
     lappend out [Line "incomplete struct and union tags (pointee identities only)" [dict get $c incomplete]]
     lappend out [Line "anonymous struct members promoted into their record" [dict get $c promoted]]
     lappend out [Line "layouts emitted" [dict get $c emitted] $complete]
+    lappend out [Line "  union layouts" [dict get $c emittedUnions] $complete]
+    lappend out [Line "  synthetic layouts of anonymous members" [dict get $c emittedSynthetic] $complete]
+    lappend out [Line "anonymous members representable but held by a blocked record (not emitted)" [dict get $c unheld] $complete]
     lappend out [Line "records whose layout is blocked" [dict get $c blocked] $complete]
     lappend out [Line "  structs" [dict get $c blockedStructs] $complete]
     lappend out [Line "  unions" [dict get $c blockedUnions] $complete]

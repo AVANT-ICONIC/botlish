@@ -1527,9 +1527,10 @@ the leaf's absolute offset and encoding. Keep it so:
   Never add `Ptr -> Int`, `Ptr -> Bytes` or any decoding of a pointer from
   bytes.
 * No native record allocation, `extern c struct`, layout guarantee for an
-  ordinary struct, unions, bitfields or `ffi::c::Bool` fields here
+  ordinary struct, bitfields or `ffi::c::Bool` fields here
   (NATIVE-LAYOUT-WRITES.md section 22 records what a generated layout will
-  need; fixed arrays are FIXED-LAYOUT-ARRAYS.md's, next section).
+  need; fixed arrays are FIXED-LAYOUT-ARRAYS.md's and unions
+  LAYOUT-UNIONS.md's, next sections).
 * `ffi_fixture::memory_bytes(p, n)` (the oracle of a native write) is a test
   process's own, like `ffi_fixture::memory`.
 
@@ -1582,9 +1583,10 @@ binary::load). Keep it so:
 * An element access is O(1): one load or store at the array's address plus
   the index times the stride, never a copy of the array; a copy allocates
   exactly the List (and records) it returns.
-* No unions here: a union is a separate milestone, which must coexist with
-  arrays orthogonally (an array of a union-bearing record stays blocked by
-  its element).
+* Arrays and unions compose orthogonally (LAYOUT-UNIONS.md, next sections):
+  an array of unions strides the union's declared size, a union's
+  alternative may be an array; neither knows the other beyond the
+  representation it holds.
 
 If you change the array grammar (surface/parser.tcl's `ArrayTypeExpr`, the
 static designator indices), hir/layouts.tcl's representations
@@ -1609,6 +1611,72 @@ nview`. A change to the generator's arrays (tools/c-bindgen/records.tcl's
 `ArrayField`, verify.tcl's array checks, oracle.tcl's array leaves) is a
 change to the generator (next sections' checks; regenerate and commit).
 `bench/layout-arrays.tcl` regenerates the performance report.
+
+## Union layouts
+
+A `union layout U:` (LAYOUT-UNIONS.md) declares several interpretations of
+the same bytes -- `alternative NAME: TYPE`, every one at the union's first
+byte, any representation (a scalar, a C scalar, a pointer, a nested layout,
+a fixed array, another union), with an explicit `size` and `align` that are
+never computed -- held by value in a field, an array element or another
+union's alternative. Arrays repeat representation; unions overlap it.
+Keep it so:
+
+* A union is no sum type: never add a tag, a case, an active alternative,
+  a discriminant, a pattern match, a conversion between alternatives or a
+  check of which one was last written. Selecting an alternative is
+  interpretation: a native read is one load at the alternative's address
+  (`ViewBase` folds the union's offset), never a whole-union load, a copy,
+  an allocation or a cached value, and costs the same for the first and the
+  sixty-fourth alternative.
+* Overlap is declared only by a union: an ordinary layout's fields never
+  share a byte (LAYOUT-FIELD-OVERLAP). Never infer a union, accept overlap
+  elsewhere, or let a union's size or alignment be computed from its
+  alternatives; an alternative wider than its union is an error.
+* A union has no copied value: no `LayoutStruct` of a union or of anything
+  holding one by value, so `binary::parse`, `binary::emit`, `binary::load`
+  and whole-array writes of one are `LAYOUT-UNION` (`compiler::DiagnosticCode`
+  `LayoutUnion`), statically and, for a program compiled unchecked, when the
+  call runs. Bytes are read and written one alternative at a time through a
+  static designator (`binary::read(data, L.u.alt)`, `binary::write`,
+  `binary::write_foreign`); a designator names an alternative, never the
+  union. Never make a copied union a struct of every alternative, a byte
+  blob with interpretation methods, or anything else, without a design
+  decision recorded in LAYOUT-UNIONS.md ("The copied-value decision").
+* A write touches exactly its alternative's bytes: a narrow alternative
+  never zeroes or normalizes the rest of the union, nor the bytes around it.
+* Pointer authority is recursive through alternatives: bytes never become a
+  pointer through any alternative (`binary::read` or `binary::parse` of a
+  pointer path is `LAYOUT-NATIVE-ONLY`); native write authority may store
+  scalar bits that a pointer alternative then reads (raw native memory),
+  and a pointer stored through an alternative is observed, never moved.
+* A union is a declaration registry entry (`hir/layouts.tcl`, `union 1`):
+  compilation isolation, HIR text (`union layout ...`) and interchange
+  carry it; a same-named record of another compilation is never taken for
+  it.
+
+If you change the union grammar (surface/parser.tcl's `LayoutDecl`),
+hir/layouts.tcl's union cases (`IsUnion`, `ReprUnionPath`, `UnionRefusal`,
+`FieldPath` through unions, the overlap and bounds checks), `binary::read`
+(core/binary.tcl, core/native.tcl's registration, native/lower.tcl's
+`LayoutCall`), the union cases of `ViewBase`, `ReprRead`/`ReprWrite`,
+`ViewFieldType`, `hir/completions.tcl`'s `ExactCopy`/`ExtentsVerdict`, or the
+HIR text of a union, run `tests/layout-unions.test` (its C oracle,
+tests/cffi/nunion-fixture.c, needs `cc`), its golden suite (`tclsh9.0
+tests/local.tcl tests/golden/layout-unions.bot`), `tests/layout-arrays.test`,
+`tests/binary-layout.test`, `tests/native-view.test`,
+`tests/native-edit.test`, `audit/layout-unions/tools/fuzz.tcl` (several
+seeds, once with `-gc-stress 1`), `audit/layout-unions/tools/mutate.tcl`
+(every mutant in its `mutants.txt` must still apply and be killed: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule), the layout-arrays, binary-layout, native-view and
+native-edit mutation tools (they mutate the same code) and `cargo test
+--release --manifest-path native/Cargo.toml --lib nview`. A change to the
+generator's unions (tools/c-bindgen/records.tcl's `Synthetic`, `Block`,
+`Base`, `Members`; probe.tcl's `anonymous`; verify.tcl's `Fields` and
+`anonymous`; oracle.tcl's `Selected`) is a change to the generator (the C
+binding generator's checks below; regenerate and commit).
+`bench/layout-unions.tcl` regenerates the performance report.
 
 ## C ABI types and imprinting
 
@@ -1806,15 +1874,33 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   _Alignof, offsetof and each member's type, probed -- never a layout rule
   computed in Tcl or Botlish: no padding, alignment, packing or bitfield
   rule anywhere in the generator. A field a layout cannot represent (a
-  union or overlay, a flexible array member, a bitfield, float, double,
-  `_Bool`, an array of one of those) blocks its record and every record
-  holding it by value, with its reason in the manifest: never flatten,
-  approximate or reinterpret it, and never extend the layout language from
-  the generator. A fixed array of representable elements is a layout field
-  (`array N of E`, FIXED-LAYOUT-ARRAYS.md) whose extents are the
-  compiler's answers (one probe per dimension), never the declaration's
-  expressions. A layout and the record's opaque pointee identity stay two
-  declarations; a pointer field keeps its pointee's identity.
+  flexible array member, a bitfield, float, double, `_Bool`, an array of
+  one of those) blocks its record and every record holding it by value,
+  with its reason in the manifest: never flatten, approximate or
+  reinterpret it, and never extend the layout language from the generator.
+  A fixed array of representable elements is a layout field (`array N of
+  E`, FIXED-LAYOUT-ARRAYS.md) whose extents are the compiler's answers (one
+  probe per dimension), never the declaration's expressions. A layout and
+  the record's opaque pointee identity stay two declarations; a pointer
+  field keeps its pointee's identity.
+* A C union is a `union layout` (LAYOUT-UNIONS.md) whose alternatives are
+  at the offsets the compiler gives (a member off the union's start is
+  `union-member-offset`, never assumed 0); a union of representable
+  alternatives is no blocker, and a blocked one is blocked by its
+  alternatives' own root reasons. An anonymous member that is no struct
+  inside a struct (an anonymous union; an anonymous struct inside a union)
+  is a synthetic layout of its own, named by its place
+  (`CONTAINER_memberN`), held by a generated field: never flatten it into
+  overlapping fields, never promote it, never drop it. Its members are
+  probed through the record that names them (C11's promoted names), its
+  size, alignment and members' offsets within it are clang's record layout
+  (`-fdump-record-layouts`, the toolchain adapter's `recordLayouts`), and
+  the two must agree; a synthetic layout whose record is blocked is not
+  emitted (`layout-unheld`). The manifest maps every promoted C name to its
+  generated path (`promoted` rows); layouts-check.c checks every
+  alternative, and a synthetic layout's members through its record, and
+  generation compares every synthetic layout's size and alignment with a
+  fresh record layout dump.
 * A generated layout is its target's and its toolchain's: windows-x86_64-gnu
   is MinGW-w64's (Windows x86-64, the GNU ABI), the Win32 profile's target.
   Never generate, label or check it as MSVC's windows-x86_64, and add no

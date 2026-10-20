@@ -272,11 +272,15 @@ proc ::cbind::emit::files {theModel} {
 }
 
 # The layouts module of MODEL: {TEXT KEYS}, KEYS the pointee identities its
-# pointer fields name. One ordinary `layout` per emitted record, in
-# emission order (records.tcl): the compiler's sizeof, _Alignof and offsets,
-# each field's type the binding model's mapping of its C type (a fixed
-# array's extents the compiler's too: FIXED-LAYOUT-ARRAYS.md), each field
-# with its C declaration beside it.
+# pointer fields name. One ordinary `layout` per emitted struct and one
+# `union layout` per emitted union (LAYOUT-UNIONS.md: its members are its
+# alternatives), in emission order (records.tcl): the compiler's sizeof,
+# _Alignof and offsets, each field's type the binding model's mapping of its
+# C type (a fixed array's extents the compiler's too:
+# FIXED-LAYOUT-ARRAYS.md), each field with its C declaration beside it. A
+# synthetic record (an anonymous member, records.tcl) is a layout like any
+# other, held by its container's generated field; its comment names where
+# it is.
 proc ::cbind::emit::Layouts {} {
     variable model
     variable ns
@@ -289,9 +293,10 @@ proc ::cbind::emit::Layouts {} {
     foreach key [dict get $model layoutOrder] {
         set rec [dict get $recs $key]
         set where [expr {[dict get $rec origin] in {public bundled internal} ? "[dict get $rec header]:[dict get $rec line]" : "a system header"}]
-        set spell [CRecord $rec]
+        set spell [CRecord $recs $rec]
+        set union [expr {[dict get $rec kind] eq "union"}]
         append body "\n# $spell ($where): sizeof [dict get $rec size], _Alignof [dict get $rec align]\n"
-        append body "layout [dict get $rec layoutName]:\n"
+        append body "[expr {$union ? "union layout" : "layout"}] [dict get $rec layoutName]:\n"
         append body "    size [dict get $rec size]\n"
         append body "    align [dict get $rec align]\n"
         set lines {}
@@ -303,7 +308,13 @@ proc ::cbind::emit::Layouts {} {
             set type [Type $text]
             lappend keys {*}[Keys $text]
             set decl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname] $anonNames] " "]
-            lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
+            if {$union} {
+                # (Every alternative begins at the union's start: records.tcl
+                # blocks a union whose member the compiler places elsewhere.)
+                lappend lines [list "    alternative [dict get $f name]: $type" $decl]
+            } else {
+                lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
+            }
         }
         set width 0
         foreach l $lines { set width [expr {max($width, [string length [lindex $l 0]])}] }
@@ -344,9 +355,14 @@ proc ::cbind::emit::IdentityNote {key complete} {
     return ", a complete C type seen through pointers only"
 }
 
-# The C spelling of record REC in a comment: its tag and the typedefs naming
-# it ("struct _POINT, typedef POINT").
-proc ::cbind::emit::CRecord {rec} {
+# The C spelling of record REC of RECS in a comment: its tag and the
+# typedefs naming it ("struct _POINT, typedef POINT"); for a synthetic
+# record, the member it is ("the anonymous union member3 of struct
+# _OVERLAPPED").
+proc ::cbind::emit::CRecord {recs rec} {
+    if {[dict get $rec synthetic]} {
+        return "the anonymous [dict get $rec kind] member [::cbind::records::Path $recs [dict get $rec key]] ([dict get $rec owner])"
+    }
     set out [expr {[dict get $rec anonymous] ? "an anonymous [dict get $rec kind]" : [dict get $rec key]}]
     if {[llength [dict get $rec typedefs]]} {
         append out ", typedef [join [dict get $rec typedefs] {, }]"

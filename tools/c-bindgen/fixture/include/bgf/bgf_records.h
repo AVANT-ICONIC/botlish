@@ -218,6 +218,69 @@ typedef int (__attribute__((ms_abi)) *bgf_ms_callback)(int);
 extern int bgf_take_ms(bgf_ms_callback cb);
 #endif
 
+/* Unions (LAYOUT-UNIONS.md): a union is a union layout whose alternatives
+ * are its members, each where the compiler places it; an anonymous member
+ * -- a union, or a struct inside a union -- is a synthetic layout of its
+ * own, held by a generated field, never flattened. Unions of scalars and
+ * arrays, of a record and a scalar, of a packed record; arrays of unions,
+ * one- and two-dimensional; the OVERLAPPED and LARGE_INTEGER shapes; deeper
+ * anonymous nesting; a keyword alternative; a tag the synthetic name of
+ * bgf_overlapped's anonymous union would take; unions wider than every
+ * alternative (tail padding, an aligned union), named and anonymous; two
+ * anonymous unions on one line. */
+typedef union bgf_word { uint32_t whole; uint16_t halves[2]; uint8_t bytes[4]; } bgf_word;
+typedef union bgf_shape { bgf_point pt; long long bits; unsigned char raw[3]; } bgf_shape;
+typedef struct bgf_words3 { int n; bgf_word words[3]; } bgf_words3;
+typedef struct bgf_word_grid { bgf_word grid[2][2]; short tail; } bgf_word_grid;
+typedef union bgf_packed_u { bgf_packed1 p; uint8_t raw[7]; } bgf_packed_u;
+typedef struct bgf_overlapped {
+    uintptr_t internal;
+    uintptr_t internal_high;
+    union {
+        struct {
+            uint32_t offset;
+            uint32_t offset_high;
+        };
+        void *pointer;
+    };
+    void *event;
+} bgf_overlapped;
+struct bgf_overlapped_member3 { int z; };
+typedef union bgf_large {
+    struct { uint32_t low; int32_t high; };
+    struct { uint32_t low; int32_t high; } u;
+    long long quad;
+} bgf_large;
+typedef struct bgf_deep {
+    char tag;
+    struct {
+        short a;
+        union { int b; char c[3]; };
+    };
+    union
+    {
+        struct { uint16_t x; uint16_t y; union { uint8_t z; uint16_t zz; }; };
+        bgf_word w;
+    };
+} bgf_deep;
+typedef union bgf_kwu { int fn; unsigned int type; } bgf_kwu;
+typedef union bgf_tail_u { char c[5]; int i; } bgf_tail_u;
+typedef union __attribute__((aligned(16))) bgf_aligned_u { int i; char c; } bgf_aligned_u;
+typedef struct bgf_anon_tail { char k; union { char c[5]; int i; }; char after; } bgf_anon_tail;
+typedef struct bgf_two_anon { union { char a; int b; }; union { short c; long long d; }; } bgf_two_anon;
+
+/* Unions an alternative blocks: the alternative's own reason is the root,
+ * directly, through a record, an array or an anonymous member; and a
+ * representable anonymous union its record's bitfield blocks (not emitted:
+ * nothing reaches it). */
+typedef union bgf_num { int i; float f; } bgf_num;
+typedef union bgf_flagu { int i; bool b; } bgf_flagu;
+typedef union bgf_bitsu { bgf_bits bits; int i; } bgf_bitsu;
+typedef struct bgf_holds_bitsu { int n; bgf_bitsu u; } bgf_holds_bitsu;
+typedef struct bgf_nums2 { bgf_num nums[2]; } bgf_nums2;
+typedef struct bgf_anon_float { int k; union { int i; float f; }; } bgf_anon_float;
+typedef struct bgf_bits_overlay { unsigned int flag : 1; union { int i; char c; }; } bgf_bits_overlay;
+
 /* Functions pointing to records (the API pressure the report counts). */
 extern int bgf_rect_area(const bgf_rect *r);
 extern void bgf_node_link(bgf_node *a, bgf_node *b);

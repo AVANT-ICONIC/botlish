@@ -13,11 +13,15 @@
 # anonymous struct members and typedef-named anonymous records, with
 # #pragma pack(N), packed and aligned attributes around and inside them,
 # fixed arrays (FIXED-LAYOUT-ARRAYS.md: of C integers, stdint types, data
-# pointers, earlier records and struct lf_inner, two-dimensional ones) --
-# and, in some records, a field the layout language lacks: a flexible array
-# member, a union by value, a bitfield, a float, a double, a _Bool, an
-# array of one of those, or a record that holds one of those by value
-# (directly or as an array's elements). The fuzzer generates its binding
+# pointers, earlier records and struct lf_inner, two-dimensional ones),
+# unions (LAYOUT-UNIONS.md: union records of any of those alternatives --
+# integers, a record and a scalar, an array and a scalar --, unions held by
+# value and as array elements, anonymous unions, anonymous structs inside
+# them) -- and, in some records, a field the layout language lacks: a
+# flexible array member, a bitfield, a float, a double, a _Bool, an array
+# of one of those, or a record that holds one of those by value (directly,
+# as an array's elements, or as an alternative of a union, named or
+# anonymous). The fuzzer generates its binding
 # for TARGET (the host's by default; any target of the fixture's: the
 # header is freestanding) with an in-memory profile, and checks, each
 # against something other than the generator:
@@ -25,15 +29,20 @@
 #   * its own model: which records are layouts and which are blocked, with
 #     which direct blocker and which root reasons (a record holding a
 #     blocked one, or an array of it, is nested-layout-blocked, rooted in
-#     the inner reason; a pointer to a blocked record blocks nothing); each
-#     emitted layout's field names, in order, and their Botlish types -- the
-#     C scalar its own table of the target's data model gives each C type
-#     and stdint name, the pointee identity its own naming rule gives each
-#     pointer;
+#     the inner reason; a union is blocked only by its alternatives' reasons,
+#     an anonymous member's included; a pointer to a blocked record blocks
+#     nothing); each emitted layout's field names, in order, and their
+#     Botlish types -- the C scalar its own table of the target's data model
+#     gives each C type and stdint name, the pointee identity its own naming
+#     rule gives each pointer, an anonymous member's synthetic layout the
+#     name its own rule gives it (the container's name and member place,
+#     CONTAINER_memberN) with its own members;
 #   * a second C compiler (GCC: cc on the host, the target's cross gcc
 #     elsewhere, when installed): every size, alignment and offset the
 #     emitted layouts state, and every array's sizeof and its last element's
-#     offset, through the fuzzer's own C designators -- run
+#     offset, through the fuzzer's own C designators (an anonymous member's
+#     members by their promoted C names, at the offset the layouts give
+#     them through the synthetic layouts) -- run
 #     as a program on the host, compiled as static assertions for another
 #     target;
 #   * the runtime oracle (tools/c-bindgen/oracle.tcl), on the host: C writes
@@ -43,8 +52,10 @@
 #     both native backends.
 #
 # The last line is "programs N records R layouts L disagreements X" (the
-# exit status is 1 on any); every disagreement is printed with its
-# directory, kept unless -keep is 0.
+# exit status is 1 on any), the one before it how many of the layouts were
+# unions and synthetic layouts (anonymous members), and how many unions were
+# blocked; every disagreement is printed with its directory, kept unless
+# -keep is 0.
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create -n 8 -seed 1 -records 10 -target "" -gc-stress 0 -keep 1 -verbose 0]
@@ -112,7 +123,6 @@ proc drawProgram {p k} {
 # expectRoots (the direct reasons it waits for, through what it holds).
 proc verdict {rec} {
     set roots {}
-    if {[dict get $rec kind] eq "union"} { lappend roots union }
     foreach f [dict get $rec fields] {
         if {[dict get $f expect] ne "blocked"} continue
         switch -- [dict get $f reason] {
@@ -138,7 +148,7 @@ proc typedefScalar {typedefs name} {
 }
 
 proc drawRecord {r earlier typedefs enums} {
-    set kind [expr {[chance 0.08] ? "union" : "struct"}]
+    set kind [expr {[chance 0.18] ? "union" : "struct"}]
     set anonymous [expr {$kind eq "struct" && [chance 0.12]}]
     set tag [expr {$anonymous ? "" : "lf_r$r"}]
     set typedef [expr {$anonymous || [chance 0.5] ? "lf_r${r}_t" : ""}]
@@ -154,18 +164,21 @@ proc drawRecord {r earlier typedefs enums} {
     }
     set fields {}
     set n [between 1 7]
-    set blocked [expr {$kind eq "union" || [chance 0.2]}]
+    set blocked [chance 0.2]
     set blockAt [expr {$blocked ? [between 0 [expr {$n - 1}]] : -1}]
+    set recName [expr {$typedef ne "" ? $typedef : $tag}]
     for {set i 0} {$i < $n} {incr i} {
         set name f${r}_$i
-        if {$i == $blockAt && $kind eq "struct"} {
-            # A flexible array member only last, after a named member (C).
-            lappend fields [drawBlocked $r $i $name $earlier [expr {$i == $n - 1 && $i > 0}]]
+        if {$i == $blockAt} {
+            # A flexible array member only last, after a named member, and
+            # in a struct (C).
+            lappend fields [drawBlocked $r $i $name $earlier [expr {$kind eq "struct" && $i == $n - 1 && $i > 0}]]
             continue
         }
         set f [drawField $r $i $name $earlier $typedefs $enums [expr {$anonymous ? "" : "$kind $tag"}] \
-            [expr {$typedef ne "" ? $typedef : $tag}]]
-        if {[dict get $f expect] ne "promoted" && [chance 0.05] && $kind eq "struct"} {
+            $recName $kind]
+        if {[dict get $f expect] ne "promoted" && ![string match "union \{*" [dict get $f c]] && ![string match "struct \{*" [dict get $f c]]
+                && [chance 0.05] && $kind eq "struct"} {
             dict set f c "[dict get $f c] __attribute__((aligned([pick {4 8 16}])))"
         }
         lappend fields $f
@@ -176,9 +189,22 @@ proc drawRecord {r earlier typedefs enums} {
 }
 
 # A field of the supported universe: {c DECL expect TYPE members {{BOTNAME CPATH}} dep KEY}.
-proc drawField {r i name earlier typedefs enums self selfName} {
+# A field of a union (KIND) is an alternative; SELFNAME names the record (an
+# anonymous member's synthetic layout is named after it and its place, I).
+proc drawField {r i name earlier typedefs enums self selfName {kind struct}} {
     set x [expr {rand()}]
-    set emitted [lmap e $earlier {expr {[dict get $e kind] eq "struct" && ![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]
+    set emitted [lmap e $earlier {expr {![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]
+    set y [expr {rand()}]
+    if {$y < 0.06} {
+        # A union by value: lf_u, or an array of it.
+        if {[chance 0.5]} {
+            return [dict create c "union lf_u $name" expect nested nested {union lf_u} nestedName lf_u members [list [list $name $name]]]
+        }
+        set n [between 1 3]
+        return [dict create c "union lf_u $name\[$n\]" expect "array $n of lf_u" members [list [list $name $name]]]
+    } elseif {$y < 0.13} {
+        return [drawAnonymous $i $name $selfName $earlier $kind]
+    }
     if {$x < 0.32} {
         set c [pick [dict keys $::scalars]]
         return [dict create c "$c $name" expect ffi::c::[dict get $::scalars $c] members [list [list $name $name]]]
@@ -221,14 +247,84 @@ proc drawField {r i name earlier typedefs enums self selfName} {
         set e [pick $emitted]
         return [dict create c "[dict get $e kind] [dict get $e tag] $name" expect nested nested [dict get $e key] members [list [list $name $name]]]
     } elseif {$x < 1.0} {
-        # An anonymous struct member: its members are the record's own.
+        # An anonymous struct member: in a struct, its members are the
+        # record's own (promoted); in a union, a synthetic struct layout is
+        # the alternative.
         set a [pick [dict keys $::scalars]]
         set b [pick [dict keys $::scalars]]
+        if {$kind eq "union"} {
+            return [dict create c "struct { $a ${name}_a; $b ${name}_b; }" expect anonymous \
+                synthetic ${selfName}_member[expr {$i + 1}] slot member[expr {$i + 1}] synthKind struct \
+                inner [list [dict create c "$a ${name}_a" expect ffi::c::[dict get $::scalars $a] members [list [list ${name}_a ${name}_a]]] \
+                    [dict create c "$b ${name}_b" expect ffi::c::[dict get $::scalars $b] members [list [list ${name}_b ${name}_b]]]]]
+        }
         return [dict create c "struct { $a ${name}_a; $b ${name}_b; }" expect promoted \
             types [list ffi::c::[dict get $::scalars $a] ffi::c::[dict get $::scalars $b]] \
             members [list [list ${name}_a ${name}_a] [list ${name}_b ${name}_b]]]
     }
     return [dict create c "int $name" expect ffi::c::Int members [list [list $name $name]]]
+}
+
+# An anonymous union member I of the record SELFNAME (LAYOUT-UNIONS.md): a
+# synthetic union layout SELFNAME_memberI+1, held by the field memberI+1,
+# its alternatives scalars, arrays, an earlier record -- and sometimes an
+# anonymous struct of its own (a synthetic struct layout, the alternative
+# memberJ+1) or a field the layout language lacks, which blocks it and the
+# record (its root reason, never the union).
+proc drawAnonymous {i name selfName earlier kind} {
+    set synth ${selfName}_member[expr {$i + 1}]
+    set inner {}
+    set m [between 1 3]
+    for {set j 0} {$j < $m} {incr j} {
+        set iname ${name}_[format %c [expr {97 + $j}]]
+        switch -- [pick {scalar scalar array struct record blocked}] {
+            scalar {
+                set c [pick [dict keys $::scalars]]
+                lappend inner [dict create c "$c $iname" expect ffi::c::[dict get $::scalars $c] members [list [list $iname $iname]]]
+            }
+            array { lappend inner [drawArray $iname [lmap e $earlier {expr {![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]] }
+            struct {
+                set a [pick [dict keys $::scalars]]
+                set b [pick [dict keys $::scalars]]
+                lappend inner [dict create c "struct { $a ${iname}_x; $b ${iname}_y; }" expect anonymous \
+                    synthetic ${synth}_member[expr {$j + 1}] slot member[expr {$j + 1}] synthKind struct \
+                    inner [list [dict create c "$a ${iname}_x" expect ffi::c::[dict get $::scalars $a] members [list [list ${iname}_x ${iname}_x]]] \
+                        [dict create c "$b ${iname}_y" expect ffi::c::[dict get $::scalars $b] members [list [list ${iname}_y ${iname}_y]]]]]
+            }
+            record {
+                set emitted [lmap e $earlier {expr {![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]
+                if {[llength $emitted]} {
+                    set e [pick $emitted]
+                    lappend inner [dict create c "[dict get $e kind] [dict get $e tag] $iname" expect nested nested [dict get $e key] members [list [list $iname $iname]]]
+                } else {
+                    lappend inner [dict create c "int $iname" expect ffi::c::Int members [list [list $iname $iname]]]
+                }
+            }
+            blocked {
+                set reason [pick {float c-bool bitfield}]
+                set decl [dict get {float "float NAME" c-bool "_Bool NAME" bitfield "unsigned int NAME : 3"} $reason]
+                lappend inner [dict create c [string map [list NAME $iname] $decl] expect blocked reason $reason]
+            }
+        }
+    }
+    set f [dict create c "union { [join [lmap g $inner {string cat [dict get $g c] ";"}] { }] }" expect anonymous \
+        synthetic $synth slot member[expr {$i + 1}] synthKind union inner $inner]
+    set roots [AnonymousRoots $f]
+    if {[llength $roots]} {
+        return [dict create c [dict get $f c] expect blocked reason nested roots $roots]
+    }
+    return $f
+}
+
+# The root reasons an anonymous member field F waits for (its blocked
+# alternatives', at any depth).
+proc AnonymousRoots {f} {
+    set roots {}
+    foreach g [dict get $f inner] {
+        if {[dict get $g expect] eq "blocked"} { lappend roots [dict get $g reason] }
+        if {[dict get $g expect] eq "anonymous"} { lappend roots {*}[AnonymousRoots $g] }
+    }
+    return [lsort -unique $roots]
 }
 
 # A fixed array of a supported element (FIXED-LAYOUT-ARRAYS.md): {c DECL
@@ -265,16 +361,16 @@ proc drawArray {name emitted} {
 # A field the layout language lacks: {c DECL expect blocked reason R dep KEY?}.
 proc drawBlocked {r i name earlier last} {
     set blockedEarlier [lmap e $earlier {expr {[dict get $e kind] eq "struct" && ![dict get $e anonymous] && [dict get $e expectStatus] eq "blocked" ? $e : [continue]}}]
-    set shapes {union bitfield float double bool floats bools unions}
+    set shapes {bitfield float double bool floats bools floatUnion floatUnions}
     if {$last} { lappend shapes flexible }
     if {[llength $blockedEarlier]} { lappend shapes nestedBlocked nestedBlocked nestedBlockedArray }
     set shape [pick $shapes]
     switch -- $shape {
         floats { return [dict create c "float $name\[[between 1 4]\]" expect blocked reason float] }
         bools { return [dict create c "_Bool $name\[[between 1 4]\]" expect blocked reason c-bool] }
-        unions { return [dict create c "union lf_u $name\[2\]" expect blocked reason union nested 1] }
+        floatUnions { return [dict create c "union lf_fu $name\[2\]" expect blocked reason nested roots float] }
         flexible { return [dict create c "int $name\[\]" expect blocked reason flexible-array] }
-        union { return [dict create c "union lf_u $name" expect blocked reason union nested 1] }
+        floatUnion { return [dict create c "union lf_fu $name" expect blocked reason nested roots float] }
         bitfield { return [dict create c "unsigned int $name : [between 1 9]" expect blocked reason bitfield] }
         float { return [dict create c "float $name" expect blocked reason float] }
         double { return [dict create c "double $name" expect blocked reason double] }
@@ -295,7 +391,7 @@ proc drawBlocked {r i name earlier last} {
 # The header text of PROG.
 proc header {prog} {
     set h "/* lf.h -- a layout fuzz program (audit/c-bindgen/tools/layout-fuzz.tcl). */\n#ifndef LF_H\n#define LF_H\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n\n"
-    append h "struct lf_opaque;\nstruct lf_inner { int a; long b; };\nunion lf_u { int i; void *p; };\ntypedef void (*lf_callback)(long);\n"
+    append h "struct lf_opaque;\nstruct lf_inner { int a; long b; };\nunion lf_u { int i; void *p; };\nunion lf_fu { int i; float f; };\ntypedef void (*lf_callback)(long);\n"
     foreach t [dict get $prog typedefs] { append h "typedef [dict get $t base] [dict get $t name];\n" }
     foreach e [dict get $prog enums] {
         set items {}
@@ -364,34 +460,87 @@ proc checkModel {prog result} {
         set name [dict get $got layoutName]
         if {$name ne [dict get $rec name]} { lappend problems "$key: layout name $name, the model's [dict get $rec name]" }
         if {![dict exists $layouts $name]} { lappend problems "$key: no layout $name in layouts.bot"; continue }
-        set fields [lindex [dict get $layouts $name] 2]
-        set expected {}
-        foreach f [dict get $rec fields] {
-            switch -- [dict get $f expect] {
-                promoted {
-                    foreach m [dict get $f members] t [dict get $f types] { lappend expected [list [lindex $m 0] $t] }
-                }
-                nested {
-                    set inner ""
-                    foreach e [dict get $prog records] { if {[dict get $e key] eq [dict get $f nested]} { set inner [dict get $e name] } }
-                    lappend expected [list [lindex [dict get $f members] 0 0] $inner]
-                }
-                default { lappend expected [list [lindex [dict get $f members] 0 0] [dict get $f expect]] }
-            }
-        }
-        set actual [lmap f $fields {list [lindex $f 0] [lindex $f 1]}]
-        if {$actual ne $expected} { lappend problems "$name: fields $actual, the model's $expected" }
+        lappend problems {*}[checkFields $prog $layouts $name [dict get $rec fields] [dict get $rec kind]]
     }
     return $problems
+}
+
+# The disagreements of layout NAME of LAYOUTS (the generated text's) with
+# the model's FIELDS of a KIND record, and of every synthetic layout an
+# anonymous member of them is, recursively.
+proc checkFields {prog layouts name fields kind} {
+    set problems {}
+    if {![dict exists $layouts $name]} { return [list "no layout $name in layouts.bot"] }
+    lassign [dict get $layouts $name] size align have union
+    if {$union != ($kind eq "union")} { lappend problems "$name: union $union, the model's [expr {$kind eq "union"}]" }
+    set expected {}
+    foreach f $fields {
+        switch -- [dict get $f expect] {
+            promoted {
+                foreach m [dict get $f members] t [dict get $f types] { lappend expected [list [lindex $m 0] $t] }
+            }
+            nested {
+                if {[dict exists $f nestedName]} {
+                    set inner [dict get $f nestedName]
+                } else {
+                    set inner ""
+                    foreach e [dict get $prog records] { if {[dict get $e key] eq [dict get $f nested]} { set inner [dict get $e name] } }
+                }
+                lappend expected [list [lindex [dict get $f members] 0 0] $inner]
+            }
+            anonymous {
+                lappend expected [list [dict get $f slot] [dict get $f synthetic]]
+                lappend problems {*}[checkFields $prog $layouts [dict get $f synthetic] [dict get $f inner] [dict get $f synthKind]]
+            }
+            default { lappend expected [list [lindex [dict get $f members] 0 0] [dict get $f expect]] }
+        }
+    }
+    set actual [lmap f $have {list [lindex $f 0] [lindex $f 1]}]
+    if {$actual ne $expected} { lappend problems "$name: fields $actual, the model's $expected" }
+    if {$union} {
+        foreach f $have { if {[lindex $f 2] != 0} { lappend problems "$name.[lindex $f 0]: an alternative at [lindex $f 2]" } }
+    }
+    return $problems
+}
+
+# Every synthetic layout name the model's FIELDS hold, recursively.
+proc syntheticNames {fields} {
+    set out {}
+    foreach f $fields {
+        if {[dict get $f expect] eq "anonymous"} {
+            lappend out [dict get $f synthetic] {*}[syntheticNames [dict get $f inner]]
+        }
+    }
+    return $out
+}
+
+# The fields of layout NAME of LAYOUTS flattened through synthetic layouts
+# (SYNTHETIC: their names): {{BOTPATH CPATH TYPE OFFSET} ...}, OFFSET from
+# the record's start (BASE plus the fields'), CPATH the C member (an
+# anonymous member's members are the record's: C11's promoted names).
+proc flatten {layouts name synthetic base bot} {
+    set out {}
+    foreach f [lindex [dict get $layouts $name] 2] {
+        lassign $f fname type offset
+        set at [expr {$base + $offset}]
+        if {$type in $synthetic} {
+            lappend out {*}[flatten $layouts $type $synthetic $at "$bot$fname."]
+        } else {
+            lappend out [list "$bot$fname" $fname $type $at]
+        }
+    }
+    return $out
 }
 
 # The members of every emitted layout as the fuzzer's own C designators:
 # {LAYOUT CNAME {{BOTPATH CPATH} ...}} with nested layouts flattened.
 proc designators {prog layouts} {
     set out {}
+    set synthetic {}
+    foreach rec [dict get $prog records] { lappend synthetic {*}[syntheticNames [dict get $rec fields]] }
     foreach rec [dict get $prog records] {
         if {[dict get $rec expectStatus] ne "layout" || ![dict exists $layouts [dict get $rec name]]} continue
-        lappend out [list [dict get $rec name] [cname $rec] [lindex [dict get $layouts [dict get $rec name]] 2]]
+        lappend out [list [dict get $rec name] [cname $rec] [flatten $layouts [dict get $rec name] $synthetic 0 ""]]
     }
     return $out
 }
@@ -416,9 +565,9 @@ proc secondCompiler {dir prog result} {
         append asserts "_Static_assert(sizeof($c) == $size, \"$name size\");\n_Static_assert(_Alignof($c) == $align, \"$name align\");\n"
         append prints "    printf(\"$name %zu %zu\\n\", sizeof($c), _Alignof($c));\n"
         foreach f $fields {
-            lassign $f fname type offset
-            append asserts "_Static_assert(__builtin_offsetof($c, $fname) == $offset, \"$name.$fname\");\n"
-            append prints "    printf(\"$name.$fname %zu\\n\", __builtin_offsetof($c, $fname));\n"
+            lassign $f bot fname type offset
+            append asserts "_Static_assert(__builtin_offsetof($c, $fname) == $offset, \"$name.$bot\");\n"
+            append prints "    printf(\"$name.$fname %zu $offset\\n\", __builtin_offsetof($c, $fname));\n"
             # A fixed array: its sizeof, and its last element's offset (the
             # stride), by the model's widths.
             lassign [arrayShape $type $layouts] extents width
@@ -456,10 +605,7 @@ proc secondCompiler {dir prog result} {
         if {[string match *:* $what]} {
             if {$a != $b} { lappend problems "$what: GCC's $a, the layout's $b" }
         } elseif {[string match *.* $what]} {
-            lassign [split $what .] name fname
-            set offset ""
-            foreach f [lindex [dict get $layouts $name] 2] { if {[lindex $f 0] eq $fname} { set offset [lindex $f 2] } }
-            if {$offset != $a} { lappend problems "$what: GCC's offset $a, the layout's $offset" }
+            if {$a != $b} { lappend problems "$what: GCC's offset $a, the layout's $b" }
         } else {
             lassign [dict get $layouts $what] size align
             if {$size != $a || $align != $b} { lappend problems "$what: GCC's sizeof $a and _Alignof $b, the layout's $size and $align" }
@@ -502,6 +648,9 @@ set scratch [file tempdir]
 set programs 0
 set nrecords 0
 set nlayouts 0
+set nunions 0
+set nsynthetic 0
+set nblockedUnions 0
 set disagreements 0
 set skippedSecond 0
 for {set p 0} {$p < [dict get $options -n]} {incr p} {
@@ -523,6 +672,14 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
         if {$second eq "skipped"} { incr skippedSecond } else { lappend problems {*}$second }
         set emitted [llength [dict get $result model layoutOrder]]
         incr nlayouts $emitted
+        foreach k [dict get $result model layoutOrder] {
+            set lr [dict get $result model layouts $k]
+            if {[dict get $lr kind] eq "union"} { incr nunions }
+            if {[dict get $lr synthetic]} { incr nsynthetic }
+        }
+        dict for {k lr} [dict get $result model layouts] {
+            if {[dict get $lr kind] eq "union" && [dict get $lr status] eq "layout-blocked"} { incr nblockedUnions }
+        }
         if {$target eq $host && $emitted} {
             set r [::cbind::oracle::build lf [file join $dir out] all [expr {[dict get $options -seed] * 100 + $p}]]
             set app [file join $dir app]
@@ -563,5 +720,6 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
 }
 if {$disagreements == 0} { file delete -force $scratch }
 if {$skippedSecond} { puts "(no second compiler for $target: $skippedSecond programs checked by the model and the generator's own verification only)" }
+puts "(union layouts $nunions, synthetic layouts $nsynthetic, blocked unions $nblockedUnions)"
 puts "programs $programs records $nrecords layouts $nlayouts disagreements $disagreements"
 exit [expr {$disagreements > 0}]

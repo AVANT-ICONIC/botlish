@@ -411,6 +411,14 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
                 return [FormConst [lindex $term 1]]
             }
         }
+        # A List read from bytes through a designator of a fixed array has
+        # its extent (-result-length {path K}: binary::read, LAYOUT-UNIONS.md).
+        if {[lindex $length 0] eq "path" && [lindex $length 1] < [llength $args]} {
+            set repr [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $args [lindex $length 1]]]]
+            if {$repr ne "" && [dict get $repr kind] eq "array"} {
+                return [FormConst [dict get $repr extent]]
+            }
+        }
     }
     return [FormAtom [list len [list e $id]]]
 }

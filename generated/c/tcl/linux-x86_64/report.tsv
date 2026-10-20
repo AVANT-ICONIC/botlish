@@ -1436,14 +1436,14 @@ record	struct Tcl_ObjType	layout-direct	tcl::layouts	Tcl_ObjType	sizeof 112, _Al
 record	struct anon@tcl.h:723	layout-direct	tcl::layouts	Tcl_ObjInternalRep_twoPtrValue	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@tcl.h:727	layout-direct	tcl::layouts	Tcl_ObjInternalRep_ptrAndLongRep	sizeof 16, _Alignof 8, 2 fields
 record	struct anon@tcl.h:731	layout-direct	tcl::layouts	Tcl_ObjInternalRep_ptrAndSize	sizeof 16, _Alignof 8, 2 fields
-record	union Tcl_ObjInternalRep	layout-blocked		double,union	a union: its members overlap; field doubleValue: double (double)
-record	struct Tcl_Obj	layout-blocked		nested-layout-blocked	field internalRep (union Tcl_ObjInternalRep, field) -> union
+record	union Tcl_ObjInternalRep	layout-blocked		double	field doubleValue: double (double)
+record	struct Tcl_Obj	layout-blocked		nested-layout-blocked	field internalRep (union Tcl_ObjInternalRep, field) -> double
 record	struct Tcl_Namespace	layout-direct	tcl::layouts	Tcl_Namespace	sizeof 40, _Alignof 8, 5 fields
 record	struct Tcl_CallFrame	layout-direct	tcl::layouts	Tcl_CallFrame	sizeof 112, _Alignof 8, 14 fields
 record	struct anon@tcl.h:846	layout-direct	tcl::layouts	Tcl_CmdInfo	sizeof 80, _Alignof 8, 10 fields
 record	struct Tcl_DString	layout-direct	tcl::layouts	Tcl_DString	sizeof 224, _Alignof 8, 4 fields
-record	union anon@tcl.h:1092	layout-blocked		union	a union: its members overlap
-record	struct Tcl_HashEntry	layout-blocked		nested-layout-blocked	field key (union anon@tcl.h:1092, field) -> union
+record	union anon@tcl.h:1092	layout-direct	tcl::layouts	Tcl_HashEntry_key	sizeof 8, _Alignof 8, 4 fields
+record	struct Tcl_HashEntry	layout-direct	tcl::layouts	Tcl_HashEntry	sizeof 40, _Alignof 8, 5 fields
 record	struct Tcl_HashKeyType	layout-direct	tcl::layouts	Tcl_HashKeyType	sizeof 40, _Alignof 8, 6 fields
 record	struct Tcl_HashTable	layout-direct	tcl::layouts	Tcl_HashTable	sizeof 104, _Alignof 8, 11 fields
 record	struct Tcl_HashSearch	layout-direct	tcl::layouts	Tcl_HashSearch	sizeof 24, _Alignof 8, 3 fields
