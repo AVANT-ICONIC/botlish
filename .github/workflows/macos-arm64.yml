@@ -50,7 +50,7 @@ on:
         options: [acceptance, full]
         default: acceptance
       tests:
-        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust, native-stack-mutants, native-aot-mutants, native-stack-bench)"
+        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust, native-stack-mutants, native-aot-mutants, native-stack-bench, c-ffi-fuzz, c-ffi-mutants[=NAME,...], c-ffi-bench)"
         required: false
         default: ""
       gc_stress:
@@ -110,8 +110,11 @@ jobs:
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
 
+      # The runtime's tests and the driver's own (--bins): its link plans,
+      # targets and the Apple C signature, which Cranelift's AArch64 backend
+      # compiles here.
       - name: Native Rust unit tests
-        run: cargo test --release --manifest-path native/Cargo.toml --lib
+        run: cargo test --release --manifest-path native/Cargo.toml --lib --bins
 
       # The host's stack bounds and guards and the runtime's overflow guard,
       # checked in child processes (native/tests/native_stack.rs, milestone 4):

@@ -338,3 +338,189 @@ proc core::cabi::ExternImpl {display args} {
 ====
     if {0} {
 >>>>
+
+# --- the macOS Apple Silicon C ABI (MACOS-AARCH64-MILESTONE-6.md) ------------
+#
+# A `%% TARGET ...` line restricts a mutant to the hosts that compile it
+# differently; elsewhere it is SKIPPED, never counted as killed. Not here,
+# because they are equivalent: a C call that is no safepoint of the stack
+# maps (no C function can reach the collector during the call, C-FFI.md
+# section 20: no root is ever read there), and Linux AArch64's extension
+# attributes (Cranelift ignores them for AAPCS64, whose callee extends).
+
+@@ macos-link-plan-is-gnus macOS links with GNU ld's link plan: the libraries inside --start-group/--end-group, which Apple's ld rejects
+%% macos-aarch64
+## native/src/codegen/aot.rs
+<<<<
+const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") { LinkerFlavor::Apple } else { LinkerFlavor::Gnu };
+====
+const LINKER: LinkerFlavor = LinkerFlavor::Gnu;
+>>>>
+
+@@ apple-plan-has-group Apple's link plan keeps GNU ld's archive group
+## native/src/codegen/aot.rs
+<<<<
+        let group = flavor == LinkerFlavor::Gnu;
+====
+        let group = true;
+>>>>
+
+@@ apple-default-libraries-dropped Apple's link plan keeps rustc's -nodefaultlibs: no compiler runtime after the plan's libraries
+## native/src/codegen/aot.rs
+<<<<
+    args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
+====
+    if flavor == LinkerFlavor::Gnu {
+        args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
+    }
+>>>>
+
+@@ link-dirs-dropped the -L search directories never reach the linker
+## native/src/codegen/aot.rs
+<<<<
+    for dir in link_dirs {
+        args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
+    }
+====
+    for _dir in link_dirs {}
+>>>>
+
+@@ apple-linker-diagnostics-dropped a failed link's Apple ld lines (undefined symbols, the linker's failure) are filtered out of its message
+## native/src/codegen/aot.rs
+<<<<
+                || line.contains("Undefined symbols for architecture")
+                || line.contains("\", referenced from:")
+                || line.contains("linker command failed")
+====
+>>>>
+
+@@ apple-stack-parameters-extended Apple's stack-passed narrow parameters keep their extension attribute: Cranelift stores each at register width, past its slot
+%% macos-aarch64 linux-aarch64
+## native/src/codegen/target.rs
+<<<<
+        CallConv::AppleAarch64 => 8,
+====
+        CallConv::AppleAarch64 => usize::MAX,
+>>>>
+
+@@ apple-register-boundary-off-by-one the eighth parameter (x7) is taken for a stack one and loses its extension under Apple's convention
+%% macos-aarch64 linux-aarch64
+## native/src/codegen/target.rs
+<<<<
+        CallConv::AppleAarch64 => 8,
+====
+        CallConv::AppleAarch64 => 7,
+>>>>
+
+@@ apple-convention-is-linuxs a foreign call on macOS is compiled with the generic AArch64 convention (SystemV): no caller extension, an 8-byte slot per stack argument
+%% macos-aarch64
+## native/src/codegen/target.rs
+<<<<
+pub fn c_call_conv(triple: &Triple) -> CallConv {
+    CallConv::triple_default(triple)
+}
+====
+pub fn c_call_conv(triple: &Triple) -> CallConv {
+    match CallConv::triple_default(triple) {
+        CallConv::AppleAarch64 => CallConv::SystemV,
+        other => other,
+    }
+}
+>>>>
+
+@@ signed-argument-zero-extended a signed narrow argument is zero-extended by the caller
+%% macos-aarch64 linux-x86_64
+## native/src/codegen/clif.rs
+<<<<
+            (true, true) => param.sext(),
+====
+            (true, true) => param.uext(),
+>>>>
+
+@@ unsigned-argument-sign-extended an unsigned narrow argument is sign-extended by the caller
+%% macos-aarch64 linux-x86_64
+## native/src/codegen/clif.rs
+<<<<
+            (true, false) => param.uext(),
+====
+            (true, false) => param.sext(),
+>>>>
+
+@@ short-class-is-int a 16-bit C class is given a 32-bit machine type: a short result read from 32 bits, a short stack argument given an int's slot
+## native/src/codegen/clif.rs
+<<<<
+        16 => types::I16,
+====
+        16 => types::I32,
+>>>>
+
+@@ pointer-argument-truncated a pointer argument is passed with its low 32 bits only
+## native/src/codegen/clif.rs
+<<<<
+            values.push(if class.bits() < 64 { self.b.ins().ireduce(c_type(class), word) } else { word });
+====
+            values.push(if class.bits() < 64 {
+                self.b.ins().ireduce(c_type(class), word)
+            } else if class == nir::CAbi::Ptr {
+                let low = self.b.ins().ireduce(types::I32, word);
+                self.b.ins().uextend(I64, low)
+            } else {
+                word
+            });
+>>>>
+
+@@ pointer-result-truncated a pointer result keeps its low 32 bits only
+## native/src/codegen/clif.rs
+<<<<
+            // (address << 4) | tag when the word holds the address.
+            let shifted = self.b.ins().ishl_imm_s(returned, 4);
+====
+            // (address << 4) | tag when the word holds the address.
+            let low = self.b.ins().ireduce(types::I32, returned);
+            let returned = self.b.ins().uextend(I64, low);
+            let shifted = self.b.ins().ishl_imm_s(returned, 4);
+>>>>
+
+@@ macos-plain-char-unsigned plain C char unsigned on macOS AArch64, as on Linux AArch64
+%% macos-aarch64
+## core/cabi.tcl
+<<<<
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
+====
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 0 triple aarch64-apple-darwin} \
+>>>>
+
+@@ mach-o-symbol-double-prefixed on macOS a C function's link symbol is declared with Mach-O's `_` already on it, so the object crate's prefix makes it `__NAME`
+%% macos-aarch64
+## native/src/codegen/clif.rs
+<<<<
+            .declare_function(&decl.symbol, Linkage::Import, &c_signature(module, decl))
+====
+            .declare_function(
+                &if cfg!(target_vendor = "apple") { format!("_{}", decl.symbol) } else { decl.symbol.clone() },
+                Linkage::Import,
+                &c_signature(module, decl),
+            )
+>>>>
+
+@@ link-failure-removes-earlier a link removes the executable already at its destination before it knows whether it succeeds
+## native/src/codegen/aot.rs
+<<<<
+    let work = WorkDir::beside(destination)?;
+    let object = emit_object(program).map_err(|e| e.message().to_string())?;
+    let object_path = work.0.join("program.o");
+====
+    let work = WorkDir::beside(destination)?;
+    let _ = std::fs::remove_file(destination);
+    let object = emit_object(program).map_err(|e| e.message().to_string())?;
+    let object_path = work.0.join("program.o");
+>>>>
+
+@@ fixture-wrong-architecture the C fixture is compiled for x86-64 on macOS: every link of it fails (the tests' own fixture build)
+%% macos-aarch64
+## tests/c-ffi.test
+<<<<
+        exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi fixture.c] -o [file join $::fixtureDir fixture.o]
+====
+        exec cc -arch x86_64 -c -O2 -fPIC [file join $::projectRoot tests cffi fixture.c] -o [file join $::fixtureDir fixture.o]
+>>>>

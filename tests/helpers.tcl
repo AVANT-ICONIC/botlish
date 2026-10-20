@@ -138,9 +138,17 @@ testConstraint nativeStackGuard [expr {[core::cabi::hostTarget] in {linux-x86_64
 # operating system: a test that builds and runs an executable of a portable
 # program carries this one; one whose program needs Linux syscalls keeps
 # nativeLinux, one that reads ELF or needs the stub linker its own
-# constraint, and a program that calls C is linked on Linux only (C-FFI.md's
-# tests say so themselves).
+# constraint, and a program that calls C carries nativeCCalls.
 testConstraint executableAot [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
+
+# C calls (extern c fn, C-FFI.md): the native backends link a program that
+# calls C with the system linker and its declared libraries and run it, on
+# Linux x86-64 and AArch64 (GNU ld's link plan, the SysV and AAPCS64 C ABIs)
+# and on macOS AArch64 (Apple's ld, the Apple arm64 C ABI,
+# MACOS-AARCH64-MILESTONE-6.md): codegen/aot.rs's C_CALLS. A capability, not
+# an operating system: a test that links and runs a C fixture carries this
+# one (and its fixture's own constraint: a C compiler, the rustc linker).
+testConstraint nativeCCalls [expr {[core::cabi::hostTarget] in {linux-x86_64 linux-aarch64 macos-aarch64}}]
 
 # binaryHeader PATH and hostBinaryHeader KIND: what a program object or an
 # executable is, and what this host's are.

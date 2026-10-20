@@ -39,6 +39,42 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
     CallConv::triple_default(triple)
 }
 
+/// How many leading parameters of a foreign C signature in convention CONV
+/// carry their narrow integer's extension attribute (`sext`/`uext`,
+/// `clif::c_signature`): every one, except under AppleAarch64, where only
+/// the eight passed in registers do.
+///
+/// Apple's arm64 ABI ("Writing ARM64 code for Apple platforms") makes the
+/// caller sign- or zero-extend an argument narrower than 32 bits to 32 bits
+/// *in its register*, and gives an argument passed on the stack a slot of
+/// its natural size, packed at its natural alignment (a `char` one byte):
+/// a stack slot has nothing to extend into. Cranelift 0.135.2 implements
+/// both, but stores an extended *stack* argument at the full register width
+/// into its narrow slot (machinst/abi.rs `gen_call_args`: an 8-byte `str`
+/// at a 1-, 2- or 4-byte slot's offset). Stored in parameter order, each
+/// such store spills over into the next argument's slots before that
+/// argument is stored, but the last one can write up to seven bytes past
+/// the argument area, into the calling function's own frame -- the
+/// explicit stack slot that holds its GC roots (MACOS-AARCH64-MILESTONE-6.md,
+/// "Cranelift's narrow stack arguments"). A parameter without an attribute
+/// is stored at its natural width, which is exactly Apple's contract for a
+/// stack argument, so the attribute is left off the stack-passed ones.
+///
+/// Every C ABI class a foreign call passes is one general-purpose register
+/// (an integer, a `_Bool`, a pointer: no floating point, aggregate or
+/// 128-bit value), so under AAPCS64's register assignment, which Apple
+/// keeps, the first eight parameters are x0-x7 and every later one is on
+/// the stack. Botlish places nothing: the slots and registers stay
+/// Cranelift's. Elsewhere every narrow parameter keeps its attribute (SysV
+/// x86-64's stack slots are eight bytes, and Cranelift ignores the attribute
+/// for Linux AArch64's AAPCS64, whose callee extends).
+pub fn c_extended_parameters(conv: CallConv) -> usize {
+    match conv {
+        CallConv::AppleAarch64 => 8,
+        _ => usize::MAX,
+    }
+}
+
 /// The operating system family of OS, as targets distinguish them.
 fn os_family(os: OperatingSystem) -> String {
     if os.is_like_darwin() {

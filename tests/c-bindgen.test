@@ -25,7 +25,7 @@ testConstraint linuxNative [expr {$::tcl_platform(os) eq "Linux"
     && $::tcl_platform(machine) in {x86_64 amd64 aarch64 arm64}}]
 set ::hostTarget [core::cabi::hostTarget]
 testConstraint nativeRun [expr {[testConstraint clang] && [testConstraint nativeBuilt]
-    && [testConstraint rustcLinker] && [testConstraint linuxNative] && $::hostTarget ne ""}]
+    && [testConstraint rustcLinker] && [testConstraint nativeCCalls] && $::hostTarget ne ""}]
 
 set ::fixture [::cbind::profile::load fixture]
 set ::fixtureDir [file join $::projectRoot tools c-bindgen fixture]
@@ -168,6 +168,70 @@ proc staleFiles {result dir ns} {
     return [lmap d [::cbind::generate::compare [dict get $result files] $dir $ns] {lrange $d 0 1}]
 }
 
+# The value of manifest FIELD (the rest of its line, one Tcl word or more)
+# in the manifest text TEXT, or "".
+proc manifestField {text field} {
+    if {[regexp -line "^$field (.*)\$" $text -> value]} {
+        return $value
+    }
+    return ""
+}
+
+# The provenance a generation records of the clang that made it, beyond the
+# target it was asked for: its version string and the count of tokens its
+# preprocessing produced (clang's own builtin headers -- stdint.h, stddef.h
+# -- are part of a freestanding translation unit, and differ by version).
+# Nothing in the bindings, the shim, the reports or the layouts depends on
+# them.
+proc toolchainProvenance {manifest} {
+    return [list [lindex [manifestField $manifest toolchain_version] 0] [manifestField $manifest preprocessed_tokens]]
+}
+
+# FILES (a generation's) with the generating clang's provenance replaced by
+# what DIR's committed manifest records, when the two differ and the
+# generation's toolchain is otherwise the recorded one (the same family and
+# target): its version string wherever it is written (the manifest's
+# toolchain_version, evidence and layout_abi lines, the header of
+# layouts.tsv), the manifest's preprocessed_tokens, and the manifest's
+# checksum of every file that held the version. With the recorded clang it
+# returns FILES unchanged, so its comparison stays byte for byte; with
+# another (Apple clang on macOS, another Ubuntu clang), every other byte of
+# every file is still compared (cb-fixture-current), and the provenance it
+# replaced is reported (cb-fixture-current-provenance).
+proc asRecordedToolchain {files dir} {
+    set committedPath [file join $dir manifest.txt]
+    if {![file exists $committedPath] || ![dict exists $files manifest.txt]} {
+        return $files
+    }
+    set committed [::chdr::readFile $committedPath]
+    set generated [dict get $files manifest.txt]
+    lassign [toolchainProvenance $committed] recordedVersion recordedTokens
+    lassign [toolchainProvenance $generated] version tokens
+    foreach field {toolchain_family toolchain_target} {
+        if {[manifestField $committed $field] ne [manifestField $generated $field]} {
+            return $files
+        }
+    }
+    if {$version eq $recordedVersion || $version eq "" || $recordedVersion eq ""} {
+        return $files
+    }
+    dict for {path text} $files {
+        dict set files $path [string map [list $version $recordedVersion] $text]
+    }
+    set lines {}
+    foreach line [split [dict get $files manifest.txt] \n] {
+        if {[regexp {^file (\S+) (\d+) [0-9a-f]+$} $line -> path count] && [dict exists $files $path]
+                && [string first $recordedVersion [dict get $files $path]] >= 0} {
+            set line "file $path $count [::chdr::crc32 [dict get $files $path]]"
+        } elseif {[string match "preprocessed_tokens *" $line]} {
+            set line "preprocessed_tokens $recordedTokens"
+        }
+        lappend lines $line
+    }
+    dict set files manifest.txt [join $lines \n]
+    return $files
+}
+
 # The directory holding PROFILE/TARGET's generation (`generation`) as files,
 # written once. The tests that compile, link and run a binding use it, not
 # the committed one, so that they test the generator; the *-current tests
@@ -237,11 +301,25 @@ proc fixtureWith {changes} {
 # ---------------------------------------------------------------------------
 # The synthetic fixture: the generator's rules, pinned
 
-test cb-fixture-current {the fixture's committed generated bindings, for every target of its profile, are exactly what generation produces (the check mode, byte for byte: modules, shim, manifest, report)} -constraints clang -body {
+test cb-fixture-current {the fixture's committed generated bindings, for every target of its profile, are exactly what generation produces (the check mode, byte for byte: modules, shim, manifest, report) -- with the clang that generated them, and with any other clang of the same family but for its recorded provenance (version string, preprocessed token count), whose every other byte is still compared} -constraints clang -body {
     lmap target [dict get $::fixture targets] {
-        staleFiles [generation $::fixture $target] [::cbind::profile::outputDir $::fixture $target] bgf
+        set dir [::cbind::profile::outputDir $::fixture $target]
+        set files [asRecordedToolchain [dict get [generation $::fixture $target] files] $dir]
+        lmap d [::cbind::generate::compare $files $dir bgf] {lrange $d 0 2}
     }
 } -result {{} {} {} {}}
+
+test cb-fixture-current-provenance {the generating clang's provenance, as each target's manifest records it and as this host's clang gives it: the same family and target triple everywhere (the toolchain is clang, for the target asked for); the version string and the token count are the clang's own (identical with the clang the commit was generated with)} -constraints clang -body {
+    lmap target [dict get $::fixture targets] {
+        set committed [::chdr::readFile [file join [::cbind::profile::outputDir $::fixture $target] manifest.txt]]
+        set generated [dict get [generation $::fixture $target] files manifest.txt]
+        set same [expr {[toolchainProvenance $committed] eq [toolchainProvenance $generated]}]
+        if {!$same} {
+            puts "cb-fixture-current-provenance: $target generated with [toolchainProvenance $generated], committed with [toolchainProvenance $committed]"
+        }
+        list $target [manifestField $generated toolchain_family] [expr {[manifestField $generated toolchain_target] eq [manifestField $committed toolchain_target]}]
+    }
+} -result {{linux-x86_64 clang 1} {linux-aarch64 clang 1} {macos-aarch64 clang 1} {windows-x86_64-gnu clang 1}}
 
 test cb-fixture-deterministic {generation is byte-for-byte deterministic: two runs, another working directory, another time zone and locale give the same files; no time, temporary path or host path is in them} -constraints clang -body {
     set first [dict get [::cbind::generate::run $::fixture linux-x86_64] files]
