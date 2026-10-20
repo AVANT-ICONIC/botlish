@@ -378,6 +378,17 @@ proc native::evalHir {hir args} {
 # Readiness is the public -aot-spec contract, checked before expanding native
 # implementations (which are runtime support, like the Rust helpers). Never
 # run the program while compiling it, and never fall back to another backend.
+# The file a standalone executable linked for PATH is (native::executable's
+# result): PATH, except on a Windows host, where a PATH without an extension
+# gets .exe -- the driver's rule (codegen/aot.rs's executable_path), for
+# callers that name the file before or without linking it.
+proc native::executableFile {path} {
+    if {[string match windows-* [core::cabi::hostTarget]] && [file extension $path] eq ""} {
+        return $path.exe
+    }
+    return $path
+}
+
 proc native::executable {hir path args} {
     set analysisOptions [dict create -specialize 1]
     foreach {option variable} {

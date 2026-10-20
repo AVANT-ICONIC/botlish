@@ -108,20 +108,27 @@ jobs:
           clang --version | head -2
 
       - name: Build native (Cranelift) backend
+        id: build
         uses: ./.github/actions/build-native
+
+      # Every check below runs once the backend is built, whatever an earlier
+      # one found, so that one failure never hides the others.
 
       # The runtime's tests and the driver's own (--bins): the link plans
       # (MSVC's among them), targets, stack probes, the program object's
       # format, the argument encoding.
       - name: Native Rust unit tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: cargo test --release --manifest-path native/Cargo.toml --lib --bins 2>&1 | tee rust-tests.log
 
       # No stack guard on Windows yet: the test target says so and checks
       # nothing (it must still build and run).
       - name: Native stack test target (no guard on this host)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: cargo test --release --manifest-path native/Cargo.toml --test native_stack
 
       - name: C ABI facts against core::cabi's windows-x86_64 row (clang, MSVC target)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
           CC: clang
         run: tclsh9.0 tests/platform/cabi-facts.tcl
@@ -132,20 +139,24 @@ jobs:
       # operating system, the other Windows environment), C calls and
       # coroutines refused, the stack without its guard.
       - name: Native status
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1 2>&1 | tee native-status.log
 
       # The COFF object and the PE executable, read here (no MSVC tool):
       # symbols, relocations, subsystem, imported DLLs (the system's only),
       # the standalone runs.
       - name: Native objects and executables
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1 2>&1 | tee aot-facts.log
 
       # The census's allocation-heavy workloads and more, on both native
       # backends and as executables, five times under GC stress.
       - name: GC workloads (cranelift, cranelift-generic, executables; GC stress)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/gc-workloads.tcl -repeat 5 2>&1 | tee gc-workloads.log
 
       - name: The 2048 benchmark as an executable
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           mkdir -p artifacts
           cp examples/games/2048/bench.bot examples/games/2048/game2048.bot audit/windows-toolchain/programs/fib.bot artifacts/
@@ -165,6 +176,7 @@ jobs:
       # A second opinion on the files tests/binary-header.tcl reads: MSVC's
       # own dumpbin (the only step that enters vcvars64.bat).
       - name: dumpbin (MSVC) on the object and the executables
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: cmd
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS=%%i
@@ -182,6 +194,7 @@ jobs:
       # tests), targets, executables, the command line, applications, the
       # 2048 workload.
       - name: Smoke tier and the Windows-relevant test files
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           tclsh9.0 tests/platform/tier.tcl smoke argv.test target-model.test native-executable.test \
             main-cli.test application-modules.test workload-2048.test native.test c-abi-types.test 2>&1 | tee tier.log
@@ -211,7 +224,12 @@ jobs:
 
   acceptance:
     name: acceptance (Windows x86-64, shard ${{ matrix.shard }}/4)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    # After the smoke job, whatever its result: Windows runners are few, and
+    # the smoke's verdict is the one wanted first.
+    needs: smoke
+    if: >-
+      !cancelled()
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: windows-2025
     timeout-minutes: 150
     strategy:

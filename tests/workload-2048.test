@@ -206,7 +206,7 @@ test workload-2048-bench-executable {bench.bot and game2048.bot, copied out of t
             [file join $::projectRoot main.tcl] -warnings off -emit-native-executable "../application copy/bench.bot"]
         file rename [file join $app bench] [file join $run bench]
         file delete -force $app
-        list $built [exec env PATH= [file join $run bench]] [exec env PATH= BOTLISH_NATIVE_GC_STRESS=1 [file join $run bench]]
+        list $built [runStandalone [file join $run bench]] [runStandalone [file join $run bench] BOTLISH_NATIVE_GC_STRESS 1]
     } finally {
         removeDirectory {workload-2048 bench executable}
     }

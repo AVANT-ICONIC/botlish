@@ -220,8 +220,8 @@ set expected [dict create \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
         stack-overflow {error {NATIVE BUG} {native backend failed:*has overflowed its stack*}} \
         stack-depth-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
-        coroutine-stack-overflow {error {NATIVE UNSUPPORTED} {native coroutines need stack switching*}} \
-        coroutine {error {NATIVE UNSUPPORTED} {native coroutines need stack switching*}} \
+        coroutine-stack-overflow {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only*}} \
+        coroutine {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only*}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
         c-call {error {NATIVE LINK} {native link failed: this program calls C*C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only*}} \
         object {value {coff x86_64 object}} \

@@ -145,6 +145,32 @@ testConstraint nativeStackGuard [native::hostSupports stackGuard]
 # nativeCCalls.
 testConstraint executableAot [native::hostSupports executables]
 
+# A Unix shell for scripts the tests write and run (`#!/bin/sh` wrappers, `sh
+# -c`): a test that needs one carries this, never an operating system.
+testConstraint unixShell [expr {$::tcl_platform(platform) eq "unix" && [auto_execok sh] ne ""}]
+
+# Runs the standalone executable linked for PATH (native::executableFile:
+# PATH.exe on Windows) with PATH empty -- no toolchain or interpreter
+# launcher on it -- and the extra environment NAME VALUE ..., as `exec env
+# PATH= NAME=VALUE ... PATH` runs it on Unix, on any host (Windows has no
+# env): its standard output, as exec returns it. The environment is this
+# process's again afterwards.
+proc runStandalone {path args} {
+    set names [concat PATH [dict keys $args]]
+    set saved [dict create]
+    foreach name $names {
+        if {[info exists ::env($name)]} { dict set saved $name $::env($name) }
+    }
+    try {
+        set ::env(PATH) ""
+        foreach {name value} $args { set ::env($name) $value }
+        return [exec [native::executableFile $path]]
+    } finally {
+        foreach name $names { unset -nocomplain ::env($name) }
+        dict for {name value} $saved { set ::env($name) $value }
+    }
+}
+
 # C calls (extern c fn, C-FFI.md): the native backends link a program that
 # calls C with the system linker and its declared libraries and run it, on
 # Linux x86-64 and AArch64 (GNU ld's link plan, the SysV and AAPCS64 C ABIs)
