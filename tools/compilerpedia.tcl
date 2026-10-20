@@ -644,9 +644,14 @@ proc cpt::Documenting {entry topicCodes} {
 # ---------------------------------------------------------------------------
 # Examples
 
-# The value main.tcl prints for VALUE.
-proc cpt::Shown {value} {
-    return [core::value::show $value 1]
+# The value main.tcl prints for VALUE, the result of HIR: main.tcl's
+# ShowResult, which shows a DecimalRounded value at the precision HIR's
+# result type guarantees (hir::decimal::Display).
+proc cpt::Shown {value hir} {
+    if {[hir::roots $hir] eq ""} {
+        return [core::value::show $value 1]
+    }
+    return [hir::decimal::Display $value [hir::typeOf $hir [lindex [hir::roots $hir] end]]]
 }
 
 # Runs EXAMPLE (of topic TOPIC) on BACKENDS (those of its own it may use);
@@ -762,8 +767,8 @@ proc cpt::CheckExample {topic example backends scratch} {
             lappend problems "$id on $backend: failed at run time: $value ([dict get $options -errorcode])"
             continue
         }
-        if {[dict get $example value] ne "" && [Shown $value] ne [dict get $example value]} {
-            lappend problems "$id on $backend: value [Shown $value], the example states [dict get $example value]"
+        if {[dict get $example value] ne "" && [Shown $value $hir] ne [dict get $example value]} {
+            lappend problems "$id on $backend: value [Shown $value $hir], the example states [dict get $example value]"
         }
     }
     return $problems

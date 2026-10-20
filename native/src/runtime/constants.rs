@@ -30,8 +30,8 @@ pub fn install(vm: &mut Vm, entries: &[Const], generic_entries: &[usize], static
                 hdr: Header::new(KIND_BIGINT, true),
                 n: digits.parse().expect("validated big Int literal"),
             })) as *mut Header,
-            Const::Float(_, bits) => Box::into_raw(Box::new(FloatObj {
-                hdr: Header::new(KIND_FLOAT, true),
+            Const::Float(ty, bits) => Box::into_raw(Box::new(FloatObj {
+                hdr: Header::new(ty.heap_kind(), true),
                 bits: *bits,
             })) as *mut Header,
             Const::Native(index) => Box::into_raw(Box::new(NativeObj {

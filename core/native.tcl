@@ -1202,6 +1202,9 @@ proc core::native::invoke {nativeValue argValues} {
 #                            finite number: an overflow, a division by zero
 #                            (core/float.tcl; FLOAT64-MILESTONE-1.md), or a
 #                            non-finite C double entering Botlish (C-FFI.md)
+# The binary errors follow (core/binary.tcl), then UnrepresentableDecimal
+# (core/decimal.tcl, which core/core.tcl loads after binary.tcl so that the
+# ids existing programs and documents show stay what they were).
 core::native::declareError InvalidArgumentEncoding
 core::native::declareError IndexNotFound
 core::native::declareError LowerUnderrun

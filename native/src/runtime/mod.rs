@@ -8,6 +8,7 @@ pub mod bytesobj;
 pub mod constants;
 pub mod construct;
 pub mod coroutine;
+pub mod decimal;
 pub mod error;
 pub mod ffi;
 pub mod ffifixture;

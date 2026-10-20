@@ -111,7 +111,17 @@ namespace eval core::type {
     # representation on every target.
     variable floats [dict create \
         Float64 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace float64}]
-    variable primitives [list int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum cptr {*}[dict keys $floats]]
+    # DecimalRounded is the runtime kind of the decimal-rounded numbers
+    # (DECIMAL-ROUNDED-MILESTONE-1.md, core/decimal.tcl), spelled like its
+    # runtime kind tag as Float64 is. Bare, it is "a decimal-rounded number
+    # whose guaranteed precision is not known" -- what a native's
+    # -param-types say; the source-spellable types are its scalar
+    # refinements, DecimalRounded{minDecimalsPreserved: N, ...}, the HIR form
+    # {srefined DecimalRounded FACTS} (hir/refinements.tcl), which an
+    # annotation must write (the bare name is no annotation:
+    # hir::types::resolveNamed). It is no float type: no float operation
+    # takes it, and it is never a Float64.
+    variable primitives [list int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum cptr {*}[dict keys $floats] DecimalRounded]
     # NAME -> {name NAME base KIND validator CMD parents {NAME...}
     # integerDomain DOMAIN source 0|1 refinement {} | {carrier TYPE owner NS
     # span SPAN} cabi {} | {c SPELLING target TARGET bits N signed 0|1}}
