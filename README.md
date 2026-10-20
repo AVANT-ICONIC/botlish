@@ -1,3 +1,7 @@
+<p align=center>
+    <img src="./robot.transparent.svg" style="width: 10vw;">
+</p>
+
 # Botlish
 
 **A high-level, native-capable, safe and friendly language for building
