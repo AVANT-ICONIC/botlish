@@ -135,8 +135,8 @@ one at 0 shares and 0 detaches in steady state.
   | build (1,024 inserts) | 13,488 | 7,344 | 9,223,752 |
   | replace (2,000) | 25,488 | 9,344 | 13,319,752 |
 
-* **Consequence.** An insert costs 2.3 us at 16 entries and 13.3 us at
-  1,024, against about 0.2 us for `lpa`, which keeps the count in a
+* **Consequence.** An insert costs 2.8 us at 16 entries and 23.3 us at
+  1,024 (baseline), against 0.2-0.3 us for `lpa`, which keeps the count in a
   one-slot array and never rebuilds the struct. That is O(n) per insert,
   so the build is quadratic.
 * **Generality.** This affects any struct that holds more than one
@@ -1101,9 +1101,9 @@ Brief section 34 asks for the operations that stay awkward or expensive
     builds (Int hit 65.9 to 57.1 ns, String miss 69.9 to 41.5 ns);
   * on the merged tree, against the modular `lpa`: 3-28 %;
   * against the proof-shaped `lpmask`: 0-10 %. That is nothing on Int
-    builds, 4-6 % on Int lookups, and about 10 % on String and Point
-    lookups (Int hit 37.5 against 39.9 ns, 492 against 496
-    instructions).
+    builds, 4-6 % on Int lookups, about 10 % on String lookups and Point
+    hits, and 1 % on Point misses (Int hit 37.5 against 39.9 ns, 492
+    against 496 instructions; Point miss 103 against 104 ns).
 
   The compiler work removed the same per-step costs the primitive
   removes. What is left is CO-1, CO-2 and CO-3, which would help every
