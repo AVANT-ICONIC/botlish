@@ -237,6 +237,18 @@ extern c fn ERR_put_error named "botlish_bssl_ERR_put_error"(
     line: ffi::c::UInt
 ) -> unit
 
+# C: void ERR_add_error_data(unsigned int count, ...)
+extern c fn ERR_add_error_data named "botlish_bssl_ERR_add_error_data"(
+    count: ffi::c::UInt,
+    variadic
+) -> unit
+
+# C: void ERR_add_error_dataf(const char *format, ...)
+extern c fn ERR_add_error_dataf named "botlish_bssl_ERR_add_error_dataf"(
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
 # C: void ERR_set_error_data(char *data, int flags)
 extern c fn ERR_set_error_data named "botlish_bssl_ERR_set_error_data"(
     data: ffi::c::Ptr[ffi::c::Char],

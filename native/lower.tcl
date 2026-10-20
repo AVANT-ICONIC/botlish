@@ -1654,7 +1654,7 @@ proc native::lower::Program {hirProgram args} {
     foreach key $foreignList {
         set record [dict get $declarations $key]
         set alias [core::cabi::AliasIndex [dict get $record contract]]
-        lappend header "foreign [ForeignIndex $key] [Quote [dict get $record symbol]] params=[Quote [join [dict get $record abi params] { }]] result=[dict get $record abi result][expr {$alias >= 0 ? " alias=$alias" : ""}] name=[Quote $key]"
+        lappend header "foreign [ForeignIndex $key] [Quote [dict get $record symbol]] params=[Quote [join [dict get $record abi params] { }]] result=[dict get $record abi result][expr {$alias >= 0 ? " alias=$alias" : ""}][expr {[dict getdef $record abi variadic 0] ? " variadic=1" : ""}] name=[Quote $key]"
     }
     # The target the program was built for (core/cabi.tcl's name and
     # triple), when its HIR depends on one (hir::cabi::targetOf): the driver
@@ -5133,6 +5133,15 @@ proc native::lower::BorrowCall {fnVar e node} {
         set text "foreigncall [ForeignIndex $key] [join $operands { }]"
         if {[dict size $access]} {
             append text " exposed=[join [lsort -integer [dict keys $access]] ,]"
+        }
+        if {[dict exists $node cvarargs] && [dict get $node cvarargs] ne {}} {
+            # A variadic C call (VARIADICS-VERTICAL-SLICE-1.md): each
+            # trailing operand's own C ABI class and the class C's default
+            # argument promotion passes it as (hir::borrow's `cvarargs`); the
+            # call's machine signature is built from them (codegen/clif.rs).
+            append text " varargs=[join [lmap how [dict get $node cvarargs] {
+                string cat [dict get $how class] : [dict get $how promoted]
+            }] ,]"
         }
         if {[hir::borrow::resultAlias $hir $e] >= 0} {
             append text " discard"

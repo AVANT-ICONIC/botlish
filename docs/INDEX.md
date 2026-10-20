@@ -27,6 +27,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [ELIF.md](ELIF.md) -- `elif`
 - [METHOD-SUGAR.md](METHOD-SUGAR.md) -- method-call sugar
 - [FLAGS.md](FLAGS.md) -- flag parameters
+- [VARIADICS-VERTICAL-SLICE-1.md](VARIADICS-VERTICAL-SLICE-1.md) -- variadic parameters (`variadic xs: List[T]`) and variadic C calls (`extern c fn f(fixed, variadic)`), with the binding generator's `...` (completion report)
 - [MULTI-VALUE-RESULTS.md](MULTI-VALUE-RESULTS.md) -- multi-value results: name the parts
 - [MUTUAL-RECURSION.md](MUTUAL-RECURSION.md) -- mutual recursion: `mutual:` groups
 - [STRUCTURAL-FUNCTION-TYPES.md](STRUCTURAL-FUNCTION-TYPES.md) -- structural function types (`Fn{...}`)

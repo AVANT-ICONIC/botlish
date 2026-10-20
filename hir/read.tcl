@@ -1039,11 +1039,14 @@ proc hir::read::Expr {hirVar level s path block} {
             }
         }
         block {
-            if {![BlockHeader $head body params captures staticRefs declared errorsText binds nomethod contexts provesText cloneText resumeText]} {
-                Fail $number "expected \"block SCOPE (PARAMS) captures (BINDINGS) ?staticRefs (BINDINGS)? ?nomethod? ?contexts (IDS) requires (IDS)? ?declares ...? ?proves BINDING NAME: TYPE? ?errors ...? ?binds ...?\""
+            if {![BlockHeader $head body params captures staticRefs declared errorsText binds nomethod contexts provesText cloneText resumeText variadic]} {
+                Fail $number "expected \"block SCOPE (PARAMS) captures (BINDINGS) ?staticRefs (BINDINGS)? ?nomethod? ?variadic N? ?contexts (IDS) requires (IDS)? ?declares ...? ?proves BINDING NAME: TYPE? ?errors ...? ?binds ...?\""
             }
             if {$nomethod} {
                 SetField hir $e nomethod 1
+            }
+            if {$variadic ne ""} {
+                SetField hir $e variadic $variadic
             }
             if {$contexts ne ""} {
                 SetField hir $e directContexts [lindex $contexts 0]
@@ -1135,8 +1138,13 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e body $ids
         }
         call {
-            if {![regexp {^(?:native\((.+?)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?(?: installs (\S+))?(?: imprint \[(.+?)\])?(?: (trait|contexttrait) (\S+)\.(\S+) witness (.+))?$} $head -> native target generic known installs imprintText traitWord traitId requirement witnessText]} {
-                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false? ?installs ID? ?imprint \[TYPE, ...\]? ?trait|contexttrait TRAIT.OP witness TYPE?\""
+            if {![regexp {^(?:native\((.+?)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?(?: installs (\S+))?(?: imprint \[(.+?)\])?(?: variadic ([0-9]+) ([0-9]+))?(?: (trait|contexttrait) (\S+)\.(\S+) witness (.+))?$} $head -> native target generic known installs imprintText variadicFixed variadicCount traitWord traitId requirement witnessText]} {
+                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false? ?installs ID? ?imprint \[TYPE, ...\]? ?variadic FIXED COUNT? ?trait|contexttrait TRAIT.OP witness TYPE?\""
+            }
+            if {$variadicFixed ne ""} {
+                # A call of a variadic function (hir/variadic.tcl): its last
+                # argument collects COUNT trailing arguments.
+                SetField hir $e variadic [dict create fixed $variadicFixed count $variadicCount]
             }
             if {$imprintText ne ""} {
                 # Explicit imprints (hir/imprint.tcl), as hir::format wrote
@@ -1481,7 +1489,7 @@ proc hir::read::Expr {hirVar level s path block} {
 # into the named variables; 0 if malformed. The optional parts are found
 # outside brackets, so a declared type may itself contain spaces, ", " or
 # the word "errors" (a structural function type's own "errors: [...]").
-proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar {nomethodVar ""} {contextsVar ""} {provesVar ""} {cloneVar ""} {resumeVar ""}} {
+proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar {nomethodVar ""} {contextsVar ""} {provesVar ""} {cloneVar ""} {resumeVar ""} {variadicVar ""}} {
     foreach var {bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar} {
         upvar 1 [set $var] [string range $var 0 end-3]
     }
@@ -1504,6 +1512,15 @@ proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar de
     if {[regexp {^ nomethod(.*)$} $rest -> after]} {
         set nomethod 1
         set rest $after
+    }
+    # A variadic function's fixed parameter count (VARIADICS-VERTICAL-
+    # SLICE-1.md), as hir::format prints it.
+    if {$variadicVar ne ""} {
+        upvar 1 $variadicVar variadic
+        set variadic ""
+        if {[regexp {^ variadic ([0-9]+)(.*)$} $rest -> variadic after]} {
+            set rest $after
+        }
     }
     # A trait clone's parameter views and a declared trait result
     # (TRAITS.md), as hir::format prints them.

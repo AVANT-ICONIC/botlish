@@ -23,10 +23,12 @@ function	bgf_twins	direct	bgf::bgf	direct	symbol bgf_twins; (ffi::c::Ptr[bgf_twi
 function	bgf_labeled	direct	bgf::bgf	direct	symbol bgf_labeled_v2; (ffi::c::Int) -> ffi::c::Int
 function	bgf_renamed	direct	bgf::bgf	direct	symbol bgf_renamed_impl; (ffi::c::Int) -> ffi::c::Int
 function	bgf_current	direct	bgf::bgf	direct	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
+function	bgf_printf	direct	bgf::bgf	direct	symbol bgf_printf; (ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
+function	bgf_vprintf	unsupported		va-list	parameter 2 (args): __builtin_va_list
+function	bgf_vshadow	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
+function	bgf_vother	direct	bgf::bgf	direct	symbol bgf_vother; (ffi::c::Int, variadic) -> ffi::c::Int
 function	bgf_scale	unsupported		double,float	parameter 1 (x): double; parameter 2 (y): float; result: double
 function	bgf_swap	unsupported		by-value-aggregate	parameter 1 (p): struct bgf_pair by value; result: struct bgf_pair by value
-function	bgf_printf	unsupported		variadic	a variadic function (...)
-function	bgf_vprintf	unsupported		va-list	parameter 2 (args): __builtin_va_list
 function	bgf_set_measure	unsupported		unsupported-callback-signature	parameter 1 (measure): callback argument 1: double (double); parameter 1 (measure): callback result: double (double)
 function	bgf_wide_set	unsupported		typedef-abi-mismatch	parameter 1 (w): typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
 function	bgf_noproto	unsupported		no-prototype	declared without a prototype: ()
@@ -49,6 +51,7 @@ macro	BGF_UINT64_C	unsupported		macro-needs-signature	a function-like macro (exp
 macro	BGF_TWICE	thunk	bgf::thunks::bgf	thunk (macro)	symbol botlish_bgf_BGF_TWICE; (ffi::c::Int) -> ffi::c::Int
 macro	bgf_legacy	alias	bgf::bgf	alias of bgf_current	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
 macro	bgf_call_add	alias	bgf::bgf	alias of bgf_add	symbol bgf_add; (ffi::c::Int, ffi::c::Int) -> ffi::c::Int
+macro	bgf_print	alias	bgf::bgf	alias of bgf_printf	symbol bgf_printf; (ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 enumerator	BGF_RED	constant	bgf::bgf	ffi::c::UInt	unsigned int 0
 enumerator	BGF_GREEN	constant	bgf::bgf	ffi::c::UInt	unsigned int 5
 enumerator	BGF_BLUE	constant	bgf::bgf	ffi::c::UInt	unsigned int 6

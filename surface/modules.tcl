@@ -697,6 +697,9 @@ proc surface::modules::RemapFile {node fileId} {
                 lassign [dict get $node resume] type origin
                 dict set node resume [list $type [RemapOrigin $origin $fileId]]
             }
+            if {[dict exists $node variadic]} {
+                dict set node variadic [RemapOrigin [dict get $node variadic] $fileId]
+            }
             # paramTypes carries no origin of its own (plain type-name
             # strings, resolved later by hir/resolve.tcl): nothing to remap.
         }

@@ -1859,6 +1859,17 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 # consumers that must not trust it (native::prepareHir).
                 dict set hir violatedDeclared $paramBinding $arg
             }
+            if {!$inferred && [dict exists $node variadic] && $i == [dict get $node variadic fixed]
+                    && [lindex $declaredType 0] eq "list"} {
+                # A variadic call's collected List (hir/variadic.tcl): each
+                # trailing argument is held to the element type by its own
+                # proof (a List literal's static type keeps no element's
+                # range), and the ones that break it are diagnosed at their
+                # own spelling; when every one is proven, so is the List.
+                hir::variadic::DiagnoseElements hir $e $node $arg [lindex $declaredType 1] \
+                    [hir::semantic::SourceName $hir $paramBinding] $ranges
+                continue
+            }
             hir::Diagnose hir TYPE [format \
                 {argument for parameter "%s" cannot be proven to satisfy %s%s (argument type: %s%s)%s%s} \
                 [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $declaredType] \

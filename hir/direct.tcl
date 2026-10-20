@@ -207,11 +207,27 @@ proc hir::direct::Targets {hir c node unit memoVar sections} {
         # included (C-FFI.md, "direct"). A noescape one is an ordinary call:
         # foreign is not direct.
         set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
-        if {$retains ne {}} {
-            set reasons [lmap r $retains {
-                lassign $r index pname escape
-                format {parameter "%s": escape %s} $pname $escape
-            }]
+        set reasons [lmap r $retains {
+            lassign $r index pname escape
+            format {parameter "%s": escape %s} $pname $escape
+        }]
+        # A pointer passed as a trailing argument of a variadic C function
+        # (VARIADICS-VERTICAL-SLICE-1.md) has no contract at all, so its
+        # escape is unknown: C may keep it.
+        set position [llength [dict get [core::native::metadata $name] foreign params]]
+        set pointers {}
+        foreach how [dict getdef $node cvarargs {}] {
+            incr position
+            if {[dict getdef $how promoted ""] eq "ptr"} {
+                lappend pointers $position
+            }
+        }
+        if {$pointers ne {}} {
+            lappend reasons [format {argument%s %s: %s passed as a trailing argument, whose escape no contract states} \
+                [expr {[llength $pointers] == 1 ? "" : "s"}] [join $pointers {, }] \
+                [expr {[llength $pointers] == 1 ? "a pointer" : "pointers"}]]
+        }
+        if {$reasons ne {}} {
             return [list [list [core::native::namespaceOf $name] \
                 [list text "[core::native::displayName $name], a C function whose contract lets it retain pointer authority past the call ([join $reasons {; }])"] foreign]]
         }

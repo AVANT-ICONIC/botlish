@@ -24,6 +24,13 @@
 #      write S   bcf_fill(m, 0, 0) of an S-byte MutableBytes, the write-back
 #                discarded: one write exposure, whose detach copies S bytes
 #                -- expected linear in S
+#      va 2      bcf_vsum(2, a, b): a variadic call of two trailing ints
+#                (VARIADICS-VERTICAL-SLICE-1.md), beside `add` -- on x86-64
+#                through the %al stub, on Apple AArch64 on the stack
+#      va 11     bcf_vsum(11, ...): eleven trailing ints, the later ones on
+#                the stack everywhere, beside `stack 12`
+#      va 4.0    bcf_vscale(1.0, 4, ...): four trailing doubles after a
+#                fixed double (%al = 5 on x86-64)
 #
 # 2. SHA-256 through the package-owned static BoringSSL
 #    (tests/cffi/boringssl.tcl; skipped when it is not built): sha256::digest
@@ -90,6 +97,11 @@ extern c fn stack_tail named "bcf_stack_tail"(a: ffi::c::Long, b: ffi::c::Long, 
 extern c fn pick named "bcf_pick"(which: ffi::c::Int, a1: ffi::c::SChar, a2: ffi::c::UChar, a3: ffi::c::Short, a4: ffi::c::UShort, a5: ffi::c::Int, a6: ffi::c::UInt, a7: ffi::c::Char, s8: ffi::c::SChar, s9: ffi::c::UChar, s10: ffi::c::Short, s11: ffi::c::SChar, s12: ffi::c::UShort, s13: ffi::c::Int, s14: ffi::c::SChar, s15: ffi::c::Long, s16: ffi::c::UChar, s17: ffi::c::Short, s18: ffi::c::UInt, s19: ffi::c::SChar) -> ffi::c::LongLong
 extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
 extern c fn fill named "bcf_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
+extern c fn vsum named "bcf_vsum"(count: ffi::c::Int, variadic) -> ffi::c::LongLong
+extern c fn vscale named "bcf_vscale"(factor: ffi::c::Double, count: ffi::c::Int, variadic) -> ffi::c::Double
+
+fn c_int(n: ffi::c::Int) -> ffi::c::Int:
+    n
 }
 foreach file {boringssl.bot sha256.bot} {
     file copy -force [file join $root examples ffi sha256 $file] [file join $scratch $file]
@@ -150,6 +162,9 @@ try {
     foreach s $sizes {
         puts [format "  %-14s %s" "write $s" [perCall "m = abi::bytes::from_bytes(abi::bytes::from_list(pattern($s)))" {bcf::fill(m, 0, 0)} 1]]
     }
+    puts [format "  %-14s %s" "va 2" [perCall {a = bcf::c_int(1)} {bcf::vsum(2, a, a)} 0]]
+    puts [format "  %-14s %s" "va 11" [perCall {a = bcf::c_int(1)} {bcf::vsum(11, a, a, a, a, a, a, a, a, a, a, a)} 0]]
+    puts [format "  %-14s %s" "va 4.0" [perCall {x = 0} "y = bcf::vscale(1.0, 4, 0.5, 1.5, 2.5, 3.5):\n            on NonFiniteFloat:\n                0.0" 1]]
     puts ""
     if {$boringssl eq ""} {
         puts "2. SHA-256: skipped (the package-owned BoringSSL is not built: tclsh9.0 tests/cffi/boringssl.tcl)"

@@ -1010,7 +1010,7 @@ record	struct SDL_GPUTexture	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_GPUTexture; 
 record	struct SDL_GPUTransferBuffer	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_GPUTransferBuffer; identity=sdl3::ctypes::SDL_GPUTransferBuffer; header=include/SDL3/SDL_gpu.h:453; pointed-by=4
 record	struct SDL_Gamepad	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_Gamepad; identity=sdl3::ctypes::SDL_Gamepad; header=include/SDL3/SDL_gamepad.h:100; pointed-by=40
 record	struct SDL_Haptic	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_Haptic; identity=sdl3::ctypes::SDL_Haptic; header=include/SDL3/SDL_haptic.h:150; pointed-by=26
-record	struct SDL_IOStream	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_IOStream; identity=sdl3::ctypes::SDL_IOStream; header=include/SDL3/SDL_iostream.h:182; pointed-by=53
+record	struct SDL_IOStream	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_IOStream; identity=sdl3::ctypes::SDL_IOStream; header=include/SDL3/SDL_iostream.h:182; pointed-by=54
 record	struct SDL_Joystick	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_Joystick; identity=sdl3::ctypes::SDL_Joystick; header=include/SDL3/SDL_joystick.h:94; pointed-by=39
 record	struct SDL_Mutex	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_Mutex; identity=sdl3::ctypes::SDL_Mutex; header=include/SDL3/SDL_mutex.h:296; pointed-by=7
 record	struct SDL_Process	-	-	opaque-only	-	-	-	-	-	typedefs=SDL_Process; identity=sdl3::ctypes::SDL_Process; header=include/SDL3/SDL_process.h:64; pointed-by=9

@@ -107,8 +107,8 @@ function	ERR_error_string	direct	boringssl::err	direct	symbol botlish_bssl_ERR_e
 function	ERR_GET_FUNC	thunk	boringssl::thunks::err	thunk (inline)	symbol botlish_boringssl_ERR_GET_FUNC; (ffi::c::UInt) -> ffi::c::Int
 function	ERR_clear_system_error	direct	boringssl::err	direct	symbol botlish_bssl_ERR_clear_system_error; () -> unit
 function	ERR_put_error	direct	boringssl::err	direct	symbol botlish_bssl_ERR_put_error; (ffi::c::Int, ffi::c::Int, ffi::c::Int, ffi::c::Ptr[ffi::c::Char], ffi::c::UInt) -> unit
-function	ERR_add_error_data	unsupported		variadic	a variadic function (...)
-function	ERR_add_error_dataf	unsupported		variadic	a variadic function (...)
+function	ERR_add_error_data	direct	boringssl::err	direct	symbol botlish_bssl_ERR_add_error_data; (ffi::c::UInt, variadic) -> unit
+function	ERR_add_error_dataf	direct	boringssl::err	direct	symbol botlish_bssl_ERR_add_error_dataf; (ffi::c::Ptr[ffi::c::Char], variadic) -> unit
 function	ERR_set_error_data	direct	boringssl::err	direct	symbol botlish_bssl_ERR_set_error_data; (ffi::c::Ptr[ffi::c::Char], ffi::c::Int) -> unit
 function	CRYPTO_cleanup_all_ex_data	direct	boringssl::ex_data	direct	symbol botlish_bssl_CRYPTO_cleanup_all_ex_data; () -> unit
 function	OPENSSL_sk_new	direct	boringssl::stack	direct	symbol botlish_bssl_OPENSSL_sk_new; (ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]], return: ffi::c::Int}]) -> ffi::c::Ptr[OPENSSL_STACK]
@@ -265,7 +265,7 @@ function	BIO_pop	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_pop; (ffi:
 function	BIO_next	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_next; (ffi::c::Ptr[BIO]) -> ffi::c::Ptr[BIO]
 function	BIO_find_type	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_find_type; (ffi::c::Ptr[BIO], ffi::c::Int) -> ffi::c::Ptr[BIO]
 function	BIO_copy_next_retry	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_copy_next_retry; (ffi::c::Ptr[BIO]) -> unit
-function	BIO_printf	unsupported		variadic	a variadic function (...)
+function	BIO_printf	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_printf; (ffi::c::Ptr[BIO], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 function	BIO_indent	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_indent; (ffi::c::Ptr[BIO], ffi::c::UInt, ffi::c::UInt) -> ffi::c::Int
 function	BIO_hexdump	direct	boringssl::bio	direct	symbol botlish_bssl_BIO_hexdump; (ffi::c::Ptr[BIO], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::UInt) -> ffi::c::Int
 function	ERR_print_errors	direct	boringssl::bio	direct	symbol botlish_bssl_ERR_print_errors; (ffi::c::Ptr[BIO]) -> unit
@@ -1088,10 +1088,10 @@ function	OPENSSL_tolower	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSS
 function	OPENSSL_isspace	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_isspace; (ffi::c::Int) -> ffi::c::Int
 function	OPENSSL_strcasecmp	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_strcasecmp; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int
 function	OPENSSL_strncasecmp	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_strncasecmp; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::ULong) -> ffi::c::Int
-function	BIO_snprintf	unsupported		variadic	a variadic function (...)
+function	BIO_snprintf	direct	boringssl::mem	direct	symbol botlish_bssl_BIO_snprintf; (ffi::c::Ptr[ffi::c::Char], ffi::c::ULong, ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 function	BIO_vsnprintf	unsupported		va-list	parameter 4 (args): __builtin_va_list
 function	OPENSSL_vasprintf	unsupported		va-list	parameter 3 (args): __builtin_va_list
-function	OPENSSL_asprintf	unsupported		variadic	a variadic function (...)
+function	OPENSSL_asprintf	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_asprintf; (ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 function	OPENSSL_strndup	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_strndup; (ffi::c::Ptr[ffi::c::Char], ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Char]
 function	OPENSSL_memdup	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_memdup; (ffi::c::Ptr[ffi::c::Void], ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
 function	OPENSSL_strlcpy	direct	boringssl::mem	direct	symbol botlish_bssl_OPENSSL_strlcpy; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::ULong) -> ffi::c::ULong

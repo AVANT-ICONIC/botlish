@@ -15,12 +15,12 @@ Inventory (public headers, as this target's preprocessor sees them)
   enumerators                                                               1166
 
 Bound (of the API names)
-  directly linked externs                                                   1086    77.3%
+  directly linked externs                                                   1101    78.4%
   aliases (externs of the symbol a macro names)                                3     0.2%
   thunks (C wrappers in the shim)                                             13     0.9%
     of them table-redirected names (stubs)                                     0
-  bound in all                                                              1102    78.4%
-  unsupported                                                                303    21.6%
+  bound in all                                                              1117    79.5%
+  unsupported                                                                288    20.5%
   excluded by the profile                                                      0     0.0%
   constants generated                                                       1656    74.0%
 
@@ -29,16 +29,15 @@ Unsupported API names by blocker (an API may have several)
   float                                                                       87     6.2%
   unsupported-macro                                                           44     3.1%
   double                                                                      27     1.9%
-  variadic                                                                    16     1.1%
   by-value-aggregate                                                           8     0.6%
   va-list                                                                      7     0.5%
   unsupported-callback-signature                                               2     0.1%
 
 Pointer contracts (bound APIs)
-  pointer parameters                                                        1368
+  pointer parameters                                                        1388
     with a favorable manual fact (the profile)                                 2     0.1%
     with a compiler-proven fact                                               16     1.2%
-    unknown (no fact: no exposure, retains)                                 1350    98.7%
+    unknown (no fact: no exposure, retains)                                 1370    98.7%
   pointer results                                                            261
     independent                                                                1     0.4%
     alias of a parameter                                                       0     0.0%
@@ -46,17 +45,17 @@ Pointer contracts (bound APIs)
 
 Capability pressure (API names a missing FFI capability blocks or limits)
   C _Bool in the signature (blocked without ffi::c::Bool)                    506    36.0%
-    of them bound now, bool their only blocker                               456    32.5%
+    of them bound now, bool their only blocker                               457    32.5%
   float/double                                                               114     8.1%
   aggregates by value (struct, union)                                          8     0.6%
-  varargs (..., va_list)                                                      23     1.6%
+  varargs (..., va_list)                                                       7     0.5%
   callback signature outside the ABI universe                                  2     0.1%
   explicit calling convention (one the target does not take as its default)       0     0.0%
   macro without a signature                                                  157    11.2%
   bound, declaring a convention the target takes as its default                0     0.0%
   bound, taking a callback (no Botlish function can be one yet)               36     2.6%
   bound, pointing to a complete C struct (needs memory views)                225    16.0%
-  bound, a pointer parameter that may be retained (direct)                   834    59.4%
+  bound, a pointer parameter that may be retained (direct)                   849    60.4%
 
 Records and layouts (complete C records of the public headers and every record they hold by value)
   complete structs                                                           123
@@ -97,12 +96,12 @@ Layout pressure (blocked records a missing feature would make layouts: directly 
   all of the above                                                            42    33.1%  38 + 4
 
 API pressure (bound APIs pointing to C records)
-  bound APIs with a pointer to a C record (parameter or result)              699    49.8%
+  bound APIs with a pointer to a C record (parameter or result)              700    49.8%
     to a record with an emitted layout                                       189    27.0%
     to a complete record whose layout is blocked                              40     5.7%
-    only to incomplete records (or complete ones outside the headers)        474    67.8%
+    only to incomplete records (or complete ones outside the headers)        475    67.9%
   pointers by shape and record (layout / blocked / incomplete / outside):
-    param T *                128 / 12 / 537 / 0
+    param T *                128 / 12 / 538 / 0
     param const T *          95 / 37 / 0 / 0
     param T **               1 / 0 / 13 / 0
     result T *               27 / 4 / 93 / 0
@@ -160,8 +159,8 @@ Macros
 
 Generated source
   Botlish files                                                               59
-  lines                                                                     9398
-  extern c fn declarations                                                  1102
+  lines                                                                     9504
+  extern c fn declarations                                                  1117
   opaque types                                                               102
   constants                                                                 1656
   layouts                                                                     82
