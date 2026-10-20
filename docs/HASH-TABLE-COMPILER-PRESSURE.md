@@ -14,7 +14,8 @@ entry records:
 * a candidate fix, whether it was prototyped, and the result.
 
 The prototypes of every entry marked "prototyped" are merged into this
-branch, except RT-1, which is on its own branch, `exp-probe-primitive`.
+branch, except RT-1, which is a patch,
+`audit/hash-table/patches/probe-primitive.patch`.
 An adversarial review of the merged prototypes found soundness bugs that
 they caused or exposed, and several older ones; all are fixed ("Found by
 the adversarial review of the prototypes", at the end).
@@ -72,9 +73,9 @@ mutable contents, or a whole-program analysis.
 | [CO-6](#co-6-struct-keys-are-hashed-and-compared-through-materialized-objects) | struct keys are hashed and compared through materialized objects | allocation | moderate | partly (RO-1) | |
 | [CO-7](#co-7-native-lowering-of-a-large-list-literal-is-quadratic) | native lowering of a large List literal is quadratic in its length | compile cost | moderate | no | 15,531 elements: 173 s; 62,949: out of 15 GB |
 | [CO-8](#co-8-a-long-equality-chain-exceeds-the-front-ends-nesting-limit) | a long `or` chain exceeds the front end's nesting limit | compile limit | cheap | no | 1,024 terms: "too many nested evaluations" |
-| [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (branch `exp-probe-primitive`) | 2-41 % on the baseline; 0-10 % against proof-shaped Botlish after the compiler work: not justified |
+| [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (`audit/hash-table/patches/probe-primitive.patch`) | 2-41 % on the baseline; 0-10 % against proof-shaped Botlish after the compiler work: not justified |
 | [RT-2](#rt-2-a-runtime-owned-table) | a runtime-owned table | runtime | -- | no (the Rust reference stands in) | |
-| [RT-3](#rt-3-a-keyed-hash) | a keyed hash: no table can defend itself against chosen keys | runtime | -- | no (a semantic decision) | colliding keys: 2.8-6.9 µs per hit at 1,024 keys |
+| [RT-3](#rt-3-a-keyed-hash) | a keyed hash: no table can defend itself against chosen keys | runtime | -- | no (a semantic decision) | colliding keys: 2.8-9.0 µs per hit at 1,024 keys on the baseline |
 
 The rest of this document gives the entries in full, in the order of the
 table.
@@ -642,8 +643,9 @@ registration (core/mutvec.tcl), so no form proves it, not even
 entries with a checked `mvat` on every probe step. Candidate: a `-bounds`
 registration with `length` as the size form. This is cheap for reads. For
 writes it is cheap too, because a vector's length changes only through
-`push`, `pop` and `clear`, so the size form would be invalidated by those
-calls. Not prototyped.
+`push`, `pop`, `take` and `clear` (and, for a context member, any call
+that may reach it), so the size form would be invalidated by those calls.
+Not prototyped.
 
 ### CP-7. A collection's contents cannot bound another's index
 
@@ -923,7 +925,7 @@ quality": FNV's distribution is not the problem).
   inlined by hand with the capacity hoisted, has `call=1`.
 * **Consequence.** A call costs about 1.5-2.5 ns plus spills. `lpa` against
   `lpmono` is the measured difference (HASH-TABLE-EXPERIMENT.md,
-  "Abstraction cost").
+  "Abstraction-cost experiments").
 * **Generality.** Every accessor wrapper in every program; the corpus
   hashtable.bot's `ht_probe_next` has the same shape.
 * **Candidate fix.** With CG-2's raw `rimod`, the `next_slot` and `home`
@@ -1086,7 +1088,8 @@ Brief section 34 asks for the operations that stay awkward or expensive
   primitive.
 * **Other users.** None outside open addressing. It is not a general
   operation.
-* **Prototype.** `lpp.bot`, on branch `exp-probe-primitive`. It is
+* **Prototype.** `lpp.bot`, with
+  `audit/hash-table/patches/probe-primitive.patch` applied. It is
   registered in core/mutarray.tcl (Tcl `probeLinear`), lowered as
   `mutarrayprobe` and implemented in Rust as `rt_mutarray_probe`. It
   passes the fuzzer on four backends (144 checks).
@@ -1136,11 +1139,12 @@ CG-1, CG-2, RO-1 and the proofs.
 * **Measured consequence.**
   * `int-collide` (SPEC.md section 5) uses keys found by black-box search
     whose hashes are 0 mod 1,024. Every open-addressed table degrades to
-    a scan of one cluster: 2.8-6.9 µs per hit at 1,024 keys against
-    70-90 ns, and builds become quadratic (HASH-TABLE-EXPERIMENT.md, "Key
-    types").
-  * Chaining degrades least (1.05 µs). Rust's `std::HashMap`, with
-    SipHash and a per-process random key, takes 10.9 ns on the same keys.
+    a scan of one cluster: 2.8-9.0 µs per hit at 1,024 keys on the
+    baseline compiler (2.4-4.5 µs on the merged tree) against 70-90 ns,
+    and builds become quadratic (HASH-TABLE-EXPERIMENT.md, "Key types").
+  * Chaining degrades least (1.05 µs on the baseline, 0.95 µs merged).
+    Rust's `std::HashMap`, with SipHash and a per-process random key,
+    takes 10.9 ns on the same keys.
 * **Smallest plausible primitive.** `hash_keyed(x, k)`: SipHash-1-3, or a
   comparable keyed function, over the same canonical bytes `hash` walks.
   A table would draw `k` at `fresh` from a process-wide random source.

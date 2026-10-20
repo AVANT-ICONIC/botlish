@@ -4,12 +4,12 @@
 # something on every probe step. In lpa a probe step calls next_slot (an
 # out-of-line call: tiny-leaf inlining excludes `mod`) and slots (an
 # out-of-line call wrapping the `mutable_array::capacity` helper) for every
-# slot it looks at (HASH-TABLE-EXPERIMENT.md, "Abstraction cost"). Here the
-# probe loops take the capacity as a parameter, read once per operation, and
-# compute the next slot in place; every other helper (home, store, counted,
-# full?, between?, find, find_empty, grown, moved, shifted) is lpa's, called
-# once per operation or per moved entry. lookup is still find, then a read
-# of the slot found (lpmono fuses them).
+# slot it looks at (HASH-TABLE-EXPERIMENT.md, "Abstraction-cost
+# experiments"). Here the probe loops take the capacity as a parameter, read
+# once per operation, and compute the next slot in place; every other helper
+# (home, store, counted, full?, between?, find, find_empty, grown, moved,
+# shifted) is lpa's, called once per operation or per moved entry. lookup
+# is still find, then a read of the slot found (lpmono fuses them).
 #
 # policy: 7/10
 import list

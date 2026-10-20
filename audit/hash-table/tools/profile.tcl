@@ -1,5 +1,5 @@
 # profile.tcl -- where one table operation's instructions go
-# (HASH-TABLE-EXPERIMENT.md, "Where the remaining instructions go"): a mode
+# (HASH-TABLE-EXPERIMENT.md, "What remains"): a mode
 # of drivers/bench.bot and its baseline (SPEC.md section 6) under callgrind,
 # and per function the difference divided by the operations, so a runtime
 # helper (rt_hash, rt_value_eq, rt_int_mod, ...) shows its own share and the

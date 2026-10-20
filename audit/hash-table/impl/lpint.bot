@@ -3,7 +3,7 @@
 # arrays typed (MutableArray[int], MutableArray[int]) and the key, value
 # and default parameters typed. lpa against lpint isolates what untyped
 # (generic) slot arrays cost a call site's specialization (brief section 9;
-# HASH-TABLE-EXPERIMENT.md, "Abstraction cost").
+# HASH-TABLE-EXPERIMENT.md, "Abstraction-cost experiments").
 #
 # policy: 7/10
 # key-type: int
