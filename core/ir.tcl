@@ -5,6 +5,7 @@
 #   (const LITERAL)             (const TYPE LITERAL)   TYPE: int str list
 #                                                        UnicodeChar enum
 #                                                        a float type (Float64)
+#                                                        DecimalRounded
 #   (bind NAME EXPR)
 #   (ref NAME)
 #   (block PARAMS BODY...)
@@ -286,6 +287,15 @@ proc core::ir::CheckShape {node} {
                             core::malformed "an enum literal is {ENUM-ID CASE}" $node
                         }
                     }
+                    DecimalRounded {
+                        # A DecimalRounded constant (DECIMAL-ROUNDED-
+                        # MILESTONE-1.md): the canonical text of the exact
+                        # decimal it is (core::decimal::Text); its
+                        # representation is chosen from that number alone.
+                        if {![core::decimal::isCanonical $text]} {
+                            core::malformed "not a canonical DecimalRounded literal" $node
+                        }
+                    }
                     default {
                         if {![core::type::isFloat $type]} {
                             core::malformed "unknown literal type \"$type\"" $node
@@ -463,6 +473,10 @@ proc core::ir::checkShape {node} {
 # (const list {E...}) builds a list; each element follows the untyped rule.
 # (const TYPE TEXT), TYPE a floating-point type (Float64), is the number
 # whose canonical decimal text (core::float::text) is TEXT.
+# (const DecimalRounded TEXT) is the DecimalRounded constant whose exact
+# decimal value has the canonical text TEXT (core::decimal::Text,
+# DECIMAL-ROUNDED-MILESTONE-1.md); core::decimal::constant chooses its
+# representation.
 # (const enum {ID CASE}) is the case CASE of the enum declared as ID
 # (ENUMS.md): a value, like a literal, never a lookup.  Core IR does not
 # check that ID declares CASE -- HIR resolution did (hir/enums.tcl).
@@ -492,6 +506,7 @@ proc core::ir::literalValue {node} {
             }
             return [core::value::listOf $items]
         }
+        DecimalRounded { return [core::decimal::constant $text] }
         default {
             return [core::float::fromText $type $text]
         }

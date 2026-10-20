@@ -1487,7 +1487,12 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
-            || [hir::types::IsNativeMemory $declared]} {
+            || [hir::types::IsNativeMemory $declared] || [hir::refinements::IsRefined $declared]} {
+        # A scalar refinement (hir/refinements.tcl) only by a type whose
+        # facts imply its own: a fact is proven where a value acquires it
+        # (a DecimalRounded constant's root, hir/decimal.tcl), never from a
+        # Range.
+        #
         # A native view (NATIVE-LAYOUT-VIEWS.md) only by the view of the same
         # layout, a native edit (NATIVE-LAYOUT-WRITES.md) by the edit.
         #
@@ -2043,6 +2048,12 @@ proc hir::range::MismatchClause {argType declared} {
     set refinement [RefinementClause $argType $declared]
     if {$refinement ne ""} {
         return $refinement
+    }
+    set decimal [hir::decimal::MismatchClause $argType $declared]
+    if {$decimal ne ""} {
+        # DecimalRounded (DECIMAL-ROUNDED-MILESTONE-1.md): a guarantee not
+        # strengthened, an upper bound not dropped, no implicit conversion.
+        return $decimal
     }
     if {[hir::types::IsNamedStruct $argType] && [hir::types::IsNamedStruct $declared]
             && $argType ne $declared} {

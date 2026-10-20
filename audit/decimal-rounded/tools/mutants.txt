@@ -1,0 +1,263 @@
+# Mutants of DecimalRounded (audit/decimal-rounded/tools/mutate.tcl;
+# DECIMAL-ROUNDED-MILESTONE-1.md): deliberate bugs in the rounding rule,
+# the proofs of constants, the representation choice, the observations
+# (comparisons, equality, hashing, decay, quantization, display), the
+# scalar-refinement schema (implication, validation), the guarantee-loss
+# rule (among them the "blind min" inference the milestone brief warns
+# about), literal typing, interchange, and the native runtime's exact
+# helpers (native/src/runtime/decimal.rs).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/ is a native
+# mutant: mutate.tcl rebuilds the native backend for it. Lines starting with
+# # outside an edit are comments.
+
+# ---------------------------------------------------------------------------
+# The rounding rule and the proofs (core/decimal.tcl)
+
+@@ round-half-up ties round away from zero, not to even
+## core/decimal.tcl
+<<<<
+    if {$twice > $q || ($twice == $q && $n % 2 != 0)} {
+====
+    if {$twice >= $q} {
+>>>>
+
+@@ proven-one-more a constant is claimed proven one place further than it is
+## core/decimal.tcl
+<<<<
+            return [expr {$p - 1}]
+====
+            return $p
+>>>>
+
+@@ constant-nearest a constant is always the binary64 nearest its decimal, never the neighbor its decimal needs
+## core/decimal.tcl
+<<<<
+    set x [Represent [ParseDecimal $text]]
+====
+    set x [lindex [RatDouble [ParseDecimal $text]] 1]
+>>>>
+
+@@ quantize-unchecked a quantization no representation satisfies returns the nearest binary64 instead of failing
+## core/decimal.tcl
+<<<<
+    if {$y eq "" || ![Satisfies $y $t $n]} {
+====
+    if {$y eq ""} {
+>>>>
+
+# ---------------------------------------------------------------------------
+# Observations
+
+@@ compare-representation comparisons compare the representations, not their decimals at the precision
+## core/decimal.tcl
+<<<<
+    set ka [RoundAt [DoubleRat [of $a]] $p]
+    set kb [RoundAt [DoubleRat [of $b]] $p]
+    return [expr {$ka < $kb ? -1 : ($ka > $kb ? 1 : 0)}]
+====
+    return [RatCmp [DoubleRat [of $a]] [DoubleRat [of $b]]]
+>>>>
+
+@@ compare-finer-precision a comparison reads the larger of its operands' guaranteed precisions
+## hir/decimal.tcl
+<<<<
+                set precision [expr {min([Precision [lindex $types 0]], [Precision [lindex $types 1]])}]
+====
+                set precision [expr {max([Precision [lindex $types 0]], [Precision [lindex $types 1]])}]
+>>>>
+
+@@ decay-representation float64::from_decimal_rounded returns the representation, hidden digits included
+## core/decimal.tcl
+<<<<
+    set rounded [RatDouble [Rat [RoundAt [DoubleRat [of $v]] $p] [expr {10 ** $p}]]]
+====
+    set rounded [list ok [of $v]]
+>>>>
+
+@@ equality-blind type-blind == compares DecimalRounded representations instead of refusing
+## core/value.tcl
+<<<<
+        core::semanticError EQUALITY \
+            "== of a DecimalRounded value needs the precision of its type, which this equality does not know (compare DecimalRounded values directly)"
+====
+        return [expr {[lindex $a 1] == [lindex $b 1]}]
+>>>>
+
+@@ hash-blind hash of a DecimalRounded value hashes its representation instead of refusing
+## core/hashing.tcl
+<<<<
+        core::semanticError EQUALITY \
+            "hash of a DecimalRounded value needs the precision of its type, which a hash does not know"
+====
+        return [Bytes $h [Utf8Bytes [lindex $v 1]]]
+>>>>
+
+@@ display-extra-place a result displays one place more than its type guarantees
+## hir/decimal.tcl
+<<<<
+            return [core::decimal::text $value [Precision $type]]
+====
+            return [core::decimal::text $value [expr {[Precision $type] + 1}]]
+>>>>
+
+@@ set-annotation-allowed an ImmutableSet of DecimalRounded values is a valid annotation
+## hir/types.tcl
+<<<<
+        if {$ctor eq "ImmutableSet" && [hir::decimal::Mentions $t]} {
+====
+        if {0} {
+>>>>
+
+# ---------------------------------------------------------------------------
+# The scalar-refinement schema (hir/refinements.tcl)
+
+@@ ceiling-droppable a value with an observation ceiling stands where no ceiling is
+## hir/refinements.tcl
+<<<<
+        if {$vb eq ""} {
+====
+        if {$vb eq "" || $vb eq "inf"} {
+>>>>
+
+@@ constraint-unchecked maxDecimalsPreserved below minDecimalsPreserved is a valid type
+## hir/refinements.tcl
+<<<<
+                && $relation eq "atLeast" && [dict get $given $a] < [dict get $given $b]} {
+====
+                && $relation eq "atLeast" && 0} {
+>>>>
+
+@@ min-optional minDecimalsPreserved is optional
+## hir/refinements.tcl
+<<<<
+            minDecimalsPreserved [dict create required 1 min 0 max 1000 order atLeast absent ""] \
+====
+            minDecimalsPreserved [dict create required 0 min 0 max 1000 order atLeast absent ""] \
+>>>>
+
+# ---------------------------------------------------------------------------
+# Guarantee loss and literal typing (hir/decimal.tcl, hir/types.tcl)
+
+@@ blind-min arithmetic on opaque DecimalRounded values silently keeps the weaker operand's guarantee
+## hir/decimal.tcl
+<<<<
+    return [expr {$type eq $::core::decimal::kind && $op in {+ - * /}}]
+====
+    return 0
+>>>>
+## hir/decimal.tcl
+<<<<
+        + - - - * - / {
+            # (Each of the four arithmetic operators.)
+====
+        + - - - * - / {
+            return
+>>>>
+## hir/types.tcl
+<<<<
+            if {[dict exists $node decimalExpected]} {
+                # The root of a DecimalRounded constant expression: the type
+                # its position expects, which hir::decimal::verify proves.
+                set result [dict get $node decimalExpected]
+            }
+====
+            if {[dict exists $node decimalExpected]} {
+                # The root of a DecimalRounded constant expression: the type
+                # its position expects, which hir::decimal::verify proves.
+                set result [dict get $node decimalExpected]
+            } elseif {[dict exists $node resolvedOperator] && [lindex [dict get $node resolvedOperator] 1] eq "DecimalRounded"
+                    && [llength $argTypes] == 2 && [hir::decimal::IsRefined [lindex $argTypes 0]]
+                    && [hir::decimal::IsRefined [lindex $argTypes 1]]} {
+                set result [lub [lindex $argTypes 0] [lindex $argTypes 1]]
+            }
+>>>>
+
+@@ negation-loses unary minus of an opaque value loses its guarantee
+## hir/decimal.tcl
+<<<<
+    return [expr {$type eq $::core::decimal::kind && $op in {+ - * /}}]
+====
+    return [expr {$type eq $::core::decimal::kind && $op in {+ - * / neg}}]
+>>>>
+
+@@ mixing-unchecked an operator mixing a DecimalRounded and a Float64 operand is not reported
+## hir/decimal.tcl
+<<<<
+    if {[hir::operators::Mismatched $types $::core::decimal::kind]} {
+        # (Poison, hir/types.tcl's Call: this is why.)
+====
+    if {0} {
+        # (Poison, hir/types.tcl's Call: this is why.)
+>>>>
+
+@@ handler-no-expectation a handler's literal does not take the handled call's DecimalRounded type
+## hir/decimal.tcl
+<<<<
+                set declared [hir::typeOf $hir [dict get $node call]]
+====
+                set declared ""
+>>>>
+
+@@ zero-divisor-unreported a division by an exactly zero decimal is not a precision loss
+## hir/decimal.tcl
+<<<<
+        undefined {
+====
+        undefined-never {
+>>>>
+
+@@ interchange-representation HIR interchange carries a DecimalRounded constant's binary64
+## hir/interchange.tcl
+<<<<
+            dict set hir exprs $e value ""
+====
+            # (The representation stays in the text.)
+>>>>
+
+# ---------------------------------------------------------------------------
+# The native runtime (native/src/runtime/decimal.rs)
+
+@@ native-round-half-up the native rounding rounds ties away from zero
+## native/src/runtime/decimal.rs
+<<<<
+    if twice > *den || (twice == *den && odd) {
+====
+    if twice >= *den {
+        let _ = odd;
+>>>>
+
+@@ native-compare-representation native comparisons compare the representations
+## native/src/runtime/decimal.rs
+<<<<
+    round_at(&exact(a), p).cmp(&round_at(&exact(b), p))
+====
+    let _ = p;
+    exact(a).cmp(&exact(b))
+>>>>
+
+@@ native-decay-representation the native decay returns the representation
+## native/src/runtime/decimal.rs
+<<<<
+    let k = round_at(&exact(x), p);
+    nearest_double(&Rational { num: k, den: BigInt::from(10u32).pow(p) }).expect("a rounded finite binary64 is finite")
+====
+    let _ = p;
+    x
+>>>>
+
+@@ native-quantize-unchecked the native quantization returns a representation that does not satisfy the decimal
+## native/src/runtime/decimal.rs
+<<<<
+        Some(_) => None,
+====
+        Some(_) => Some(y),
+>>>>

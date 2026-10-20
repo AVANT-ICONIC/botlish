@@ -142,6 +142,7 @@ Values are immutable. Every value has exactly one kind:
 |----------|------------------|----------------------------------------------------|
 | `int`    | `42`             | arbitrary precision; no fixed-width overflow       |
 | `Float64` | `1.5`, `1.0e100` | a finite IEEE 754 binary64 number (FLOAT64-MILESTONE-1.md): never NaN, an infinity or negative zero; shown as the shortest decimal that reads back to it, always with a point |
+| `DecimalRounded` | `0.30` / `<DecimalRounded>` | a number whose static type `DecimalRounded{minDecimalsPreserved: N}` guarantees its decimal to N places (DECIMAL-ROUNDED-MILESTONE-1.md); shown as round(v, N) with exactly N places where the static type says N, as `<DecimalRounded>` (no digits) where it does not |
 | `str`    | `"hello"`        | a string                                           |
 | `UnicodeChar` | `'A'`       | exactly one Unicode scalar value (UNICODE-CHAR-LITERALS.md) |
 | `bool`   | `true` / `false` | the only valid condition values                    |
@@ -159,9 +160,9 @@ and the string `"true"` are all different values, and none of the strings is
 a Boolean.
 
 **Float64.** A literal with a decimal point (`0.0`, `1.5`, `-3.25`, `10.0`,
-`6.02e23`) is a Float64, the binary64 number nearest its decimal value; a
-literal without one is an Int, and nothing else decides a literal's type
-(the binding or parameter it reaches does not). `+ - * /`, unary `-` and the
+`6.02e23`) is a Float64, the binary64 number nearest its decimal value --
+except where a DecimalRounded type is expected, below; a literal without one
+is an Int, and a binding never decides a literal's type. `+ - * /`, unary `-` and the
 comparisons on two Float64 operands are the Float64 operations, chosen by the
 operands' static types (`hir/operators.tcl`); an Int and a Float64 together
 are a TYPE error (nothing converts implicitly: `float64::from_int` and
@@ -178,8 +179,34 @@ happened, never a value. Negative zero is zero. Float64 is the first of a family
 types (`core/type.tcl`'s `floats`; other widths are expected later), and
 representation-sensitive IEEE behavior -- bit patterns, NaN payloads, signed
 zero, rounding modes -- is not part of the programming model.
-Precision-guaranteed decimal numbers are separate future work, not Float64.
+Precision-guaranteed decimal numbers are DecimalRounded, below, not Float64.
 See FLOAT64-MILESTONE-1.md.
+
+**DecimalRounded.** `DecimalRounded{minDecimalsPreserved: N}` (optionally
+`, maxDecimalsPreserved: M`, M >= N; the fields may also stand on lines of
+their own) is a *scalar refinement*: a type whose integer parameters are
+facts the compiler knows (`hir/refinements.tcl`, the reusable schema). A
+value of it stands for an intended number t, and the type guarantees that
+rounding the value half to even to any P <= N places gives round(t, P).
+It is a guarantee, not a representation (today a binary64 the compiler
+chooses; nothing observes which). A decimal literal is a DecimalRounded
+constant exactly where such a type is expected -- a declared result, a
+parameter, a struct field, a List element, a handler's value, beside a
+DecimalRounded operand (`hir::decimal::resolve`, the one place the choice is
+made) -- and there it means its exact source decimal. The compiler proves
+every constant (a literal, or `+ - * /` and unary `-` of constants) with
+exact arithmetic: accepted only when the binary64 a run computes rounds
+right at every place up to N, else `DECIMAL-PRECISION` ("only proven
+correct to 16 decimal places"). Arithmetic on other DecimalRounded values
+proves nothing and is `DECIMAL-GUARANTEE-LOST` (unary minus keeps its
+type). `< <= > >= == !=` compare the operands' decimals at the smaller
+guaranteed precision; equality and hashing that do not know the precision
+(of a List or struct holding them, a set, an untyped `==`) are refused.
+Weakening is subtyping; `float64::from_decimal_rounded` decays a value to
+the Float64 of its guaranteed decimal and `decimal_rounded::round[T]`
+quantizes a Float64 (`UnrepresentableDecimal` when nothing holds that
+decimal); nothing converts implicitly. A non-finite binary64 result is
+`NonFiniteFloat`. See DECIMAL-ROUNDED-MILESTONE-1.md.
 
 **Strings and characters.** A String (`str`) is a sequence of characters; a
 character is a `UnicodeChar`, exactly one Unicode scalar value. **A single
@@ -319,6 +346,11 @@ Evaluates to a literal value.
   the canonical text of a finite number (`core::float::text`: `1.5`, `0.0`,
   `1.0e100`), or the IR is malformed. Untyped text with a point is a String:
   `(const 1.5)` is `"1.5"`.
+* `(const DecimalRounded TEXT)` is a DecimalRounded constant
+  (DECIMAL-ROUNDED-MILESTONE-1.md): TEXT is the canonical text of its exact
+  decimal value (`0.295`, `1.0e22`), never a binary64; its representation is
+  chosen from that number (`core::decimal::constant`). Core IR has no
+  precision: the operations that read one take it as an argument.
 * `(const list {1 2 abc})` builds a list. Each element follows the untyped
   rule.
 * `(const enum {ID CASE})` is the case CASE of the enum declared as ID
@@ -531,6 +563,20 @@ registered from the float family's table (`core/type.tcl`'s `floats`) with a
 `-fold` command, so the completion analysis computes a call of exactly known
 operands while compiling. `==` and `hash` are the generic ones.
 
+The DecimalRounded operations (DECIMAL-ROUNDED-MILESTONE-1.md) are internal
+root natives too: `DecimalRounded#+ - * /` (errors `NonFiniteFloat`, the
+binary64 operation on the representations, with a `-fold` command),
+`DecimalRounded#neg`, and the check forms `DecimalRounded#< <= > >= ==` that
+an operator with a DecimalRounded operand resolves to (`hir::decimal::
+resolve`). After the checks, `hir::decimal::Elaborate` rewrites each
+observation to its run-time operation with the precision it reads as a last
+argument: `decimal_rounded#less` `#less_equal` `#greater` `#greater_equal`
+`#equal` (DecimalRounded, DecimalRounded, int → bool),
+`decimal_rounded#to_float64` (DecimalRounded, int → Float64) and
+`decimal_rounded#round` (Float64, int → DecimalRounded, errors
+`UnrepresentableDecimal`). A check form left unelaborated refuses to run.
+`==` and `hash` refuse a DecimalRounded value (`EQUALITY`).
+
 Standard intrinsics (qualified root natives):
 
 | Name | Signature |
@@ -549,6 +595,8 @@ Standard intrinsics (qualified root natives):
 | `char::scalar_value` | UnicodeChar → int (the Unicode scalar value: `0..0x10FFFF` without the surrogates, never a byte or a code unit of an encoding) |
 | `float64::from_int` | int → Float64, errors `NonFiniteFloat`: the nearest Float64 (ties to even), from the exact Int at any size; an Int beyond the largest finite Float64 fails (FLOAT64-MILESTONE-1.md) |
 | `float64::truncate` | Float64 → int: the integer part, rounding toward zero, exact at any magnitude; never fails |
+| `float64::from_decimal_rounded` | DecimalRounded → Float64: the Float64 nearest round(x, N), N the precision x's static type guarantees (elaborated to `decimal_rounded#to_float64`); never fails (DECIMAL-ROUNDED-MILESTONE-1.md) |
+| `decimal_rounded::round[T]` | Float64 → T, errors `UnrepresentableDecimal`: T a refined DecimalRounded type, imprinted explicitly; the value whose decimal is the Float64's exact value rounded half to even to T's places (elaborated to `decimal_rounded#round`) |
 | `mutable_array::allocate` | int → mutarray (every slot `unit`) |
 | `mutable_array::capacity` | mutarray → int |
 | `mutable_array::at` | mutarray, int → any, errors `IndexNotFound` (as `list::at`) |
@@ -1447,6 +1495,18 @@ the types. Unreachable code is still typed but marked `reachable 0`, and it
 contributes nothing to result or break types. Semantic types never encode
 representation: no Tcl variables, frames or boxing.
 
+A *scalar refinement* (`hir/refinements.tcl`, DECIMAL-ROUNDED-MILESTONE-1.md)
+is another kind of fact on a type, distinct from the refinement values of
+`refined type` below: a compiler-declared family with integer parameters,
+`{srefined FAMILY FACTS}`, FACTS its stated parameters in canonical order
+(`DecimalRounded{minDecimalsPreserved: 2}` is `{srefined DecimalRounded
+{minDecimalsPreserved 2}}`). The family's schema declares each parameter's
+range, whether it is required, the order its implication uses and the
+constraints between parameters; validation (`REFINEMENT-PARAMETER`),
+implication (subtyping), joins, the source spelling HIR text writes and
+reads, and decay to the base type are generic over it. DecimalRounded is its
+one family.
+
 Refinements (`hir/refine.tcl`) follow the run-time rule of §6. When a
 condition calls a callee whose static type is a known native, that native's
 metadata gives facts about the arguments that are plain references; when it
@@ -1904,7 +1964,9 @@ add10(32)          # 42 (add captures x)
   Float64 literals (`DIGITS.DIGITS`, an optional exponent `e`/`E`, `+`/`-`,
   `DIGITS`: `1.5`, `10.0`, `2.5e-3`; no leading zeros, a point needs a digit
   on both sides, one beyond the largest finite Float64 is a syntax error;
-  FLOAT64-MILESTONE-1.md), strings
+  FLOAT64-MILESTONE-1.md; where a DecimalRounded type is expected the same
+  literal is a DecimalRounded constant of its exact decimal,
+  DECIMAL-ROUNDED-MILESTONE-1.md), strings
   (`"..."`, escapes `\\ \" \n \r \t`), `true`, `false`, `unit`, lists
   `[a, b]`, calls `f(x)(y)`.
 * Operators, from highest precedence: the postfix forms (call, `.field`,
@@ -2515,6 +2577,14 @@ zero is zero), check finiteness (`|r| <= f64::MAX`, failing with
 (`rt_float_new`, the allocation and safepoint); `f64eq` compares the bits,
 `hash` hashes them. A C `double` (`ffi::c::Double`) is passed in the
 target's floating-point registers and checked the same way when it returns.
+A **DecimalRounded** value is the same boxed binary64 under its own kind
+(`KIND_DECIMAL`, float-type code 1; `float DecimalRounded 0xBITS` in NIR):
+no precision travels with it. `d64add` ... `d64neg` are the binary64
+operations; `d64lt` ... `d64eq`, `d64tof64` and `d64round` take the
+precision as an operand and call the runtime's exact helpers
+(`runtime/decimal.rs`, `num-bigint`), which agree with `core/decimal.tcl` bit
+for bit. A standalone executable prints its result without types, so a
+DecimalRounded value prints `<DecimalRounded>` there.
 
 **Strings** are UTF-8 with a cached character count and an ASCII flag.
 `str::length` and `str::substring` count Unicode scalar values, including

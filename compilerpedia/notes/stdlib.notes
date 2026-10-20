@@ -1187,20 +1187,99 @@ import char
 @value [65, 233, 128512]
 @end
 
+@topic stdlib.module.decimal_rounded
+title: -
+summary: The explicit quantization from Float64 to DecimalRounded: decimal_rounded::round[T](x).
+index: stdlib
+keywords: decimal functions; decimal conversion; float to decimal; quantize; round to places
+related: concept.decimal-rounded stdlib.float64::from_decimal_rounded
+
+== NOTES
+`decimal_rounded` has no module file: its member is an intrinsic, reached
+with `import decimal_rounded`. With float64::from_decimal_rounded it is
+one of the two conversions between DecimalRounded and Float64: nothing
+converts implicitly, a Float64 never becomes a DecimalRounded value by
+being relabeled, and the operators on DecimalRounded values are the
+language's own (concept.decimal-rounded).
+
+@topic stdlib.decimal_rounded::round
+title: -
+summary: decimal_rounded::round[T](x): the value of the DecimalRounded type T whose decimal is the Float64 x rounded half to even to T's places, after `import decimal_rounded`.
+index: stdlib
+keywords: round to places; quantize; float to decimal; make decimal; banker's rounding
+related: concept.decimal-rounded stdlib.float64::from_decimal_rounded stdlib.module.decimal_rounded error.decimal-guarantee-lost
+
+== NOTES
+The one way to mint a guarantee from a value computed at run time: it
+does not claim x already is a decimal, it rounds it. T is imprinted
+explicitly and must be a refined DecimalRounded type (decimal_rounded::
+round[Float64](x) is a TYPE error, and without [T] it is IMPRINT). The
+rounding reads x's exact binary value: the Float64 1.005 is
+1.00499999999999989..., so it rounds to 1.00 at two places. The result is
+represented to satisfy every place up to N; when no representation does
+-- a decimal finer than binary64 holds at its magnitude, such as
+4873863637.854281 at nine places -- the call fails with the declared
+error UnrepresentableDecimal. Runs on every backend.
+
+== EXAMPLES
+@example accept
+import decimal_rounded
+
+fn cents(x: Float64) -> DecimalRounded{minDecimalsPreserved: 2} errors UnrepresentableDecimal:
+    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)
+
+fn safe(x: Float64) -> DecimalRounded{minDecimalsPreserved: 2}:
+    x.cents():
+        on UnrepresentableDecimal:
+            0.00
+
+[safe(0.1 + 0.2), safe(1.005), safe(-0.125)]
+@value [0.30, 1.00, -0.12]
+@end
+
 @topic stdlib.module.float64
 title: -
-summary: The explicit conversions between Int and Float64: float64::from_int and float64::truncate.
+summary: The explicit conversions of Float64: from and to Int (float64::from_int, float64::truncate) and from DecimalRounded (float64::from_decimal_rounded).
 index: stdlib
-keywords: float functions; float conversion; int to float; float to int
-related: concept.floats stdlib./
+keywords: float functions; float conversion; int to float; float to int; decimal to float
+related: concept.floats stdlib./ concept.decimal-rounded
 
 == NOTES
 `float64` has no module file: its members are intrinsics, reached with
-`import float64`. They are the only conversions between the two number
-types: Botlish never converts implicitly, so an expression mixing an Int
-and a Float64 is rejected until one side is converted. There is no
+`import float64`. They are the only conversions between Float64 and the
+other number types: Botlish never converts implicitly, so an expression
+mixing an Int and a Float64 is rejected until one side is converted (and
+so is one mixing a Float64 and a DecimalRounded value). There is no
 rounding mode, no Float64-to-String conversion beyond a program's printed
 result, and no bit-level access to a Float64.
+
+@topic stdlib.float64::from_decimal_rounded
+title: -
+summary: The Float64 nearest round(x, N), N the places the DecimalRounded x's type guarantees, after `import float64`: the visible decay of a guarantee; it never fails.
+index: stdlib
+keywords: decimal to float; decay; forget precision; convert decimal
+related: concept.decimal-rounded stdlib.decimal_rounded::round stdlib.module.float64 error.decimal-guarantee-lost
+
+== NOTES
+Decays a DecimalRounded value to a Float64 explicitly: the guarantee is
+forgotten, and the Float64 is the one nearest the guaranteed decimal --
+never the value's hidden representation digits, so every backend and
+every representation give the same Float64. The decimal is round(x, N)
+with N x's static minDecimalsPreserved (a value of
+DecimalRounded{minDecimalsPreserved: 2} representing 0.295 gives 0.3).
+It is how a program computes with DecimalRounded values that are not
+constants (error.decimal-guarantee-lost).
+
+== EXAMPLES
+@example accept
+import float64
+
+fn cents() -> DecimalRounded{minDecimalsPreserved: 2}:
+    0.295
+
+[float64::from_decimal_rounded(cents()), cents().from_decimal_rounded()]
+@value [0.3, 0.3]
+@end
 
 @topic stdlib.float64::from_int
 title: -

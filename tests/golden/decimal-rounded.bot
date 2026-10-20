@@ -1,0 +1,364 @@
+# decimal-rounded.bot -- DecimalRounded{minDecimalsPreserved: N}, the first
+# precision-guaranteed numeric refinement (manifest: category decimal-rounded;
+# ported from tests/decimal-rounded.test, DECIMAL-ROUNDED-MILESTONE-1.md).
+#
+# A body cannot return a DecimalRounded value to test::value, whose == is
+# the type-blind equality that refuses one (EQUALITY): each body observes
+# its values as a program would, by comparisons at the guaranteed
+# precision (a literal beside a DecimalRounded operand is a constant of its
+# type). The decay float64::from_decimal_rounded is not observed here: a
+# suite beside tests/golden/float64.bot cannot import float64 (its import
+# would name that application file, MODULE-COLLISION). The Tcl originals
+# also pin every value's representation on all four backends, the
+# conversions to Float64, the messages and the HIR.
+import compiler
+import test
+import decimal_rounded
+import list
+import immutable_set
+
+# X at two places: its value, its type weakened to DecimalRounded{minDecimalsPreserved: 2}.
+fn two(x: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
+    x
+
+fn register_literal_tests():
+    fn exact_intent() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 2}:
+                0.295
+            fn g() -> DecimalRounded{minDecimalsPreserved: 2}:
+                1.245
+            [f() == 0.30, f() == 0.29, g() == 1.24, g() == 1.25]
+    test::value("dr-literal-exact-intent", [true, false, true, false], exact_intent)
+
+    fn refused_17() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 17}:
+                0.1
+            f() == 0.1
+    test::rejects("dr-literal-precision-refused/17", compiler::DiagnosticCode::DecimalPrecision, refused_17)
+
+    fn accepted_16() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 16}:
+                0.1
+            f() == 0.1
+    test::value("dr-literal-precision-refused/16", true, accepted_16)
+
+    fn subnormal() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 324}:
+                5.0e-324
+            [f() == 0.0, f() > 0.0]
+    test::value("dr-literal-small-large/subnormal", [false, true], subnormal)
+
+    fn subnormal_325() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 325}:
+                5.0e-324
+            f() > 0.0
+    test::rejects("dr-literal-small-large/subnormal-325", compiler::DiagnosticCode::DecimalPrecision, subnormal_325)
+
+    fn exact_large() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 0}:
+                1.0e22
+            [f() == 1.0e22, f() == 1.0e21]
+    test::value("dr-literal-small-large/exact", [true, false], exact_large)
+
+    fn inexact_large() errors compiler::CompilerError:
+        static compile:
+            fn f() -> DecimalRounded{minDecimalsPreserved: 0}:
+                1.0e23
+            f() > 0.0
+    test::rejects("dr-literal-small-large/inexact", compiler::DiagnosticCode::DecimalPrecision, inexact_large)
+
+fn register_boundary_tests():
+    fn two_places() errors compiler::CompilerError:
+        static compile:
+            [two(1.234) == 1.23, two(1.2349999999) == 1.23, two(1.235) == 1.24, two(1.2350000001) == 1.24,
+                two(1.244) == 1.24, two(1.2449999999) == 1.24, two(1.245) == 1.24, two(1.2450000001) == 1.25,
+                two(1.255) == 1.26, two(-1.245) == -1.24, two(-1.235) == -1.24, two(1.245) == 1.25]
+    test::value("dr-boundaries-two-places",
+        [true, true, true, true, true, true, true, true, true, true, true, false], two_places)
+
+    fn comparisons() errors compiler::CompilerError:
+        static compile:
+            fn d(x: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
+                x
+            [d(1.235) == d(1.24), d(1.245) == d(1.24), d(1.2450000001) == d(1.25), d(1.2349999999) < d(1.235),
+                d(1.244) < d(1.245), d(1.244) == d(1.245), d(1.255) == d(1.26)]
+    test::value("dr-boundaries-comparisons", [true, true, true, true, false, true, true], comparisons)
+
+# FINE: a Float64 whose nine-place decimal no binary64 holds (a parameter,
+# so the compiler does not decide the quantization's failure).
+fn register_weakening_tests(fine: Float64):
+    fn weakening() errors compiler::CompilerError:
+        static compile:
+            fn four() -> DecimalRounded{minDecimalsPreserved: 4}:
+                0.12345
+            fn capped(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:
+                x
+            [two(four()) == 0.12, capped(four()) == 0.12, capped(two(0.125)) == 0.12, four() == 0.12]
+    test::value("dr-weakening", [true, true, true, false], weakening)
+
+    fn stronger() errors compiler::CompilerError:
+        static compile:
+            fn three(x: DecimalRounded{minDecimalsPreserved: 3}) -> int:
+                1
+            fn two(x: DecimalRounded{minDecimalsPreserved: 2}) -> int:
+                three(x)
+            two(0.5)
+    test::rejects("dr-strengthening-refused/places", compiler::DiagnosticCode::Type, stronger)
+
+    fn dropped_ceiling() errors compiler::CompilerError:
+        static compile:
+            fn open(x: DecimalRounded{minDecimalsPreserved: 2}) -> int:
+                1
+            fn capped(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:
+                open(x)
+            capped(0.5)
+    test::rejects("dr-strengthening-refused/ceiling", compiler::DiagnosticCode::Type, dropped_ceiling)
+
+    fn minted() errors compiler::CompilerError:
+        static compile:
+            fn f(x: DecimalRounded{minDecimalsPreserved: 2}) -> int:
+                1
+            y = 0.5 * 1.0
+            f(y)
+    test::rejects("dr-strengthening-refused/float64", compiler::DiagnosticCode::Type, minted)
+
+    fn quantize() errors compiler::CompilerError:
+        static compile:
+            fn q(x: Float64) -> DecimalRounded{minDecimalsPreserved: 2} errors UnrepresentableDecimal:
+                decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)
+            fn is(x: Float64, expected: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                d = q(x):
+                    on UnrepresentableDecimal:
+                        return false
+                d == expected
+            [is(0.1 + 0.2, 0.30), is(1.005, 1.00), is(2.675, 2.67), is(-0.125, -0.12), is(1.0e15 + 0.3, 1000000000000000.25),
+                is(1.005, 1.01)]
+    test::value("dr-quantize", [true, true, true, true, true, false], quantize)
+
+    fn unrepresentable() errors compiler::CompilerError:
+        static compile:
+            fn q(v: Float64) -> int:
+                d = decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 9}](v):
+                    on UnrepresentableDecimal:
+                        return 0
+                1
+            q(fine)
+    test::value("dr-quantize/unrepresentable", 0, unrepresentable)
+
+fn register_arithmetic_tests():
+    fn proven() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 1}:
+                0.1 + 0.2
+            fn b() -> DecimalRounded{minDecimalsPreserved: 2}:
+                1.00 + 2.00
+            fn c() -> DecimalRounded{minDecimalsPreserved: 1}:
+                10.0 / 2.0
+            fn d() -> DecimalRounded{minDecimalsPreserved: 1}:
+                1.5 * 2.0
+            fn f() -> DecimalRounded{minDecimalsPreserved: 1}:
+                -(0.15)
+            fn g() -> DecimalRounded{minDecimalsPreserved: 3}:
+                (0.125 + 0.25) * 2.0 - 1.0 / 8.0
+            [a() == 0.3, b() == 3.00, c() == 5.0, d() == 3.0, f() == -0.2, g() == 0.625]
+    test::value("dr-arithmetic-proven", [true, true, true, true, true, true], proven)
+
+    fn third() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 17}:
+                1.0 / 3.0
+            a() > 0.0
+    test::rejects("dr-arithmetic-proof-loss/third", compiler::DiagnosticCode::DecimalPrecision, third)
+
+    fn big() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 2}:
+                1.0e20 + 0.01
+            a() > 0.0
+    test::rejects("dr-arithmetic-proof-loss/large", compiler::DiagnosticCode::DecimalPrecision, big)
+
+    fn cancelled() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 3}:
+                0.1 * 3.0 - 0.3
+            a() == 0.0
+    test::value("dr-arithmetic-proof-loss/cancellation-3", true, cancelled)
+
+    fn cancelled_16() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 16}:
+                0.1 * 3.0 - 0.3
+            a() == 0.0
+    test::rejects("dr-arithmetic-proof-loss/cancellation-16", compiler::DiagnosticCode::DecimalPrecision, cancelled_16)
+
+    fn opaque() errors compiler::CompilerError:
+        static compile:
+            fn f(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
+                a + b
+            f(0.5, 0.25) == 0.75
+    test::rejects("dr-arithmetic-opaque/sum", compiler::DiagnosticCode::DecimalGuaranteeLost, opaque)
+
+    fn negation() errors compiler::CompilerError:
+        static compile:
+            fn f(a: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
+                -a
+            [f(0.125) == -0.12, f(-0.135) == 0.14, f(0.0) == 0.00, f(0.125) == 0.12]
+    test::value("dr-arithmetic-opaque/negation", [true, true, true, false], negation)
+
+    fn exact_product() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 30}:
+                0.1 * 10.0
+            a() == 1.0
+    test::value("dr-arithmetic-not-blind-min/exact", true, exact_product)
+
+    fn literal_30() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 30}:
+                0.1
+            a() == 0.1
+    test::rejects("dr-arithmetic-not-blind-min/literal", compiler::DiagnosticCode::DecimalPrecision, literal_30)
+
+    fn mixed() errors compiler::CompilerError:
+        static compile:
+            fn f(a: DecimalRounded{minDecimalsPreserved: 2}, b: Float64) -> bool:
+                a < b
+            f(0.5, 0.5)
+    test::rejects("dr-mixing-refused", compiler::DiagnosticCode::Type, mixed)
+
+    fn overflow() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 0}:
+                1.0e300 * 1.0e300
+            a() > 0.0
+    test::rejects("dr-nonfinite-distinct/overflow", compiler::DiagnosticCode::KnownError, overflow)
+
+    fn zero_divisor() errors compiler::CompilerError:
+        static compile:
+            fn a() -> DecimalRounded{minDecimalsPreserved: 0}:
+                1.0 / (0.1 * 3.0 - 0.3)
+            a() > 0.0
+    test::rejects("dr-nonfinite-distinct/exact-zero-divisor", compiler::DiagnosticCode::DecimalPrecision, zero_divisor)
+
+fn register_observation_tests():
+    fn comparisons() errors compiler::CompilerError:
+        static compile:
+            fn lt(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                a < b
+            fn le(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                a <= b
+            fn gt(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:
+                a > b
+            fn ge(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:
+                a >= b
+            [lt(1.234, 1.235), lt(1.235, 1.244), le(1.235, 1.244), lt(1.244, 1.245), lt(-1.245, -1.235),
+                gt(0.26, 0.249), ge(0.26, 0.249), gt(0.36, 0.249), lt(0.004, 0.005), lt(0.005, 0.015), gt(0.25, 0.249)]
+    test::value("dr-comparisons", [true, false, true, false, false, true, true, true, false, true, false], comparisons)
+
+    fn equality() errors compiler::CompilerError:
+        static compile:
+            fn eq2(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                a == b
+            fn ne2(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                a != b
+            fn eq3(a: DecimalRounded{minDecimalsPreserved: 3}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:
+                a == b
+            fn sum() -> DecimalRounded{minDecimalsPreserved: 2}:
+                0.1 + 0.2
+            [eq2(sum(), 0.3), ne2(sum(), 0.3), eq2(1.234, 1.2349), eq3(1.234, 1.2349), eq3(1.2345, 1.2355), ne2(1.25, 1.24)]
+    test::value("dr-equality", [true, false, true, false, false, true], equality)
+
+    fn list_equality() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[DecimalRounded{minDecimalsPreserved: 2}]:
+                [0.1]
+            f() == f()
+    test::rejects("dr-equality-refused", compiler::DiagnosticCode::Type, list_equality)
+
+    fn set_of() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[DecimalRounded{minDecimalsPreserved: 2}]:
+                [0.1]
+            immutable_set::from_list(f())
+            1
+    test::rejects("dr-sets-refused", compiler::DiagnosticCode::Type, set_of)
+
+    fn upper_bound() errors compiler::CompilerError:
+        static compile:
+            fn c(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:
+                x
+            fn fine() -> DecimalRounded{minDecimalsPreserved: 4}:
+                1.23449
+            [c(fine()) == c(1.2349), c(fine()) < c(1.2349), c(1.2344) == c(1.2301), c(fine()) == 1.23]
+    test::value("dr-upper-bound", [true, false, true, true], upper_bound)
+
+    fn finer() errors compiler::CompilerError:
+        static compile:
+            fn open(x: DecimalRounded{minDecimalsPreserved: 3}) -> int:
+                1
+            fn c(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:
+                open(x)
+            c(0.5)
+    test::rejects("dr-upper-bound-types/finer", compiler::DiagnosticCode::Type, finer)
+
+    fn above_ceiling() errors compiler::CompilerError:
+        static compile:
+            fn c() -> DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 4}:
+                0.5
+            c() > 0.0
+    test::rejects("dr-upper-bound-types/above-ceiling", compiler::DiagnosticCode::RefinementParameter, above_ceiling)
+
+    fn missing_min() errors compiler::CompilerError:
+        static compile:
+            fn f(x: DecimalRounded{maxDecimalsPreserved: 4}) -> int:
+                1
+            1
+    test::rejects("dr-parameters-validated/missing", compiler::DiagnosticCode::RefinementParameter, missing_min)
+
+    fn unknown_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(x: DecimalRounded{minDecimalsPreserved: 2, decimals: 4}) -> int:
+                1
+            1
+    test::rejects("dr-parameters-validated/unknown", compiler::DiagnosticCode::RefinementParameter, unknown_parameter)
+
+    fn parity() errors compiler::CompilerError:
+        static compile:
+            fn values() -> List[DecimalRounded{minDecimalsPreserved: 3}]:
+                [1.2345, 1.2355, 0.0005, -0.0005, 0.0015, 2.675, 1.0e15, 123.4565, 0.1, 0.3]
+            fn decimals() -> List[DecimalRounded{minDecimalsPreserved: 3}]:
+                [1.234, 1.236, 0.0, 0.0, 0.002, 2.675, 1.0e15, 123.456, 0.1, 0.3]
+            fn le(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> bool:
+                a <= b
+            fn walk(xs: List[DecimalRounded{minDecimalsPreserved: 3}], ys: List[DecimalRounded{minDecimalsPreserved: 3}], i: int, acc):
+                if i == list::length(xs):
+                    acc
+                else:
+                    x = list::at(xs, i):
+                        on IndexNotFound:
+                            return acc
+                    y = list::at(ys, i):
+                        on IndexNotFound:
+                            return acc
+                    walk(xs, ys, i + 1, list::append(acc, [x == y, x < 0.001, le(x, 1.24)]))
+            walk(values(), decimals(), 0, [])
+    test::value("dr-runtime-parity", [[true, false, true], [true, false, true], [true, true, true], [true, true, true],
+        [true, false, true], [true, false, false], [true, false, false], [true, false, false],
+        [true, false, true], [true, false, true]], parity)
+
+fn register_decimal_rounded_tests():
+    register_literal_tests()
+    register_boundary_tests()
+    register_weakening_tests(4873863637.854281)
+    register_arithmetic_tests()
+    register_observation_tests()
+
+with context test::suite()
+register_decimal_rounded_tests()
+test::report()

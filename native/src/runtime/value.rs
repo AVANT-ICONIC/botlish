@@ -150,6 +150,11 @@ pub const KIND_MUTVEC: u8 = 16;
 /// number of one primitive float type, never NaN, an infinity or negative
 /// zero, so equality and hashing compare its bits.
 pub const KIND_FLOAT: u8 = 17;
+/// A DecimalRounded value (DECIMAL-ROUNDED-MILESTONE-1.md): a FloatObj
+/// holding the binary64 that represents it, under a kind of its own, so it
+/// is never taken for a Float64 (a kind guard, equality, display). Its
+/// guaranteed precision is static only: nothing here records it.
+pub const KIND_DECIMAL: u8 = 18;
 
 #[repr(C)]
 pub struct Header {
@@ -448,13 +453,18 @@ pub struct FloatObj {
 
 pub const FLOAT_BITS_OFFSET: i32 = offset_of!(FloatObj, bits) as i32;
 
-/// A primitive floating-point type (core/type.tcl's float family). Each is a
-/// semantic Kind of its own; what the native backend knows of one -- its
-/// machine type, its object, its arithmetic -- hangs off this enum, so a
-/// further width is a variant every `match` on it then asks about.
+/// A type whose values the native backend represents as one IEEE 754
+/// number in a FloatObj: a primitive floating-point type (core/type.tcl's
+/// float family), or DecimalRounded, whose first implementation is a
+/// binary64 (a representation, never its semantics:
+/// DECIMAL-ROUNDED-MILESTONE-1.md). Each is a semantic Kind of its own; what
+/// the native backend knows of one -- its machine type, its object, its
+/// arithmetic -- hangs off this enum, so a further width is a variant every
+/// `match` on it then asks about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FloatType {
     Float64,
+    DecimalRounded,
 }
 
 impl FloatType {
@@ -462,6 +472,7 @@ impl FloatType {
     pub fn parse(name: &str) -> Option<FloatType> {
         match name {
             "Float64" => Some(FloatType::Float64),
+            "DecimalRounded" => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -470,13 +481,23 @@ impl FloatType {
     pub fn code(self) -> u64 {
         match self {
             FloatType::Float64 => 0,
+            FloatType::DecimalRounded => 1,
         }
     }
 
     pub fn from_code(code: u64) -> FloatType {
         match code {
             0 => FloatType::Float64,
+            1 => FloatType::DecimalRounded,
             _ => panic!("bad floating-point type number {code}"),
+        }
+    }
+
+    /// The heap kind of the FloatObj holding a value of this type.
+    pub fn heap_kind(self) -> u8 {
+        match self {
+            FloatType::Float64 => KIND_FLOAT,
+            FloatType::DecimalRounded => KIND_DECIMAL,
         }
     }
 
@@ -485,12 +506,14 @@ impl FloatType {
     pub fn prefix(self) -> &'static str {
         match self {
             FloatType::Float64 => "f64",
+            FloatType::DecimalRounded => "d64",
         }
     }
 
     pub fn of_prefix(prefix: &str) -> Option<FloatType> {
         match prefix {
             "f64" => Some(FloatType::Float64),
+            "d64" => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -498,12 +521,14 @@ impl FloatType {
     pub fn kind(self) -> Kind {
         match self {
             FloatType::Float64 => Kind::Float64,
+            FloatType::DecimalRounded => Kind::DecimalRounded,
         }
     }
 
     pub fn of_kind(kind: Kind) -> Option<FloatType> {
         match kind {
             Kind::Float64 => Some(FloatType::Float64),
+            Kind::DecimalRounded => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -513,7 +538,9 @@ impl FloatType {
     /// zero (a value has one representation).
     pub fn admit(self, x: f64) -> Option<u64> {
         match self {
-            FloatType::Float64 => {
+            // (A DecimalRounded value's binary64 is finite with one zero,
+            // exactly like a Float64's: core/decimal.tcl's `value`.)
+            FloatType::Float64 | FloatType::DecimalRounded => {
                 if !x.is_finite() {
                     return None;
                 }
@@ -525,21 +552,26 @@ impl FloatType {
 
 /// The float type of the floating-point value V.
 pub fn float_type_of(v: Value) -> FloatType {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
-    // Every FloatObj is a Float64 today; a further width records its type
-    // in the object.
-    FloatType::Float64
+    // The heap kind says which (a FloatObj's layout is every type's).
+    match heap_kind(v) {
+        KIND_DECIMAL => FloatType::DecimalRounded,
+        kind => {
+            debug_assert_eq!(kind, KIND_FLOAT);
+            FloatType::Float64
+        }
+    }
 }
 
-/// The number of the Float64 value V.
+/// The number of the Float64 value V, or the binary64 representing the
+/// DecimalRounded value V.
 pub fn float64_of(v: Value) -> f64 {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    debug_assert!(matches!(heap_kind(v), KIND_FLOAT | KIND_DECIMAL));
     f64::from_bits(unsafe { as_ref::<FloatObj>(v) }.bits)
 }
 
 /// The bits of the floating-point value V (FloatObj::bits).
 pub fn float_bits(v: Value) -> u64 {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    debug_assert!(matches!(heap_kind(v), KIND_FLOAT | KIND_DECIMAL));
     unsafe { as_ref::<FloatObj>(v) }.bits
 }
 
@@ -736,6 +768,10 @@ pub enum Kind {
     /// A Float64 (FLOAT64-MILESTONE-1.md, FloatType): a FloatObj. Named as
     /// its core/type.tcl spelling, like UnicodeChar.
     Float64,
+    /// A DecimalRounded value (DECIMAL-ROUNDED-MILESTONE-1.md): a FloatObj
+    /// of kind KIND_DECIMAL. No equality and no hash a type-blind operation
+    /// may use: its precision is its static type's.
+    DecimalRounded,
 }
 
 impl Kind {
@@ -760,6 +796,7 @@ impl Kind {
             "enum" => Kind::Enum,
             "cptr" => Kind::CPtr,
             "Float64" => Kind::Float64,
+            "DecimalRounded" => Kind::DecimalRounded,
             _ => return None,
         })
     }
@@ -785,6 +822,7 @@ impl Kind {
             Kind::Enum => "enum",
             Kind::CPtr => "cptr",
             Kind::Float64 => "Float64",
+            Kind::DecimalRounded => "DecimalRounded",
         }
     }
 
@@ -796,7 +834,7 @@ impl Kind {
         [
             Kind::Int, Kind::Str, Kind::Bool, Kind::Unit, Kind::List, Kind::Result, Kind::Block, Kind::Native,
             Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct, Kind::ByteStore, Kind::MutByteStore,
-            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr, Kind::Float64,
+            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr, Kind::Float64, Kind::DecimalRounded,
         ][code as usize]
     }
 }
@@ -834,7 +872,7 @@ pub fn kind_of(v: Value) -> Kind {
         KIND_MUTBYTES => Kind::MutByteStore,
         KIND_COROUTINE => Kind::Coroutine,
         KIND_MUTVEC => Kind::MutVec,
-        KIND_FLOAT => float_type_of(v).kind(),
+        KIND_FLOAT | KIND_DECIMAL => float_type_of(v).kind(),
         _ => panic!("not a program value: {v:#x}"),
     }
 }

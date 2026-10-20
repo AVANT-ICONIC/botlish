@@ -1128,6 +1128,49 @@ kinds): a change to that gate, to those kinds or to which joins can hold a
 path-release diagnostic also needs `tests/static-economics.test` and the
 static-decision harnesses (Static intrinsics, below).
 
+## DecimalRounded and scalar refinements
+
+`DecimalRounded{minDecimalsPreserved: N}` (optionally `maxDecimalsPreserved:
+M`; DECIMAL-ROUNDED-MILESTONE-1.md) is a guarantee, not a representation:
+rounding the value half to even to any P <= N places gives its intended
+decimal. It is the one family of the scalar-refinement schema
+(`hir/refinements.tcl`), which owns validation, the canonical form
+`{srefined FAMILY FACTS}`, implication, joins and the text. Keep it so:
+
+* Never name `minDecimalsPreserved` or `maxDecimalsPreserved` outside the
+  schema table (`dr-schema-generic`); a new family or order is a schema
+  row, never type machinery of its own. Scalar refinements are not the
+  refinement values of `refined type` (hir/refine.tcl).
+* The literal choice is made only in `hir::decimal::resolve` (inside the
+  inference fixpoint): a decimal constant expression where a refined
+  DecimalRounded type is expected means its exact source decimal; every
+  other decimal literal stays a Float64. Never add global literal inference
+  or typed locals for it.
+* Only decimal constant expressions are proven, by exact simulation of the
+  binary64 operations a run performs (`hir::decimal::Facts`,
+  `core::decimal::ExactOperation`): never host floating point, never a rule
+  from the operands' precisions (no `min`). Arithmetic on any other
+  DecimalRounded value is DECIMAL-GUARANTEE-LOST: never give it a type.
+* Every observation reads at most the guaranteed precision of its operands'
+  static types, written into the call by `hir::decimal::Elaborate` (no
+  backend chooses one): comparisons and `==` at the smaller precision, the
+  decay at N, the display at N. Type-blind `==`, `hash`, sets and display
+  never read a representation (EQUALITY, TYPE, `<DecimalRounded>`). No
+  precision metadata at run time; HIR interchange carries a constant's exact
+  decimal, never its binary64 (`hir::interchange::WithoutRepresentations`).
+* Nothing converts between Float64 and DecimalRounded implicitly: the decay
+  is `float64::from_decimal_rounded`, minting is a proof or
+  `decimal_rounded::round[T]` (UnrepresentableDecimal).
+
+If you change any of that (DECIMAL-ROUNDED-MILESTONE-1.md, "What to run
+when changing this", lists the files), run `tests/decimal-rounded.test`,
+`tclsh9.0 tests/local.tcl tests/golden/decimal-rounded.bot`,
+`audit/decimal-rounded/tools/fuzz.tcl` (several seeds),
+`audit/decimal-rounded/tools/mutate.tcl` (every mutant in its `mutants.txt`
+must still apply and be killed: update a mutant's text when you change the
+code it mutates, keeping it a mutant of the same rule) and `cargo test
+--release --manifest-path native/Cargo.toml --lib decimal`.
+
 ## Enums
 
 Enums (ENUMS.md) are named, closed, nominal sums of payload-free cases:

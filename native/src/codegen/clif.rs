@@ -1485,8 +1485,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutByteStore => KIND_MUTBYTES,
             Kind::Coroutine => KIND_COROUTINE,
             Kind::MutVec => KIND_MUTVEC,
-            // (Every FloatObj is a Float64 today: FloatType's own header.)
+            // (A FloatObj's heap kind says which: FloatType::heap_kind.)
             Kind::Float64 => KIND_FLOAT,
+            Kind::DecimalRounded => KIND_DECIMAL,
             Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum | Kind::CPtr => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
@@ -1976,9 +1977,31 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             // Floating-point arithmetic and comparisons (FLOAT64-MILESTONE-1.md):
             // the target's own floating-point instructions on the unboxed
             // numbers (float_op); the conversions are runtime helpers.
-            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq => {
+            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq
+            | D64Add | D64Sub | D64Mul | D64Div | D64Neg => {
                 let (ty, fop) = op.float().expect("a floating-point operation");
                 self.float_op(ty, fop, &a)
+            }
+            // DecimalRounded's observations (DECIMAL-ROUNDED-MILESTONE-1.md):
+            // exact decimal rounding at the precision operand, a runtime
+            // helper (runtime::decimal).
+            D64Lt | D64Le | D64Gt | D64Ge | D64Eq => {
+                let cc = match op {
+                    D64Lt => IntCC::SignedLessThan,
+                    D64Le => IntCC::SignedLessThanOrEqual,
+                    D64Gt => IntCC::SignedGreaterThan,
+                    D64Ge => IntCC::SignedGreaterThanOrEqual,
+                    _ => IntCC::Equal,
+                };
+                let order = self.call_helper("rt_decimal_cmp", &[self.vm, a[0], a[1], a[2]]);
+                let flag = self.b.ins().icmp_imm_s(cc, order, 0);
+                self.bool_of(flag)
+            }
+            D64ToF64 => self.call_allocating("rt_decimal_to_f64", &[self.vm, a[0], a[1]], "d64tof64", KIND_FLOAT),
+            D64Round => {
+                let v = self.call_allocating("rt_decimal_round", &[self.vm, a[0], a[1]], "d64round", KIND_DECIMAL);
+                self.check(v);
+                v
             }
             F64FromInt => {
                 let v = self.call_allocating("rt_f64_from_int", &[self.vm, a[0]], "f64fromint", KIND_FLOAT);
@@ -2650,7 +2673,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// the target's floating-point class.
     fn float_number(&mut self, ty: FloatType, v: ir::Value) -> ir::Value {
         match ty {
-            FloatType::Float64 => self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET),
+            // (A DecimalRounded value's representation is a binary64 in the
+            // same object layout.)
+            FloatType::Float64 | FloatType::DecimalRounded => {
+                self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET)
+            }
         }
     }
 
@@ -2679,7 +2706,6 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// needs (codegen::roots).
     fn float_op(&mut self, ty: FloatType, op: nir::FloatOp, a: &[ir::Value]) -> ir::Value {
         use nir::FloatOp::*;
-        let FloatType::Float64 = ty;
         if op == Eq {
             let x = self.b.ins().load(I64, MemFlagsData::trusted(), a[0], FLOAT_BITS_OFFSET);
             let y = self.b.ins().load(I64, MemFlagsData::trusted(), a[1], FLOAT_BITS_OFFSET);
@@ -2728,7 +2754,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 }
                 let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
                 let code = self.iconst(ty.code());
-                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", KIND_FLOAT)
+                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", ty.heap_kind())
             }
             Eq | FromInt | Trunc => unreachable!("not computed in floating-point registers"),
         }
