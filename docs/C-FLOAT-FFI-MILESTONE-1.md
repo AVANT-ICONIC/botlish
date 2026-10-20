@@ -537,8 +537,8 @@ on ubuntu-24.04-arm (run 39481296400, commit a5ea3c3): the Tcl suite on
 interp and compile, its cranelift and cranelift-generic coverage, the golden
 suites (four shards, beside their Tcl originals) and the native Rust unit
 tests, plain and under GC stress, all passed -- c-float-ffi.test's C fixture,
-register exhaustion and lowering tests among them, natively; the suite under
-GC stress was still running when this was written.
+register exhaustion and lowering tests among them, natively; and the whole
+Tcl suite under GC stress (`BOTLISH_NATIVE_GC_STRESS=1`) passed.
 
 Linux x86-64 CI (tests.yml, run 39481292379, commit a5ea3c3): every job
 passed -- the Tcl suite on interp and compile, cranelift and
