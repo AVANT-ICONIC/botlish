@@ -523,7 +523,11 @@ Linux x86-64 (this container):
 | audit/c-bindgen fuzz.tcl, layout-fuzz.tcl | fuzz.tcl seeds 3, 17, 41 and seed 5 under GC stress: 0 disagreements; layout-fuzz.tcl seeds 2, 17, 41, seed 7 under GC stress, and linux-aarch64, macos-aarch64, windows-x86_64-gnu targets: 0 disagreements |
 | Rust, whole (`--lib`, `--bin botlish-native`) | 267 and 43 passed |
 | tests/local.tcl | 202 Tcl test files on interp and compile (6383 and 6378 passed, 12 and 17 skipped, 2128 golden duplicates skipped) and 100 golden suites on all four backends (4938, 4938, 4846 and 4948 tests passed); its one failure, compilerpedia.test's check of the generated stdlib topic (stale after lib/ffi/c.bot's header changed), fixed by regenerating it: compilerpedia.test 39 passed |
-| the affected harnesses (other areas' fuzzers, interchange and isolation audits, warning gate, the retargeted mutants) | pending at this commit |
+| warning gate (audit/refactor/tools/gate.tcl) | passed: the observed warnings are exactly the manifest |
+| HIR interchange (roundtrip.tcl) | `-via interchange` and `-via cache` over c-float-ffi.bot, binary-layout.bot, layout-unions.bot, layout-arrays.bot, and `-via interchange` over the default twelve suites: 0 differ |
+| compilation isolation (interleave.tcl) | the four suites above and the default twelve: 0 differ |
+| other areas' fuzzers (seeds 3 and 17) | c-ffi, binary-layout, native-view, native-edit, layout-arrays, layout-unions: 0 disagreements; c-abi-types: 2 and 8, every one a program compiled for another target that the native driver refuses (NATIVE TARGET) -- identical on the tree before this milestone, unrelated to it |
+| the existing mutants whose text this milestone retargeted | binary-layout 4, native-edit 5, native-view 2, layout-arrays 2, c-ffi 1 (and 1 macOS-only, skipped), target-model 2, error-payloads 1, c-bindgen 7: all applied and killed |
 
 Linux AArch64: the Rust boundary tests (`--lib c_float`, 5 passed) and the
 AArch64 lowering tests (`c_float_aapcs64_stack_slots`,
