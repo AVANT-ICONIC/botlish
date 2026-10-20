@@ -399,8 +399,8 @@ test dr-comparisons {< <= > >= compare round(a, P) with round(b, P), P the small
         "fn le(a: $dr2, b: $dr2) -> bool:\n    a <= b\n" \
         "fn gt(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:\n    a > b\n" \
         "fn ge(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:\n    a >= b\n" \
-        "\[lt(1.234, 1.235), lt(1.235, 1.244), le(1.235, 1.244), lt(1.244, 1.245), lt(-1.245, -1.235), gt(0.26, 0.249), ge(0.26, 0.249), gt(0.36, 0.249), lt(0.004, 0.005), lt(0.005, 0.015)\]\n"]
-} -result {[true, false, true, false, false, true, true, true, false, true]}
+        "\[lt(1.234, 1.235), lt(1.235, 1.244), le(1.235, 1.244), lt(1.244, 1.245), lt(-1.245, -1.235), gt(0.26, 0.249), ge(0.26, 0.249), gt(0.36, 0.249), lt(0.004, 0.005), lt(0.005, 0.015), gt(0.25, 0.249)\]\n"]
+} -result {[true, false, true, false, false, true, true, true, false, true, false]}
 
 test dr-equality {== means the same decimal at P (the smaller guaranteed precision) and != its negation; two representations of one decimal are equal, two decimals one hidden digit apart are equal at fewer places and unequal at more} -body {
     drValue [string cat "fn eq2(a: $dr2, b: $dr2) -> bool:\n    a == b\n" \

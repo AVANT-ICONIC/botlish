@@ -430,8 +430,6 @@ proc core::decimal::Proven {x t} {
     if {[RatCmp $xr $t] == 0} {
         return exact
     }
-    # round(X, P) and round(T, P) differ once 10^-P is below |X - T|: that
-    # bounds the search.
     # A cell of precision P is 10^-P wide, so once 10^-P is below |X - T| the
     # two are in different cells: the loop ends there at the latest.
     set p 0
