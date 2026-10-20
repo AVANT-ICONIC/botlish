@@ -136,6 +136,18 @@ layout PARR:
     field n: binary::U32 at 0
     field ps: array 2 of PWORD at 8
 
+union layout TAILU:
+    size 12
+    align 16
+    alternative a: binary::U8
+    alternative pair: array 2 of binary::U32
+
+layout ARRT:
+    size 40
+    align 4
+    field ts: array 3 of TAILU at 0
+    field after: binary::U32 at 36
+
 # The abi::bytes::Bytes of the Ints VALUES (each 0..255).
 fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
     bs = loop v in values:
@@ -193,6 +205,22 @@ fn register_declaration_tests():
         static compile:
             [binary::layout_length(WORD), binary::layout_alignment(WORD), binary::layout_length(WIDE), binary::layout_alignment(WIDE), binary::layout_length(SANDWICH)]
     test::value("lu-size-and-alignment-are-explicit/queries", [4, 4, 16, 8, 24], queries)
+
+    # lu-tail-padding: a union's declared size and alignment, never its
+    # alternatives'; an array of unions strides the declared size.
+    fn tail_queries() errors compiler::CompilerError:
+        static compile:
+            [binary::layout_length(TAILU), binary::layout_alignment(TAILU), binary::layout_length(ARRT)]
+    test::value("lu-tail-padding/queries", [12, 16, 40], tail_queries)
+    fn tail_bytes() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List[any] errors LayoutLengthMismatch:
+                [binary::read(d, ARRT.ts[1].a), binary::read(d, ARRT.ts[2].pair), binary::read(d, ARRT.after), frozen(binary::write(m, ARRT.ts[1].a, 9))]
+            r = go(bytes_of(ramp(40)), mutable(ramp(40))):
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("lu-tail-padding/bytes", [243, [3840272103, 3772900067], 3638155995, bytes_of([255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 9, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224, 223, 222, 221, 220, 219, 218, 217, 216])], tail_bytes)
 
     # lu-not-a-type-not-a-struct: a union is a layout -- no type, no value
     # -- and has no copied value: no LayoutStruct of it or of anything

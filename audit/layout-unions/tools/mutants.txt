@@ -1,0 +1,384 @@
+# Mutants of unions in binary layouts (audit/layout-unions/tools/mutate.tcl;
+# LAYOUT-UNIONS.md): each a deliberate bug in the declaration checks and the
+# union representation (hir/layouts.tcl), the copy refusals, the static
+# designators, typing (hir/types.tcl), HIR text (hir/format.tcl), the
+# reference implementation (core/binary.tcl), the registration of the
+# writes (core/binary.tcl) or native lowering (native/lower.tcl).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/src/ is a native
+# mutant: mutate.tcl rebuilds the native backend for it (none here: unions
+# added no runtime code). Lines starting with # outside an edit are comments.
+
+@@ union-as-struct a union is taken for an ordinary record by every copy: ReprUnionPath never finds one, so LayoutStruct, parse, emit, load and whole-array writes of a union-holding representation are accepted
+## hir/layouts.tcl
+<<<<
+proc hir::layouts::ReprUnionPath {repr} {
+    switch -- [dict get $repr kind] {
+        union {
+            return ""
+        }
+====
+proc hir::layouts::ReprUnionPath {repr} {
+    switch -- [dict get $repr kind] {
+        union {
+            return none
+        }
+>>>>
+
+@@ ordinary-overlap-accepted an ordinary layout's overlapping fields are accepted, as if every layout were a union (overlap no longer needs declaring)
+## hir/layouts.tcl
+<<<<
+    set others $fields
+    if {$union} {
+        set others {}
+    }
+====
+    set others {}
+    if {$union} {
+        set others {}
+    }
+>>>>
+
+@@ only-first-alternative a union keeps only its first alternative (the others dropped at registration)
+## hir/layouts.tcl
+<<<<
+        lappend fields [dict merge [dict create name $fieldName offset [expr {$offset + 0}]] $repr \
+            [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
+    }
+====
+        if {!$union || $fields eq {}} {
+        lappend fields [dict merge [dict create name $fieldName offset [expr {$offset + 0}]] $repr \
+            [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
+        }
+    }
+>>>>
+
+@@ alternatives-sequential a union's alternatives are laid end to end like a record's fields (each after the previous one's bytes) instead of all at the union's origin
+## hir/layouts.tcl
+<<<<
+        lappend fields [dict merge [dict create name $fieldName offset [expr {$offset + 0}]] $repr \
+            [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
+    }
+====
+        if {$union} {
+            set offset [tcl::mathop::+ 0 {*}[lmap f $fields {dict get $f width}]]
+        }
+        lappend fields [dict merge [dict create name $fieldName offset [expr {$offset + 0}]] $repr \
+            [dict create span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]]
+    }
+>>>>
+
+@@ union-size-from-widest a union's size is recomputed as its widest alternative's (its declared tail padding dropped)
+## hir/layouts.tcl
+<<<<
+    dict set registry $id size $size
+    dict set registry $id align $align
+====
+    if {$union} {
+        set size [tcl::mathfunc::max {*}[lmap f $fields {dict get $f width}]]
+    }
+    dict set registry $id size $size
+    dict set registry $id align $align
+>>>>
+
+@@ union-alignment-recomputed a union's alignment is recomputed from its alternatives (the largest power of two dividing a widest scalar's width, at most 8) instead of the declared one
+## hir/layouts.tcl
+<<<<
+    dict set registry $id size $size
+    dict set registry $id align $align
+====
+    if {$union} {
+        set align [tcl::mathfunc::min 8 [tcl::mathfunc::max {*}[lmap f $fields {expr {[dict get $f kind] eq "scalar" ? [dict get $f width] : 1}}]]]
+    }
+    dict set registry $id size $size
+    dict set registry $id align $align
+>>>>
+
+@@ union-nested-width-alternative a union held by value takes its first alternative's width (an array of unions strides that width; a record's union field is narrower than the union)
+## hir/layouts.tcl
+<<<<
+        set width [dict get $registry $nested size]
+        if {[IsUnion $nested]} {
+====
+        set width [dict get $registry $nested size]
+        if {[IsUnion $nested]} {
+            set width [dict get [lindex [dict get $registry $nested fields] 0] width]
+>>>>
+
+@@ union-of-array-flattened an array alternative of a union is flattened to its element (only the first element's bytes)
+## hir/layouts.tcl
+<<<<
+        set repr [ResolveRepr [dict get $field type] [dict exists $field pointerText] $ns $byId done $stack \
+            $id $name $fieldName $typeSpan 0]
+====
+        set repr [ResolveRepr [dict get $field type] [dict exists $field pointerText] $ns $byId done $stack \
+            $id $name $fieldName $typeSpan 0]
+        if {$union && [dict get $repr kind] eq "array"} {
+            set repr [dict get $repr element]
+        }
+>>>>
+
+@@ union-base-offset-lost a designator through a union loses the union's own offset (its alternatives taken at the record's origin: a write lands on the fields before it)
+## hir/layouts.tcl
+<<<<
+            set layout $union
+            set base $offset
+            incr index
+            continue
+====
+            set layout $union
+            incr index
+            continue
+>>>>
+
+@@ alternative-offset-shifted a designator puts a union's alternatives one byte past the union's origin (a write's last byte spills into what follows the alternative)
+## hir/layouts.tcl
+<<<<
+            set layout $union
+            set base $offset
+            incr index
+            continue
+====
+            set layout $union
+            set base [expr {$offset + 1}]
+            incr index
+            continue
+>>>>
+
+@@ union-write-whole-width a scalar written through a union is widened to 8 bytes (a narrow alternative's write zeroes the rest of the union -- and past it)
+## hir/layouts.tcl
+<<<<
+        set entry [list $text $offset {*}[ReprDescriptor $repr]]
+        return [list ok [list [DescriptorHead $id] [size $id] [join $path .] $entry]]
+    }
+    error "internal compiler error: an empty field path of layout $id"
+====
+        set entry [list $text $offset {*}[ReprDescriptor $repr]]
+        if {[llength $path] > 1 && [IsUnion $layout] && [lindex $entry 2] in {u i}} {
+            lset entry 3 8
+        }
+        return [list ok [list [DescriptorHead $id] [size $id] [join $path .] $entry]]
+    }
+    error "internal compiler error: an empty field path of layout $id"
+>>>>
+
+@@ designator-ends-at-union a designator may end at a union (a write of a whole union is then refused as a copy, not named as an alternative's)
+## hir/layouts.tcl
+<<<<
+        if {[dict get $repr kind] eq "union"} {
+            set union [dict get $repr layout]
+            if {$last} {
+====
+        if {[dict get $repr kind] eq "union"} {
+            set union [dict get $repr layout]
+            if {0 && $last} {
+>>>>
+
+@@ active-alternative-read every read of a live union's alternative reads its first alternative, as if the union held one active member
+## hir/layouts.tcl
+<<<<
+            set field [FieldDescriptor $id [dict get $node name]]
+            if {$field eq ""} continue
+            ViewRead hir $e $field
+====
+            set field [FieldDescriptor $id [dict get $node name]]
+            if {$field eq ""} continue
+            if {[IsUnion $id]} {
+                set field [lindex [descriptor $id] 3 0]
+            }
+            ViewRead hir $e $field
+>>>>
+
+@@ pointer-alternative-from-bytes binary::read of a pointer alternative is accepted (no LAYOUT-NATIVE-ONLY), so bytes reach a pointer through a union
+## hir/layouts.tcl
+<<<<
+                    set inner [ReprPointerPath $field]
+                    if {$inner ne "none"} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+                            "$name cannot read $text from bytes:
+====
+                    set inner [ReprPointerPath $field]
+                    if {0 && $inner ne "none"} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+                            "$name cannot read $text from bytes:
+>>>>
+## core/binary.tcl
+<<<<
+    if {[ReprPointerPath $repr] ne "none"} {
+        core::semanticError LAYOUT-NATIVE-ONLY \
+            "binary::read: [PathText $path] holds a C pointer, which bytes never become"
+    }
+====
+>>>>
+
+@@ pointer-union-parse-allowed binary::parse of a layout holding a pointer-bearing union is accepted: neither the union refusal nor the native-only rule sees the pointer inside the union's alternatives
+## hir/layouts.tcl
+<<<<
+        if {$why ne ""} {
+            # (LAYOUT-UNIONS.md: before a pointer, which a union may hold
+            # too -- there is no copy to make at all.)
+====
+        if {0 && $why ne ""} {
+            # (LAYOUT-UNIONS.md: before a pointer, which a union may hold
+            # too -- there is no copy to make at all.)
+>>>>
+## hir/layouts.tcl
+<<<<
+proc hir::layouts::ReprPointerPath {repr} {
+    switch -- [dict get $repr kind] {
+        pointer {
+            return ""
+        }
+        layout - union {
+====
+proc hir::layouts::ReprPointerPath {repr} {
+    switch -- [dict get $repr kind] {
+        pointer {
+            return ""
+        }
+        union {
+            return none
+        }
+        layout {
+>>>>
+
+@@ scalar-alternative-needs-foreign-write an ordinary write of a scalar alternative is refused when its union (or the record around it) holds a pointer anywhere, as if every write into a native-only record encoded a pointer
+## hir/layouts.tcl
+<<<<
+                    } elseif {[ReprPointerPath $field] ne "none"} {
+                        # A fixed array holding C pointers (FIXED-LAYOUT-
+                        # ARRAYS.md), directly or in its nested elements.
+====
+                    } elseif {[ReprPointerPath $field] ne "none" || [NativeOnly $root]} {
+                        # A fixed array holding C pointers (FIXED-LAYOUT-
+                        # ARRAYS.md), directly or in its nested elements.
+>>>>
+
+@@ pointer-alternative-ordinary-write an ordinary binary::write of a pointer alternative is accepted statically (no LAYOUT-NATIVE-ONLY)
+## hir/layouts.tcl
+<<<<
+                write {
+                    if {$pointer} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+====
+                write {
+                    if {0 && $pointer} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+>>>>
+
+@@ pointer-alternative-store-moves a pointer stored through a union's pointer alternative is moved into memory instead of observed (the program's binding is consumed)
+## core/binary.tcl
+<<<<
+core::native::register binary::store -arity 3 -impl core::binary::store \
+    -param-types {any str any} -result-type unit -ownership {observe observe observe} \
+====
+core::native::register binary::store -arity 3 -impl core::binary::store \
+    -param-types {any str any} -result-type unit -ownership {observe observe own} \
+>>>>
+
+@@ union-window-read-as-scalar a live union read off a record's view is loaded as a scalar instead of being the union's window (its address)
+## native/lower.tcl
+<<<<
+    switch -- [lindex $repr 0] {
+        layout - array - union {
+            return [Assign fn "op cptroffset $view $at" $e]
+        }
+====
+    switch -- [lindex $repr 0] {
+        layout - array {
+            return [Assign fn "op cptroffset $view $at" $e]
+        }
+>>>>
+
+@@ union-read-cached a read of a live union's alternative is cached per view and offset in a function, as if native memory could not change between two reads
+## native/lower.tcl
+<<<<
+proc native::lower::NativeField {fnVar e view field base} {
+    upvar 1 $fnVar fn
+    return [NativeRepr fn $e $view [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
+}
+====
+proc native::lower::NativeField {fnVar e view field base} {
+    upvar 1 $fnVar fn
+    set key "$view/$base/[lindex $field 1]/[lrange $field 2 end]"
+    if {[dict exists $fn readCache $key]} {
+        return [dict get $fn readCache $key]
+    }
+    set r [NativeRepr fn $e $view [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
+    dict set fn readCache $key $r
+    return $r
+}
+>>>>
+
+@@ hir-text-drops-union-kind HIR text prints a union as an ordinary layout whose fields are its alternatives at offset 0 (read back, it is overlapping fields)
+## hir/format.tcl
+<<<<
+        if {[dict exists $entry union] && [dict get $entry union]} {
+====
+        if {0 && [dict exists $entry union] && [dict get $entry union]} {
+>>>>
+
+@@ hir-text-drops-alternative-representation HIR text prints a union's alternatives by their consumer type only (an array or a union alternative lost)
+## hir/format.tcl
+<<<<
+            set alternatives [lmap field [dict get $entry fields] {
+                format {%s: %s} [dict get $field name] \
+                    [if {[dict exists $field repr]} {
+====
+            set alternatives [lmap field [dict get $entry fields] {
+                format {%s: %s} [dict get $field name] \
+                    [if {0 && [dict exists $field repr]} {
+>>>>
+
+@@ union-identity-process-wide whether a layout is a union is remembered process-wide by its identity, never reset or captured with a compilation's declarations (a same-named record of a later compilation is taken for the union)
+## hir/layouts.tcl
+<<<<
+proc hir::layouts::IsUnion {id} {
+    variable registry
+    return [expr {[dict exists $registry $id] && [dict getdef [dict get $registry $id] union 0]}]
+}
+====
+proc hir::layouts::IsUnion {id} {
+    variable registry
+    variable unionsEver
+    if {![info exists unionsEver]} {
+        set unionsEver [dict create]
+    }
+    if {[dict exists $registry $id] && [dict getdef [dict get $registry $id] union 0]} {
+        dict set unionsEver $id 1
+    }
+    return [dict exists $unionsEver $id]
+}
+>>>>
+
+@@ union-copy-reference-unchecked the reference implementation imprints a union-holding layout (the union read as a struct of every alternative) when a program compiled unchecked asks it to
+## core/binary.tcl
+<<<<
+        union {
+            # Statically LAYOUT-UNION (hir/layouts.tcl): several
+            # interpretations of the same bytes are no value to imprint.
+            core::semanticError LAYOUT-UNION "field \"$name\" of $structId is the union layout [LayoutName [lindex $repr 1 0]], which has no copied value (one of its alternatives is read at a time)"
+        }
+====
+        union {
+            return [Decode [lindex $repr 1] $bytes $at]
+        }
+>>>>
+## core/binary.tcl
+<<<<
+proc core::binary::RefuseNativeOnly {operation descriptor} {
+    set path [UnionPath $descriptor]
+    if {$path ne "none"} {
+====
+proc core::binary::RefuseNativeOnly {operation descriptor} {
+    set path [UnionPath $descriptor]
+    if {0 && $path ne "none"} {
+>>>>

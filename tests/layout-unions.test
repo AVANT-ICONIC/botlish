@@ -273,6 +273,18 @@ layout PLAIN:
     field a: binary::U32 at 0
     field b: binary::U16 at 4
 
+union layout TAILU:
+    size 12
+    align 16
+    alternative a: binary::U8
+    alternative pair: array 2 of binary::U32
+
+layout ARRT:
+    size 40
+    align 4
+    field ts: array 3 of TAILU at 0
+    field after: binary::U32 at 36
+
 }
 
 # A program's value as text: an abi::bytes::Bytes as bytes(HEX ...), a List
@@ -589,6 +601,16 @@ test lu-not-a-type-not-a-struct {a union is a layout: no type of values (LAYOUT-
         [luKinds "x = WORD {whole: 1}\n0\n"] \
         [luKinds "fn f(v: NativeView\[WORD\], e: NativeEdit\[OVLU\], a: NativeView\[array 3 of WORD\], b: NativeEdit\[array 2 of array 2 of WORD\]) -> int:\n    0\n0\n"]
 } -result {LAYOUT-NOT-A-TYPE LAYOUT-NOT-A-VALUE {LAYOUT-UNION {unknown or invalid type LayoutStruct[WORD] for parameter "x": LayoutStruct[WORD] does not exist: WORD is a union layout: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes one alternative at a time (WORD.whole, or through a native view or edit)}} {LAYOUT-UNION {unknown or invalid type LayoutStruct[OVL] for parameter "x": LayoutStruct[OVL] does not exist: layout OVL holds the union layout OVLU by value at OVL.u: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as OVL.u.offsets, or through a native view or edit)}} LAYOUT-UNION {LAYOUT-UNION {unknown or invalid type LayoutStruct[ARRS] for parameter "x": LayoutStruct[ARRS] does not exist: layout ARRS holds the union layout WORD by value at ARRS.ws[]: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as ARRS.ws[0].whole, or through a native view or edit)}} LAYOUT-UNION UNKNOWN-STRUCT accepted}
+
+test lu-tail-padding {a union's size and alignment are its declared ones, never its alternatives': TAILU (a byte or two words, 8 bytes at most) is 12 bytes aligned 16, so an array of it strides 12 -- element i's alternatives at 12 * i -- and a write of its 1-byte alternative changes that byte only, the union's 11 others and the field after the array untouched; on every backend, and natively through a view and an edit} -body {
+    set b [luRamp 40]
+    list \
+        [luRun "\[binary::layout_length(TAILU), binary::layout_alignment(TAILU), binary::layout_length(ARRT)\]\n"] \
+        [luRun "fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n    \[binary::read(d, ARRT.ts\[1\].a), binary::read(d, ARRT.ts\[2\].pair), binary::read(d, ARRT.after), frozen(binary::write(m, ARRT.ts\[1\].a, 9))\]\nr = go(bytes_of(ramp(40)), mutable(ramp(40))):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"] \
+        [luNativeRun "fn go() -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n    p = memory(ramp(40))\n    v = binary::native::view(ARRT, p)\n    e = binary::native::edit(ARRT, p)\n    x = \[binary::element(v.ts, 1).a, binary::load(binary::element(v.ts, 2).pair), v.after\]\n    binary::store(binary::element(e.ts, 1), TAILU.a, 9)\n    \[x, dump(p, 40)\]\nr = go():\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"]
+} -cleanup {unset -nocomplain b} -result [list {same: [12, 16, 40]} \
+    "same: \[[lindex [luRamp 40] 12], \[[luAt [luRamp 40] 24 4], [luAt [luRamp 40] 28 4]\], [luAt [luRamp 40] 36 4], [luHex [lreplace [luRamp 40] 12 12 9]]\]" \
+    "same: \[\[[lindex [luRamp 40] 12], \[[luAt [luRamp 40] 24 4], [luAt [luRamp 40] 28 4]\], [luAt [luRamp 40] 36 4]\], [luList [lreplace [luRamp 40] 12 12 9]]\]"]
 
 # ---------------------------------------------------------------------------
 # Designators and the copy refusals
@@ -920,12 +942,19 @@ test lu-isolation {two programs declaring a same-named union whose alternatives 
     set body "fn f() -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch:\n    p = memory(fill(8, 255))\n    e = binary::native::edit(Swap, p)\n    binary::store(e, Swap.v, 1)\n    v = binary::native::view(Swap, p)\n    d = binary::write(mutable(fill(binary::layout_length(Swap), 0)), Swap.h, 2)\n    \[dump(p, 8), v.h, frozen(d), binary::read(bytes_of(ramp(binary::layout_length(Swap))), Swap.v)\]\nr = f():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
     set first [surface::compile [luProgram "$a$body"] unions.bot -warnings off]
     set second [surface::compile [luProgram "$b$body"] unions.bot -warnings off]
-    list [luOutcome cranelift $first] [luOutcome cranelift $second] [luOutcome cranelift-generic $first] [lrange [luOutcome interp $first] 0 1]
-} -cleanup {unset -nocomplain a b body first second} -result [list \
+    # A same-named record after the union, and the union after the record:
+    # whether Swap is a union is the compilation's own fact, too.
+    set record "layout Swap:\n    size 8\n    align 4\n    field v: binary::U32 at 0\n    field h: binary::I16 at 4\n\n"
+    set third [surface::compile [luProgram "$record$body"] unions.bot -warnings off]
+    set fourth [surface::compile [luProgram "$a$body"] unions.bot -warnings off]
+    list [luOutcome cranelift $first] [luOutcome cranelift $second] [luOutcome cranelift-generic $first] [lrange [luOutcome interp $first] 0 1] \
+        [luOutcome cranelift $third] [expr {[luOutcome cranelift $fourth] eq [luOutcome cranelift $first]}]
+} -cleanup {unset -nocomplain a b body first second record third fourth} -result [list \
     [list value "\[\[1, 0, 0, 0, 255, 255, 255, 255\], 1, bytes(02 00 00 00), [luAt [luRamp 4] 0 4]\]"] \
     [list value "\[\[1, 255, 255, 255, 255, 255, 255, 255\], [luAt {1 255 255 255 255 255 255 255} 0 8], bytes(02 00 00 00 00 00 00 00), 255\]"] \
     [list value "\[\[1, 0, 0, 0, 255, 255, 255, 255\], 1, bytes(02 00 00 00), [luAt [luRamp 4] 0 4]\]"] \
-    {error NATIVE-ONLY}]
+    {error NATIVE-ONLY} \
+    [list value "\[\[1, 0, 0, 0, 255, 255, 255, 255\], -1, bytes(00 00 00 00 02 00 00 00), [luAt [luRamp 8] 0 4]\]"] 1]
 
 test lu-cache {the front-end cache keeps unions: a program file compiled through -cache twice is read back from its entry the second time and reads and writes the same alternatives} -constraints nativeBuilt -body {
     set dir [makeDirectory lu-cache-[pid]]

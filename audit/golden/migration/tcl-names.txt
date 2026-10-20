@@ -8239,6 +8239,7 @@ tests/layout-unions.test lu-registry pass
 tests/layout-unions.test lu-declaration-errors pass
 tests/layout-unions.test lu-overlap-is-declared-only-by-a-union pass
 tests/layout-unions.test lu-size-and-alignment-are-explicit pass
+tests/layout-unions.test lu-tail-padding pass
 tests/layout-unions.test lu-not-a-type-not-a-struct pass
 tests/layout-unions.test lu-designators pass
 tests/layout-unions.test lu-copy-refusals pass
