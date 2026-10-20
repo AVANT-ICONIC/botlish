@@ -1149,7 +1149,9 @@ proc ::cbind::records::Name {recs} {
         set names {}
         set fields {}
         foreach f [dict get $rec fields] {
-            set n [expr {[dict get $f cname] eq "" ? [dict get $f slot] : [::cbind::model::Ident [dict get $f cname]]}]
+            # (Never expr's ?:, which would read a member named inf or nan
+            # as a number.)
+            set n [if {[dict get $f cname] eq ""} {dict get $f slot} else {::cbind::model::Ident [dict get $f cname]}]
             while {$n in $names} { append n _ }
             lappend names $n
             dict set f name $n

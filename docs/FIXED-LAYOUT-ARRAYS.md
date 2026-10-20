@@ -1,5 +1,10 @@
 # Fixed arrays in binary layouts
 
+> Partially superseded by LAYOUT-UNIONS.md: unions landed and compose with
+> arrays as section 12 required -- an array of unions strides the union's
+> declared size, a union's alternative may be an array -- and the C binding
+> generator's union blocker (sections 12 and 15) is gone.
+
 A `layout` field may now be a fixed array:
 
     layout WIN32_FIND_DATAW:

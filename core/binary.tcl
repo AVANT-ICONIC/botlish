@@ -332,8 +332,9 @@ proc core::binary::RefuseNativeOnly {operation descriptor} {
     set path [UnionPath $descriptor]
     if {$path ne "none"} {
         # Statically LAYOUT-UNION (LAYOUT-UNIONS.md).
+        set where [if {$path eq ""} {string cat ""} else {string cat " ($path)"}]
         core::semanticError LAYOUT-UNION \
-            "$operation: [LayoutName [lindex $descriptor 0]] holds a union[expr {$path eq "" ? "" : " ($path)"}], which has no copied value"
+            "$operation: [LayoutName [lindex $descriptor 0]] holds a union$where, which has no copied value"
     }
     set path [PointerPath $descriptor]
     if {$path ne ""} {

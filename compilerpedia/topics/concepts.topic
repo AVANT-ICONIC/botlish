@@ -3183,11 +3183,15 @@ NS::ctypes' opaque type, and a pointer field keeps its pointee's identity.
     MinGW-w64's headers and compiler for windows-x86_64-gnu (Windows x86-64,
     the GNU ABI), never for MSVC's windows-x86_64: MSVC's headers and
     layouts are not probed, and a GNU layout is never taken for MSVC's.
-  * A record with a field no layout represents yet (a fixed or flexible
-    array, a union or anonymous overlay, a bitfield, float or double, C
-    _Bool) gets no layout, and neither does a record holding one by value;
-    a pointer to it is still an ordinary typed pointer. layouts.tsv and the
-    report name each record's blockers.
+  * A fixed array is a layout field and a C union a union layout; an
+    anonymous union, or an anonymous struct inside a union, is a layout of
+    its own (OVERLAPPED_member3) held by a generated field, its size and
+    alignment clang's record layout. A record with a field no layout
+    represents yet (a flexible array, a bitfield, float or double, C
+    _Bool) gets no layout, and neither does a record or union holding one
+    by value; a pointer to it is still an ordinary typed pointer.
+    layouts.tsv and the report name each record's blockers, and map every
+    member name an anonymous member promotes to its generated path.
   * Nothing in the compiler knows a layout was generated: it is ordinary
     source, checked like any other.
 

@@ -1074,7 +1074,9 @@ relocation change), and anything on macOS (section 34).
   of the bound functions pointing to C records, 82 Tcl, 183 SDL3 and 791
   BoringSSL point to one with a layout; the rest wait for arrays, unions and
   the other representations that report measures, or point to incomplete
-  records.
+  records. (Since FIXED-LAYOUT-ARRAYS.md and LAYOUT-UNIONS.md: 121 Tcl, 189
+  SDL3 and 1,152 BoringSSL; what remains waits for floats, Bool fields,
+  bitfields and double.)
 * **Floats** (SDL3: 114 API names), aggregates by value (8), varargs (23):
   their own milestones.
 * **Macro signatures**: 63 Tcl, 66 BoringSSL and 113 SDL3 function-like

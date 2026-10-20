@@ -5,6 +5,16 @@
 > of exactly N elements -- items 32 and 66 and "The fixed-layout limitation"
 > below describe the language before it.
 
+> Partially superseded by LAYOUT-UNIONS.md: overlap is declared by a
+> `union layout` (several interpretations of the same bytes, every
+> alternative at the union's start, an explicit size and alignment) held by
+> value in a field -- items 33 and 67 describe the language before it. A
+> union has no copied value: `LayoutStruct`, `binary::parse`,
+> `binary::emit` and `binary::load` of anything holding one are
+> LAYOUT-UNION, and bytes are read one alternative at a time
+> (`binary::read(data, L.u.alt)`). Overlap stays an error in an ordinary
+> layout, and a union is no sum (item 67's plan is not what landed).
+
 Fixed binary layouts: `layout` declarations, `LayoutStruct[L]`, imprinting
 and emission.
 

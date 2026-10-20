@@ -262,7 +262,7 @@ proc hir::layouts::ReprPointerPath {repr} {
                         # ARRAYS.md), directly or in its nested elements.
 >>>>
 
-@@ pointer-alternative-ordinary-write an ordinary binary::write of a pointer alternative is accepted statically (no LAYOUT-NATIVE-ONLY)
+@@ pointer-alternative-ordinary-write an ordinary binary::write of a pointer alternative (or of anything holding a pointer) is accepted statically (no LAYOUT-NATIVE-ONLY): bytes are written with pointers the program never handed to binary::write_foreign
 ## hir/layouts.tcl
 <<<<
                 write {
@@ -270,8 +270,16 @@ proc hir::layouts::ReprPointerPath {repr} {
                         lappend problems [list LAYOUT-NATIVE-ONLY \
 ====
                 write {
-                    if {0 && $pointer} {
+                    if {0} {
                         lappend problems [list LAYOUT-NATIVE-ONLY \
+>>>>
+## hir/layouts.tcl
+<<<<
+                    } elseif {[ReprPointerPath $field] ne "none"} {
+                        # A fixed array holding C pointers (FIXED-LAYOUT-
+====
+                    } elseif {0} {
+                        # A fixed array holding C pointers (FIXED-LAYOUT-
 >>>>
 
 @@ pointer-alternative-store-moves a pointer stored through a union's pointer alternative is moved into memory instead of observed (the program's binding is consumed)
@@ -281,7 +289,7 @@ core::native::register binary::store -arity 3 -impl core::binary::store \
     -param-types {any str any} -result-type unit -ownership {observe observe observe} \
 ====
 core::native::register binary::store -arity 3 -impl core::binary::store \
-    -param-types {any str any} -result-type unit -ownership {observe observe own} \
+    -param-types {any str any} -result-type unit -ownership {observe observe move} \
 >>>>
 
 @@ union-window-read-as-scalar a live union read off a record's view is loaded as a scalar instead of being the union's window (its address)

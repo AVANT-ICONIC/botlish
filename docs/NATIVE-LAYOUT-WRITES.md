@@ -5,6 +5,13 @@
 > element of a live array at a dynamic index, and a whole array is written
 > from a List (section 22's "Fixed arrays" item).
 
+> Partially superseded by LAYOUT-UNIONS.md: an edit writes a union one
+> alternative at a time (`binary::store(e, L.u.alt, v)`, through
+> `NativeEdit[U]`), touching exactly that alternative's bytes; a designator
+> names an alternative, never a union, and byte storage is written the same
+> way (`binary::write`, `binary::write_foreign` through a pointer
+> alternative).
+
 Native layout writes: the write half of the native-layout model. Live native
 memory is written through a writable native capability, `NativeEdit[L]`
 (`binary::native::edit`, `binary::store`); byte storage the program owns is
