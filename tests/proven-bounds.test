@@ -647,7 +647,18 @@ test bounds-vector-quiet-runs-proven {two loops over one vector place with nothi
 # no size form sees grow (and alias the copies hir::mutvec never wrote out
 # for it): {NAME BODY}, each rejected where the operation is taken as a
 # value -- bound, passed or stored -- before any bounds proof is relied on.
+# (The baseline accepted the counted-loop form and read past the List's
+# end natively.)
 set vectorOperationValues {
+    local-counted {v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    p = mutable_vector::push
+    p(v, 4)
+    zs = loop x in v:
+        x
+    loop k from 0 to list::length(zs):
+        ys.at(k)}
     local-mod {v = mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
@@ -696,7 +707,7 @@ test bounds-vector-operation-value {a vector grown through a mutating operation 
     lmap {name body} $vectorOperationValues {
         list $name [strictKind [string map [list $::vectorDecls $decls] [vectorSnapshotProgram $body 4 ""]]]
     }
-} -result {{local-mod MUTABLE-PLACE-RECEIVER} {field-counted MUTABLE-PLACE-RECEIVER} {clear-argument MUTABLE-PLACE-RECEIVER} {lockstep MUTABLE-PLACE-RECEIVER} {capacity MUTABLE-PLACE-RECEIVER}}
+} -result {{local-counted MUTABLE-PLACE-RECEIVER} {local-mod MUTABLE-PLACE-RECEIVER} {field-counted MUTABLE-PLACE-RECEIVER} {clear-argument MUTABLE-PLACE-RECEIVER} {lockstep MUTABLE-PLACE-RECEIVER} {capacity MUTABLE-PLACE-RECEIVER}}
 
 test bounds-vector-mutated-operand {a lockstep loop's domains run in written order before its body: a domain over a vector evaluated before a mutation in another domain's operands has the length the vector had before it (proven equal to a List collected over it earlier), one evaluated after it has its own length (LOCKSTEP-UNPROVEN, which the counts differing at run time confirm)} -body {
     set decl "${vectorDecls}fn f() -> List\[int\] errors IndexNotFound:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    ys = loop x in v:\n        x * 10\n    %s\n    r\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
