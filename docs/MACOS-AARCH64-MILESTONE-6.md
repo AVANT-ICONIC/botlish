@@ -1113,7 +1113,7 @@ Workflow `.github/workflows/macos-arm64.yml` ("tests (macos arm64)"),
 | [39376981482](https://github.com/mwagner-webdev/botlish/actions/runs/39376981482) | 248f284 | smoke: aot-facts' C-call checks -- `c-library`, `c-call-run`, `c-call-import`, Apple ld's missing-library and undefined-symbol diagnostics -- and one failure in the check itself (`c-link-command` compared `-L` with the unnormalized `/var/...` while rustc's argument had `/private/var/...`), fixed in 0866e38 |
 | [39377475266](https://github.com/mwagner-webdev/botlish/actions/runs/39377475266) | 0866e38 | smoke: every aot-facts check, the C-call ones included, and the macOS link command of section 4; Tier C under GC stress: c-ffi.test, c-bindgen.test, native-view, native-edit, layout-arrays (301 tests per pass, 0 failed) and the fuzzer (0 disagreements), section 21; its acceptance shards were cancelled by the next push |
 | [39379524425](https://github.com/mwagner-webdev/botlish/actions/runs/39379524425) | bad0deb | every job green: smoke; acceptance, both shards -- 197 Tcl test files on interp and 95 golden suites on all four backends, 0 failed, c-ffi.test and c-bindgen.test among them; Tier C: 44 of 44 C FFI mutants killed, 12 of 14 AOT mutants (2 Linux-only skipped), the benchmark (sections 25-26) |
-| [39387800323](https://github.com/mwagner-webdev/botlish/actions/runs/39387800323) | 76e4073 | running at the time of writing (smoke and acceptance of the default-libraries wording, the `cf-availability-check` rename and aot-facts' failed-link report) |
+| [39387800323](https://github.com/mwagner-webdev/botlish/actions/runs/39387800323) | 76e4073 | every job green: smoke (aot-facts with its failed-link report), both acceptance shards (c-ffi.test with `cf-availability-check`), the Linux control; the last code change of the milestone (38fe69f after it is documentation and main's README) |
 
 ## 28. Linux x86-64 regression results
 
@@ -1148,10 +1148,14 @@ narrower guard.
 [39379530108](https://github.com/mwagner-webdev/botlish/actions/runs/39379530108)
 (ubuntu-24.04-arm): the Tcl suite on interp and compile, its cranelift and
 cranelift-generic coverage, the four golden shards and the native Rust unit
-tests all green; the native GC-stress job still running at the time of
-writing. The run at fe560af,
+tests and the native GC-stress run (the whole suite under
+`BOTLISH_NATIVE_GC_STRESS=1`, 89 minutes) all green -- **success**. The run
+at fe560af,
 [39375824830](https://github.com/mwagner-webdev/botlish/actions/runs/39375824830),
-had the same jobs green. Linux AArch64 is where a wrong caller
+succeeded too. The later commits change no code that Linux AArch64
+compiles differently: comments, the macOS-only `cf-availability-check`,
+and aot-facts.tcl's failed-link path (exercised in this container, and run
+by every macOS workflow's Linux control job). Linux AArch64 is where a wrong caller
 extension is invisible to a callee (AAPCS64's callee extends), and where
 Cranelift ignores the extension attribute: the capture tests check there
 that Botlish's register arguments carry their own width's bits and its
