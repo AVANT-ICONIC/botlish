@@ -1522,6 +1522,7 @@ tests/error-payloads.test ep-affine-partial-construction pass
 tests/error-payloads.test ep-affine-payload-type pass
 tests/error-payloads.test ep-affine-pending-arguments pass
 tests/error-payloads.test ep-affine-propagation pass
+tests/error-payloads.test ep-affine-propagation-releasing pass
 tests/error-payloads.test ep-affine-refail pass
 tests/error-payloads.test ep-bind-payload-free pass
 tests/error-payloads.test ep-captured-payload-binding pass

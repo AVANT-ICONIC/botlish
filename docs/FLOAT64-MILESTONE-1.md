@@ -560,7 +560,12 @@ with `expr`'s `?:`.
 * Ternaries over numbers, and over constant strings that do not read as
   numbers, stayed.
 * The mutation harnesses' mutant texts were rewritten with the code they
-  mutate; all 835 still apply.
+  mutate; all 835 still apply. The 40 rewritten mutants, run by their
+  harnesses, are all killed. One of them,
+  `propagation-copies-affine-payload`, survived at first, and it also
+  survived on the tree before this change: its only test reached no
+  releasing re-raise. `ep-affine-propagation-releasing` (with its golden
+  port) now kills it (ERROR-PAYLOADS.md, section 42).
 
 `tests/numeric-looking-names.test` holds it:
 

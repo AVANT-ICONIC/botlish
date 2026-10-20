@@ -543,6 +543,10 @@ test ep-affine-propagation {item 35: an affine payload propagates through a decl
     epReleased "${::epAffine}fn mid(n: int) -> int errors ReadFailed:\n    read(n) + 1\nfn f(n: int) -> int:\n    mid(n):\n        on ReadFailed {stream: s, bytesRead: b}:\n            e = s(Message {value: 5})\n            e.value * 100 + b\n\[f(3), f(0), test_ep_live()\]\n"
 } -result {{value {[503, 1, 0]}} {value {[503, 1, 0]}}}
 
+test ep-affine-propagation-releasing {item 35: an affine payload propagates through a function that releases an affine value of its own on the error edge -- the releasing re-raise releases what the function owns and raises the payload it received, which the handler then resumes} -body {
+    epReleased "${::epAffine}fn mid(n: int) -> int errors ReadFailed:\n    held = make(7)\n    x = read(n)\n    consume(held) + x\nfn f(n: int) -> int:\n    mid(n):\n        on ReadFailed {stream: s, bytesRead: b}:\n            e = s(Message {value: 5})\n            e.value * 100 + b\n\[f(3), f(0), test_ep_live()\]\n"
+} -result {{value {[503, 2, 0]}} {value {[503, 2, 0]}}}
+
 test ep-affine-partial-construction {item 31: a later payload field that fails abandons the payload: the affine field already moved into it is released (pending temporary)} -body {
     epReleased "${::epAffine}fn g(n: int) -> int errors ReadFailed, Boom:\n    s = make(n)\n    if n > 0:\n        fail ReadFailed {stream: s, bytesRead: might_fail(n)}\n    0\nfn f(n: int) -> int:\n    g(n):\n        on ReadFailed {bytesRead}:\n            bytesRead\n        on Boom:\n            -1\n\[f(3), f(1), f(0), test_ep_live()\]\n"
 } -result {{value {[-1, 1, 0, 0]}} {value {[-1, 1, 0, 0]}}}

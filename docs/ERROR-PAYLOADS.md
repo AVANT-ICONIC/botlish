@@ -640,8 +640,11 @@ temporary (`ep-affine-handlers`).
 
 The same ownership tree moves outward: no copy, no drop-and-recreate; a
 releasing re-raise on an error edge re-raises the payload it received
-(`ep-affine-propagation`; the `propagation-copies-affine-payload` mutant
-releases it on the way and is killed).
+(`ep-affine-propagation`; `ep-affine-propagation-releasing` propagates it
+through a function that releases an affine value of its own on that edge,
+which is the only kind that has a releasing re-raise: the
+`propagation-copies-affine-payload` mutant releases the payload on the way
+and is killed there).
 
 ### 43. Early-exit cleanup
 
@@ -804,7 +807,12 @@ unaimed and 25 aimed with `-fault unhandled`.
 
 **44 mutants, 44 killed, 0 survived** (the final run, after
 ERROR-IDENTITY-AND-COMPLETION-SOUNDNESS.md; a first run there, before the
-aimed detector existed, also killed all 44). This milestone's 24:
+aimed detector existed, also killed all 44). A later run, during
+FLOAT64-MILESTONE-1.md, found `propagation-copies-affine-payload`
+surviving: the function `ep-affine-propagation` propagates through holds
+no affine value, so its call has no releasing re-raise to mutate.
+`ep-affine-propagation-releasing` (section 42) has one and kills it; the
+row below counts that test. This milestone's 24:
 
 | mutant | tests failed | fuzz programs disagreeing | aimed | Rust |
 |---|---:|---:|---:|---|
