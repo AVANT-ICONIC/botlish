@@ -919,7 +919,7 @@ test ne-plain-memory {a native edit performs ordinary loads and stores and nothi
         [regexp -all {copy_nonoverlapping\(bytes\.as_ptr\(\), address as \*mut u8} $source] \
         [regexp -all {fn rt_native_store\M|fn rt_native_store_ptr\M} $source] \
         [lsort [lmap name [core::native::names] {expr {[string match binary* $name] ? $name : [continue]}}]]
-} -cleanup {unset -nocomplain source} -result {{edit view} 1 1 2 {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field binary::element binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::edit binary::native::view binary::parse binary::store binary::store_element binary::write binary::write_foreign}}
+} -cleanup {unset -nocomplain source} -result {{edit view} 1 1 2 {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field binary::element binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::edit binary::native::view binary::parse binary::read binary::store binary::store_element binary::write binary::write_foreign}}
 
 # ---------------------------------------------------------------------------
 # Executables and GC stress

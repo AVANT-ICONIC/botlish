@@ -1862,6 +1862,95 @@ fn f(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengt
 @at 12:30
 @end
 
+@topic error.layout-union
+title: LAYOUT-UNION: a copy of a union, or of anything holding one
+summary: A union is several interpretations of the same bytes, so it has no copied value: no LayoutStruct, parse, emit or load of a union or of a layout holding one; read or write one alternative.
+index: errors
+alias: has no copied value; is a union layout; holds the union layout
+keywords: union, union layout, alternative, overlap, LayoutStruct, binary::parse, binary::load, binary::read, copy, OVERLAPPED
+related: concept.layout-unions stdlib.binary::read stdlib.binary::write concept.binary-layouts error.layout-native-only
+docs: LAYOUT-UNIONS.md
+code: CORE SEMANTIC LAYOUT-UNION
+
+== MEANING
+    binary::parse cannot imprint layout OVL from bytes: layout OVL holds
+    the union layout OVLU by value at OVL.u: a union is several
+    interpretations of the same bytes, never independent values, so it
+    has no copied value; ...
+
+A union's alternatives all start at its first byte: a struct holding one
+value per alternative would pretend they are independent fields, and
+nothing records which one was written last (a union has no tag and no
+active alternative). So a union has no LayoutStruct, and neither has any
+layout holding one by value -- directly, in a nested layout or as an
+array element. The same holds for binary::load of a live union or of an
+array of unions, binary::read of a designator that holds one, and a whole-
+array write of an array of unions.
+
+== WHAT TO DO
+Read and write a union one alternative at a time, through a static
+designator: binary::read(data, OVL.u.offsets.offset) and
+binary::write(data, OVL.u.offsets.offset, v) on bytes; in native memory,
+v.u.offsets.offset through a view and binary::store(e, OVL.u.offsets.
+offset, v) through an edit. A record alternative or an array alternative
+is copied whole (binary::read(data, OVL.u.offsets), binary::load(v.u.
+offsets)): it is an ordinary layout. A higher-level wrapper that knows
+which alternative a protocol means turns it into a domain value.
+
+@example reject
+import abi::bytes
+import binary
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::U16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+
+fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+    binary::parse(WORD, d)
+
+0
+@caption A union has no LayoutStruct to imprint into
+@error CORE SEMANTIC LAYOUT-UNION
+@at 17:19
+@end
+
+@example accept
+import abi
+import abi::bytes
+import binary
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::U16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.whole, 131073))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.halves)]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@caption One alternative at a time
+@value [131073, LayoutStruct[HALVES] {low: 1, high: 2}]
+@end
+
 @topic error.layout-not-a-type
 title: LAYOUT-NOT-A-TYPE: a layout's name used as a type
 summary: A layout describes bytes and is not itself a type: the values imprinted with layout L have the type `LayoutStruct[L]`.

@@ -2582,6 +2582,50 @@ binary::parse(Pair, r):
 @value LayoutStruct[Pair] {a: 258, b: -1}
 @end
 
+@topic stdlib.binary::read
+title: -
+summary: The one representation a field designator names, imprinted from bytes of exactly L's size, binary::read(data, L.path): a scalar, a record, an array, one alternative of a union.
+index: stdlib
+keywords: read field from bytes; read one field; union alternative; interpret bytes as; read alternative; pick union member
+related: stdlib.binary::write stdlib.binary::parse concept.layout-unions concept.binary-layouts
+
+== NOTES
+data must statically be an abi::bytes::Bytes (abi::bytes::freeze a
+MutableBytes); the designator is written L.FIELD, a path through nested
+layouts and unions (L.u.alt.field) and element indices (L.items[3]),
+resolved statically to one constant offset. It is binary::write's read
+twin, and how a union is read from bytes: a union has no copied value
+(LAYOUT-UNION), so a program reads the alternative it means
+(binary::read(data, U.whole)), each alternative by its own encoding. It
+may name a nested layout (its LayoutStruct) or a fixed array (a List of
+exactly its extent, which the compiler knows); never a union itself
+(LAYOUT-OPERAND: name an alternative), a C pointer, or anything holding
+one (LAYOUT-NATIVE-ONLY: bytes never become a pointer). Runs on every
+backend. Declared nomethod. LAYOUT-UNIONS.md.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative bytes: array 4 of binary::U8
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.whole, 16909060))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.bytes), binary::read(e, WORD.bytes[3])]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@value [16909060, [4, 3, 2, 1], 1]
+@end
+
 @topic stdlib.binary::write_foreign
 title: -
 summary: A new abi::bytes::MutableBytes with an existing C pointer's address bits encoded into a pointer field of layout L, binary::write_foreign(data, L.field, p).

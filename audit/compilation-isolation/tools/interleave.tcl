@@ -22,7 +22,7 @@
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create \
     -suites {traits-path.bot harness.bot contexts.bot affinity.bot coroutines.bot errors.bot
-        representation.bot declared-errors.bot ownership.bot binary-layout.bot layout-arrays.bot} \
+        representation.bot declared-errors.bot ownership.bot binary-layout.bot layout-arrays.bot layout-unions.bot} \
     -backends {interp compile cranelift cranelift-generic} -print 0]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "interleave.tcl: unknown option $option" }
