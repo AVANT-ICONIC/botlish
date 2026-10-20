@@ -83,7 +83,10 @@
 ## hir/layouts.tcl
 <<<<
             set inner [ReprPointerPath [dict get $repr element]]
-            return [expr {$inner eq "none" ? "none" : "\[\]$inner"}]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
 ====
             return none
 >>>>
@@ -180,7 +183,10 @@
 @@ native-index-without-stride native element access scales the index by 1, not by the element's width
 ## native/lower.tcl
 <<<<
-        set scaled [expr {$stride == 1 ? $index : [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]}]
+        set scaled $index
+        if {$stride != 1} {
+            set scaled [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]
+        }
 ====
         set scaled $index
 >>>>

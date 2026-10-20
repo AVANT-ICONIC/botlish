@@ -113,10 +113,18 @@
 ## hir/affine.tcl
 <<<<
             if {$affineField} {
-                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+                if {$kind eq "ref"} {
+                    set shown [hir::semantic::RefName $hir $e]
+                } else {
+                    set shown "value"
+                }
 ====
             if {0} {
-                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+                if {$kind eq "ref"} {
+                    set shown [hir::semantic::RefName $hir $e]
+                } else {
+                    set shown "value"
+                }
 >>>>
 
 @@ any-erasure-hides erasing an affine value into an unrestricted position (any, an unrestricted field or argument) is accepted
@@ -169,7 +177,7 @@ proc hir::affine::Erasure {hir e what} {
                 set released [concat [Leaving $hir $scopes $byKey $pairs $state $x] [PendingItems $hir $pending $x]]
                 if {[dict get $node kind] eq "fail"} {
                     set released [lmap b $released {
-                        expr {[dict exists $hir bindings $b] && [dict get $hir bindings $b kind] eq "param" ? [continue] : $b}
+                        if {[dict exists $hir bindings $b] && [dict get $hir bindings $b kind] eq "param"} {continue} else {set b}
                     }]
                 }
                 if {$released eq {}} continue
@@ -177,11 +185,11 @@ proc hir::affine::Erasure {hir e what} {
 ## hir/affine.tcl
 <<<<
                     set released [lmap b [concat [Leaving $hir $scopes $byKey $pairs $state $x] [PendingItems $hir $pending $x]] {
-                        expr {$b in $done ? [continue] : $b}
+                        if {$b in $done} {continue} else {set b}
                     }]
 ====
                     set released [lmap b [concat [Leaving $hir $scopes $byKey $pairs $state $x] [PendingItems $hir $pending $x]] {
-                        expr {$b in $done || ([dict exists $hir bindings $b] && [dict get $hir bindings $b kind] eq "param") ? [continue] : $b}
+                        if {$b in $done || ([dict exists $hir bindings $b] && [dict get $hir bindings $b kind] eq "param")} {continue} else {set b}
                     }]
 >>>>
 
@@ -265,7 +273,11 @@ proc hir::affine::Erasure {hir e what} {
         set s [structuralOf $a]
         return [expr {$s ne "" && [FnSubtype $s $b]}]
 ====
-        set s [expr {[IsCoroutine $a] ? [list fn [lindex $a 1]] : [structuralOf $a]}]
+        if {[IsCoroutine $a]} {
+            set s [list fn [lindex $a 1]]
+        } else {
+            set s [structuralOf $a]
+        }
         return [expr {$s ne "" && [FnSubtype $s $b]}]
 >>>>
 
@@ -274,7 +286,11 @@ proc hir::affine::Erasure {hir e what} {
 <<<<
         return [expr {[IsCoroutine $a] && [CoroutineMismatch $a $b] eq ""}]
 ====
-        set s [expr {[IsCoroutine $a] ? $a : [structuralOf $a]}]
+        if {[IsCoroutine $a]} {
+            set s $a
+        } else {
+            set s [structuralOf $a]
+        }
         return [expr {$s ne "" && [CoroutineMismatch $s $b] eq ""}]
 >>>>
 

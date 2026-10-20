@@ -154,7 +154,10 @@ proc hir::layouts::Fail {span message {kind TYPE}} {
 # The declaration identity of a layout NAME declared in module NAMESPACE (""
 # for the entry program).
 proc hir::layouts::identity {name namespace} {
-    return [expr {$namespace eq "" ? $name : "${namespace}::${name}"}]
+    if {$namespace eq ""} {
+        return $name
+    }
+    return "${namespace}::${name}"
 }
 
 # 1 if ID is a registered layout declaration identity.
@@ -180,10 +183,16 @@ proc hir::layouts::lookup {name {ns ""}} {
         return ""
     }
     if {[string first :: $name] >= 0} {
-        return [expr {[dict exists $registry $name] ? $name : ""}]
+        if {[dict exists $registry $name]} {
+            return $name
+        }
+        return ""
     }
     set id [identity $name $ns]
-    return [expr {[dict exists $registry $id] ? $id : ""}]
+    if {[dict exists $registry $id]} {
+        return $id
+    }
+    return ""
 }
 
 # The identity of the struct view of layout ID.
@@ -203,7 +212,10 @@ proc hir::layouts::OfStructId {structId} {
         return ""
     }
     set id [string range $structId 13 end-1]
-    return [expr {[dict exists $registry $id] ? $id : ""}]
+    if {[dict exists $registry $id]} {
+        return $id
+    }
+    return ""
 }
 
 # The layout of TYPE when TYPE is a LayoutStruct type, else "".
@@ -401,7 +413,10 @@ proc hir::layouts::ElementType {type} {
 # binary::load makes of it.
 proc hir::layouts::TermConsumerType {term} {
     set repr [ReprOfTerm $term]
-    return [expr {$repr eq "" ? "any" : [dict get $repr type]}]
+    if {$repr eq ""} {
+        return any
+    }
+    return [dict get $repr type]
 }
 
 # TERM as source text, the way hir::types::show prints a type: "array 16 of
@@ -419,7 +434,10 @@ proc hir::layouts::ShowTerm {term} {
 # What a NativeView[...] or NativeEdit[...] type shows between its brackets:
 # a layout's identity, or a live array's representation (ShowTerm).
 proc hir::layouts::ShowNative {payload} {
-    return [expr {[IsArrayTerm $payload] ? [ShowTerm $payload] : $payload}]
+    if {[IsArrayTerm $payload]} {
+        return [ShowTerm $payload]
+    }
+    return $payload
 }
 
 # The array descriptor (ReprDescriptor's {array N STRIDE ELEMENT}) of the
@@ -458,11 +476,17 @@ proc hir::layouts::ReprPointerPath {repr} {
         }
         layout {
             set inner [PointerField [dict get $repr layout]]
-            return [expr {$inner eq "" ? "none" : ".$inner"}]
+            if {$inner eq ""} {
+                return none
+            }
+            return ".$inner"
         }
         array {
             set inner [ReprPointerPath [dict get $repr element]]
-            return [expr {$inner eq "none" ? "none" : "\[\]$inner"}]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
         }
     }
     return none
@@ -523,7 +547,10 @@ proc hir::layouts::OfViewType {type} {
         return ""
     }
     set id [lindex $type 1]
-    return [expr {[declared $id] ? $id : ""}]
+    if {[declared $id]} {
+        return $id
+    }
+    return ""
 }
 
 # The layout of TYPE when TYPE is a NativeEdit type, else ""
@@ -533,7 +560,10 @@ proc hir::layouts::OfEditType {type} {
         return ""
     }
     set id [lindex $type 1]
-    return [expr {[declared $id] ? $id : ""}]
+    if {[declared $id]} {
+        return $id
+    }
+    return ""
 }
 
 # The layout of TYPE when TYPE reads native memory -- a NativeView[L] or a
@@ -544,7 +574,10 @@ proc hir::layouts::OfNativeType {type} {
         return ""
     }
     set id [lindex $type 1]
-    return [expr {[declared $id] ? $id : ""}]
+    if {[declared $id]} {
+        return $id
+    }
+    return ""
 }
 
 # The static type of field NAME read through a NativeView[ID] (the file
@@ -820,7 +853,7 @@ proc hir::layouts::NotScalarReason {type spelled} {
 # The kind of declaration (for a message) the identity ID already is, or "".
 proc hir::layouts::OtherDeclaration {id name} {
     if {$name in {Int any never Fn Coroutine enum unit} || [core::type::isBuiltinName $name]
-            || [dict exists $::hir::types::constructors $name]} {
+            || [dict exists $::hir::types::constructors $name] || [core::native::isBuiltinEnum $name]} {
         return "a built-in type"
     }
     if {[core::type::valid $id]} {
@@ -936,8 +969,8 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
     set ns [dict get $decl namespace]
     set size [dict get $decl size]
     set align [dict get $decl align]
-    set sizeSpan [expr {[dict exists $decl sizeSpan] ? [dict get $decl sizeSpan] : [dict get $decl nameSpan]}]
-    set alignSpan [expr {[dict exists $decl alignSpan] ? [dict get $decl alignSpan] : [dict get $decl nameSpan]}]
+    set sizeSpan [dict getdef $decl sizeSpan [dict get $decl nameSpan]]
+    set alignSpan [dict getdef $decl alignSpan [dict get $decl nameSpan]]
     if {![string is entier -strict $size] || $size < 1 || $size > $maxSize} {
         Fail $sizeSpan "layout \"$name\" has size $size: a layout's size is a byte count from 1 to $maxSize" LAYOUT-SIZE
     }
@@ -948,9 +981,9 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
     set names [dict create]
     foreach field [dict get $decl fields] {
         set fieldName [dict get $field name]
-        set nameSpan [expr {[dict exists $field nameSpan] ? [dict get $field nameSpan] : [dict get $decl nameSpan]}]
-        set typeSpan [expr {[dict exists $field typeSpan] ? [dict get $field typeSpan] : $nameSpan}]
-        set offsetSpan [expr {[dict exists $field offsetSpan] ? [dict get $field offsetSpan] : $nameSpan}]
+        set nameSpan [dict getdef $field nameSpan [dict get $decl nameSpan]]
+        set typeSpan [dict getdef $field typeSpan $nameSpan]
+        set offsetSpan [dict getdef $field offsetSpan $nameSpan]
         if {[dict exists $names $fieldName]} {
             Fail $nameSpan "duplicate field \"$fieldName\" in layout \"$name\" (first declared at [Where [dict get $names $fieldName]]): a layout's fields have distinct names" DUPLICATE-FIELD
         }
@@ -1061,7 +1094,7 @@ proc hir::layouts::ResolveRepr {typeExpr pointerText ns byId doneVar stack id na
         }
         variable pendingPointers
         lappend pendingPointers [dict create id $id field $fieldName name $name ns $ns typeExpr $typeExpr \
-            typeSpan $typeSpan typeText [expr {$pointerText ? $typeExpr : ""}] depth $depth]
+            typeSpan $typeSpan typeText [if {$pointerText} {set typeExpr} else {string cat ""}] depth $depth]
         # The bare pointer kind until then: affine, like every pointer.
         return [dict create kind pointer width $width endian little type cptr]
     }
@@ -1115,7 +1148,11 @@ proc hir::layouts::ResolvePointers {orderVar} {
             }
             set spelled $typeText
             if {[hir::types::IsCPtr $type]} {
-                set problem [expr {[lindex $type 1] eq "void" ? "" : [hir::cabi::PointeeProblem [lindex $type 1]]}]
+                if {[lindex $type 1] eq "void"} {
+                    set problem ""
+                } else {
+                    set problem [hir::cabi::PointeeProblem [lindex $type 1]]
+                }
             } elseif {[hir::types::IsCFnPtr $type]} {
                 set problem [hir::cabi::SignatureProblem [lindex $type 1]]
             } else {
@@ -1159,7 +1196,11 @@ proc hir::layouts::UnresolvedFieldType {typeExpr ns spelled fieldName layoutName
             # C-ABI-TYPES.md: no field holds a value of C's void.
             return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: [hir::cabi::VoidMessage]"
         }
-        set id [expr {[string first :: $typeExpr] >= 0 ? $typeExpr : [identity $typeExpr $ns]}]
+        if {[string first :: $typeExpr] >= 0} {
+            set id $typeExpr
+        } else {
+            set id [identity $typeExpr $ns]
+        }
         if {[info exists batchStructs] && [dict exists $batchStructs $id]} {
             return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: $spelled is a struct type, not an integer domain or a layout (a struct holds domain meaning, not bytes; a nested layout field names a layout)"
         }
@@ -1430,7 +1471,7 @@ proc hir::layouts::Role {name} {
         return ""
     }
     set meta [core::native::metadata $name]
-    return [expr {[dict exists $meta layout] ? [dict get $meta layout] : ""}]
+    return [dict getdef $meta layout ""]
 }
 
 # The value of role WORD ("operand", "typed", "input", "query") in ROLE, or
@@ -1531,7 +1572,11 @@ proc hir::layouts::Problems {hir e name role} {
     set viewed [RoleOf $role viewed]
     set arrayed [RoleOf $role arrayed]
     if {$viewed ne "" || $arrayed ne ""} {
-        set arg [lindex $args [lindex [expr {$viewed ne "" ? $viewed : $arrayed}] 0]]
+        if {$viewed ne ""} {
+            set arg [lindex $args [lindex $viewed 0]]
+        } else {
+            set arg [lindex $args [lindex $arrayed 0]]
+        }
         set type [hir::typeOf $hir $arg]
         if {$type ne "never" && !(($viewed ne "" && [OfNativeType $type] ne "")
                 || ($arrayed ne "" && [OfArrayType $type] ne ""))} {
@@ -1765,7 +1810,7 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
         if {$valueType eq "never" || ![hir::get $hir $arg reachable]} {
             return
         }
-        set range [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [hir::range::unknown]}]
+        set range [dict getdef $ranges $arg [hir::range::unknown]]
         if {[hir::range::ProvesValueAcceptedBy $valueType $range $declared]} {
             return
         }
@@ -1791,7 +1836,7 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
     if {$valueType eq "never" || ![hir::get $hir $arg reachable]} {
         return
     }
-    set range [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [hir::range::unknown]}]
+    set range [dict getdef $ranges $arg [hir::range::unknown]]
     if {[hir::range::ProvesValueAcceptedBy $valueType $range $declared]} {
         return
     }

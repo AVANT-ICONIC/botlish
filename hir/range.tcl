@@ -263,7 +263,11 @@ proc hir::range::intersect {a b} {
     set ea [ExactOf $a]
     set eb [ExactOf $b]
     if {$ea eq {} && $eb eq {}} { return $r }
-    set source [expr {$ea eq {} ? $eb : $ea}]
+    if {$ea eq {}} {
+        set source $eb
+    } else {
+        set source $ea
+    }
     set values [lmap v $source {
         if {($mn ne {-inf} && $v < $mn) || ($mx ne {+inf} && $v > $mx) \
                 || ($ea ne {} && $eb ne {} && $v ni $eb)} continue
@@ -277,7 +281,10 @@ proc hir::range::TypeFact {type} {
     if {[catch {core::type::integerFacts $type} facts]} { return [unknown] }
     if {$facts eq {}} { return [unknown] }
     set r [dict create min [dict get $facts min] max [dict get $facts max]]
-    return [expr {[dict exists $facts exact] ? [Normalize $r [dict get $facts exact]] : $r}]
+    if {[dict exists $facts exact]} {
+        return [Normalize $r [dict get $facts exact]]
+    }
+    return $r
 }
 
 proc hir::range::ConstrainType {hir e r} {
@@ -360,14 +367,20 @@ proc hir::range::Min {a b} {
     if {$a eq "-inf" || $b eq "-inf"} {
         return -inf
     }
-    return [expr {$a < $b ? $a : $b}]
+    if {$a < $b} {
+        return $a
+    }
+    return $b
 }
 
 proc hir::range::Max {a b} {
     if {$a eq "+inf" || $b eq "+inf"} {
         return +inf
     }
-    return [expr {$a > $b ? $a : $b}]
+    if {$a > $b} {
+        return $a
+    }
+    return $b
 }
 
 # The least upper bound of A and B: every value either could be. "never" (no
@@ -615,7 +628,7 @@ proc hir::range::show {r} {
     }
     set mn [dict get $r min]
     set mx [dict get $r max]
-    set base "\[[expr {$mn eq {-inf} ? "-∞" : $mn}], [expr {$mx eq {+inf} ? "+∞" : $mx}]\]"
+    set base "\[[if {$mn eq {-inf}} {string cat "-∞"} else {set mn}], [if {$mx eq {+inf}} {string cat "+∞"} else {set mx}]\]"
     # Only ever displays an *explicitly* tracked exact set, or a bare
     # point's own trivial singleton -- never ExactOf's broader on-demand
     # reconstruction of an arbitrary small dense interval (ExactOf itself
@@ -729,7 +742,11 @@ proc hir::range::BitOp {name x y} {
                 return $r
             }
             set mx [ShiftRightBound $xmx $ymn]
-            set mn [expr {$ymx eq "+inf" ? 0 : [ShiftRightBound $xmn $ymx]}]
+            if {$ymx eq "+inf"} {
+                set mn 0
+            } else {
+                set mn [ShiftRightBound $xmn $ymx]
+            }
             set r [dict create min $mn max $mx]
             return [CrossExact $r $x $y {apply {{a b} {expr {$a >> $b}}}}]
         }
@@ -746,7 +763,11 @@ proc hir::range::BitOp {name x y} {
                 return [unknown]
             }
             set mn [expr {$xmn << $ymn}]
-            set mx [expr {$xmx eq "+inf" ? "+inf" : ($xmx << $ymx)}]
+            if {$xmx eq "+inf"} {
+                set mx "+inf"
+            } else {
+                set mx [expr {$xmx << $ymx}]
+            }
             set r [dict create min $mn max $mx]
             return [CrossExact $r $x $y {apply {{a b} {expr {$a << $b}}}}]
         }
@@ -834,7 +855,7 @@ proc hir::range::ExternalSeeds {hir spec} {
                 continue
             }
             set nparams [llength [hir::get $hir $targetBlock params]]
-            set current [expr {[dict exists $seeds $target] ? [dict get $seeds $target] : [lrepeat $nparams never]}]
+            set current [dict getdef $seeds $target [lrepeat $nparams never]]
             set next {}
             foreach argExpr [hir::get $hir $callExpr args] c $current {
                 lappend next [join $c [SeedRange $hir $argExpr]]
@@ -922,7 +943,10 @@ proc hir::range::BindingRange {hir bindings b} {
         return [dict get $bindings $b]
     }
     set n [hir::exact::BindingIntOf $hir $b]
-    return [expr {$n eq "" ? [unknown] : [point $n]}]
+    if {$n eq ""} {
+        return [unknown]
+    }
+    return [point $n]
 }
 
 proc hir::range::Expr {hirVar ctxVar e} {
@@ -934,7 +958,11 @@ proc hir::range::Expr {hirVar ctxVar e} {
     switch -- [dict get $node kind] {
         const {
             set v [dict get $node value]
-            set r [expr {[core::value::kind $v] eq "int" ? [point [core::value::intOf $v]] : [unknown]}]
+            if {[core::value::kind $v] eq "int"} {
+                set r [point [core::value::intOf $v]]
+            } else {
+                set r [unknown]
+            }
             dict set ctx exprs $e $r
             return $r
         }
@@ -1099,7 +1127,11 @@ proc hir::range::Expr {hirVar ctxVar e} {
         }
         return {
             set value [dict get $node value]
-            set r [expr {$value eq "" ? [unknown] : [Expr hir ctx $value]}]
+            if {$value eq ""} {
+                set r [unknown]
+            } else {
+                set r [Expr hir ctx $value]
+            }
             if {$r ne "never" && [dict get $node target] ne ""} {
                 dict set ctx returnRange [join [dict get $ctx returnRange] $r]
             }
@@ -1107,7 +1139,11 @@ proc hir::range::Expr {hirVar ctxVar e} {
         }
         break {
             set value [dict get $node value]
-            set r [expr {$value eq "" ? [unknown] : [Expr hir ctx $value]}]
+            if {$value eq ""} {
+                set r [unknown]
+            } else {
+                set r [Expr hir ctx $value]
+            }
             set target [dict get $node target]
             if {$r ne "never" && $target ne "" && [dict exists $ctx breakRanges $target]} {
                 dict set ctx breakRanges $target [join [dict get $ctx breakRanges $target] $r]
@@ -1134,7 +1170,10 @@ proc hir::range::Expr {hirVar ctxVar e} {
         }
         ok - error {
             set value [Expr hir ctx [dict get $node value]]
-            return [expr {$value eq "never" ? "never" : [unknown]}]
+            if {$value eq "never"} {
+                return "never"
+            }
+            return [unknown]
         }
         handle {
             # A handled call (EXPLICIT-ERROR-COMPLETIONS.md): the wrapped
@@ -1255,7 +1294,11 @@ proc hir::range::Call {hirVar ctxVar e node} {
                 + { set result [add $x $y] }
                 - {
                     set offset [DifferenceOffset $hir [lindex [dict get $node args] 0] [lindex [dict get $node args] 1]]
-                    set result [expr {$offset eq "" ? [sub $x $y] : [point $offset]}]
+                    if {$offset eq ""} {
+                        set result [sub $x $y]
+                    } else {
+                        set result [point $offset]
+                    }
                 }
                 * { set result [mul $x $y] }
             }
@@ -1297,7 +1340,7 @@ proc hir::range::Call {hirVar ctxVar e node} {
             return $result
         }
         set results [dict get $ctx calleeResults]
-        set result [expr {[dict exists $results $targetId] ? [dict get $results $targetId] : [unknown]}]
+        set result [dict getdef $results $targetId [unknown]]
         set result [ConstrainType $hir $e $result]
         if {$result eq "never"} {set result [unknown]}
         dict set ctx exprs $e $result
@@ -1773,7 +1816,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             continue
         }
         set argType [hir::typeOf $hir $arg]
-        set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
+        set argRange [dict getdef $ranges $arg [unknown]]
         set inferred [hir::signatures::inferredTrusted $hir $targetBlock $i]
         if {$inferred && [hir::signatures::CallableAdmits $argType $declaredType]} {
             # An untyped parameter the body calls (its inferred contract is
@@ -1802,7 +1845,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             }
             hir::Diagnose hir COROUTINE-NOT-FUNCTION [format \
                 {%s is a coroutine handle, not a function value: it carries the evolving state of one coroutine and cannot be passed where a function value of type %s is expected (Fn and Coroutine are distinct callable kinds, even with the same contract; declare the parameter %s, or leave it untyped)} \
-                [expr {[dict get $hir exprs $arg kind] eq "ref" ? "\"[hir::semantic::RefName $hir $arg]\"" : "this value"}] \
+                [if {[dict get $hir exprs $arg kind] eq "ref"} {string cat "\"[hir::semantic::RefName $hir $arg]\""} else {string cat "this value"}] \
                 [hir::types::show $declaredType] \
                 [hir::types::show [list coroutine [lindex $declaredType 1]]]] $arg
             continue
@@ -1821,7 +1864,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $declaredType] \
                 [expr {$inferred ? ", the parameter type inferred from the function body" : ""}] \
                 [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
-                [expr {$inferred ? [hir::signatures::because $hir $targetBlock $i] : ""}]] $arg
+                [if {$inferred} {hir::signatures::because $hir $targetBlock $i} else {string cat ""}]] $arg
             continue
         }
         # A checked-only requirement: the body re-validates it at run time
@@ -1868,7 +1911,7 @@ proc hir::range::VerifyImprintedNative {hirVar ranges e node name} {
         incr index
         if {$arg eq "" || $declared eq ""} { continue }
         set argType [hir::typeOf $hir $arg]
-        set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
+        set argRange [dict getdef $ranges $arg [unknown]]
         if {[ProvesValueAcceptedBy $argType $argRange $declared]} {
             continue
         }
@@ -1920,7 +1963,7 @@ proc hir::range::VerifyStruct {hirVar ranges e node} {
         if {$valueType eq "never" || ![hir::get $hir $field reachable]} {
             continue
         }
-        set valueRange [expr {[dict exists $ranges $field] ? [dict get $ranges $field] : [unknown]}]
+        set valueRange [dict getdef $ranges $field [unknown]]
         if {[ProvesValueAcceptedBy $valueType $valueRange $declared]} {
             continue
         }
@@ -1946,7 +1989,7 @@ proc hir::range::VerifyPayload {hirVar ranges e node} {
         if {$valueType eq "never" || ![hir::get $hir $field reachable]} {
             continue
         }
-        set valueRange [expr {[dict exists $ranges $field] ? [dict get $ranges $field] : [unknown]}]
+        set valueRange [dict getdef $ranges $field [unknown]]
         if {[ProvesValueAcceptedBy $valueType $valueRange $declared]} {
             continue
         }
@@ -2017,7 +2060,10 @@ proc hir::range::MismatchClause {argType declared} {
         return ""
     }
     set why [hir::types::explainMismatch $argType $declared]
-    return [expr {$why eq "" ? "" : "; $why"}]
+    if {$why eq ""} {
+        return ""
+    }
+    return "; $why"
 }
 
 # The explanation, when DECLARED requires a refinement (REFINEMENT-VALUES.md)
@@ -2069,7 +2115,11 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
     }
     if {[llength $argExprs] != [llength $declaredTypes]} {
         if {$coroutine} {
-            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "step"}]
+            if {[dict get $hir exprs $callee kind] eq "ref"} {
+                set name [hir::semantic::RefName $hir $callee]
+            } else {
+                set name "step"
+            }
             if {$declaredTypes eq {}} {
                 hir::Diagnose hir COROUTINE-RESUME-ARITY \
                     "this coroutine has the zero-message protocol: resume it with no argument, \"${name}()\", got [llength $argExprs] argument(s)" $e
@@ -2090,7 +2140,7 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
         incr index
         if {$declaredType eq "any" || [dict exists $hir poisoned $arg]} { continue }
         set argType [hir::typeOf $hir $arg]
-        set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
+        set argRange [dict getdef $ranges $arg [unknown]]
         if {[ProvesValueAcceptedBy $argType $argRange $declaredType]} {
             continue
         }
@@ -2173,8 +2223,8 @@ proc hir::range::JoinBindings {saved after1 after0 branches} {
     }
     set result [dict create]
     dict for {b r} $saved {
-        set r1 [expr {[dict exists $after1 $b] ? [dict get $after1 $b] : $r}]
-        set r0 [expr {[dict exists $after0 $b] ? [dict get $after0 $b] : $r}]
+        set r1 [dict getdef $after1 $b $r]
+        set r0 [dict getdef $after0 $b $r]
         dict set result $b [join $r1 $r0]
     }
     return $result
@@ -2338,7 +2388,7 @@ proc hir::range::OutcomeFacts {hir ctx condition outcome} {
         }
         set dead [dict create]
         dict for {b r} $first {
-            dict set dead $b [expr {$r ne {never} && [IsEmpty $r] ? $r : $empty}]
+            dict set dead $b [if {$r ne {never} && [IsEmpty $r]} {set r} else {set empty}]
         }
         return [list 0 $dead]
     }
@@ -2368,10 +2418,20 @@ proc hir::range::Meet {a b} {
     if {[IsEmpty $b]} {
         return $b
     }
-    set mn [expr {[dict get $a min] eq {-inf} ? [dict get $b min]
-        : ([dict get $b min] eq {-inf} ? [dict get $a min] : [Max [dict get $a min] [dict get $b min]])}]
-    set mx [expr {[dict get $a max] eq {+inf} ? [dict get $b max]
-        : ([dict get $b max] eq {+inf} ? [dict get $a max] : [Min [dict get $a max] [dict get $b max]])}]
+    if {[dict get $a min] eq {-inf}} {
+        set mn [dict get $b min]
+    } elseif {[dict get $b min] eq {-inf}} {
+        set mn [dict get $a min]
+    } else {
+        set mn [Max [dict get $a min] [dict get $b min]]
+    }
+    if {[dict get $a max] eq {+inf}} {
+        set mx [dict get $b max]
+    } elseif {[dict get $b max] eq {+inf}} {
+        set mx [dict get $a max]
+    } else {
+        set mx [Min [dict get $a max] [dict get $b max]]
+    }
     if {$mn ne {-inf} && $mx ne {+inf} && $mn > $mx} {
         return [dict create min $mn max $mx]
     }
@@ -2415,8 +2475,8 @@ proc hir::range::ComparisonNarrowing {hir ctx condition outcome} {
     }
     lassign $args ea eb
     set exprs [dict get $ctx exprs]
-    set ra [expr {[dict exists $exprs $ea] ? [dict get $exprs $ea] : [unknown]}]
-    set rb [expr {[dict exists $exprs $eb] ? [dict get $exprs $eb] : [unknown]}]
+    set ra [dict getdef $exprs $ea [unknown]]
+    set rb [dict getdef $exprs $eb [unknown]]
     set facts [dict create]
     set ba [RefBinding $hir $ea]
     if {$ba ne ""} {
@@ -2453,12 +2513,19 @@ proc hir::range::EqualityNarrowing {hir ctx condition args outcome} {
     }
     lassign [dict get [dict get $ctx monotone] $condition] p step
     lassign $args ea eb
-    set boundExpr [expr {[RefBinding $hir $ea] eq $p ? $eb : $ea}]
+    if {[RefBinding $hir $ea] eq $p} {
+        set boundExpr $eb
+    } else {
+        set boundExpr $ea
+    }
     set exprs [dict get $ctx exprs]
-    set boundRange [expr {[dict exists $exprs $boundExpr] ? [dict get $exprs $boundExpr] : [unknown]}]
+    set boundRange [dict getdef $exprs $boundExpr [unknown]]
     set current [dict get [dict get $ctx bindings] $p]
     set n [Narrowed [expr {$step > 0 ? "<" : ">"}] $current $boundRange]
-    return [expr {$n eq "" ? {} : [dict create $p $n]}]
+    if {$n eq ""} {
+        return {}
+    }
+    return [dict create $p $n]
 }
 
 # The Range of X narrowed by "X OP Y", given X's own range RX and Y's range
@@ -2521,8 +2588,8 @@ proc hir::range::Narrowed {op rx ry} {
 proc hir::range::ExactEqualityNarrowing {hir ctx args outcome} {
     lassign $args ea eb
     set exprs [dict get $ctx exprs]
-    set ra [expr {[dict exists $exprs $ea] ? [dict get $exprs $ea] : [unknown]}]
-    set rb [expr {[dict exists $exprs $eb] ? [dict get $exprs $eb] : [unknown]}]
+    set ra [dict getdef $exprs $ea [unknown]]
+    set rb [dict getdef $exprs $eb [unknown]]
     set facts [dict create]
     foreach pair [list [list $ea $ra $rb] [list $eb $rb $ra]] {
         lassign $pair selfExpr selfRange otherRange
@@ -2744,7 +2811,11 @@ proc hir::range::AnalyzeInstance {hir id instanceCalls block params assumed mono
     dict for {b r} $captureSeed {
         dict set ctx bindings $b $r
     }
-    set body [expr {$block eq "program" ? [hir::roots $hir] : [hir::get $hir $block body]}]
+    if {$block eq "program"} {
+        set body [hir::roots $hir]
+    } else {
+        set body [hir::get $hir $block body]
+    }
     set final [Sequence hir ctx $body]
     set result [join $final [dict get $ctx returnRange]]
     set outcome [dict create exprs [dict get $ctx exprs] result $result calls [dict get $ctx calls] \
@@ -2879,7 +2950,7 @@ proc hir::range::SettleInstance {hir id instanceCalls block params assumed locke
 proc hir::range::ResultsRead {results callees} {
     set read {}
     foreach t $callees {
-        lappend read [expr {[dict exists $results $t] ? [list $t [dict get $results $t]] : [list $t]}]
+        lappend read [if {[dict exists $results $t]} {list $t [dict get $results $t]} else {list $t}]
     }
     return $read
 }
@@ -2937,7 +3008,7 @@ proc hir::range::CaptureFacts {outcomes creators position childBlock} {
                 continue
             }
             dict for {b r} $capRanges {
-                set prior [expr {[dict exists $facts $b] ? [dict get $facts $b] : "never"}]
+                set prior [dict getdef $facts $b "never"]
                 dict set facts $b [join $prior $r]
             }
         }
@@ -2952,7 +3023,7 @@ proc hir::range::CaptureFacts {outcomes creators position childBlock} {
 # must be refolded.
 proc hir::range::NoteCreates {creatorsVar recaptureVar id previous outcome} {
     upvar 1 $creatorsVar creatorsOf $recaptureVar recapture
-    foreach pair [expr {$previous eq "" ? {} : [dict get $previous creates]}] {
+    foreach pair [if {$previous eq ""} {string cat {}} else {dict get $previous creates}] {
         set childBlock [lindex $pair 0]
         dict set recapture $childBlock 1
         dict unset creatorsOf $childBlock $id
@@ -3028,7 +3099,11 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
         set recontribute [dict create]
         foreach id [InOrder $position $walk] {
             set block [dict get $ctx blockOf $id]
-            set captureSeed [expr {$captureOpt && [dict exists $captures $block] ? [dict get $captures $block] : {}}]
+            if {$captureOpt && [dict exists $captures $block]} {
+                set captureSeed [dict get $captures $block]
+            } else {
+                set captureSeed {}
+            }
             set key [list [dict get $narrowed $id] $captureSeed [ResultsRead $results [dict get $calleesOf $id]]]
             if {[dict exists $memo $id] && [lindex [dict get $memo $id] 0] eq $key} {
                 continue
@@ -3037,7 +3112,7 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
                 $block [dict get $ctx paramsOf $id] [dict get $narrowed $id] \
                 [dict get $ctx monotoneOf $id] $results $captureSeed]
             dict set memo $id [list $key $outcome]
-            set previous [expr {[dict exists $outcomes $id] ? [dict get $outcomes $id] : {}}]
+            set previous [dict getdef $outcomes $id {}]
             dict set outcomes $id $outcome
             dict set summarize $id 1
             if {![dict exists $dormant $id]} {
@@ -3070,7 +3145,7 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
                 if {[dict exists $locked $i]} {
                     lappend next $o
                 } else {
-                    lappend next [RangeNarrow $o [expr {$c eq "never" ? [unknown] : $c}]]
+                    lappend next [RangeNarrow $o [if {$c eq "never"} {unknown} else {set c}]]
                 }
                 incr i
             }
@@ -3085,16 +3160,16 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
             if {![dict size [dict get $creatorsOf $childBlock]]} {
                 continue
             }
-            set current [expr {[dict exists $captures $childBlock] ? [dict get $captures $childBlock] : {}}]
+            set current [dict getdef $captures $childBlock {}]
             set next $current
             dict for {b r} [CaptureFacts $outcomes [dict get $creatorsOf $childBlock] $position $childBlock] {
-                set old [expr {[dict exists $current $b] ? [dict get $current $b] : [unknown]}]
+                set old [dict getdef $current $b [unknown]]
                 dict set next $b [RangeNarrow $old $r]
             }
             if {$next ne $current} {
                 set changed 1
                 dict set nextRenarrow $childBlock 1
-                foreach i [expr {[dict exists $instancesOf $childBlock] ? [dict get $instancesOf $childBlock] : {}}] {
+                foreach i [dict getdef $instancesOf $childBlock {}] {
                     dict set nextWalk $i 1
                 }
             }
@@ -3262,7 +3337,11 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         set instance [dict get $spec instances $id]
         set block [dict get $instance block]
         dict set blockOf $id $block
-        set params [expr {$block eq "program" ? {} : [hir::get $hir $block params]}]
+        if {$block eq "program"} {
+            set params {}
+        } else {
+            set params [hir::get $hir $block params]
+        }
         dict set paramsOf $id $params
         dict set viewOf $id [hir::specialize::view $hir $spec $id]
         dict set instanceCallsOf $id [dict get $instance calls]
@@ -3378,7 +3457,11 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         foreach id [InOrder $position $settle] {
             set before [dict get $assumed $id]
             set block [dict get $blockOf $id]
-            set captureSeed [expr {$captureOpt && [dict exists $captureSeeds $block] ? [dict get $captureSeeds $block] : {}}]
+            if {$captureOpt && [dict exists $captureSeeds $block]} {
+                set captureSeed [dict get $captureSeeds $block]
+            } else {
+                set captureSeed {}
+            }
             set key [list $before $captureSeed [ResultsRead $calleeResults [dict get $calleesOf $id]]]
             if {[dict exists $settleMemo $id] && [lindex [dict get $settleMemo $id] 0] eq $key} {
                 lassign [lindex [dict get $settleMemo $id] 1] outcome settled
@@ -3388,7 +3471,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
                     [dict get $lockedOf $id] [dict get $monotoneOf $id] $calleeResults $captureSeed]
                 dict set settleMemo $id [list $key $answer]
                 lassign $answer outcome settled
-                set previous [expr {[dict exists $outcomes $id] ? [dict get $outcomes $id] : {}}]
+                set previous [dict getdef $outcomes $id {}]
                 dict set outcomes $id $outcome
                 dict set summarize $id 1
                 if {![dict exists $dormant $id]} {
@@ -3460,7 +3543,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
                     # settled itself: work's caller drive is a self-tail
                     # loop that only reaches its own [-∞,500] over several
                     # rounds) happened to produce first.
-                    lappend next [expr {$c eq "never" ? [unknown] : $c}]
+                    lappend next [if {$c eq "never"} {unknown} else {set c}]
                 } elseif {[dict exists $poisoned $i]} {
                     # This instance's own self-recursion already proved the
                     # entry unbounded (id-processing loop, above): permanent,
@@ -3473,7 +3556,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
                     # anything: the first real caller evidence is this
                     # parameter's first fact, adopted exactly, for the same
                     # reason as the non-self-recursive case above.
-                    lappend next [expr {$c eq "never" ? [unknown] : $c}]
+                    lappend next [if {$c eq "never"} {unknown} else {set c}]
                 } else {
                     # A genuine, already-established self-derived fact
                     # (drive's own [-∞,500], reached through its own
@@ -3515,11 +3598,11 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
             if {![dict size [dict get $creatorsOf $childBlock]]} {
                 continue
             }
-            set current [expr {[dict exists $captureSeeds $childBlock] ? [dict get $captureSeeds $childBlock] : {}}]
+            set current [dict getdef $captureSeeds $childBlock {}]
             set next [CaptureFacts $outcomes [dict get $creatorsOf $childBlock] $position $childBlock]
             if {$next ne $current} {
                 set changed 1
-                foreach i [expr {[dict exists $instancesOf $childBlock] ? [dict get $instancesOf $childBlock] : {}}] {
+                foreach i [dict getdef $instancesOf $childBlock {}] {
                     dict set nextSettle $i 1
                 }
             }
@@ -3668,7 +3751,11 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
     set resultNarrow [dict create attempted 0 converged 0 rounds 0]
     set finalOutcomes ""
     if {$narrowOpt && $callFactsOpt && $resultNarrowOpt} {
-        set budget [expr {$resultNarrowRoundLimit ne "" ? $resultNarrowRoundLimit : $roundBudget}]
+        if {$resultNarrowRoundLimit ne ""} {
+            set budget $resultNarrowRoundLimit
+        } else {
+            set budget $roundBudget
+        }
         lassign [NarrowRounds $narrowCtx $narrowed $narrowedCaptures $calleeResults 1 $budget] \
             converged candidate candidateCaptures candidateResults rounds lastOutcomes
         dict set resultNarrow attempted 1
@@ -3695,7 +3782,11 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         set finalOutcomes [dict create]
         foreach id $ids {
             set block [dict get $blockOf $id]
-            set captureSeed [expr {$captureOpt && [dict exists $narrowedCaptures $block] ? [dict get $narrowedCaptures $block] : {}}]
+            if {$captureOpt && [dict exists $narrowedCaptures $block]} {
+                set captureSeed [dict get $narrowedCaptures $block]
+            } else {
+                set captureSeed {}
+            }
             dict set finalOutcomes $id [AnalyzeInstance [dict get $viewOf $id] $id [dict get $instanceCallsOf $id] \
                 $block [dict get $paramsOf $id] [dict get $narrowed $id] \
                 [dict get $monotoneOf $id] $calleeResults $captureSeed]
@@ -3709,7 +3800,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         # proof: the state-less walk above only sees the joined entry
         # Range, so its own join of the recursive branches (e.g. R + R
         # for fib) is looser than the per-state summary R.
-        set result [expr {[dict exists $pinned $id] ? [dict get $pinned $id] : [dict get $outcome result]}]
+        set result [dict getdef $pinned $id [dict get $outcome result]]
         dict set instances $id [dict create params [dict get $narrowed $id] \
             exprs [dict get $outcome exprs] result $result]
     }

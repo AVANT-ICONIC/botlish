@@ -127,7 +127,10 @@ proc hir::coroutines::NativeOf {hir e} {
         return ""
     }
     set name [dict get $binding name]
-    return [expr {$name in [core::coroutines::natives] ? $name : ""}]
+    if {$name in [core::coroutines::natives]} {
+        return $name
+    }
+    return ""
 }
 
 # 1 if HIR refers to any coroutine operation at all: a program without one
@@ -182,9 +185,12 @@ proc hir::coroutines::analyze {hirVar} {
             set arg [lindex [dict get $hir exprs $c args] 0]
             if {$arg eq "" || [dict get $hir exprs $arg kind] ne "block"} continue
             set body [dict get $hir exprs $arg body]
-            set inner [expr {[llength $body] == 1 && [dict get $hir exprs [lindex $body 0] kind] eq "call"
-                ? [lindex $body 0] : ""}]
-            set root [expr {$inner eq "" ? "" : [hir::contexts::Callee $hir $inner]}]
+            set inner [if {[llength $body] == 1 && [dict get $hir exprs [lindex $body 0] kind] eq "call"} {lindex $body 0} else {string cat ""}]
+            if {$inner eq ""} {
+                set root ""
+            } else {
+                set root [hir::contexts::Callee $hir $inner]
+            }
             dict set thunks $arg [dict create create $c root $root call $inner]
         }
     }
@@ -330,7 +336,7 @@ proc hir::coroutines::analyze {hirVar} {
 
 # The declared `resume T` protocol of block E, or "".
 proc hir::coroutines::DeclaredResume {hir e} {
-    return [expr {[dict exists $hir exprs $e declaredResume] ? [dict get $hir exprs $e declaredResume] : ""}]
+    return [dict getdef $hir exprs $e declaredResume ""]
 }
 
 # The protocol a coroutine whose root has inferred protocol P is resumed
@@ -869,7 +875,7 @@ proc hir::coroutines::SequenceOf {hir p e} {
 proc hir::coroutines::EffectText {hir e} {
     if {![dict exists $hir coroutines mayYield]} {
         # HIR read from text (hir/read.tcl): the effect as it was printed.
-        return [expr {[dict exists $hir exprs $e coroutineEffect] ? [dict get $hir exprs $e coroutineEffect] : ""}]
+        return [dict getdef $hir exprs $e coroutineEffect ""]
     }
     if {![MayYield $hir $e] || ![dict exists $hir coroutines blocks $e]} {
         return ""
@@ -933,7 +939,10 @@ proc hir::coroutines::thunkOfHandle {hir e {seen {}}} {
     set value [dict get $hir exprs $by value]
     if {[NativeOf $hir $value] eq [core::coroutines::createNative]} {
         set thunk [lindex [dict get $hir exprs $value args] 0]
-        return [expr {[dict exists $hir coroutines thunks $thunk] ? $thunk : ""}]
+        if {[dict exists $hir coroutines thunks $thunk]} {
+            return $thunk
+        }
+        return ""
     }
     return [thunkOfHandle $hir $value [concat $seen [list $b]]]
 }

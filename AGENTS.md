@@ -151,6 +151,22 @@ and with no locale the system encoding falls back to `iso8859-1`, which
 makes writing non-ASCII/astral output fail outright instead of being
 silently mangled.
 
+### Tcl's `expr` reads a numeric-looking result as a number
+
+`expr` converts its result to a number when the result string looks like
+one: `expr {$c ? $name : ""}` is `Inf` for the name `inf` or `infinity`
+and a domain error for `nan` (any letter case, and a one-element list of
+such a name). Botlish names and String text are strings in the compiler,
+so the compiler never selects a value that may be a string with `expr`'s
+`?:`. Write `if` (a statement, or `[if {C} {set a} else {set b}]`) or
+`[dict getdef D K DEFAULT]` instead. A ternary over numbers, or over
+constant strings that do not read as numbers, is fine.
+`tests/numeric-looking-names.test` checks the sources for the rule
+(`nl-no-string-ternary`) and compiles programs with such names against the
+same programs renamed (FLOAT64-MILESTONE-1.md, section 16). Compare
+strings with `eq`/`ne`, never `==` (`"nan" == "nan"` is false,
+`"inf" == "Infinity"` true).
+
 ### Known Tcl core bug: compiled `incr` wraps instead of promoting at the i64 boundary
 
 Confirmed directly (BYTE-NIBBLE-BIT-ARITHMETIC.md's own account has the full

@@ -131,7 +131,7 @@ proc hir::interchange::decode {text args} {
             throw {HIR INTERCHANGE TARGET} "HIR interchange text for another target: $problem"
         }
     }
-    foreach name [expr {[dict exists $body requires] ? [dict get $body requires] : {}}] {
+    foreach name [dict getdef $body requires {}] {
         core::loadLibrary $name
     }
     hir::activate $hir

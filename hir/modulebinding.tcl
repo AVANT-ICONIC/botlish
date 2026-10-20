@@ -134,8 +134,7 @@ proc hir::modulebinding::ContextExpr {hir e stateVar} {
                 # construction is context-free exactly when its field values
                 # are (building the payload itself reads no context).
                 set value [dict get $node value]
-                set parts [expr {[hir::kind $hir $value] eq "struct" && [dict exists [hir::node $hir $value] payloadOf]
-                    ? [dict get [hir::node $hir $value] fields] : [list $value]}]
+                set parts [if {[hir::kind $hir $value] eq "struct" && [dict exists [hir::node $hir $value] payloadOf]} {dict get [hir::node $hir $value] fields} else {list $value}]
                 set result [ContextSequence $hir $parts state]
                 if {[lindex $result 0] ne "ok"} {
                     return $result
@@ -202,8 +201,9 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
     switch -- [dict get $node kind] {
         const {
             set kind [core::value::kind [dict get $node value]]
-            if {$kind in {int str bool unit UnicodeChar enum}} {
-                # (An enum case, ENUMS.md, is an immutable scalar value.)
+            if {$kind in [core::type::scalarKinds]} {
+                # (An enum case, ENUMS.md, and a floating-point number are
+                # immutable scalar values.)
                 return [list ok [list scalar $kind]]
             }
             return [list bad unknown "literal value kind $kind"]
@@ -456,7 +456,7 @@ proc hir::modulebinding::ImmutableNative {hir symbol proofs} {
         }
     }
     set kind [core::type::base [dict get $meta resultType]]
-    if {$kind in {int str bool unit}} {
+    if {$kind in {int str bool unit} || [core::type::isFloat $kind]} {
         return [list ok [list scalar $kind]]
     }
     if {$kind eq "mutarray"} {

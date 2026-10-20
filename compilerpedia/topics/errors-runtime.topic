@@ -43,7 +43,8 @@ before the call:
 
 If zero is a caller's mistake rather than a case, fail with a declared
 error of your own instead, so callers must handle it (concept.errors).
-Botlish has no division operator (capability.integer-division).
+Botlish has no integer division (capability.integer-division); Float64
+division by zero is the declared error NonFiniteFloat (concept.floats).
 
 @topic error.range
 title: RANGE: an argument outside the range an operation accepts

@@ -72,7 +72,7 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
     let mut s = String::from(
         "#![allow(unused_imports)]\n\
          use botlish_native::{nir::OpCode, runtime::{aot, constants::{self, Const},\n\
-         framemap::{FunctionMap, ProgramMap}, metrics::AllocMode, value::{Kind, Value},\n\
+         framemap::{FunctionMap, ProgramMap}, metrics::AllocMode, value::{FloatType, Kind, Value},\n\
          vm::{EnumInfo, FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm}}};\n\
          use std::rc::Rc;\n\
          unsafe extern \"C\" {\n",
@@ -156,6 +156,7 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
             Const::BigInt(text) => writeln!(s, "Const::BigInt({text:?}.into()),"),
             Const::Native(id) => writeln!(s, "Const::Native({id}),"),
             Const::FnValue(id) => writeln!(s, "Const::FnValue({id}),"),
+            Const::Float(ty, bits) => writeln!(s, "Const::Float(FloatType::{ty:?}, {bits:#x}),"),
         }
         .unwrap();
     }

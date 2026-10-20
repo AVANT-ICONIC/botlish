@@ -385,10 +385,18 @@ proc hir::stringregion::Bindings {hir spec regionOf consumingParams} {
     foreach id [dict get $spec used] {
         set instance [dict get $spec instances $id]
         set block [dict get $instance block]
-        set region [expr {$block eq "program" ? "program" : $block}]
+        if {$block eq "program"} {
+            set region "program"
+        } else {
+            set region $block
+        }
         set view [hir::specialize::view $hir $spec $id]
         set exprs [dict get $context exprs $region]
-        set topBody [expr {$region eq "program" ? [hir::roots $view] : [hir::get $view $region body]}]
+        if {$region eq "program"} {
+            set topBody [hir::roots $view]
+        } else {
+            set topBody [hir::get $view $region body]
+        }
         set trailing [hir::escape::TrailingPositions $view $topBody $exprs]
         set calls [dict get $instance calls]
 
@@ -488,7 +496,7 @@ proc hir::stringregion::Bindings {hir spec regionOf consumingParams} {
                 continue
             }
             set ok 1
-            foreach r [expr {[dict exists $refsByBinding $b] ? [dict get $refsByBinding $b] : {}}] {
+            foreach r [dict getdef $refsByBinding $b {}] {
                 if {![dict exists $eqOther $r] && ![dict exists $lenArgs $r]
                         && ![dict exists $classifyArgs $r] && ![dict exists $consumingCallArgs $r]} {
                     set ok 0
@@ -610,8 +618,7 @@ proc hir::stringregion::explain {hir spec analysis} {
     set lines {}
     foreach id [dict get $spec used] {
         set recognized [dict exists [dict get $analysis regionOf] $id]
-        set bindings [expr {[dict exists [dict get $analysis virtual] $id]
-            ? [dict keys [dict get [dict get $analysis virtual] $id]] : {}}]
+        set bindings [if {[dict exists [dict get $analysis virtual] $id]} {dict keys [dict get [dict get $analysis virtual] $id]} else {string cat {}}]
         set consuming [consumingParamsOf $analysis $id]
         if {!$recognized && $bindings eq "" && $consuming eq ""} {
             continue

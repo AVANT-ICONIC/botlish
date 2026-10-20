@@ -4,6 +4,7 @@
 #
 #   (const LITERAL)             (const TYPE LITERAL)   TYPE: int str list
 #                                                        UnicodeChar enum
+#                                                        a float type (Float64)
 #   (bind NAME EXPR)
 #   (ref NAME)
 #   (block PARAMS BODY...)
@@ -286,7 +287,15 @@ proc core::ir::CheckShape {node} {
                         }
                     }
                     default {
-                        core::malformed "unknown literal type \"$type\"" $node
+                        if {![core::type::isFloat $type]} {
+                            core::malformed "unknown literal type \"$type\"" $node
+                        }
+                        # A floating-point number (FLOAT64-MILESTONE-1.md):
+                        # its canonical decimal text (core::float::text),
+                        # which denotes one finite number of the type.
+                        if {![core::float::isCanonical $type $text]} {
+                            core::malformed "not a canonical $type literal" $node
+                        }
                     }
                 }
             }
@@ -452,6 +461,8 @@ proc core::ir::checkShape {node} {
 # leading zeros, no "+", no "-0") is an int; anything else is a str.
 # (const int LITERAL), (const str LITERAL) force the type.
 # (const list {E...}) builds a list; each element follows the untyped rule.
+# (const TYPE TEXT), TYPE a floating-point type (Float64), is the number
+# whose canonical decimal text (core::float::text) is TEXT.
 # (const enum {ID CASE}) is the case CASE of the enum declared as ID
 # (ENUMS.md): a value, like a literal, never a lookup.  Core IR does not
 # check that ID declares CASE -- HIR resolution did (hir/enums.tcl).
@@ -480,6 +491,9 @@ proc core::ir::literalValue {node} {
                 lappend items [InferLiteral $element]
             }
             return [core::value::listOf $items]
+        }
+        default {
+            return [core::float::fromText $type $text]
         }
     }
 }

@@ -288,10 +288,18 @@ proc hir::enums::IsAffine {id {seen {}}} {
 @@ enum-field-forces-boxing a struct with an enum field is never scalar-replaced
 ## hir/escape.tcl
 <<<<
-        set id [expr {[dict get $node named] ? [dict get $node structId] : ""}]
+        if {[dict get $node named]} {
+            set id [dict get $node structId]
+        } else {
+            set id ""
+        }
         return [list local [list $n [list $id $layout]] {}]
 ====
-        set id [expr {[dict get $node named] ? [dict get $node structId] : ""}]
+        if {[dict get $node named]} {
+            set id [dict get $node structId]
+        } else {
+            set id ""
+        }
         if {$id ne "" && [lsearch -exact [lmap {f t} [hir::structs::fieldTypes $id] {hir::types::IsEnum $t}] 1] >= 0} {
             return ""
         }
@@ -311,9 +319,9 @@ proc hir::enums::IsAffine {id {seen {}}} {
 @@ case-set-lost-format the closed case set is lost in HIR text: only the first case is printed
 ## hir/format.tcl
 <<<<
-        return "enum [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] cases [join [dict get $entry cases] {, }]"
+        return "enum [dict get $entry id] name [dict get $entry name] ns [if {$ns eq ""} {string cat "-"} else {set ns}] cases [join [dict get $entry cases] {, }]"
 ====
-        return "enum [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] cases [lindex [dict get $entry cases] 0]"
+        return "enum [dict get $entry id] name [dict get $entry name] ns [if {$ns eq ""} {string cat "-"} else {set ns}] cases [lindex [dict get $entry cases] 0]"
 >>>>
 
 @@ enum-type-roundtrip-loses-identity an enum type read back from HIR text is the bare enum kind

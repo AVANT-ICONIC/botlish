@@ -62,6 +62,7 @@ fn show_into(v: Value, out: &mut String) {
         }
         Kind::Bool => out.push_str(if v == TRUE { "true" } else { "false" }),
         Kind::Unit => out.push_str("unit"),
+        Kind::Float64 => out.push_str(&float_text(float64_of(v))),
         Kind::UnicodeChar => {
             // Matches core::value::show's UnicodeChar rendering exactly
             // (core/value.tcl): single-quoted, the same escape vocabulary
@@ -227,6 +228,42 @@ pub fn enum_names(v: Value) -> (String, String) {
     })
 }
 
+/// The canonical decimal text of the finite number X (core/float.tcl's Text,
+/// character for character): the shortest digits that read back as X
+/// (Rust's shortest round-trip formatting, as Tcl's), laid out as a
+/// Botlish decimal literal -- positional for a leading-digit exponent in
+/// -4..15 (`1.5`, `0.0001`, `10.0`), else `D.DDDeN` (`1.0e16`, `1.0e-5`) --
+/// with a "-" for a negative number and `0.0` for zero.
+pub fn float_text(x: f64) -> String {
+    const MIN_POSITIONAL: i32 = -4;
+    const MAX_POSITIONAL: i32 = 16;
+    if x == 0.0 {
+        return "0.0".to_string();
+    }
+    let sign = if x < 0.0 { "-" } else { "" };
+    let sci = format!("{:e}", x.abs());
+    let (mantissa, exponent) = sci.split_once('e').expect("LowerExp writes an exponent");
+    let exponent: i32 = exponent.parse().expect("LowerExp writes a decimal exponent");
+    let all: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let digits = all.trim_end_matches('0');
+    let n = digits.len() as i32;
+    // X = 0.DIGITS x 10^POINT.
+    let point = exponent + 1;
+    if (MIN_POSITIONAL..MAX_POSITIONAL).contains(&exponent) {
+        if point <= 0 {
+            return format!("{sign}0.{}{digits}", "0".repeat((-point) as usize));
+        }
+        if point >= n {
+            return format!("{sign}{digits}{}.0", "0".repeat((point - n) as usize));
+        }
+        let (whole, fraction) = digits.split_at(point as usize);
+        return format!("{sign}{whole}.{fraction}");
+    }
+    let (first, rest) = digits.split_at(1);
+    let rest = if rest.is_empty() { "0" } else { rest };
+    format!("{sign}{first}.{rest}e{exponent}")
+}
+
 pub fn int_text(v: Value) -> String {
     match int_small(v) {
         Some(n) => n.to_string(),
@@ -246,6 +283,10 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
         // back to the Tcl host round-trips through core::ir::literalValue
         // unchanged.
         Kind::UnicodeChar => tcl_list(&["UnicodeChar".to_string(), char_of(v).to_string()]),
+        // core::value::float's representation ({Float64 X}, core/value.tcl),
+        // X the canonical decimal text, which reads back as exactly this
+        // number.
+        Kind::Float64 => tcl_list(&["Float64".to_string(), float_text(float64_of(v))]),
         // Matches core::value::enumValue's own representation exactly
         // ({enum ID CASE}, core/value.tcl): the names, never the numbers.
         Kind::Enum => {

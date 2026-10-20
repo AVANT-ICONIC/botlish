@@ -44,9 +44,9 @@
 @@ caller-context-launders-helper one mediated edge of a module launders its context-free ones (the contextual caller of a context-free helper)
 ## hir/direct.tcl
 <<<<
-        set undischarged [lmap edge $list {expr {[dict get $edge discharged] eq "" ? $edge : [continue]}}]
+        set undischarged [lmap edge $list {if {[dict get $edge discharged] eq ""} {set edge} else {continue}}]
 ====
-        set undischarged [lmap edge $list {expr {[dict get $edge discharged] eq "" ? $edge : [continue]}}]
+        set undischarged [lmap edge $list {if {[dict get $edge discharged] eq ""} {set edge} else {continue}}]
         if {[llength $undischarged] < [llength $list]} { set undischarged {} }
 >>>>
 
@@ -147,9 +147,17 @@
 @@ context-trait-never-discharges a context trait of the module itself does not mediate
 ## hir/direct.tcl
 <<<<
-        set owner [expr {[dict exists $record trait] ? [hir::traits::owner $id] : [hir::structs::owner $id]}]
+        if {[dict exists $record trait]} {
+            set owner [hir::traits::owner $id]
+        } else {
+            set owner [hir::structs::owner $id]
+        }
 ====
-        set owner [expr {[dict exists $record trait] ? "-" : [hir::structs::owner $id]}]
+        if {[dict exists $record trait]} {
+            set owner "-"
+        } else {
+            set owner [hir::structs::owner $id]
+        }
 >>>>
 
 @@ method-obligation-dropped a direct call through method syntax makes its candidate unfit

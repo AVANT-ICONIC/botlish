@@ -63,5 +63,5 @@ proc hir::imports::typeNamed {ns short} {
         return ""
     }
     set types [dict get $table $ns types]
-    return [expr {[dict exists $types $short] ? [dict get $types $short] : ""}]
+    return [dict getdef $types $short ""]
 }

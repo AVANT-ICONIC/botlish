@@ -83,6 +83,16 @@
 #                   element type is affine). AT is the argument whose static
 #                   type holds the element type (a collection), or `result`
 #                   (the call's own type, a constructor's).
+#   fold            "" or a command prefix deciding a call whose every
+#                   argument is exactly known: `{*}FOLD ARG...` returns
+#                   {value V} (the call returns V), {error NAME} (it completes
+#                   with the declared error NAME, one of its -errors), or ""
+#                   (nothing is decided: the arguments are not the
+#                   operation's). It must be the very computation the
+#                   implementation performs (core/float.tcl's apply), so a
+#                   decided call and a run of it never differ. Static
+#                   analyses (hir/completions.tcl, hir/exactvalue.tcl) read
+#                   it by registration, never by name.
 #   bounds          "" or the bounds checks behind a native's argument-
 #                   dependent errors (STDLIB-NAMESPACES.md), stated once here
 #                   so static analyses (hir/completions.tcl) read them by
@@ -312,13 +322,16 @@ namespace eval core::native {
     #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
     #   mutvec-mutate        mutates a MutableVector header in place (push,
     #                        pop, take, swap, clear)
+    #   float-alloc          makes a floating-point value, which the native
+    #                        runtime keeps in a heap object of its own
+    #                        (core/float.tcl; FLOAT64-MILESTONE-1.md)
     #   raw-syscall          executes a raw Linux kernel transition (x86-64's
     #                        `syscall`, AArch64's `svc #0`) with unknown
     #                        effects (core/linuxabi.tcl;
     #                        LINUX-X86-64-SYSCALL.md)
     variable runtimeTags {bigint string-alloc list-alloc result-alloc char-index
         range-check structural-equality mutarray-alloc mutarray-mutate hash set-alloc
-        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate}
+        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate float-alloc}
     # The -ownership roles (OWNERSHIP ROLES above).
     variable ownershipRoles {observe place move element repeat factory copy-out equality resume message release erase}
     # NAME -> 1: the errors the runtime itself declares, visible in every
@@ -326,6 +339,16 @@ namespace eval core::native {
     # declarations (hir/errordecls.tcl). Only a native's -errors may name one;
     # native/lower.tcl's ErrorId gives each a fixed NIR id from its index.
     variable builtinErrors [dict create]
+    # NAME -> {FIELD TYPE ...}: the payload a builtin error carries
+    # (ERROR-PAYLOADS.md; declareErrorPayload), its fields in declaration
+    # order, each TYPE a HIR type. A builtin error without an entry is
+    # payload-free, as every builtin error but NonFiniteFloat is.
+    variable builtinPayloads [dict create]
+    # NAME -> {CASE ...}: the enums the runtime itself declares (ENUMS.md;
+    # declareEnum), visible in every program under their bare names like the
+    # builtin errors, and never declarable by a program. The types of
+    # builtin error payloads' fields (NonFiniteFloat's NonFiniteResult).
+    variable builtinEnums [dict create]
     # NS -> 1: the intrinsic namespaces the compiler provides as direct
     # modules (DIRECT-MODULES.md): their members expose raw, ambient
     # authority, so a call into one is a direct edge of the calling module.
@@ -397,7 +420,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
+        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {} -fold {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -480,7 +503,11 @@ proc core::native::register {name args} {
         }
     }
     set shape [dict get $options -result-shape]
-    set count [expr {$arity eq "*" ? "" : $arity}]
+    if {$arity eq "*"} {
+        set count ""
+    } else {
+        set count $arity
+    }
     if {![ValidShape $shape $count]} {
         error "core::native::register: bad -result-shape \"$shape\" for \"$name\""
     }
@@ -503,7 +530,7 @@ proc core::native::register {name args} {
         }
     }
     if {$ownership ne "" && ($arity eq "*" ? [llength $ownership] == 0 : [llength $ownership] != $arity)} {
-        error "core::native::register: -ownership of \"$name\" must list [expr {$arity eq "*" ? "its leading" : $arity}] role(s)"
+        error "core::native::register: -ownership of \"$name\" must list [if {$arity eq "*"} {string cat "its leading"} else {set arity}] role(s)"
     }
     set errorsFrom [dict get $options -errors-from]
     if {$errorsFrom ne "" && (![string is digit -strict $errorsFrom] || $arity eq "*" || $errorsFrom >= $arity
@@ -564,7 +591,8 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern]]
+        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern] \
+        fold [dict get $options -fold]]
     return [core::value::native $name]
 }
 
@@ -675,7 +703,10 @@ proc core::native::unboundedErrors {metadata} {
         extents { list LayoutExtentMismatch }
         default { list }
     }]
-    return [lmap error [dict get $metadata errors] {expr {$error in $produced ? [continue] : $error}}]
+    return [lmap error [dict get $metadata errors] {
+        if {$error in $produced} continue
+        set error
+    }]
 }
 
 # 1 if BOUNDS is a valid -bounds for a native of ARITY declaring exactly
@@ -894,10 +925,56 @@ proc core::native::builtinErrorIndex {name} {
     return [dict get $builtinErrors $name]
 }
 
+# Gives the builtin error NAME the payload FIELDS, {FIELD TYPE ...} in
+# declaration order (ERROR-PAYLOADS.md): every failure with it must carry a
+# value of that anonymous struct type (failDeclared's PAYLOAD), which a
+# handler binds like a source-declared error's (hir/errordecls.tcl answers
+# for builtin errors from here).
+proc core::native::declareErrorPayload {name fields} {
+    variable builtinPayloads
+    if {![isBuiltinError $name]} {
+        error "core::native::declareErrorPayload: \"$name\" is not a builtin error"
+    }
+    dict set builtinPayloads $name $fields
+}
+
+# The payload fields of the builtin error NAME ({FIELD TYPE ...}), or {} for
+# a payload-free one.
+proc core::native::builtinPayload {name} {
+    variable builtinPayloads
+    return [dict getdef $builtinPayloads $name {}]
+}
+
+# Declares the builtin enum NAME with the payload-free cases CASES, in
+# declaration order (ENUMS.md: a closed nominal sum; its identity is NAME,
+# like an entry program's enum). hir/enums.tcl registers it in every
+# compilation.
+proc core::native::declareEnum {name cases} {
+    variable builtinEnums
+    if {![regexp {^[A-Z][A-Za-z0-9]*$} $name] || [dict exists $builtinEnums $name]} {
+        error "core::native::declareEnum: bad or repeated enum name \"$name\""
+    }
+    dict set builtinEnums $name $cases
+}
+
+# 1 if NAME is a builtin enum (declareEnum).
+proc core::native::isBuiltinEnum {name} {
+    variable builtinEnums
+    return [dict exists $builtinEnums $name]
+}
+
+# The builtin enums: NAME -> {CASE ...}, in declaration order.
+proc core::native::builtinEnums {} {
+    variable builtinEnums
+    return $builtinEnums
+}
+
 # Called by a native's impl to complete with the declared builtin error NAME
-# (one of its own -errors). Never returns.
-proc core::native::failDeclared {name message} {
-    throw [list CORE DECLARED-ERROR $name] $message
+# (one of its own -errors) -- with PAYLOAD, the value of its payload's
+# anonymous struct type, when NAME declares one (declareErrorPayload).
+# Never returns.
+proc core::native::failDeclared {name message {payload ""}} {
+    throw [list CORE DECLARED-ERROR $name {*}[if {$payload eq ""} {string cat {}} else {list $payload}]] $message
 }
 
 # The one slice rule (STDLIB-NAMESPACES.md), shared by every slicing native
@@ -1011,7 +1088,10 @@ proc core::native::ownershipRole {name index} {
         return [lindex $roles end]
     }
     set role [lindex $roles $index]
-    return [expr {$role eq "" ? "erase" : $role}]
+    if {$role eq ""} {
+        return "erase"
+    }
+    return $role
 }
 
 # OUTCOME is host 1 (predicate returned true) or 0 (returned false).
@@ -1056,12 +1136,17 @@ proc core::native::invoke {nativeValue argValues} {
         try {
             set result [{*}[dict get $meta impl] {*}$argValues]
         } trap {CORE DECLARED-ERROR} {message options} {
-            set error [lindex [dict get $options -errorcode] 2]
+            set code [dict get $options -errorcode]
+            set error [lindex $code 2]
             if {$error ni $errors} {
                 throw [list CORE CONTRACT TYPE] \
                     "$name: contract violation: it signalled the undeclared error \"$error\" (declared: $errors)"
             }
-            return [core::completion::propagatingError [core::value::errorId $error]]
+            if {([llength $code] == 4) != ([builtinPayload $error] ne {})} {
+                throw [list CORE CONTRACT TYPE] \
+                    "$name: contract violation: it signalled \"$error\" [expr {[llength $code] == 4 ? "with a payload the error does not declare" : "without the payload the error declares"}]"
+            }
+            return [core::completion::propagatingError [core::value::errorId $error {*}[lrange $code 3 end]]]
         }
     } else {
         set result [{*}[dict get $meta impl] {*}$argValues]
@@ -1099,7 +1184,12 @@ proc core::native::invoke {nativeValue argValues} {
 #                            STDLIB-NAMESPACES.md)
 #   LowerUnderrun            a slice bound below its interval (checkSlice)
 #   UpperOverrun             a slice bound above its interval (checkSlice)
+#   NonFiniteFloat           a floating-point operation whose result is not a
+#                            finite number: an overflow, a division by zero
+#                            (core/float.tcl; FLOAT64-MILESTONE-1.md), or a
+#                            non-finite C double entering Botlish (C-FFI.md)
 core::native::declareError InvalidArgumentEncoding
 core::native::declareError IndexNotFound
 core::native::declareError LowerUnderrun
 core::native::declareError UpperOverrun
+core::native::declareError NonFiniteFloat

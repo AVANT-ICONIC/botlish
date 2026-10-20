@@ -164,7 +164,7 @@ proc hir::induction::ClassifyArg {hir argExpr p} {
         if {$c eq ""} {
             return other
         }
-        return [list step [expr {$name eq "+" ? $c : -$c}]]
+        return [list step [if {$name eq "+"} {set c} else {expr {-$c}}]]
     }
     if {$name eq "+" && [IsRefTo $hir $eb $p]} {
         set c [ConstInt $hir $ea]
@@ -494,7 +494,11 @@ proc hir::induction::analyze {hir spec seeds {open {}}} {
             }
             continue
         }
-        set paramSeeds [expr {[dict exists $seeds $id] ? [dict get $seeds $id] : [lrepeat $n [hir::range::unknown]]}]
+        if {[dict exists $seeds $id]} {
+            set paramSeeds [dict get $seeds $id]
+        } else {
+            set paramSeeds [lrepeat $n [hir::range::unknown]]
+        }
         set body [hir::get $hir $block body]
         set overrides [dict create]
         set monotone [dict create]

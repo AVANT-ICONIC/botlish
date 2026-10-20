@@ -56,7 +56,7 @@ namespace eval hir::methodfilter {
     # are compared in. A domain or a refinement is named by another kind
     # (core::type::base), and an integer is admitted by range proofs, so a
     # kind outside this set excludes nothing.
-    variable comparableKinds {int str bool unit UnicodeChar list struct enum mutvec mutarray}
+    variable comparableKinds [list int str bool unit UnicodeChar list struct enum mutvec mutarray {*}[core::type::floatTypes]]
     # Candidate -> the kinds of its first parameter's contracts, for the HIR
     # being read (ResetCache clears it with every new build).
     variable paramKinds [dict create]
@@ -172,7 +172,7 @@ proc hir::methodfilter::DefinedType {hir b} {
     set binding [dict get $hir bindings $b]
     if {[dict get $binding kind] eq "param"} {
         set scope [dict get $binding scope]
-        set owner [expr {[dict exists $hir scopes $scope owner] ? [dict get $hir scopes $scope owner] : ""}]
+        set owner [dict getdef $hir scopes $scope owner ""]
         if {$owner ne "" && [dict exists $hir exprs $owner params]} {
             set i [lsearch -exact [dict get $hir exprs $owner params] $b]
             if {$i >= 0} {

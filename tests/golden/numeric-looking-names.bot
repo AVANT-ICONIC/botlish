@@ -1,0 +1,23 @@
+# numeric-looking-names.bot -- names Tcl would read as numbers
+# (tests/numeric-looking-names.test): a function named nan, inf or infinity
+# compiles and runs like any other, on every backend.
+#
+# Ported from tests/numeric-looking-names.test, which stays authoritative and
+# unchanged: it also checks the compiler's sources for the rule that keeps
+# such names intact and compares many programs using them against the same
+# programs with other names (front end, every backend, HIR interchange).
+import compiler
+import test
+
+fn register_numeric_looking_names_tests():
+    # nl-the-reported-program: the program that used to crash the compiler.
+    fn reported() errors compiler::CompilerError:
+        static compile:
+            fn nan(x):
+                x + 1
+            nan(1)
+    test::value("nl-the-reported-program", 2, reported)
+
+with context test::suite()
+register_numeric_looking_names_tests()
+test::report()

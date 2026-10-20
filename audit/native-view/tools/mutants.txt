@@ -140,7 +140,10 @@
 <<<<
         layout {
             set inner [PointerField [dict get $repr layout]]
-            return [expr {$inner eq "" ? "none" : ".$inner"}]
+            if {$inner eq ""} {
+                return none
+            }
+            return ".$inner"
         }
 ====
         layout {

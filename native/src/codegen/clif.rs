@@ -66,7 +66,7 @@ use crate::runtime::vm::{
     VM_ALLOC_SITE_OFFSET, VM_CONSTS_OFFSET, VM_NATIVE_ROOTS_LEN_OFFSET, VM_NATIVE_ROOTS_PTR_OFFSET,
     VM_SS_LIMIT_OFFSET, VM_SS_TOP_OFFSET, VM_STATICS_OFFSET,
 };
-use cranelift_codegen::ir::condcodes::IntCC;
+use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::{
     types, AbiParam, BlockArg, InstBuilder, MemFlagsData, Signature, StackSlotData, StackSlotKind,
     UserFuncName, UserStackMapEntry,
@@ -195,8 +195,12 @@ fn signature_n<M: Module>(module: &M, params: usize, results: usize) -> Signatur
     sig
 }
 
-/// The Cranelift type of C ABI class C (a pointer is a 64-bit word).
+/// The Cranelift type of C ABI class C (a pointer is a 64-bit word, a
+/// double the floating-point class's F64).
 fn c_type(c: nir::CAbi) -> ir::Type {
+    if c == nir::CAbi::F64 {
+        return types::F64;
+    }
     match c.bits() {
         8 => types::I8,
         16 => types::I16,
@@ -1026,6 +1030,12 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         for (i, r) in args.iter().enumerate() {
             let v = self.get(*r);
             let class = decl.params[i];
+            if class == nir::CAbi::F64 {
+                // A Float64's number, as it is: every Float64 is a double.
+                words.push(v);
+                values.push(self.float_number(FloatType::Float64, v));
+                continue;
+            }
             let word = if exposed[i] {
                 self.b.ins().sshr_imm_s(v, 1)
             } else if class == nir::CAbi::Ptr {
@@ -1063,6 +1073,26 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         }
         let Some(returned) = returned else { return self.iconst(UNIT) };
         let class = decl.result;
+        if class == nir::CAbi::F64 {
+            // A double is a Float64 only when it is a finite number
+            // (FLOAT64-MILESTONE-1.md): NaN or an infinity is the call's
+            // NonFiniteFloat, negative zero is zero (`r + 0.0`).
+            let zero = self.b.ins().f64const(0.0);
+            let r = self.b.ins().fadd(returned, zero);
+            let magnitude = self.b.ins().fabs(r);
+            let largest = self.b.ins().f64const(f64::MAX);
+            let finite = self.b.ins().fcmp(FloatCC::LessThanOrEqual, magnitude, largest);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(finite, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let result = self.non_finite_code(r);
+            self.fail_with("rt_float_nonfinite", &[self.vm, result]);
+            self.b.switch_to_block(ok);
+            let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
+            let code = self.iconst(FloatType::Float64.code());
+            return self.call_allocating("rt_float_new", &[self.vm, code, bits], "foreigncall", KIND_FLOAT);
+        }
         if class == nir::CAbi::Ptr {
             // (address << 4) | tag when the word holds the address.
             let shifted = self.b.ins().ishl_imm_s(returned, 4);
@@ -1426,6 +1456,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutByteStore => KIND_MUTBYTES,
             Kind::Coroutine => KIND_COROUTINE,
             Kind::MutVec => KIND_MUTVEC,
+            // (Every FloatObj is a Float64 today: FloatType's own header.)
+            Kind::Float64 => KIND_FLOAT,
             Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum | Kind::CPtr => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
@@ -1493,6 +1525,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 // startup): loaded from the constant table like a String
                 // constant, never allocated at run time.
                 let v = self.constant(Const::Bytes(bytes.clone()));
+                self.def(*dst, v);
+            }
+            Inst::Float { dst, ty, bits } => {
+                // A static floating-point object (constants.rs installs it
+                // at startup), loaded from the constant table like a String
+                // constant: never allocated at run time.
+                let v = self.constant(Const::Float(*ty, *bits));
                 self.def(*dst, v);
             }
             Inst::Char { dst, digits } => {
@@ -1897,6 +1936,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let eq = self.b.ins().icmp(IntCC::Equal, a[0], a[1]);
                 self.bool_of(eq)
             }
+            // Floating-point arithmetic and comparisons (FLOAT64-MILESTONE-1.md):
+            // the target's own floating-point instructions on the unboxed
+            // numbers (float_op); the conversions are runtime helpers.
+            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq => {
+                let (ty, fop) = op.float().expect("a floating-point operation");
+                self.float_op(ty, fop, &a)
+            }
+            F64FromInt => {
+                let v = self.call_allocating("rt_f64_from_int", &[self.vm, a[0]], "f64fromint", KIND_FLOAT);
+                self.check(v);
+                v
+            }
+            F64Trunc => self.call_allocating("rt_f64_trunc", &[self.vm, a[0]], "f64trunc", KIND_BIGINT),
             // C addresses (C-ABI-TYPES.md): the null pointer is a constant
             // word, the null test one comparison with it, and clone, erase
             // and retype are the word itself -- no machine operation, no
@@ -2495,6 +2547,94 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         self.b.ins().jump(done, &[BlockArg::Value(r)]);
         self.b.switch_to_block(done);
         result
+    }
+
+    /// The number of the floating-point value V of type TY, in a register of
+    /// the target's floating-point class.
+    fn float_number(&mut self, ty: FloatType, v: ir::Value) -> ir::Value {
+        match ty {
+            FloatType::Float64 => self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET),
+        }
+    }
+
+    /// The NonFiniteResult code (runtime::ops's NON_FINITE_CASES) of the
+    /// non-finite number R, as runtime::ops's non_finite_code computes it:
+    /// 2 (NotANumber) for NaN, else 0 or 1, the infinity of R's sign.
+    fn non_finite_code(&mut self, r: ir::Value) -> ir::Value {
+        let nan = self.b.ins().fcmp(FloatCC::Unordered, r, r);
+        let zero = self.b.ins().f64const(0.0);
+        let positive = self.b.ins().fcmp(FloatCC::GreaterThan, r, zero);
+        let plus = self.iconst(0);
+        let minus = self.iconst(1);
+        let infinity = self.b.ins().select(positive, plus, minus);
+        let not_a_number = self.iconst(2);
+        self.b.ins().select(nan, not_a_number, infinity)
+    }
+
+    /// The floating-point operation OP of type TY on the values A
+    /// (runtime::ops's float_apply computes the same): a comparison is one
+    /// `fcmp` (ordered: no operand is ever NaN); an arithmetic result has its
+    /// negative zero made zero (`r + 0.0` is `r` for every other number) and,
+    /// unless it is a negation, is checked finite -- |r| <= the largest
+    /// finite number, false for an infinity and for NaN -- before it is
+    /// boxed (rt_float_new); a non-finite one fails with NonFiniteFloat
+    /// (rt_float_nonfinite, given which non-finite result it was). One runtime call on every path, as a safepoint
+    /// needs (codegen::roots).
+    fn float_op(&mut self, ty: FloatType, op: nir::FloatOp, a: &[ir::Value]) -> ir::Value {
+        use nir::FloatOp::*;
+        let FloatType::Float64 = ty;
+        if op == Eq {
+            let x = self.b.ins().load(I64, MemFlagsData::trusted(), a[0], FLOAT_BITS_OFFSET);
+            let y = self.b.ins().load(I64, MemFlagsData::trusted(), a[1], FLOAT_BITS_OFFSET);
+            let flag = self.b.ins().icmp(IntCC::Equal, x, y);
+            return self.bool_of(flag);
+        }
+        let x = self.float_number(ty, a[0]);
+        match op {
+            Lt | Le | Gt | Ge => {
+                let y = self.float_number(ty, a[1]);
+                let cc = match op {
+                    Lt => FloatCC::LessThan,
+                    Le => FloatCC::LessThanOrEqual,
+                    Gt => FloatCC::GreaterThan,
+                    _ => FloatCC::GreaterThanOrEqual,
+                };
+                let flag = self.b.ins().fcmp(cc, x, y);
+                self.bool_of(flag)
+            }
+            Add | Sub | Mul | Div | Neg => {
+                let zero = self.b.ins().f64const(0.0);
+                let r = match op {
+                    Neg => self.b.ins().fsub(zero, x),
+                    _ => {
+                        let y = self.float_number(ty, a[1]);
+                        match op {
+                            Add => self.b.ins().fadd(x, y),
+                            Sub => self.b.ins().fsub(x, y),
+                            Mul => self.b.ins().fmul(x, y),
+                            _ => self.b.ins().fdiv(x, y),
+                        }
+                    }
+                };
+                let r = self.b.ins().fadd(r, zero);
+                if op != Neg {
+                    let magnitude = self.b.ins().fabs(r);
+                    let largest = self.b.ins().f64const(f64::MAX);
+                    let finite = self.b.ins().fcmp(FloatCC::LessThanOrEqual, magnitude, largest);
+                    let ok = self.b.create_block();
+                    let bad = self.b.create_block();
+                    self.b.ins().brif(finite, ok, &[], bad, &[]);
+                    self.b.switch_to_block(bad);
+                    let result = self.non_finite_code(r);
+                    self.fail_with("rt_float_nonfinite", &[self.vm, result]);
+                    self.b.switch_to_block(ok);
+                }
+                let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
+                let code = self.iconst(ty.code());
+                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", KIND_FLOAT)
+            }
+            Eq | FromInt | Trunc => unreachable!("not computed in floating-point registers"),
+        }
     }
 
     fn int_compare(&mut self, op: OpCode, a: ir::Value, b: ir::Value) -> ir::Value {

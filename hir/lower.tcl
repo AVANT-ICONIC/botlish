@@ -244,14 +244,14 @@ proc hir::lower::expr {hir e} {
         }
         handle {
             set handlers {}
-            set payloads [::expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+            set payloads [dict getdef $node handlerPayloads {}]
             set index 0
             foreach name [dict get $node handlerNames] body [dict get $node handlerBodies] {
                 # A handler with a payload binding (ERROR-PAYLOADS.md) is a
                 # one-parameter block: the parameter is that binding.
                 set payload [lindex $payloads $index]
                 incr index
-                set params [::expr {$payload eq "" ? {} : [list [dict get $hir bindings $payload name]]}]
+                set params [::if {$payload eq ""} {string cat {}} else {list [dict get $hir bindings $payload name]}]
                 lappend handlers $name [list block $params {*}[Seq $hir $body]]
             }
             return [ReleasingOnError $hir $e [list handle [expr $hir [dict get $node call]] {*}$handlers]]

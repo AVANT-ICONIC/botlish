@@ -201,7 +201,7 @@ proc hir::range::SolveInputs {analysis} {
             }
         }
         dict set inputs $id [list [dict get $st narrowed $id] \
-            [expr {[dict exists $st narrowedCaptures $block] ? [dict get $st narrowedCaptures $block] : {}}] \
+            [dict getdef $st narrowedCaptures $block {}] \
             [ExternalEntry $st $id] $others]
     }
     return $inputs
@@ -371,8 +371,7 @@ proc hir::range::SolveMeasure {hir st id block params narrowed m r limit} {
     set calls [dict get $st instanceCallsOf $id]
     set monotone [dict get $st monotoneOf $id]
     set calleeResults [dict get $st refinedResults]
-    set captureSeed [expr {[dict get $st captureOpt] && [dict exists $st narrowedCaptures $block]
-        ? [dict get $st narrowedCaptures $block] : {}}]
+    set captureSeed [if {[dict get $st captureOpt] && [dict exists $st narrowedCaptures $block]} {dict get $st narrowedCaptures $block} else {string cat {}}]
     set table [dict create]
     set seen [dict create]
     set stack {}
@@ -558,8 +557,8 @@ proc hir::range::RecursiveDecided {hir ctx condition} {
     }
     set exprs [dict get $ctx exprs]
     lassign $args ea eb
-    set ra [expr {[dict exists $exprs $ea] ? [dict get $exprs $ea] : [unknown]}]
-    set rb [expr {[dict exists $exprs $eb] ? [dict get $exprs $eb] : [unknown]}]
+    set ra [dict getdef $exprs $ea [unknown]]
+    set rb [dict getdef $exprs $eb [unknown]]
     return [ComparisonOutcome [dict get [hir::symbol $hir $target] name] $ra $rb]
 }
 

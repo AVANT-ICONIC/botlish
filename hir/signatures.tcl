@@ -153,13 +153,12 @@ namespace eval hir::signatures {
 # alone.
 proc hir::signatures::entryTypes {hir e} {
     set node [dict get $hir exprs $e]
-    set declared [expr {[dict exists $node declaredParamTypes]
-        ? [dict get $node declaredParamTypes] : [lrepeat [llength [dict get $node params]] {}]}]
+    set declared [if {[dict exists $node declaredParamTypes]} {dict get $node declaredParamTypes} else {lrepeat [llength [dict get $node params]] {}}]
     if {![dict exists $node inferredParamTypes]} {
         return $declared
     }
     return [lmap d $declared i [dict get $node inferredParamTypes] {
-        expr {$d ne {} ? $d : $i}
+        if {$d ne {}} {set d} else {set i}
     }]
 }
 
@@ -196,8 +195,7 @@ proc hir::signatures::of {hir e} {
     set node [dict get $hir exprs $e]
     set entry [entryTypes $hir $e]
     set checked [checkedTypes $hir $e]
-    set why [expr {[dict exists $node paramRequirements] ? [dict get $node paramRequirements]
-        : [lrepeat [llength [dict get $node params]] {}]}]
+    set why [if {[dict exists $node paramRequirements]} {dict get $node paramRequirements} else {lrepeat [llength [dict get $node params]] {}}]
     set params {}
     foreach b [dict get $node params] d [dict get $node declaredParamTypes] \
             t $entry c $checked w $why {
@@ -210,7 +208,7 @@ proc hir::signatures::of {hir e} {
         set result [hir::type $hir [dict get $node resultType]]
     }
     return [dict create params $params result $result \
-        errors [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]]
+        errors [dict getdef $node declaredErrors {}]]
 }
 
 # One parameter's contract as the user would read it: its trusted type if
@@ -285,7 +283,7 @@ proc hir::signatures::infer {hirVar {demote {}} {roundsVar ""}} {
                 dict set next $p $t
             } else {
                 set m [Meet $t [dict get $next $p]]
-                dict set next $p [expr {$m eq "" ? $t : $m}]
+                dict set next $p [if {$m eq ""} {set t} else {set m}]
             }
         }
         if {$next eq $seeds || [lsort -stride 2 $next] eq [lsort -stride 2 $seeds]} {
@@ -315,11 +313,15 @@ proc hir::signatures::Install {hirVar seeds solution A} {
         set why {}
         set notes {}
         foreach b [dict get $node params] d [dict get $node declaredParamTypes] {
-            set t [expr {$d eq {} && [dict exists $seeds $b] ? [dict get $seeds $b] : {}}]
+            if {$d eq {} && [dict exists $seeds $b]} {
+                set t [dict get $seeds $b]
+            } else {
+                set t {}
+            }
             lappend trusted $t
             if {$d eq {} && [dict exists $solution $b]} {
                 set c [dict get $solution $b checked]
-                lappend checked [expr {$c eq "any" || $c eq $t ? {} : $c}]
+                lappend checked [if {$c eq "any" || $c eq $t} {string cat {}} else {set c}]
                 lappend why [dict get $solution $b why]
                 lappend notes [dict get $solution $b note]
             } else {
@@ -368,7 +370,7 @@ proc hir::signatures::Collect {hir} {
                         dict set A params $b [dict create block $e index $i]
                         dict set A slots [list $e $i] $b
                         set t [lindex $entry $i]
-                        dict set A seeds $b [expr {$t eq {} ? "any" : $t}]
+                        dict set A seeds $b [if {$t eq {}} {string cat "any"} else {set t}]
                     }
                     incr i
                 }
@@ -408,7 +410,7 @@ proc hir::signatures::Collect {hir} {
 # Appends VALUE to the list A FIELD P.
 proc hir::signatures::Push {AVar field p value} {
     upvar 1 $AVar A
-    set list [expr {[dict exists $A $field $p] ? [dict get $A $field $p] : {}}]
+    set list [dict getdef $A $field $p {}]
     lappend list $value
     dict set A $field $p $list
 }
@@ -430,7 +432,10 @@ proc hir::signatures::Root {AVar b} {
         }
         if {[dict exists $A resultOf $b]} {
             set r [Root A [dict get $A resultOf $b]]
-            return [expr {[lindex $r 0] eq "param" ? [list ret [lindex $r 1]] : ""}]
+            if {[lindex $r 0] eq "param"} {
+                return [list ret [lindex $r 1]]
+            }
+            return ""
         }
         return ""
     }
@@ -443,7 +448,7 @@ proc hir::signatures::Seq {hir AVar exprs sink ctx} {
     set i 0
     foreach e $exprs {
         incr i
-        Value $hir A $e [expr {$i == $n ? $sink : "drop"}] $ctx
+        Value $hir A $e [if {$i == $n} {set sink} else {string cat "drop"}] $ctx
     }
 }
 
@@ -466,7 +471,10 @@ proc hir::signatures::Name {hir e} {
         return "the program"
     }
     set name [hir::semantic::CallableName $hir $e]
-    return [expr {$name eq "" ? "a function" : $name}]
+    if {$name eq ""} {
+        return "a function"
+    }
+    return $name
 }
 
 # Walks expression E, whose value flows into SINK:
@@ -580,7 +588,7 @@ proc hir::signatures::Value {hir AVar e sink ctx} {
         }
         handle {
             set inner $ctx
-            dict set inner handled [expr {[dict exists $node handlerNames] ? [dict get $node handlerNames] : {}}]
+            dict set inner handled [dict getdef $node handlerNames {}]
             Value $hir A [dict get $node call] $sink $inner
             foreach body [dict get $node handlerBodies] {
                 Seq $hir A $body $sink $ctx
@@ -1110,7 +1118,7 @@ proc hir::signatures::CallableContract {hir AVar contracts p} {
             incr i
             lappend shown "arg $i [hir::types::show $t] ([Where $hir $arg])"
         }
-        lappend parts "call at $where passes [expr {$shown eq {} ? "nothing" : [join $shown {, }]}]"
+        lappend parts "call at $where passes [if {$shown eq {}} {string cat "nothing"} else {join $shown {, }}]"
     }
     lappend parts [expr {$seenRet eq {} ? "its result is unconstrained (return any)"
         : "its result is required by [join [lmap r $seenRet {Describe $hir $r}] {; }]"}]

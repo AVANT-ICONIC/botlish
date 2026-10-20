@@ -80,14 +80,18 @@ proc hir::foreign::Location {span} {
 # The ABI transport class of the C value type TYPE (a resolved type): i8 ..
 # u64 for a C integer scalar by its registry metadata's width and
 # signedness (never its name), bool for C _Bool (ffi::c::Bool, Botlish's
-# bool: one byte, 0 or 1), ptr for a data or function pointer, void for
-# unit (a result only).
+# bool: one byte, 0 or 1), f64 for C double (ffi::c::Double, Botlish's
+# Float64: an IEEE 754 binary64), ptr for a data or function pointer, void
+# for unit (a result only).
 proc hir::foreign::AbiClass {type} {
     if {$type eq "unit"} {
         return void
     }
     if {$type eq "bool"} {
         return bool
+    }
+    if {$type eq "Float64"} {
+        return f64
     }
     if {[hir::types::IsCPtr $type] || [hir::types::IsCFnPtr $type]} {
         return ptr
@@ -108,7 +112,11 @@ proc hir::foreign::apply {decls linkDecls} {
     foreach decl $decls {
         set ns [dict get $decl namespace]
         set name [dict get $decl name]
-        set key [expr {$ns eq "" ? $name : "${ns}::$name"}]
+        if {$ns eq ""} {
+            set key $name
+        } else {
+            set key "${ns}::$name"
+        }
         set where [expr {$ns eq "" ? "the entry program" : "module \"$ns\""}]
         set what "extern c fn \"$name\""
         if {[dict exists $registry $key]} {
@@ -178,18 +186,25 @@ proc hir::foreign::apply {decls linkDecls} {
             }
             set provenance $written
         }
-        set symbol [expr {[dict get $decl symbol] ne "" ? [dict get $decl symbol] : $name}]
+        if {[dict get $decl symbol] ne ""} {
+            set symbol [dict get $decl symbol]
+        } else {
+            set symbol $name
+        }
         set contract [dict create params $params result $result provenance $provenance]
         set native [nativeName $key]
         set abi [dict create params $abiParams result [AbiClass $result]]
         set kinds [lmap p $params {
             set t [dict get $p type]
-            expr {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t] ? "any" : ($t eq "bool" ? "bool" : "int")}
+            if {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t]} {string cat "any"} elseif {$t in {bool Float64}} {set t} else {string cat "int"}
         }]
         set extern [dict create key $key namespace $ns name $name symbol $symbol abi $abi]
+        # A double C returns is a Float64 only when it is finite: the call
+        # completes with NonFiniteFloat otherwise (FLOAT64-MILESTONE-1.md).
+        set errors [expr {$result eq "Float64" ? "NonFiniteFloat" : ""}]
         core::native::register $native -arity [llength $params] \
             -impl [list core::cabi::ExternImpl $key] \
-            -param-types $kinds -result-type any \
+            -param-types $kinds -result-type any -errors $errors \
             -ownership [lrepeat [llength $params] observe] \
             -foreign $contract -extern $extern
         dict set registry $key [dict create key $key namespace $ns name $name symbol $symbol \
@@ -266,7 +281,7 @@ proc hir::foreign::tables {} {
 # HIR's extern c fn declarations (its `foreign` side table): KEY -> {key
 # namespace name symbol native origin contract abi}.
 proc hir::foreign::declarations {hir} {
-    return [expr {[dict exists $hir foreign] ? [dict get $hir foreign] : {}}]
+    return [dict getdef $hir foreign {}]
 }
 
 # HIR's link plan: the library names, in order.

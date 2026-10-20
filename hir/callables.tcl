@@ -354,10 +354,12 @@ proc hir::callables::CheckPreserved {hirVar arg finalType contextText} {
             incr i
         }
     }
-    set name [expr {[hir::types::IsExactBlock $type] ? [Name $hir [lindex $type 1]] : ""}]
-    set label [expr {$name ne "" ? "\"$name\""
-        : [hir::types::IsExactBlock $type] ? {this callable}
-        : "this value of type [hir::semantic::ShowType $hir $type]"}]
+    if {[hir::types::IsExactBlock $type]} {
+        set name [Name $hir [lindex $type 1]]
+    } else {
+        set name ""
+    }
+    set label [if {$name ne ""} {string cat "\"$name\""} elseif {[hir::types::IsExactBlock $type]} {string cat {this callable}} else {string cat "this value of type [hir::semantic::ShowType $hir $type]"}]
     hir::Diagnose hir TYPE [format \
         {%s has typed parameter requirements that cannot be preserved %s: its declared parameter contract would be erased and could no longer be checked at every future call} \
         $label $contextText] $arg
@@ -514,8 +516,11 @@ proc hir::callables::WalkExpr {hirVar e} {
             set value [dict get $node value]
             if {$value ne ""} {
                 set target [dict get $node target]
-                set finalType [expr {$target eq "" ? "" \
-                    : [hir::type $hir [dict get [dict get $hir exprs $target] inferredResultType]]}]
+                if {$target eq ""} {
+                    set finalType ""
+                } else {
+                    set finalType [hir::type $hir [dict get [dict get $hir exprs $target] inferredResultType]]
+                }
                 CheckPreserved hir $value $finalType \
                     {in a "return" whose function-level result type differs}
                 WalkExpr hir $value
@@ -525,7 +530,11 @@ proc hir::callables::WalkExpr {hirVar e} {
             set value [dict get $node value]
             if {$value ne ""} {
                 set target [dict get $node target]
-                set finalType [expr {$target eq "" ? "" : [hir::typeOf $hir $target]}]
+                if {$target eq ""} {
+                    set finalType ""
+                } else {
+                    set finalType [hir::typeOf $hir $target]
+                }
                 CheckPreserved hir $value $finalType \
                     {in a loop "break" whose joined type differs}
                 WalkExpr hir $value
@@ -609,15 +618,15 @@ proc hir::callables::ArgContexts {hir e} {
         set instance [hir::semantic::InstanceOf $hir $e]
         if {$instance ne ""} {
             set entry [hir::semantic::EntryTypes $hir $instance]
-            return [lmap t $declared u $entry {expr {$t eq {} ? $u : $t}}]
+            return [lmap t $declared u $entry {if {$t eq {}} {set u} else {set t}}]
         }
-        return [lmap t $declared {expr {$t eq {} ? "" : $t}}]
+        return [lmap t $declared {if {$t eq {}} {string cat ""} else {set t}}]
     }
     if {$targetKind eq ""} {
         set calleeType [hir::typeOf $hir [dict get $node callee]]
         if {[hir::types::IsFn $calleeType]
                 && [llength [hir::types::FnArgs $calleeType]] == [llength $args]} {
-            return [lmap t [hir::types::FnArgs $calleeType] {expr {$t eq "any" ? "" : $t}}]
+            return [lmap t [hir::types::FnArgs $calleeType] {if {$t eq "any"} {string cat ""} else {set t}}]
         }
         return $none
     }
@@ -686,7 +695,7 @@ proc hir::callables::ArgContexts {hir e} {
         # later call it, which this milestone does not revisit).
         return [lmap arg $args {
             set t [hir::typeOf $hir $arg]
-            expr {[Bearing $hir $t 0] ? "" : $t}
+            if {[Bearing $hir $t 0]} {string cat ""} else {set t}
         }]
     }
     return $none

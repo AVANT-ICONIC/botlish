@@ -322,7 +322,7 @@ proc printing {script {status 0}} {
         puts stderr [dict get $options -errorinfo]
         exit 1
     }
-    exit [expr {$result eq "" ? $status : $result}]
+    exit [if {$result eq ""} {set status} else {set result}]
 }
 
 set commandLine [parseCommandLine $argv]
@@ -470,7 +470,11 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         set run {core::evalProgram $program}
     }
     if {$showHir || $showAot ne "" || $showNative ne "" || $showContexts || $showDirect || $showTraits} {
-        set shownHir [expr {$hir ne "" ? $hir : [hir::build $program -strict 0]}]
+        if {$hir ne ""} {
+            set shownHir $hir
+        } else {
+            set shownHir [hir::build $program -strict 0]
+        }
     }
     if {$showHir} {
         puts [hir::format $shownHir]
@@ -516,7 +520,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         return 1
     }
     if {$showCode} {
-        puts [expr {$compiled ? [dict get $unit code] : [core::compiler::generatedCode $program]}]
+        puts [if {$compiled} {dict get $unit code} else {core::compiler::generatedCode $program}]
     }
     set nativeOptions [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
     if {$showNative ne "" && [catch {
@@ -534,7 +538,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     }
     puts "   value: [core::value::show $value 1]"
     if {$backend eq "compile"} {
-        dict for {name type} [expr {$compiled ? [dict get $unit types] : [core::compiler::programTypes $program]}] {
+        dict for {name type} [if {$compiled} {dict get $unit types} else {core::compiler::programTypes $program}] {
             puts "   type:  $name : [hir::types::show $type]"
         }
     }

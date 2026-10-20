@@ -75,7 +75,10 @@ proc hir::containers::ElementContract {t} {
     }
     if {[hir::types::IsExactBlock $t] || [hir::types::IsExactNative $t]} {
         set s [hir::types::structuralOf $t]
-        return [expr {$s ne "" ? $s : [hir::types::kindOf $t]}]
+        if {$s ne ""} {
+            return $s
+        }
+        return [hir::types::kindOf $t]
     }
     return [hir::types::Unshaped $t]
 }
@@ -90,7 +93,7 @@ proc hir::containers::NonRetaining {name} {
         return 0
     }
     return [expr {[dict get $meta resultType] in {int str bool unit UnicodeChar}
-        || [dict get $meta testsType] ne ""}]
+        || [core::type::isFloat [dict get $meta resultType]] || [dict get $meta testsType] ne ""}]
 }
 
 # The element type of the collection type T (a MutableArray's or a
@@ -129,7 +132,7 @@ proc hir::containers::NativeContexts {hir e name} {
                 # one).
                 set elem [Elem [lindex $contexts 0]]
                 for {set k 1} {$k < $n} {incr k} {
-                    lset contexts $k [expr {$k == $i ? $elem : ""}]
+                    lset contexts $k [if {$k == $i} {set elem} else {string cat ""}]
                 }
                 return $contexts
             }
@@ -155,7 +158,7 @@ proc hir::containers::NativeContexts {hir e name} {
             if {$n > $i} {
                 set contexts [lrepeat $n ""]
                 set elem [Elem $result]
-                lset contexts $i [expr {$elem eq "" ? "" : [hir::types::MakeList $elem]}]
+                lset contexts $i [if {$elem eq ""} {string cat ""} else {hir::types::MakeList $elem}]
                 return $contexts
             }
         }
@@ -233,7 +236,7 @@ proc hir::containers::VerifyStore {hirVar ranges array value} {
     if {$elem eq "any" || $valueType eq "never"} {
         return
     }
-    set range [expr {[dict exists $ranges $value] ? [dict get $ranges $value] : [hir::range::unknown]}]
+    set range [dict getdef $ranges $value [hir::range::unknown]]
     if {[hir::range::ProvesValueAcceptedBy $valueType $range $elem]} {
         return
     }
@@ -256,7 +259,7 @@ proc hir::containers::VerifyElement {hirVar ranges vector value} {
     if {$elem eq "any" || $valueType eq "never"} {
         return
     }
-    set range [expr {[dict exists $ranges $value] ? [dict get $ranges $value] : [hir::range::unknown]}]
+    set range [dict getdef $ranges $value [hir::range::unknown]]
     if {$elem ne "never" && [hir::range::ProvesValueAcceptedBy $valueType $range $elem]} {
         # (MutableVector[never], the proven-empty vector, admits nothing.)
         return
@@ -327,7 +330,7 @@ proc hir::containers::VerifyFactory {hirVar name f} {
         set block [lindex $type 1]
         if {[dict exists $hir exprs $block]} {
             set known 1
-            set params [lmap t [hir::signatures::entryTypes $hir $block] {expr {$t eq {} ? "any" : $t}}]
+            set params [lmap t [hir::signatures::entryTypes $hir $block] {if {$t eq {}} {string cat "any"} else {set t}}]
         }
     } elseif {[hir::types::IsCoroutine $type]} {
         set known 1

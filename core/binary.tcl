@@ -280,11 +280,17 @@ proc core::binary::ReprPointerPath {repr} {
         }
         layout {
             set inner [PointerPath [lindex $repr 1]]
-            return [expr {$inner eq "" ? "none" : ".$inner"}]
+            if {$inner eq ""} {
+                return none
+            }
+            return ".$inner"
         }
         array {
             set inner [ReprPointerPath [lindex $repr 3]]
-            return [expr {$inner eq "none" ? "none" : "\[\]$inner"}]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
         }
     }
     return none

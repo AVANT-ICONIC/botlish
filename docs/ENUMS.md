@@ -189,6 +189,14 @@ another module changes its identity. It is stored in the registry entry
 type `{enum ID}`, in every case value `{enum ID CASE}`, and natively in the
 enum table's `name`.
 
+A builtin enum of the runtime (`core::native::declareEnum`; today only
+`NonFiniteResult`, the type of NonFiniteFloat's payload field,
+FLOAT64-MILESTONE-1.md section 15) has its bare name as its identity, like
+an entry program's enum. It is in every compilation's registry
+(`hir::enums::Reset`), visible in every module without an import, never in
+a program's `sourceTypes` or HIR text, and no program may declare a type of
+its name.
+
 ### 4. Case identity
 
 The pair (enum declaration identity, case declaration). A case's name is
