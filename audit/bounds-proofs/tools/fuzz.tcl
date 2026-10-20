@@ -581,6 +581,17 @@ set unsound {
     q = loop x in v:
         x
     list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-copies-each-pushed {v = mutable_vector::from_list(xs)
+    c1 = v
+    c1.push(h)
+    c2 = v
+    c2.push(h)
+    c2.push(h)
+    p = loop x in c1:
+        x
+    q = loop x in c2:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
     vector-branch    {v = mutable_vector::from_list(xs)
     p = loop x in v:
         x
@@ -749,6 +760,18 @@ set vectorProven {
     c1.push(h)
     q = loop x in v:
         x * 3
+    list::at(p, mod(h, list::length(q)))}
+    copy-pushed-mutated {v = vec(xs)
+    v.push(h)
+    p = loop x in v:
+        x
+    c1 = v
+    c1.push(h)
+    q = loop x in v:
+        x * 3
+    v.pop():
+        on IndexNotFound:
+            0
     list::at(p, mod(h, list::length(q)))}
     built-mod {v = vec(xs)
     loop i from 0 to 3:

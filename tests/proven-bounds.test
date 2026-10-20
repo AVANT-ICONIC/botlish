@@ -415,6 +415,17 @@ set vectorSnapshots {
     ws = loop x in v:
         x
     zs.at(h.mod(list::length(ws)))} 4
+    copies-each-pushed {v = mutable_vector::from_list([1, 2, 3])
+    c1 = v
+    c1.push(4)
+    c2 = v
+    c2.push(5)
+    c2.push(6)
+    ys = loop x in c1:
+        x * 10
+    zs = loop x in c2:
+        x
+    ys.at(h.mod(list::length(zs)))} 4
     context-branch-callee {ys = loop x in log.items:
         x * 10
     if h > 0:
@@ -439,7 +450,7 @@ test bounds-vector-snapshots-rejected {a List collected over a MutableVector has
         list $name [strictKind [vectorSnapshotProgram $body $h ""]] \
             [verdictOf [vectorSnapshotProgram $body $h IndexNotFound ":\n    on IndexNotFound:\n        -424242"] list::at]
     }
-} -result {{local-counted UNHANDLED-ERROR {IndexNotFound 0}} {local-mod UNHANDLED-ERROR {IndexNotFound 0}} {local-mask UNHANDLED-ERROR {IndexNotFound 0}} {local-guard UNHANDLED-ERROR {IndexNotFound 0}} {local-pop UNHANDLED-ERROR {IndexNotFound 0}} {local-clear UNHANDLED-ERROR {IndexNotFound 0}} {parameter UNHANDLED-ERROR {IndexNotFound 0}} {field-path UNHANDLED-ERROR {IndexNotFound 0}} {context-callee UNHANDLED-ERROR {IndexNotFound 0}} {copy-then-copy UNHANDLED-ERROR {IndexNotFound 0}} {through-copy UNHANDLED-ERROR {IndexNotFound 0}} {loop-body UNHANDLED-ERROR {IndexNotFound 0}} {handler UNHANDLED-ERROR {IndexNotFound 0}} {branch UNHANDLED-ERROR {IndexNotFound 0}} {loop-encloses-later UNHANDLED-ERROR {IndexNotFound 0}} {own-body UNHANDLED-ERROR {IndexNotFound 0}} {context-branch-callee UNHANDLED-ERROR {IndexNotFound 0}}}
+} -result {{local-counted UNHANDLED-ERROR {IndexNotFound 0}} {local-mod UNHANDLED-ERROR {IndexNotFound 0}} {local-mask UNHANDLED-ERROR {IndexNotFound 0}} {local-guard UNHANDLED-ERROR {IndexNotFound 0}} {local-pop UNHANDLED-ERROR {IndexNotFound 0}} {local-clear UNHANDLED-ERROR {IndexNotFound 0}} {parameter UNHANDLED-ERROR {IndexNotFound 0}} {field-path UNHANDLED-ERROR {IndexNotFound 0}} {context-callee UNHANDLED-ERROR {IndexNotFound 0}} {copy-then-copy UNHANDLED-ERROR {IndexNotFound 0}} {through-copy UNHANDLED-ERROR {IndexNotFound 0}} {loop-body UNHANDLED-ERROR {IndexNotFound 0}} {handler UNHANDLED-ERROR {IndexNotFound 0}} {branch UNHANDLED-ERROR {IndexNotFound 0}} {loop-encloses-later UNHANDLED-ERROR {IndexNotFound 0}} {own-body UNHANDLED-ERROR {IndexNotFound 0}} {copies-each-pushed UNHANDLED-ERROR {IndexNotFound 0}} {context-branch-callee UNHANDLED-ERROR {IndexNotFound 0}}}
 
 test bounds-vector-snapshots-fail {each snapshot shape the prover leaves checked really reads past the end of the earlier List: declared and handled, every backend fails the read with IndexNotFound and runs the handler -- the rejection is necessary, not only conservative} -body {
     lmap {name body h} $vectorSnapshots {
@@ -448,7 +459,7 @@ test bounds-vector-snapshots-fail {each snapshot shape the prover leaves checked
         list $name [lmap b $::boundsBackends {lindex [outcomeUnderHir $b $hir] 1}] \
             [expr {[opCount $nir listget] > 0}] [opCount $nir listgetproven]
     }
-} -result [lmap name {local-counted local-mod local-mask local-guard local-pop local-clear parameter field-path context-callee copy-then-copy through-copy loop-body handler branch loop-encloses-later own-body context-branch-callee} {
+} -result [lmap name {local-counted local-mod local-mask local-guard local-pop local-clear parameter field-path context-callee copy-then-copy through-copy loop-body handler branch loop-encloses-later own-body copies-each-pushed context-branch-callee} {
     list $name {-424242 -424242 -424242 -424242} 1 0
 }]
 
@@ -611,6 +622,15 @@ set vectorQuiet {
     zs = loop x in v:
         x
     ys.at(h.mod(list::length(zs)))} 4
+    copy-pushed-mutated {v = mutable_vector::from_list([1, 2, 3])
+    v.push(4)
+    ys = loop x in v:
+        x * 10
+    c = v
+    c.push(5)
+    zs = loop x in v:
+        x
+    ys.at(h.mod(list::length(zs)))} 6
     nested-copy-pushed {v = mutable_vector::from_list([1, 2, 3])
     c = v
     c.push(4)
@@ -635,13 +655,13 @@ set vectorQuiet {
         a + y} 0
 }
 
-test bounds-vector-quiet-runs-proven {two loops over one vector place with nothing between them that can mutate it have one length, whatever mutates it before or after them: the vector built by pushes in a loop, then walked twice; pushed before both loops or after both; both loops in one iteration of a loop that pushes after them; the later loop's own body pushing (its domain is evaluated first); a parameter, a field path, a context member no call between the loops can grow; a copy pushed between the loops (another place), also with the later loop in a nested function -- a counted loop, a reduction, a guard or a mask by the later one proves a read of the earlier, accepted without `errors`, the read proven, every backend agreeing -- and a lockstep over the vector and a List collected over it after pushes, or with the lockstep's own body pushing, is accepted} -body {
+test bounds-vector-quiet-runs-proven {two loops over one vector place with nothing between them that can mutate it have one length, whatever mutates it before or after them: the vector built by pushes in a loop, then walked twice; pushed before both loops or after both; both loops in one iteration of a loop that pushes after them; the later loop's own body pushing (its domain is evaluated first); a parameter, a field path, a context member no call between the loops can grow; a copy pushed between the loops (another place), also when the vector itself is pushed before both, or with the later loop in a nested function -- a counted loop, a reduction, a guard or a mask by the later one proves a read of the earlier, accepted without `errors`, the read proven, every backend agreeing -- and a lockstep over the vector and a List collected over it after pushes, or with the lockstep's own body pushing, is accepted} -body {
     lmap {name body h} $vectorQuiet {
         set program [vectorSnapshotProgram $body $h ""]
         set proven [expr {[string match lockstep-* $name] ? "-" : [lindex [verdictOf $program list::at] 1]}]
         list $name [strictKind $program] $proven [agreedValue $program]
     }
-} -result {{built-then-walked {} 1 {[0, 3, 12, 27, 48]}} {pushed-before {} 1 40} {pushed-after {} 1 20} {one-iteration {} 1 {[20, 10, 10]}} {own-body-after {} 1 20} {parameter-guard {} 1 40} {field-mask {} 1 40} {context-no-call {} 1 70} {copy-pushed {} 1 20} {nested-copy-pushed {} 1 30} {lockstep-built {} - {[11, 22, 33, 44]}} {lockstep-own-body {} - {[11, 22, 33]}}}
+} -result {{built-then-walked {} 1 {[0, 3, 12, 27, 48]}} {pushed-before {} 1 40} {pushed-after {} 1 20} {one-iteration {} 1 {[20, 10, 10]}} {own-body-after {} 1 20} {parameter-guard {} 1 40} {field-mask {} 1 40} {context-no-call {} 1 70} {copy-pushed {} 1 20} {copy-pushed-mutated {} 1 30} {nested-copy-pushed {} 1 30} {lockstep-built {} - {[11, 22, 33, 44]}} {lockstep-own-body {} - {[11, 22, 33]}}}
 
 # A mutating operation called through a function value would grow a vector
 # no size form sees grow (and alias the copies hir::mutvec never wrote out
