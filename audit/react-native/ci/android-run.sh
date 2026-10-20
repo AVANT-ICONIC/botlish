@@ -18,4 +18,10 @@ for _ in $(seq 1 90); do
 done
 adb logcat -d -s ReactNativeJS:V AndroidRuntime:E DEBUG:V libc:V | tee "$out.full" | grep -E "BOTLISH_PROBE|FATAL|Fatal signal|Abort" > "$out" || true
 cat "$out"
-grep -q "BOTLISH_PROBE done" "$out"
+if ! grep -q "BOTLISH_PROBE done" "$out"; then
+  # The screen shows the same lines: read them from the view hierarchy.
+  adb shell uiautomator dump /sdcard/probe.xml > /dev/null 2>&1 || true
+  adb shell cat /sdcard/probe.xml | tr '>' '\n' | grep -o 'text="[^"]*"' || true
+  tail -40 "$out.full"
+  exit 1
+fi

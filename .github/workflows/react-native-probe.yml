@@ -156,19 +156,23 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Boot an x86_64 emulator (API 34)
+        run: audit/react-native/ci/android-emulator.sh
+
       - name: Run on the x86_64 emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          script: audit/react-native/ci/android-run.sh "$RUNNER_TEMP/work/probe app/android/app/build/outputs/apk/release/app-release.apk" "$RUNNER_TEMP/android-probe.log"
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          audit/react-native/ci/android-run.sh "$RUNNER_TEMP/work/probe app/android/app/build/outputs/apk/release/app-release.apk" "$RUNNER_TEMP/android-probe.log"
 
   ios:
     name: iOS app (macOS arm64, simulator)
     runs-on: macos-15
     timeout-minutes: 120
+    # macOS has no C.utf8 locale, and CocoaPods fails in Ruby's
+    # unicode_normalize under the US-ASCII one that leaves.
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - uses: actions/checkout@v5
 

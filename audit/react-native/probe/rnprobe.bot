@@ -28,6 +28,14 @@ fn require_positive(n: int) -> int errors NotPositive:
         return n
     fail NotPositive
 
+fn same(a: str, b: str) -> bool:
+    a == b
+
+fn pick(first: bool, a: str, b: str) -> str:
+    if first:
+        return a
+    b
+
 # Recursion that is not a tail call: N native frames deep.
 fn depth(n: int) -> int:
     if n <= 0:
@@ -42,6 +50,7 @@ fn exercise() -> list:
     checked = n.require_positive():
         on NotPositive:
             return [n]
-    [n.add(n), args.get(0, "").reverse(), checked, n.depth()]
+    name = args.get(0, "")
+    [n.add(n), name.reverse(), checked, n.depth(), name.same(name.reverse()), (n > 1).pick(name, "")]
 
 exercise()

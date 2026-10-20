@@ -2,7 +2,9 @@
 # ios-run.sh APP-BUNDLE OUT -- boots an available iPhone simulator, installs
 # and launches the probe app and keeps its BOTLISH_PROBE log lines in OUT
 # (exit 1 unless the probe's last line, "done", arrives within three
-# minutes).
+# minutes). React Native logs console.log at info level through os_log,
+# which `log show` omits and may not persist, so the log is streamed live
+# from before the launch.
 set -euo pipefail
 bundle=$1
 out=$2
@@ -19,13 +21,24 @@ echo "simulator $udid"
 xcrun simctl boot "$udid" || true
 xcrun simctl bootstatus "$udid" -b
 xcrun simctl install "$udid" "$bundle"
+: > "$out.stream"
+xcrun simctl spawn "$udid" log stream --level info --style compact \
+  --predicate 'eventMessage CONTAINS "BOTLISH_PROBE" OR (process == "BotlishProbeApp" AND messageType == fault)' \
+  > "$out.stream" 2>&1 &
+streamer=$!
+sleep 3
 xcrun simctl launch "$udid" org.botlish.probeapp
 for _ in $(seq 1 90); do
-  if xcrun simctl spawn "$udid" log show --last 5m --style compact --predicate 'eventMessage CONTAINS "BOTLISH_PROBE"' 2>/dev/null | grep -q "BOTLISH_PROBE done"; then
+  if grep -q "BOTLISH_PROBE done" "$out.stream"; then
     break
   fi
   sleep 2
 done
-xcrun simctl spawn "$udid" log show --last 5m --style compact --predicate 'eventMessage CONTAINS "BOTLISH_PROBE"' > "$out" || true
+kill "$streamer" || true
+grep "BOTLISH_PROBE\|fault" "$out.stream" > "$out" || true
 cat "$out"
-grep -q "BOTLISH_PROBE done" "$out"
+if ! grep -q "BOTLISH_PROBE done" "$out"; then
+  echo "no probe output; the app's crash reports, if any:"
+  ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i botlish | head -3 || true
+  exit 1
+fi

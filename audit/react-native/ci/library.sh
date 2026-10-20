@@ -22,5 +22,5 @@ case "$target" in
 esac
 RUSTFLAGS="-C force-frame-pointers=yes" cargo build --release --manifest-path native/Cargo.toml --target "$target" --lib
 tclsh9.0 audit/react-native/tools/libmode.tcl -o "$out" -prefix rnprobe -rust-target "$target" \
-  -runtime "native/target/$target/release" audit/react-native/probe/rnprobe.bot add reverse require_positive depth
+  -runtime "native/target/$target/release" audit/react-native/probe/rnprobe.bot add reverse require_positive depth same pick
 ls -l "$out"

@@ -5,7 +5,7 @@
 // logcat or the simulator's log) and shows the same lines on screen.
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text } from 'react-native';
-import { add, depth, requirePositive, reverse } from 'react-native-botlish-probe';
+import { add, depth, pick, requirePositive, reverse, same } from 'react-native-botlish-probe';
 
 function attempt(label: string, f: () => unknown): string {
   try {
@@ -25,6 +25,8 @@ function probe(): string[] {
     attempt('requirePositive(5)', () => requirePositive(5)),
     attempt('requirePositive(-1)', () => requirePositive(-1)),
     attempt('depth(1000)', () => depth(1000)),
+    attempt('same("añb", "añb")', () => same('añb', 'añb')),
+    attempt('pick(false, "left", "right")', () => pick(false, 'left', 'right')),
   ];
   let last = '';
   const t0 = Date.now();
