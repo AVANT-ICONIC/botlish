@@ -128,6 +128,7 @@ proc hir::refinements::Problems {family fields} {
     set params [dict get $schema params]
     set problems {}
     set given [dict create]
+    set written [dict create]
     foreach field $fields {
         lassign $field param text
         if {![dict exists $params $param]} {
@@ -135,10 +136,13 @@ proc hir::refinements::Problems {family fields} {
                 $param $family [join [dict keys $params] {, }]]
             continue
         }
-        if {[dict exists $given $param]} {
+        if {[dict exists $written $param]} {
             lappend problems "$family states \"$param\" twice"
             continue
         }
+        # Written: a required parameter with a bad value is that problem,
+        # not also a missing parameter.
+        dict set written $param 1
         if {![regexp {^-?[0-9]+$} $text]} {
             lappend problems "$family's \"$param\" is an integer, not \"$text\""
             continue
@@ -152,7 +156,7 @@ proc hir::refinements::Problems {family fields} {
         dict set given $param $text
     }
     dict for {param spec} $params {
-        if {[dict get $spec required] && ![dict exists $given $param]} {
+        if {[dict get $spec required] && ![dict exists $written $param]} {
             lappend problems [format {%s requires "%s" (write %s)} $family $param [Example $family]]
         }
     }

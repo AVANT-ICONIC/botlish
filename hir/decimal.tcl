@@ -26,6 +26,7 @@
 #   * an argument of a parameter declared as one;
 #   * a field of a struct construction whose field is declared as one;
 #   * an element of a List literal where List[T] of one is expected;
+#   * a handler's value, where the handled call's result type is one;
 #   * an operand of an operator whose other operand is statically one (the
 #     sibling's type is the expected type).
 #
@@ -289,12 +290,22 @@ proc hir::decimal::Retarget {hirVar e op} {
 proc hir::decimal::resolve {hirVar} {
     upvar 1 $hirVar hir
     set changed 0
-    if {[dict exists $hir operatorCalls]} {
-        foreach e [dict get $hir operatorCalls] {
-            if {![dict exists $hir exprs $e operator]} {
+    # An unresolved operator call, or one an earlier walk resolved to
+    # Float64's operation before an operand's type was known (a Float64
+    # literal beside an operand still of type any selects Float64,
+    # hir::operators::Selected): a DecimalRounded operand found since
+    # selects DecimalRounded's operation instead.
+    set calls [concat [dict getdef $hir operatorCalls {}] [dict getdef $hir floatOperators {}]]
+    if {$calls ne {}} {
+        foreach e $calls {
+            if {[dict exists $hir exprs $e operator]} {
+                set op [dict get $hir exprs $e operator]
+            } elseif {[dict exists $hir exprs $e resolvedOperator]
+                    && [lindex [dict get $hir exprs $e resolvedOperator] 1] eq "Float64"} {
+                set op [lindex [dict get $hir exprs $e resolvedOperator] 0]
+            } else {
                 continue
             }
-            set op [dict get $hir exprs $e operator]
             set operands [Operands $hir $e $op]
             set types [lmap a $operands {hir::typeOf $hir $a}]
             set selected 0
@@ -332,8 +343,13 @@ proc hir::decimal::RetargetComparison {hirVar e op} {
     set root [dict get $hir bindings [dict get $hir exprs $callee binding] scope]
     dict set hir exprs $callee binding [hir::resolve::RootBinding hir $root $native]
     dict set hir exprs $callee name $native
-    dict unset hir exprs $e operator
-    dict set hir operatorCalls [lsearch -all -inline -not -exact [dict get $hir operatorCalls] $e]
+    if {[dict exists $hir exprs $e operator]} {
+        dict unset hir exprs $e operator
+        dict set hir operatorCalls [lsearch -all -inline -not -exact [dict get $hir operatorCalls] $e]
+    }
+    if {[dict exists $hir floatOperators]} {
+        dict set hir floatOperators [lsearch -all -inline -not -exact [dict get $hir floatOperators] $e]
+    }
     dict set hir exprs $e resolvedOperator [list $op $::core::decimal::kind]
     dict lappend hir decimalOperators $e
 }
@@ -388,6 +404,22 @@ proc hir::decimal::Expectations {hir} {
                     lappend result {*}[Expected $hir $arg $declared \
                         [format {parameter "%s" of %s} [hir::semantic::SourceName $hir $param] \
                             [hir::callables::Name $hir $target]]]
+                }
+            }
+            handle {
+                # A handler's value is the handled call's: it is held to the
+                # call's normal result type (hir/types.tcl's Handle).
+                set declared [hir::typeOf $hir [dict get $node call]]
+                if {$declared eq "" || ![MentionsRefined $declared]} {
+                    continue
+                }
+                foreach body [dict get $node handlerBodies] {
+                    if {$body eq ""} {
+                        continue
+                    }
+                    foreach leaf [Tails $hir [lindex $body end]] {
+                        lappend result {*}[Expected $hir $leaf $declared "the result of the handled call"]
+                    }
                 }
             }
             struct {
@@ -598,9 +630,18 @@ proc hir::decimal::verify {hirVar} {
             }
         }
     }
-    # The named conversions.
+    # The named conversions, and every set made of DecimalRounded values (an
+    # annotation spelling one is rejected where it is resolved,
+    # hir::types::resolveApplication).
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] ne "call" || ![dict get $node reachable]} {
+            continue
+        }
+        set t [hir::typeOf $hir $e]
+        if {[lindex $t 0] eq "immutableSet" && [llength $t] == 2 && [Mentions [lindex $t 1]]} {
+            hir::Diagnose hir TYPE [format \
+                {this call makes %s: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)} \
+                [hir::types::show $t]] $e
             continue
         }
         set name [CalledNative $hir $e]
@@ -777,11 +818,22 @@ proc hir::decimal::VerifyConstant {hirVar e} {
         set claim [format {%s is only proven correct to %d decimal place%s} [Subject $hir $e] $proven \
             [if {$proven == 1} {string cat ""} else {string cat s}]]
     }
+    set first [expr {$proven + 1}]
     hir::Diagnose hir DECIMAL-PRECISION [format \
-        {%s, but %s requires %s (its exact value is %s; its binary64 computation gives %s, which rounds to %s at %d places where the exact value rounds to %s)} \
+        {%s, but %s requires %s (its exact value is %s; its binary64 computation gives %s, which rounds to %s at %d place%s where the exact value rounds to %s)} \
         $claim $reason [hir::types::show $expected] [ExactText $t] [core::decimal::BinaryText $x] \
-        [core::decimal::RoundedText [core::decimal::DoubleRat $x] [expr {$proven + 1}]] [expr {$proven + 1}] \
-        [core::decimal::RoundedText $t [expr {$proven + 1}]]] $e
+        [Abbreviated [core::decimal::RoundedText [core::decimal::DoubleRat $x] $first]] $first \
+        [if {$first == 1} {string cat ""} else {string cat s}] \
+        [Abbreviated [core::decimal::RoundedText $t $first]]] $e
+}
+
+# A rounded decimal TEXT as a message shows it: whole when short, else its
+# first digits and the last 32, where two roundings differ.
+proc hir::decimal::Abbreviated {text} {
+    if {[string length $text] <= 48} {
+        return $text
+    }
+    return "[string range $text 0 7]...[string range $text end-31 end]"
 }
 
 # What the DecimalRounded constant expression rooted at E is called in a

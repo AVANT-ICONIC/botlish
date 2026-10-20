@@ -1,0 +1,574 @@
+# decimal-rounded.test -- DecimalRounded{minDecimalsPreserved: N}, the first
+# precision-guaranteed numeric refinement (DECIMAL-ROUNDED-MILESTONE-1.md).
+#
+# A value of DecimalRounded{minDecimalsPreserved: N} stands for a true value
+# t: rounding it (half to even) to any P <= N places gives round(t, P). The
+# file pins the scalar-refinement syntax and its validation, the canonical
+# form and its text, implication (weakening) and decay, the literal typing
+# rule and the exact source decimal it starts from, the proofs of constant
+# arithmetic and their loss, the rounding rule at its boundaries, the
+# observations (comparisons, equality, conversions, display) and their
+# precision, the upper bound, the refusals (hashing, sets, aggregate
+# equality, mixing with Float64), NonFiniteFloat beside precision loss, HIR
+# text and interchange, target independence, the native representation, a
+# standalone executable, and parity of all four backends -- bit for bit (the
+# representation) and in every decision.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
+# The HIR of source TEXT (warnings off).
+proc drHir {text} {
+    return [surface::compile $text t.bot -warnings off]
+}
+
+# The raw outcome of HIR under BACKEND: {value V} or {error CODE MESSAGE}.
+proc drRun {backend hir} {
+    set saved [core::useBackend]
+    resetEffects
+    try {
+        if {[catch {
+            switch -- $backend {
+                interp {
+                    core::useBackend interp
+                    core::evalProgram [hir::lower $hir]
+                }
+                compile { core::compiler::evalHir $hir }
+                cranelift-generic { native::evalHir $hir -specialize 0 }
+                cranelift { native::evalHir $hir }
+            }
+        } result options]} {
+            return [list error [dict get $options -errorcode] $result]
+        }
+        return [list value $result]
+    } finally {
+        core::useBackend $saved
+    }
+}
+
+# The display of HIR's result value V, as main.tcl shows it: its
+# DecimalRounded values at the precision the program's result type
+# guarantees (hir::decimal::Display).
+proc drDisplay {hir v} {
+    return [hir::decimal::Display $v [hir::typeOf $hir [lindex [hir::roots $hir] end]]]
+}
+
+# The outcome of HIR on every backend, which must agree on the display and on
+# the representation of every value (core::value::show's REVEAL renders a
+# DecimalRounded value's binary64): {value DISPLAY} or {error CODE MESSAGE}.
+proc drOutcome {hir {backends {interp compile cranelift-generic cranelift}}} {
+    set outcomes {}
+    set reveals {}
+    foreach b $backends {
+        set outcome [drRun $b $hir]
+        if {[lindex $outcome 0] eq "value"} {
+            lappend reveals [core::value::show [lindex $outcome 1] 1 1]
+            set outcome [list value [drDisplay $hir [lindex $outcome 1]]]
+        }
+        lappend outcomes $outcome
+    }
+    if {[llength [lsort -unique $outcomes]] != 1 || [llength [lsort -unique $reveals]] > 1} {
+        error "mismatch across $backends: $outcomes / $reveals"
+    }
+    return [lindex $outcomes 0]
+}
+
+# The display of source TEXT's result, agreed by every backend.
+proc drValue {text} {
+    set outcome [drOutcome [drHir $text]]
+    if {[lindex $outcome 0] ne "value"} {
+        error "not a value: $outcome"
+    }
+    return [lindex $outcome 1]
+}
+
+# The representation of source TEXT's result (core::value::show with
+# REVEAL), agreed by every backend.
+proc drReveal {text} {
+    set hir [drHir $text]
+    drOutcome $hir
+    return [core::value::show [lindex [drRun interp $hir] 1] 1 1]
+}
+
+# "KIND: MESSAGE" of the first diagnostic of source TEXT's compilation (its
+# location dropped), or accepted.
+proc rejection {text} {
+    if {[catch {surface::compile $text t.bot -warnings off} message options]} {
+        if {[dict exists $options -diagnostics]} {
+            set first [lindex [dict get $options -diagnostics] 0]
+            set message [dict get $first message]
+            set code [dict get $first errorcode]
+        } else {
+            set code [dict get $options -errorcode]
+        }
+        if {[lrange $code 0 1] eq {SURFACE SYNTAX}} {
+            set code SYNTAX
+        }
+        regsub {^t\.bot:[0-9]+:[0-9]+: } [lindex [split $message \n] 0] {} message
+        return "[lindex $code end]: $message"
+    }
+    return accepted
+}
+
+# Every diagnostic kind of source TEXT's compilation, in order.
+proc rejectionKinds {text} {
+    if {[catch {surface::compile $text t.bot -warnings off} message options]} {
+        if {[dict exists $options -diagnostics]} {
+            return [lmap d [dict get $options -diagnostics] {lindex [dict get $d errorcode] end}]
+        }
+        return [list [lindex [dict get $options -errorcode] end]]
+    }
+    return {}
+}
+
+# The static type of top-level binding NAME of HIR, as it is spelled.
+proc drBindingType {hir name} {
+    return [hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] $name]]]
+}
+
+# The refined type TEXT spells (a type annotation's), or the error resolving
+# it raises.
+proc drType {text} {
+    if {[catch {surface::parse "fn f(x: $text) -> int:\n    1\n" t.bot} ast]} {
+        return "syntax: $ast"
+    }
+    set expr [lindex [dict get [lindex [dict get $ast body] 0] params] 0 2]
+    if {[catch {hir::resolve::ResolveTypeExpr $expr} type]} {
+        return "[lindex $::errorCode end]: $type"
+    }
+    return $type
+}
+
+set dr2 "DecimalRounded{minDecimalsPreserved: 2}"
+
+# ---------------------------------------------------------------------------
+# Syntax and the scalar-refinement schema
+
+test dr-parse-forms {a scalar refinement is NAME{FIELD: INT ...}, its fields separated by commas or line breaks, in a type annotation; it is no generic (no angle brackets) and its parameters are integers} -body {
+    set forms [list \
+        "fn f(x: DecimalRounded{minDecimalsPreserved: 2}) -> int:\n    1\n" \
+        "fn f(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:\n    1\n" \
+        "fn f(x: DecimalRounded{\n    minDecimalsPreserved: 2\n    maxDecimalsPreserved: 4\n}) -> int:\n    1\n" \
+        "fn f() -> DecimalRounded{\n    minDecimalsPreserved: 2\n}:\n    0.19\n" \
+        "fn f(xs: List\[DecimalRounded{maxDecimalsPreserved: 5, minDecimalsPreserved: 3}\]) -> int:\n    1\n"]
+    lmap form $forms {
+        set ast [surface::parse $form t.bot]
+        set fn [lindex [dict get $ast body] 0]
+        set types [lmap p [dict get $fn params] {surface::ast::showType [lindex $p 2]}]
+        if {[dict get $fn resultType] ne ""} {
+            lappend types [surface::ast::showType [dict get $fn resultType]]
+        }
+        set types
+    }
+} -result {{{DecimalRounded{minDecimalsPreserved: 2}} int} {{DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}} int} {{DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}} int} {{DecimalRounded{minDecimalsPreserved: 2}}} {{List[DecimalRounded{maxDecimalsPreserved: 5, minDecimalsPreserved: 3}]} int}}
+
+test dr-parse-errors {a malformed refinement is a syntax error where it is written: a field without a colon or a value, a value that is not an integer literal, a repeated field, no fields} -body {
+    lmap type [list "DecimalRounded{minDecimalsPreserved 2}" "DecimalRounded{minDecimalsPreserved: }" \
+            "DecimalRounded{minDecimalsPreserved: 2.5}" "DecimalRounded{minDecimalsPreserved: x}" \
+            "DecimalRounded{minDecimalsPreserved: 2, minDecimalsPreserved: 3}" "DecimalRounded{}" \
+            "DecimalRounded{minDecimalsPreserved: 2 maxDecimalsPreserved: 4}"] {
+        rejection "fn f(x: $type) -> int:\n    1\n"
+    }
+} -result {{SYNTAX: expected ":" after the refinement parameter "minDecimalsPreserved", found integer 2} SYNTAX:\ the\ refinement\ parameter\ \"minDecimalsPreserved\"\ of\ DecimalRounded\{...\}\ is\ an\ integer,\ found\ \"\}\" {SYNTAX: the refinement parameter "minDecimalsPreserved" of DecimalRounded{...} is an integer, found decimal number 2.5} {SYNTAX: the refinement parameter "minDecimalsPreserved" of DecimalRounded{...} is an integer, found name "x"} {SYNTAX: duplicate refinement parameter "minDecimalsPreserved" in DecimalRounded{...}} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{} for parameter "x": DecimalRounded requires "minDecimalsPreserved" (write DecimalRounded{minDecimalsPreserved: N})} {SYNTAX: expected "," between the refinement parameters of DecimalRounded{...} on one line, found name "maxDecimalsPreserved"}}
+
+test dr-parameters-validated {the parameters are validated against the family's schema (hir/refinements.tcl): minDecimalsPreserved is required, both are 0..1000, maxDecimalsPreserved >= minDecimalsPreserved, no other parameter; a bare DecimalRounded has no precision and is no annotation; only a refinement family takes parameters} -body {
+    lmap type [list "DecimalRounded{maxDecimalsPreserved: 4}" "DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2}" \
+            "DecimalRounded{minDecimalsPreserved: -1}" "DecimalRounded{minDecimalsPreserved: 1001}" \
+            "DecimalRounded{minDecimalsPreserved: 2, decimals: 4}" DecimalRounded "Float64{minDecimalsPreserved: 2}" \
+            "List\[DecimalRounded\]" "DecimalRounded{minDecimalsPreserved: 0}" "DecimalRounded{minDecimalsPreserved: 1000, maxDecimalsPreserved: 1000}"] {
+        rejection "fn f(x: $type) -> int:\n    1\nf\n"
+    }
+} -result {{REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{maxDecimalsPreserved: 4} for parameter "x": DecimalRounded requires "minDecimalsPreserved" (write DecimalRounded{minDecimalsPreserved: N})} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2} for parameter "x": an upper precision bound below the guaranteed precision describes no value: maxDecimalsPreserved must be at least minDecimalsPreserved (DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2})} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{minDecimalsPreserved: -1} for parameter "x": DecimalRounded's "minDecimalsPreserved" must be from 0 to 1000, not -1} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{minDecimalsPreserved: 1001} for parameter "x": DecimalRounded's "minDecimalsPreserved" must be from 0 to 1000, not 1001} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded{minDecimalsPreserved: 2, decimals: 4} for parameter "x": "decimals" is not a parameter of DecimalRounded (its parameters: minDecimalsPreserved, maxDecimalsPreserved)} {REFINEMENT-PARAMETER: unknown or invalid type DecimalRounded for parameter "x": DecimalRounded is written with its refinement parameters, which are part of the type: DecimalRounded{minDecimalsPreserved: N}} {REFINEMENT-PARAMETER: unknown or invalid type Float64{minDecimalsPreserved: 2} for parameter "x": "Float64" has no scalar refinements: NAME{...} refines one of DecimalRounded} {REFINEMENT-PARAMETER: unknown or invalid type List[DecimalRounded] for parameter "x": DecimalRounded is written with its refinement parameters, which are part of the type: DecimalRounded{minDecimalsPreserved: N}} accepted accepted}
+
+test dr-canonical-form {a refined type is {srefined FAMILY FACTS}, FACTS the stated parameters in schema order whatever the written order, so equal types are equal values; its text is the source spelling} -body {
+    set a [drType "DecimalRounded{maxDecimalsPreserved: 4, minDecimalsPreserved: 2}"]
+    set b [drType "DecimalRounded{\n    minDecimalsPreserved: 2\n    maxDecimalsPreserved: 4\n}"]
+    list $a [expr {$a eq $b}] [hir::types::show $a] [hir::refinements::Parse [hir::types::show $a]] \
+        [hir::refinements::Parse "DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2}"]
+} -result {{srefined DecimalRounded {minDecimalsPreserved 2 maxDecimalsPreserved 4}} 1 {DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}} {srefined DecimalRounded {minDecimalsPreserved 2 maxDecimalsPreserved 4}} {}}
+
+test dr-schema-generic {the schema is a table: DecimalRounded is its one family, and implication, joins and validation read only its parameter specifications (no procedure names a parameter)} -body {
+    set schema [hir::refinements::Schema DecimalRounded]
+    list [dict keys $::hir::refinements::families] [dict get $schema base] [dict keys [dict get $schema params]] \
+        [llength [regexp -all -inline {minDecimalsPreserved|maxDecimalsPreserved} \
+            [join [lmap p [info procs ::hir::refinements::*] {info body $p}]]]]
+} -result {DecimalRounded DecimalRounded {minDecimalsPreserved maxDecimalsPreserved} 0}
+
+test dr-implication {weakening is subtyping: a value guaranteed to more places stands where fewer are required; a value with no observation ceiling (or a higher one) stands where a ceiling is, never the reverse; every member is a subtype of the base, which states no fact} -body {
+    set types {}
+    foreach spelling {{minDecimalsPreserved: 4} {minDecimalsPreserved: 2} {minDecimalsPreserved: 2, maxDecimalsPreserved: 4}
+            {minDecimalsPreserved: 2, maxDecimalsPreserved: 6} {minDecimalsPreserved: 3, maxDecimalsPreserved: 4}} {
+        lappend types [drType "DecimalRounded{$spelling}"]
+    }
+    lappend types DecimalRounded
+    lmap a $types {
+        join [lmap b $types {hir::types::subtype $a $b}] {}
+    }
+} -result {111111 011101 001001 001101 001011 000001}
+
+test dr-joins {the join of two refined types keeps each parameter's weaker value, the meet the stronger one (or none when it breaks a constraint)} -body {
+    set a [drType "DecimalRounded{minDecimalsPreserved: 4, maxDecimalsPreserved: 6}"]
+    set b [drType "DecimalRounded{minDecimalsPreserved: 2}"]
+    set c [drType "DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 5}"]
+    set d [drType "DecimalRounded{minDecimalsPreserved: 1, maxDecimalsPreserved: 3}"]
+    lmap pair [list [list $a $b] [list $a $c] [list $c $d]] {
+        lassign $pair x y
+        list [hir::types::show [hir::types::lub $x $y]] [hir::types::show [hir::refinements::Glb $x $y]]
+    }
+} -result {{{DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6}} {DecimalRounded{minDecimalsPreserved: 4}}} {{DecimalRounded{minDecimalsPreserved: 4, maxDecimalsPreserved: 5}} {DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 6}}} {{DecimalRounded{minDecimalsPreserved: 1, maxDecimalsPreserved: 3}} {DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 5}}}}
+
+# ---------------------------------------------------------------------------
+# Literals
+
+test dr-literal-typing {a decimal literal is a DecimalRounded constant exactly where a DecimalRounded type is expected -- a declared result, a parameter, a struct field, a List element, a handler of a call of one, beside a DecimalRounded operand -- and the Float64 nearest its decimal everywhere else} -body {
+    set hir [drHir [string cat \
+        "struct Price:\n    amount: $dr2\n" \
+        "fn rate() -> $dr2:\n    0.19\n" \
+        "fn twice(x: $dr2) -> $dr2:\n    -x\n" \
+        "fn many() -> List\[$dr2\]:\n    \[0.1, 0.2\]\n" \
+        "fn safe() -> $dr2 errors NonFiniteFloat:\n    1.25 * 2.0\n" \
+        "p = Price{amount: 19.99}\n" \
+        "y = safe():\n    on NonFiniteFloat:\n        0.5\n" \
+        "\[rate() < 0.2, twice(0.25), 0.75, 1.5 + 2.5\]\n"]]
+    lmap e [lsort -dictionary [dict keys [dict get $hir exprs]]] {
+        set node [dict get $hir exprs $e]
+        expr {[dict get $node kind] eq "const" && [dict exists $node decimal] ? [dict get $node literal] : [continue]}
+    }
+} -result {{DecimalRounded 0.19} {DecimalRounded 0.1} {DecimalRounded 0.2} {DecimalRounded 1.25} {DecimalRounded 2.0} {DecimalRounded 19.99} {DecimalRounded 0.5} {DecimalRounded 0.2} {DecimalRounded 0.25} {Float64 0.75} {Float64 1.5} {Float64 2.5}}
+
+test dr-literal-exact-intent {a DecimalRounded constant starts from its exact source decimal, never from the Float64 it would otherwise be: 0.295 at 2 places is 0.30 (rounded half to even), though the Float64 nearest 0.295 rounds to 0.29; its representation is chosen to satisfy the decimal (core::decimal::Represent)} -body {
+    list [drValue "fn f() -> $dr2:\n    0.295\nf()\n"] [drReveal "fn f() -> $dr2:\n    0.295\nf()\n"] \
+        [core::float::Text 0.295] [core::decimal::RoundedText [core::decimal::DoubleRat 0.295] 2] \
+        [drValue "fn f() -> DecimalRounded{minDecimalsPreserved: 2}:\n    1.245\nf()\n"] \
+        [drReveal "fn f() -> DecimalRounded{minDecimalsPreserved: 2}:\n    1.245\nf()\n"]
+} -result {0.30 {<DecimalRounded 0.29500000000000004>} 0.295 0.29 1.24 {<DecimalRounded 1.2449999999999999>}}
+
+test dr-literal-choice-one-place {the literal choice is made in one place, inside type inference (hir::decimal::resolve): the lowering keeps the exact decimal on the Float64 constant it writes (surface::lower::DecimalConstant, hir::syntax::withDecimal), canonical, and decides nothing} -body {
+    set hir [drHir "a = 0.1000\nb = 1.50e1\n\[a, b\]\n"]
+    lmap e [lsort -dictionary [dict keys [dict get $hir exprs]]] {
+        set node [dict get $hir exprs $e]
+        expr {[dict get $node kind] eq "const" ? [list [dict get $node literal] [dict get $node decimal]] : [continue]}
+    }
+} -result {{{Float64 0.1} 0.1} {{Float64 15.0} 15.0}}
+
+test dr-literal-precision-refused {a constant whose decimal no representation holds to the expected precision is rejected, with what it is proven to: 0.1 at 17 places (no binary64 rounds to 0.10000000000000000 there); the literal stays exact, never silently the nearest binary64} -body {
+    list [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 17}:\n    0.1\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 16}:\n    0.1\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 316}:\n    1.0e-300\nf()\n"]
+} -result {{DECIMAL-PRECISION: the literal 0.1 is only proven correct to 16 decimal places, but the declared result of f requires DecimalRounded{minDecimalsPreserved: 17} (its exact value is 0.1; its binary64 computation gives 0.1000000000000000055511151231257827021181..., which rounds to 0.10000000000000001 at 17 places where the exact value rounds to 0.10000000000000000)} accepted accepted}
+
+test dr-literal-small-large {very small and very large finite constants: 5.0e-324 (binary64's least subnormal is 4.94...e-324) is proven to 324 places, where it is nonzero, and not to 325; a large decimal is proven to no place at all unless binary64 holds its integer digits (1.0e22 is exact, 1.0e23 and 1.0e300 are not); a decimal beyond binary64's range is a syntax error, as for Float64} -body {
+    list [drValue "fn f() -> DecimalRounded{minDecimalsPreserved: 324}:\n    5.0e-324\n\[f() == 0.0, f() > 0.0\]\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 325}:\n    5.0e-324\nf()\n"] \
+        [drValue "fn f() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e22\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e23\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e300\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 1}:\n    123456789012345678.5\nf()\n"] \
+        [rejection "fn f() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e309\nf()\n"]
+} -result {{[false, true]} {DECIMAL-PRECISION: the literal 5.0e-324 is only proven correct to 324 decimal places, but the declared result of f requires DecimalRounded{minDecimalsPreserved: 325} (its exact value is 5.0e-324; its binary64 computation gives 4.94065645841246544176568792868221372365e-324..., which rounds to 0.000000...00000000000000000000000000000049 at 325 places where the exact value rounds to 0.000000...00000000000000000000000000000050)} 10000000000000000000000 {DECIMAL-PRECISION: no decimal place of the literal 1.0e23 is proven correct (not even its rounding to an integer), but the declared result of f requires DecimalRounded{minDecimalsPreserved: 0} (its exact value is 1.0e23; its binary64 computation gives 9.9999999999999991611392e22, which rounds to 99999999999999991611392 at 0 places where the exact value rounds to 100000000000000000000000)} {DECIMAL-PRECISION: no decimal place of the literal 1.0e300 is proven correct (not even its rounding to an integer), but the declared result of f requires DecimalRounded{minDecimalsPreserved: 0} (its exact value is 1.0e300; its binary64 computation gives 1.000000000000000052504760255204420248704e300..., which rounds to 10000000...38115669472196386865459400540160 at 0 places where the exact value rounds to 10000000...00000000000000000000000000000000)} {DECIMAL-PRECISION: no decimal place of the literal 1.234567890123456785e17 is proven correct (not even its rounding to an integer), but the declared result of f requires DecimalRounded{minDecimalsPreserved: 1} (its exact value is 1.234567890123456785e17; its binary64 computation gives 1.2345678901234568e17, which rounds to 123456789012345680 at 0 places where the exact value rounds to 123456789012345678)} {SYNTAX: the decimal literal 1.0e309 is outside the range of Float64 (its largest finite number is 1.7976931348623157e308)}}
+
+# ---------------------------------------------------------------------------
+# The rounding rule
+
+test dr-rounding-rule {the rule is round to nearest, ties to even, of the exact value, at every precision and on both signs; it never depends on host floating-point formatting} -body {
+    lmap {text p} {0.125 2 0.135 2 1.245 2 1.235 2 1.2350000001 2 1.2449999999 2 1.2450000001 2 -1.245 2 -1.235 2
+            2.5 0 3.5 0 -0.5 0 0.05 1 0.15 1 0.25 1 -0.0 1 1234.5 0 9.995 2} {
+        core::decimal::RoundedText [core::decimal::ParseDecimal $text] $p
+    }
+} -result {0.12 0.14 1.24 1.24 1.24 1.24 1.25 -1.24 -1.24 2 4 0 0.0 0.2 0.2 0.0 1234 10.00}
+
+test dr-boundaries-two-places {constants immediately around the two-place rounding boundaries of 1.23/1.24/1.25 mean their exact decimals: 1.235 and 1.245 are ties (to even: 1.24 both), every other value rounds by its exact digits} -body {
+    drValue [string cat "fn values() -> List\[$dr2\]:\n" \
+        "    \[1.234, 1.2349999999, 1.235, 1.2350000001, 1.244, 1.2449999999, 1.245, 1.2450000001, 1.255, -1.245, -1.235\]\n" \
+        "values()\n"]
+} -result {[1.23, 1.23, 1.24, 1.24, 1.24, 1.24, 1.24, 1.25, 1.26, -1.24, -1.24]}
+
+test dr-boundaries-comparisons {comparisons of the boundary values decide by their two-place decimals: ties land on the even side, and values in one cell compare equal} -body {
+    drValue [string cat "fn d(x: $dr2) -> $dr2:\n    x\n" \
+        "\[d(1.235) == d(1.24), d(1.245) == d(1.24), d(1.2450000001) == d(1.25), d(1.2349999999) < d(1.235), d(1.244) < d(1.245), d(1.244) == d(1.245), d(1.255) == d(1.26)\]\n"]
+} -result {[true, true, true, true, false, true, true]}
+
+# ---------------------------------------------------------------------------
+# Weakening, decay, minting
+
+test dr-weakening {a value guaranteed to more places is accepted where fewer are required, and keeps its value} -body {
+    drValue [string cat "fn four() -> DecimalRounded{minDecimalsPreserved: 4}:\n    0.12345\n" \
+        "fn two(x: $dr2) -> $dr2:\n    x\n" \
+        "fn capped(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:\n    x\n" \
+        "\[two(four()), capped(four()), capped(two(0.125))\]\n"]
+} -result {[0.12, 0.12, 0.12]}
+
+test dr-strengthening-refused {a guarantee is never minted without a proof: a value guaranteed to 2 places where 3 are required, a dropped observation ceiling, a lower ceiling raised, a Float64 where a DecimalRounded is required (and the reverse) are type errors in semantic terms} -body {
+    list [rejection "fn three(x: DecimalRounded{minDecimalsPreserved: 3}) -> int:\n    1\nfn two(x: $dr2) -> int:\n    three(x)\ntwo(0.5)\n"] \
+        [rejection "fn open(x: $dr2) -> int:\n    1\nfn capped(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:\n    open(x)\ncapped(0.5)\n"] \
+        [rejection "fn six(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6}) -> int:\n    1\nfn four(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:\n    six(x)\nfour(0.5)\n"] \
+        [rejection "fn f(x: $dr2) -> int:\n    1\ny = 0.5 * 1.0\nf(y)\n"] \
+        [rejection "fn f(x: Float64) -> int:\n    1\nfn g(x: $dr2) -> int:\n    f(x)\ng(0.5)\n"] \
+        [rejection "fn f(x: Float64) -> $dr2:\n    x\nf(0.5)\n"]
+} -result {{TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 3} (argument type: DecimalRounded{minDecimalsPreserved: 2}); a value of DecimalRounded{minDecimalsPreserved: 2} is known only to 2 decimal places, and a guarantee is never strengthened without a proof (only a decimal constant's precision is proven)} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2} states no upper bound: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} allows observations to 6 places: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: Float64); a Float64 is no DecimalRounded value, and nothing converts one implicitly (decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)} {TYPE: argument for parameter "x" cannot be proven to satisfy Float64 (argument type: DecimalRounded{minDecimalsPreserved: 2}); a DecimalRounded value is no Float64, and nothing converts one implicitly (float64::from_decimal_rounded decays one to the Float64 nearest its guaranteed decimal)} {TYPE: function result does not prove declared type DecimalRounded{minDecimalsPreserved: 2}; a Float64 is no DecimalRounded value, and nothing converts one implicitly (decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)}}
+
+test dr-decay {float64::from_decimal_rounded is the visible decay to Float64: the Float64 nearest round(x, N), N the precision x's type guarantees -- never x's hidden digits} -body {
+    drValue [string cat "import float64\n" \
+        "fn d(x: $dr2) -> $dr2:\n    x\n" \
+        "fn one(x: DecimalRounded{minDecimalsPreserved: 1}) -> Float64:\n    float64::from_decimal_rounded(x)\n" \
+        "\[float64::from_decimal_rounded(d(0.295)), float64::from_decimal_rounded(d(1.245)), one(d(1.25)), one(d(1.35)), float64::from_decimal_rounded(d(0.1))\]\n"]
+} -result {[0.3, 1.24, 1.2, 1.4, 0.1]}
+
+test dr-quantize {decimal_rounded::round[T](x) mints a guarantee by quantizing: the Float64 x's exact value rounded half to even to T's places, represented to satisfy them; it is imprinted with a refined DecimalRounded type, and a decimal no representation holds is UnrepresentableDecimal} -body {
+    list [drValue [string cat "import decimal_rounded\n" \
+            "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    decimal_rounded::round\[$dr2\](x)\n" \
+            "fn safe(x: Float64) -> $dr2:\n    q(x):\n        on UnrepresentableDecimal:\n            0.0\n" \
+            "\[safe(0.1 + 0.2), safe(1.005), safe(2.675), safe(-0.125), safe(1.0e15 + 0.3)\]\n"]] \
+        [drValue [string cat "import decimal_rounded\n" \
+            "fn q(x: Float64) -> DecimalRounded{minDecimalsPreserved: 9} errors UnrepresentableDecimal:\n    decimal_rounded::round\[DecimalRounded{minDecimalsPreserved: 9}\](x)\n" \
+            "q(4873863637.854281):\n    on UnrepresentableDecimal:\n        0.0\n"]] \
+        [rejection "import decimal_rounded\ndecimal_rounded::round(0.5)\n"] \
+        [rejection "import decimal_rounded\ndecimal_rounded::round\[Float64\](0.5)\n"]
+} -result {{[0.30, 1.00, 2.67, -0.12, 1000000000000000.25]} 0.000000000 {IMPRINT: decimal_rounded::round: imprint variable T is not established (it occurs only in the result, and no type named T is visible where decimal_rounded::round is declared): write decimal_rounded::round[T](...) with explicit imprints} {TYPE: decimal_rounded::round makes a DecimalRounded value of the precision its imprint states, so it is imprinted with a DecimalRounded{...} type (decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)), not Float64}}
+
+# ---------------------------------------------------------------------------
+# Arithmetic
+
+test dr-arithmetic-proven {constant arithmetic the compiler proves: 0.1 + 0.2, 1.00 + 2.00, 10.0 / 2.0, 1.5 * 2.0, 1.0 - 0.9, unary minus; ordinary binary64 operations at run time on the constants' representations} -body {
+    drValue [string cat "fn a() -> DecimalRounded{minDecimalsPreserved: 1}:\n    0.1 + 0.2\n" \
+        "fn b() -> $dr2:\n    1.00 + 2.00\n" \
+        "fn c() -> DecimalRounded{minDecimalsPreserved: 1}:\n    10.0 / 2.0\n" \
+        "fn d() -> DecimalRounded{minDecimalsPreserved: 1}:\n    1.5 * 2.0\n" \
+        "fn e() -> DecimalRounded{minDecimalsPreserved: 15}:\n    1.0 - 0.9\n" \
+        "fn f() -> DecimalRounded{minDecimalsPreserved: 1}:\n    -(0.15)\n" \
+        "fn g() -> DecimalRounded{minDecimalsPreserved: 3}:\n    (0.125 + 0.25) * 2.0 - 1.0 / 8.0\n" \
+        "{a: a(), b: b(), c: c(), d: d(), e: e(), f: f(), g: g()}\n"]
+} -result {{a: 0.3, b: 3.00, c: 5.0, d: 3.0, e: 0.100000000000000, f: -0.2, g: 0.625}}
+
+test dr-arithmetic-representation {a proven constant computes exactly the binary64 operations the proof read (core::decimal::ExactOperation): 0.1 + 0.2 is 0.30000000000000004 inside, displayed 0.3 at one place} -body {
+    list [drReveal "fn a() -> DecimalRounded{minDecimalsPreserved: 1}:\n    0.1 + 0.2\na()\n"] \
+        [drReveal "fn a() -> DecimalRounded{minDecimalsPreserved: 16}:\n    1.0 / 3.0\na()\n"]
+} -result {{<DecimalRounded 0.30000000000000004>} {<DecimalRounded 0.3333333333333333>}}
+
+test dr-arithmetic-proof-loss {a constant result the implementation does not hold to the required places is rejected with the places it is proven to, in semantic terms (DECIMAL-PRECISION); a weaker requirement accepts it: 0.1 * 3.0 - 0.3 is 5.55e-17 in binary64 and 0.000 at 3 places, its exact value's rounding; a long rounding is abbreviated} -body {
+    list [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 17}:\n    1.0 / 3.0\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 2}:\n    1.0e20 + 0.01\na()\n"] \
+        [drValue "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e20 + 0.01\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 15}:\n    0.1 * 3.0 - 0.3\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 16}:\n    0.1 * 3.0 - 0.3\na()\n"] \
+        [drValue "fn a() -> DecimalRounded{minDecimalsPreserved: 3}:\n    0.1 * 3.0 - 0.3\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 400}:\n    1.0e-300\na()\n"]
+} -result {{DECIMAL-PRECISION: this result is only proven correct to 16 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 17} (its exact value is 1/3 = 0.33333333333333333333...; its binary64 computation gives 0.3333333333333333148296162562473909929394..., which rounds to 0.33333333333333331 at 17 places where the exact value rounds to 0.33333333333333333)} {DECIMAL-PRECISION: this result is only proven correct to 1 decimal place, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 2} (its exact value is 1.0000000000000000000001e20; its binary64 computation gives 1.0e20, which rounds to 100000000000000000000.00 at 2 places where the exact value rounds to 100000000000000000000.01)} 100000000000000000000 accepted {DECIMAL-PRECISION: this result is only proven correct to 15 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 16} (its exact value is 0.0; its binary64 computation gives 5.5511151231257827021181583404541015625e-17, which rounds to 0.0000000000000001 at 16 places where the exact value rounds to 0.0000000000000000)} 0.000 {DECIMAL-PRECISION: the literal 1.0e-300 is only proven correct to 316 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 400} (its exact value is 1.0e-300; its binary64 computation gives 1.000000000000000025059091835208759685696e-300..., which rounds to 0.000000...00000000000000100000000000000003 at 317 places where the exact value rounds to 0.000000...00000000000000100000000000000000)}}
+
+test dr-arithmetic-opaque {arithmetic on a DecimalRounded value known only by its guarantee (a parameter, a call result) proves nothing, so it is rejected (DECIMAL-GUARANTEE-LOST) rather than silently keeping or dropping the guarantee; unary minus is exact and keeps its operand's type; one diagnostic per operation, no cascade} -body {
+    list [rejection "fn f(a: $dr2, b: $dr2) -> $dr2:\n    a + b\nf(0.5, 0.25)\n"] \
+        [rejectionKinds "fn f(a: $dr2, b: $dr2) -> bool:\n    a * b < a / b\nf(0.5, 0.25)\n"] \
+        [drValue "fn f(a: $dr2) -> $dr2:\n    -a\n\[f(0.125), f(-0.135), f(0.0)\]\n"] \
+        [rejection "fn f(a: $dr2) -> $dr2:\n    a - 0.01\nf(0.5)\n"]
+} -result {{DECIMAL-GUARANTEE-LOST: no decimal place of this sum can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with decimal_rounded::round[DecimalRounded{...}])} {DECIMAL-GUARANTEE-LOST DECIMAL-GUARANTEE-LOST} {[-0.12, 0.14, 0.00]} {DECIMAL-GUARANTEE-LOST: no decimal place of this difference can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with decimal_rounded::round[DecimalRounded{...}])}}
+
+test dr-arithmetic-not-blind-min {the result guarantee follows the operation's proof, never the operands' precisions: 1.0e20 + 0.01 is refused at 2 places though 1.0e20 is exact and 0.01 holds 17, 0.1 * 10.0 is exact though 0.1 holds only 16 places, and 0.1 + 0.2 holds 16 but not 17} -body {
+    list [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 2}:\n    1.0e20 + 0.01\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 17}:\n    0.01\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 30}:\n    0.1 * 10.0\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 30}:\n    0.1\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 16}:\n    0.1 + 0.2\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 17}:\n    0.1 + 0.2\na()\n"]
+} -result {{DECIMAL-PRECISION: this result is only proven correct to 1 decimal place, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 2} (its exact value is 1.0000000000000000000001e20; its binary64 computation gives 1.0e20, which rounds to 100000000000000000000.00 at 2 places where the exact value rounds to 100000000000000000000.01)} accepted accepted {DECIMAL-PRECISION: the literal 0.1 is only proven correct to 16 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 30} (its exact value is 0.1; its binary64 computation gives 0.1000000000000000055511151231257827021181..., which rounds to 0.10000000000000001 at 17 places where the exact value rounds to 0.10000000000000000)} accepted {DECIMAL-PRECISION: this result is only proven correct to 16 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 17} (its exact value is 0.3; its binary64 computation gives 0.3000000000000000444089209850062616169452..., which rounds to 0.30000000000000004 at 17 places where the exact value rounds to 0.30000000000000000)}}
+
+test dr-mixing-refused {DecimalRounded and Float64 never mix implicitly: an operator with a Float64 operand and a DecimalRounded one is a type error that names the explicit conversions} -body {
+    list [rejection "import float64\nfn f(a: $dr2, b: Float64) -> bool:\n    a < b\nf(0.5, 0.5)\n"] \
+        [rejection "fn f(a: $dr2, b: Float64) -> $dr2:\n    a + b\nf(0.5, 0.5)\n"] \
+        [rejection "fn f(a: $dr2) -> bool:\n    a < 1\nf(0.5)\n"]
+} -result {{TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "+" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and int: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)}}
+
+test dr-nonfinite-distinct {a non-finite binary64 result is NonFiniteFloat, never a precision loss, and a constant's is always decided at compile time (KNOWN-ERROR, which a handler does not excuse): an overflow, a division by zero, a quotient whose exact divisor (1.0e-400) is represented by zero; a finite binary64 quotient of an exactly zero divisor is a precision loss instead (DECIMAL-PRECISION: no value to round)} -body {
+    list [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e300 * 1.0e300\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0} errors NonFiniteFloat:\n    1.0e300 * 1.0e300\na():\n    on NonFiniteFloat:\n        7.0\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0 / 0.0\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0 / 1.0e-400\na()\n"] \
+        [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0 / (0.1 * 3.0 - 0.3)\na()\n"] \
+        [drValue "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e15 * 8.0\na()\n"]
+} -result {{KNOWN-ERROR: this call can never complete normally under the facts proven for its arguments here -- it always produces the declared error(s) NonFiniteFloat; a handler does not make a statically known failure legal} {KNOWN-ERROR: this call can never complete normally under the facts proven for its arguments here -- it always produces the declared error(s) NonFiniteFloat; a handler does not make a statically known failure legal} {KNOWN-ERROR: this call can never complete normally under the facts proven for its arguments here -- it always produces the declared error(s) NonFiniteFloat; a handler does not make a statically known failure legal} {KNOWN-ERROR: this call can never complete normally under the facts proven for its arguments here -- it always produces the declared error(s) NonFiniteFloat; a handler does not make a statically known failure legal} {DECIMAL-PRECISION: this decimal constant divides by a value whose exact decimal value is zero, so it has no value to round (the declared result of a expects DecimalRounded{minDecimalsPreserved: 0}), even though its binary64 computation divides by a nonzero approximation} 8000000000000000}
+
+# ---------------------------------------------------------------------------
+# Observations
+
+test dr-comparisons {< <= > >= compare round(a, P) with round(b, P), P the smaller of the operands' guaranteed precisions: they hold only when the true values are provably ordered, and a pair in one rounding cell is neither less nor greater} -body {
+    drValue [string cat "fn lt(a: $dr2, b: $dr2) -> bool:\n    a < b\n" \
+        "fn le(a: $dr2, b: $dr2) -> bool:\n    a <= b\n" \
+        "fn gt(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:\n    a > b\n" \
+        "fn ge(a: DecimalRounded{minDecimalsPreserved: 1}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:\n    a >= b\n" \
+        "\[lt(1.234, 1.235), lt(1.235, 1.244), le(1.235, 1.244), lt(1.244, 1.245), lt(-1.245, -1.235), gt(0.26, 0.249), ge(0.26, 0.249), gt(0.36, 0.249), lt(0.004, 0.005), lt(0.005, 0.015)\]\n"]
+} -result {[true, false, true, false, false, true, true, true, false, true]}
+
+test dr-equality {== means the same decimal at P (the smaller guaranteed precision) and != its negation; two representations of one decimal are equal, two decimals one hidden digit apart are equal at fewer places and unequal at more} -body {
+    drValue [string cat "fn eq2(a: $dr2, b: $dr2) -> bool:\n    a == b\n" \
+        "fn ne2(a: $dr2, b: $dr2) -> bool:\n    a != b\n" \
+        "fn eq3(a: DecimalRounded{minDecimalsPreserved: 3}, b: DecimalRounded{minDecimalsPreserved: 3}) -> bool:\n    a == b\n" \
+        "fn sum() -> DecimalRounded{minDecimalsPreserved: 2}:\n    0.1 + 0.2\n" \
+        "\[eq2(sum(), 0.3), ne2(sum(), 0.3), eq2(1.234, 1.2349), eq3(1.234, 1.2349), eq3(1.2345, 1.2355), ne2(1.25, 1.24)\]\n"]
+} -result {[true, false, true, false, false, true]}
+
+test dr-equality-refused {equality that does not know the precision is refused: of a List or struct holding DecimalRounded values (statically), and the type-blind equality an untyped function's == or a hash would use (EQUALITY at run time, on every backend)} -body {
+    list [rejection "fn f() -> List\[$dr2\]:\n    \[0.1\]\nf() == f()\n"] \
+        [drOutcome [drHir "fn same(a, b):\n    a == b\nfn d() -> $dr2:\n    0.5\nsame(\[d()\], \[d()\])\n"]] \
+        [drOutcome [drHir "fn d() -> $dr2:\n    0.5\nhash(d())\n"]]
+} -result {{TYPE: == of List[DecimalRounded{minDecimalsPreserved: 2}] and List[DecimalRounded{minDecimalsPreserved: 2}]: a DecimalRounded value is equal to another at the precision its type guarantees, which equality of a value holding one does not know (compare the DecimalRounded values themselves)} {error {CORE SEMANTIC EQUALITY} {== of a DecimalRounded value needs the precision of its type, which this equality does not know (compare DecimalRounded values directly)}} {error {CORE SEMANTIC EQUALITY} {hash of a DecimalRounded value needs the precision of its type, which a hash does not know}}}
+
+test dr-sets-refused {a set hashes its members by value, which knows no precision: ImmutableSet of DecimalRounded is a type error, as an annotation and as a call's result} -body {
+    list [rejection "fn f(s: ImmutableSet\[$dr2\]) -> int:\n    1\n1\n"] \
+        [rejection "import immutable_set\nfn f() -> List\[$dr2\]:\n    \[0.1\]\nimmutable_set::from_list(f())\n"]
+} -result {{TYPE: unknown or invalid type ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] for parameter "s": ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)} {TYPE: this call makes ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}]: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)}}
+
+test dr-upper-bound {with an observation ceiling, every observation reads the guaranteed precision (never beyond the ceiling): values apart only beyond it compare equal and display alike on every backend, whatever digits the representation carries} -body {
+    drValue [string cat "fn c(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:\n    x\n" \
+        "fn fine() -> DecimalRounded{minDecimalsPreserved: 4}:\n    1.23449\n" \
+        "{same: c(fine()) == c(1.2349), less: c(fine()) < c(1.2349), apart: c(1.2344) == c(1.2301), fine: c(fine()), coarse: c(1.2349)}\n"]
+} -result {{apart: true, coarse: 1.23, fine: 1.23, less: false, same: true}}
+
+test dr-upper-bound-types {the ceiling is a type fact: a value whose observations are limited never reaches a type that would observe it more finely, and no refinement exceeds its ceiling} -body {
+    list [rejection "fn open(x: DecimalRounded{minDecimalsPreserved: 3}) -> int:\n    1\nfn c(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> int:\n    open(x)\nc(0.5)\n"] \
+        [rejection "fn c() -> DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 4}:\n    0.5\nc()\n"]
+} -result {{TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 3} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} is known only to 2 decimal places, and a guarantee is never strengthened without a proof (only a decimal constant's precision is proven)} {REFINEMENT-PARAMETER: unknown or invalid result type DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 4}: an upper precision bound below the guaranteed precision describes no value: maxDecimalsPreserved must be at least minDecimalsPreserved (DecimalRounded{minDecimalsPreserved: 5, maxDecimalsPreserved: 4})}}
+
+test dr-display {a program's result shows each DecimalRounded value as round(v, N) with exactly N places, N its static type's guarantee (through Lists, structs and an if); a value whose precision the static type does not state shows no digits} -body {
+    list [drValue [string cat "struct Price:\n    amount: $dr2\n    rate: DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 4}\n" \
+            "Price{amount: 19.995, rate: 0.1955}\n"]] \
+        [drValue "fn p(c: bool) -> DecimalRounded{minDecimalsPreserved: 0}:\n    if c:\n        return 2.5\n    3.5\n\[p(true), p(false)\]\n"] \
+        [drValue "fn p() -> $dr2:\n    0.5\n\[p(), 1\]\n"] \
+        [core::value::show [lindex [drRun interp [drHir "fn p() -> $dr2:\n    0.5\np()\n"]] 1]]
+} -result {{Price {amount: 20.00, rate: 0.196}} {[2, 4]} {[<DecimalRounded>, 1]} <DecimalRounded>}
+
+test dr-main-display {main.tcl prints a program's DecimalRounded result at its type's precision, on every backend} -constraints nativeBuilt -body {
+    set dir [makeDirectory dr-main-[pid]]
+    set path [file join $dir p.bot]
+    set channel [open $path w]
+    puts -nonewline $channel "fn p() -> List\[$dr2\]:\n    \[0.295, 1.245, -0.005\]\np()\n"
+    close $channel
+    set lines [lmap backend {interp compile cranelift-generic cranelift} {
+        lindex [split [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -warnings off -backend $backend $path] \n] 1
+    }]
+    file delete -force $dir
+    lsort -unique $lines
+} -result {{   value: [0.30, 1.24, 0.00]}}
+
+# ---------------------------------------------------------------------------
+# Folding and parity
+
+test dr-folding-parity {a constant expression's proof reads exactly the operations a run performs: the representation the verifier computes with exact rationals is the one every backend computes with binary64} -body {
+    set texts {{0.1 + 0.2} {1.0 / 3.0} {0.295 * 3.0} {1.245 - 0.005} {-(2.675)} {1.0e-300 * 1.0e-10} {123456.789 / 7.0}}
+    lmap text $texts {
+        set hir [drHir "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    $text\na()\n"]
+        set run [core::value::show [lindex [drRun interp $hir] 1] 1 1]
+        drOutcome $hir
+        set roots {}
+        dict for {e node} [dict get $hir exprs] {
+            if {[dict exists $node decimalExpected] && [dict get $node decimalTree] eq $e} {
+                lappend roots $e
+            }
+        }
+        set facts [hir::decimal::Facts $hir [lindex $roots 0]]
+        list $text [llength $roots] [expr {$run eq "<DecimalRounded [core::float::Text [lindex $facts 2]]>"}]
+    }
+} -result {{{0.1 + 0.2} 1 1} {{1.0 / 3.0} 1 1} {{0.295 * 3.0} 1 1} {{1.245 - 0.005} 1 1} {-(2.675) 1 1} {{1.0e-300 * 1.0e-10} 1 1} {{123456.789 / 7.0} 1 1}}
+
+test dr-runtime-parity {comparisons and conversions of values computed at run time (parameters, recursion over a List) agree on every backend, Tcl's exact rationals and the native runtime's big integers deciding alike around every boundary} -body {
+    drValue [string cat "import float64\nimport list\n" \
+        "fn values() -> List\[DecimalRounded{minDecimalsPreserved: 3}\]:\n" \
+        "    \[1.2345, 1.2355, 0.0005, -0.0005, 0.0015, 2.675, 1.0e15, 123.4565, 0.1, 0.3\]\n" \
+        "fn le(a: $dr2, b: $dr2) -> bool:\n    a <= b\n" \
+        "fn walk(xs: List\[DecimalRounded{minDecimalsPreserved: 3}\], i: int, acc):\n" \
+        "    if i == list::length(xs):\n        acc\n" \
+        "    else:\n        x = list::at(xs, i):\n            on IndexNotFound:\n                return acc\n" \
+        "        walk(xs, i + 1, list::append(acc, \[float64::from_decimal_rounded(x), x < 0.001, le(x, 1.24)\]))\n" \
+        "walk(values(), 0, \[\])\n"]
+} -result {[[1.234, false, true], [1.236, false, true], [0.0, true, true], [0.0, true, true], [0.002, false, true], [2.675, false, false], [1000000000000000.0, false, false], [123.456, false, false], [0.1, false, true], [0.3, false, true]]}
+
+# ---------------------------------------------------------------------------
+# Static decisions
+
+test dr-static-compile {a proof failure is a semantic diagnostic like any other: a static compile block reifies a precision loss, a lost guarantee and a malformed refinement as compiler::CompilerError, each with its own DiagnosticCode case, and accepts a proven block} -body {
+    set block {fn probe%d(n: int) -> int errors compiler::CompilerError:
+    static compile:
+        %s
+        n
+}
+    set bodies [list "fn third() -> DecimalRounded{minDecimalsPreserved: 17}:\n            1.0 / 3.0" \
+        "fn f(a: $dr2) -> $dr2:\n            a + a" \
+        "fn g(a: DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2}) -> int:\n            1" \
+        "fn h() -> DecimalRounded{minDecimalsPreserved: 3}:\n            0.125 + 0.25"]
+    set text "import compiler\n"
+    set i 0
+    foreach body $bodies {
+        append text [format $block [incr i] $body]
+    }
+    append text "fn code(f):\n    r = f(1):\n        on compiler::CompilerError {code, primary, related, message}:\n            return \[code, primary.line, primary.column\]\n    \[r\]\n"
+    append text "\[code(probe1), code(probe2), code(probe3), code(probe4)\]\n"
+    sourceAgree $text
+} -result {value {[[compiler::DiagnosticCode::DecimalPrecision, 5, 13], [compiler::DiagnosticCode::DecimalGuaranteeLost, 10, 13], [compiler::DiagnosticCode::RefinementParameter, 14, 13], [1]]}}
+
+# ---------------------------------------------------------------------------
+# HIR text, interchange, targets
+
+test dr-hir-text {a DecimalRounded constant prints as `const DecimalRounded DECIMAL` (its exact decimal) and a refined type in its source spelling; HIR text reads back exactly and runs alike} -body {
+    set hir [drHir "fn f(x: $dr2) -> $dr2:\n    -x\nfn g() -> DecimalRounded{minDecimalsPreserved: 1}:\n    0.1 + 0.2\n\[f(0.295) < g(), g()\]\n"]
+    set text [hir::format $hir]
+    set back [hir::parse $text]
+    list [expr {$text eq [hir::format $back]}] [regexp {const DecimalRounded 0\.295 : DecimalRounded\{minDecimalsPreserved: 2\}} $text] \
+        [regexp {native\(DecimalRounded#\+\)} $text] [regexp {native\(decimal_rounded#less\)} $text] \
+        [expr {[drOutcome $back {interp compile}] eq [drOutcome $hir]}]
+} -result {1 1 1 1 1}
+
+test dr-interchange {HIR interchange keeps the semantic type and each constant's exact decimal, never the binary64 this front end chose for it (decode chooses it again): the text has no representation of a DecimalRounded constant, and the decoded HIR equals the built one} -body {
+    set hir [drHir "fn g() -> DecimalRounded{minDecimalsPreserved: 2}:\n    0.295 + 1.245\ng()\n"]
+    set text [hir::interchange::encode $hir]
+    set back [hir::interchange::decode $text]
+    list [expr {[dict get $back exprs] eq [dict get $hir exprs]}] [string match *0.29500000000000004* $text] \
+        [string match {*literal {DecimalRounded 0.295}*} $text] [string match {*srefined DecimalRounded {minDecimalsPreserved 2}*} $text] \
+        [drOutcome $back]
+} -result {1 0 1 1 {value 1.54}}
+
+test dr-target-independent {validity, proofs, inferred types and decisions are every target's: the same HIR (minus its target) on Linux x86-64, Linux AArch64 and macOS AArch64, and the same diagnostics} -body {
+    set text "fn g() -> DecimalRounded{minDecimalsPreserved: 2}:\n    0.295 + 1.245\nfn h(a: $dr2, b: $dr2) -> bool:\n    a < b\n\[g(), h(1.235, 1.244)\]\n"
+    set bad "fn g() -> DecimalRounded{minDecimalsPreserved: 17}:\n    0.1\ng()\n"
+    set hirs [lmap target {linux-x86_64 linux-aarch64 macos-aarch64} {
+        dict remove [surface::compile $text t.bot -warnings off -target $target] target declarations
+    }]
+    set diagnostics [lmap target {linux-x86_64 linux-aarch64 macos-aarch64} {
+        catch {surface::compile $bad t.bot -warnings off -target $target} message
+        set message
+    }]
+    list [llength [lsort -unique $hirs]] [llength [lsort -unique $diagnostics]]
+} -result {1 1}
+
+# ---------------------------------------------------------------------------
+# The native backend
+
+test dr-native-representation {natively a DecimalRounded value is a boxed binary64 of its own kind (no precision metadata): its operations are NIR's d64 ops, comparisons and conversions carrying their precision as an operand} -constraints nativeBuilt -body {
+    set hir [drHir "import float64\nfn f(a: $dr2, b: $dr2) -> bool:\n    a < b\nfn g() -> $dr2:\n    0.1 + 0.2\nfn h(a: $dr2) -> Float64:\n    float64::from_decimal_rounded(-a)\n\[f(g(), 0.5), h(g())\]\n"]
+    set nir [native::lowered $hir]
+    list [regexp {= float DecimalRounded 0x[0-9a-f]{16}} $nir] [regexp {op d64add} $nir] [regexp {op d64lt %[0-9]+ %[0-9]+ %[0-9]+ } $nir] \
+        [regexp {op d64neg} $nir] [regexp {op d64tof64} $nir] [regexp {Float64} [regexp -inline {op d64add[^\n]*} $nir]]
+} -result {1 1 1 1 1 0}
+
+test dr-native-executable {a standalone executable computes and decides DecimalRounded values like the JIT; its type-blind result printing shows no digits of one} -constraints {nativeBuilt executableAot} -body {
+    set dir [makeDirectory dr-exe-[pid]]
+    set path [file join $dir prog.bot]
+    set channel [open $path w]
+    puts -nonewline $channel [string cat "import float64\nimport decimal_rounded\n" \
+        "fn total() -> $dr2 errors NonFiniteFloat:\n    0.10 + 0.20\n" \
+        "fn more(a: $dr2, b: $dr2) -> bool:\n    a > b\n" \
+        "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    decimal_rounded::round\[$dr2\](x)\n" \
+        "x = total():\n    on NonFiniteFloat:\n        0.00\n" \
+        "y = q(1.005):\n    on UnrepresentableDecimal:\n        0.00\n" \
+        "\[x == 0.30, more(x, 0.295), more(x, 0.2949), float64::from_decimal_rounded(x), float64::from_decimal_rounded(y), -x\]\n"]
+    close $channel
+    set hir [surface::readProgramFile $path -warnings off -cache ""]
+    set exe [native::executable $hir [file join $dir prog]]
+    set output [exec $exe]
+    file delete -force $dir
+    list [expr {$output eq [core::value::show [lindex [drRun compile $hir] 1] 1]}] $output
+} -result {1 {[true, false, true, 0.3, 1.0, <DecimalRounded>]}}
+
+cleanupTests

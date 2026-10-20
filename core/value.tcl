@@ -737,7 +737,12 @@ proc core::value::show {v {debug 0} {reveal 0}} {
             # rendering does not know how many decimal places the value's
             # type guarantees, and its representation may hold digits none
             # does. A display that knows the static type shows round(v, N)
-            # (hir::decimal::Display, core::decimal::text).
+            # (hir::decimal::Display, core::decimal::text). REVEAL (internal
+            # differential tooling, never user-facing) shows the
+            # representation, so backends are compared bit for bit.
+            if {$reveal} {
+                return "<DecimalRounded [core::float::Text [core::decimal::of $v]]>"
+            }
             return "<DecimalRounded>"
         }
         default {

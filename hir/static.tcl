@@ -240,6 +240,8 @@ namespace eval hir::static {
         COROUTINE-RESUME-TYPE                    CoroutineResumeType
         COROUTINE-RESUME-UNDERCONSTRAINED        CoroutineResumeUnderconstrained
         COROUTINE-RHS-NOT-YIELDING               CoroutineRhsNotYielding
+        DECIMAL-GUARANTEE-LOST                   DecimalGuaranteeLost
+        DECIMAL-PRECISION                        DecimalPrecision
         DIRECT                                   Direct
         DIRECT-CALLABLE-VALUE                    DirectCallableValue
         DUPLICATE                                Duplicate
@@ -281,6 +283,7 @@ namespace eval hir::static {
         OPAQUE-REPRESENTATION                    OpaqueRepresentation
         PROOF-CLAUSE                             ProofClause
         REFINEMENT-MINT-AUTHORITY                RefinementMintAuthority
+        REFINEMENT-PARAMETER                     RefinementParameter
         RETURN-OUTSIDE-CALLABLE                  ReturnOutsideCallable
         TRAIT-IMPL-ORDER                         TraitImplOrder
         TRAIT-INSTANCE-BUDGET                    TraitInstanceBudget

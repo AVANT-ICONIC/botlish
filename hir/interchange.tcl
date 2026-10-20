@@ -100,7 +100,33 @@ proc hir::interchange::encode {hir args} {
     if {![dict get $options -trait-source]} {
         set hir [dict remove $hir traitSource]
     }
-    return "$magic $version\n[list compiler [fingerprint] requires $::core::loadedLibraries hir $hir]\n"
+    return "$magic $version\n[list compiler [fingerprint] requires $::core::loadedLibraries hir [WithoutRepresentations $hir]]\n"
+}
+
+# HIR without the representation a DecimalRounded constant's `value` caches
+# for the backends (left empty, so the decoded node's fields keep their order) (DECIMAL-ROUNDED-MILESTONE-1.md, "Interchange"): the
+# text holds the constant's exact decimal (its `literal`) and its type, never
+# the binary64 this front end chose for it, which decode chooses again
+# (WithRepresentations) -- a front end with another representation strategy
+# reads the same text as the same program.
+proc hir::interchange::WithoutRepresentations {hir} {
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "const" && [lindex [dict get $node literal] 0] eq $::core::decimal::kind} {
+            dict set hir exprs $e value ""
+        }
+    }
+    return $hir
+}
+
+# HIR with every DecimalRounded constant's representation chosen again from
+# its exact decimal (core::ir::literalValue, core::decimal::constant).
+proc hir::interchange::WithRepresentations {hir} {
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "const" && [lindex [dict get $node literal] 0] eq $::core::decimal::kind} {
+            dict set hir exprs $e value [core::ir::literalValue [list const {*}[dict get $node literal]]]
+        }
+    }
+    return $hir
 }
 
 proc hir::interchange::decode {text args} {
@@ -124,7 +150,7 @@ proc hir::interchange::decode {text args} {
     if {[dict get $body compiler] ne [fingerprint]} {
         throw {HIR INTERCHANGE COMPILER} "HIR interchange text built by another front end ([dict get $body compiler]; this one is [fingerprint])"
     }
-    set hir [dict get $body hir]
+    set hir [WithRepresentations [dict get $body hir]]
     if {$check} {
         set problem [hir::cabi::TargetMismatch $hir [dict get $options -target]]
         if {$problem ne ""} {

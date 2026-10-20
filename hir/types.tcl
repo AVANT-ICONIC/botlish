@@ -430,6 +430,14 @@ proc hir::types::resolveApplication {ctor argTypes} {
             return -code error -errorcode {BOTLISH AFFINE-CONTAINER-UNSUPPORTED} \
                 "$ctor\[[show $t]\] would hold affine values: an ImmutableSet compares and hashes its members, so it cannot own them (a List, MutableVector or MutableArray of them can)"
         }
+        if {$ctor eq "ImmutableSet" && [hir::decimal::Mentions $t]} {
+            # A set hashes and compares its members by value, which knows
+            # no precision: a DecimalRounded member's hash would read
+            # digits its type does not guarantee (hir/decimal.tcl,
+            # "Observations"; core::hashing refuses one at run time).
+            return -code error -errorcode {BOTLISH TYPE} \
+                "$ctor\[[show $t]\] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)"
+        }
         if {[MentionsTrait $t]} {
             # A container of trait values would have to carry arbitrary
             # witnesses: there is no erased/heterogeneous trait

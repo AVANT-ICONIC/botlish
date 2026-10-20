@@ -757,6 +757,12 @@ proc core::decimal::comparisonNative {operator} {
     return [dict getdef $comparisons $operator ""]
 }
 
+# UnrepresentableDecimal: a quantization (decimal_rounded::round) whose
+# decimal no available representation holds to the requested number of
+# places. A builtin error after the binary ones (core/native.tcl's list of
+# builtin errors), so it is declared here, where this file loads.
+core::native::declareError UnrepresentableDecimal
+
 apply {{} {
     variable kind
     variable operators
