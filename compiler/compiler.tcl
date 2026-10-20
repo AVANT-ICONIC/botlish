@@ -829,7 +829,7 @@ proc core::compiler::CompileSequence {ctxVar exprs} {
         # included. The statement's value is already computed: it stays the
         # sequence's value.
         foreach item [hir::affine::releasesAfter $hir $e] {
-            CompileRelease ctx $item [expr {$item eq $e ? $result : ""}]
+            CompileRelease ctx $item [if {$item eq $e} {set result} else {string cat ""}]
         }
     }
     return $result
@@ -1205,7 +1205,10 @@ proc core::compiler::CompileBind {ctxVar e} {
     if {[dict get $scope materialized]} {
         # A duplicate raises here, at run time.
         Emit ctx "core::env::define \$[dict get $scope frame] [Word $name] [BoxWord $value]"
-        return [expr {[N $e duplicate] ? [Never] : $value}]
+        if {[N $e duplicate]} {
+            return [Never]
+        }
+        return $value
     }
     if {[N $e duplicate]} {
         Emit ctx "core::env::duplicateBinding [Word $name]"
@@ -1697,7 +1700,11 @@ proc core::compiler::CompileIf {ctxVar e} {
             return [Never]
         }
         set decided [expr {[lindex $status 0] eq "literal"}]
-        set outcome [expr {$decided ? [lindex $status 1] : [join $out {}]}]
+        if {$decided} {
+            set outcome [lindex $status 1]
+        } else {
+            set outcome [join $out {}]
+        }
     }
 
     set outcomes {1 0}
@@ -1752,7 +1759,11 @@ proc core::compiler::CompileIf {ctxVar e} {
         set never 1
     }
     set reprs [lsort -unique $reprs]
-    set repr [expr {[llength $reprs] == 1 ? [lindex $reprs 0] : "box"}]
+    if {[llength $reprs] == 1} {
+        set repr [lindex $reprs 0]
+    } else {
+        set repr "box"
+    }
 
     set result [NewTemp]
     Emit ctx "if {$outcome} \{"
@@ -1831,7 +1842,7 @@ proc core::compiler::CompileCondition {ctxVar e outVar} {
     # its test (CompileNativeCall, BoolResult), except where the call's code
     # runs inside a catch releasing on its error (ReleasingOnError keeps a
     # value).
-    set demanded [expr {[dict exists $ctx condition] ? [dict get $ctx condition] : ""}]
+    set demanded [dict getdef $ctx condition ""]
     if {[Kind $e] eq "call" && [hir::affine::releasesOnError $hir $e] eq ""} {
         dict set ctx condition $e
     }
@@ -1950,7 +1961,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
             break
         }
         foreach item [hir::affine::releasesAfter $hir $statement] {
-            CompileRelease ctx $item [expr {$item eq $statement ? $op : ""}]
+            CompileRelease ctx $item [if {$item eq $statement} {set op} else {string cat ""}]
         }
     }
     if {![info exists op] || [OpType $op] ne "never"} {
@@ -1961,7 +1972,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
             set op [CompileExpr ctx $last]
             if {[OpType $op] ne "never"} {
                 foreach item [hir::affine::releasesAfter $hir $last] {
-                    CompileRelease ctx $item [expr {$item eq $last ? $op : ""}]
+                    CompileRelease ctx $item [if {$item eq $last} {set op} else {string cat ""}]
                 }
                 set status [ConditionOperand $op out]
             }
@@ -1980,7 +1991,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
         # The branch does not complete: its code alone (whatever its
         # unfinished test appended is dropped).
         set out [lreplace $out[set out {}] $first end]
-        lappend out [expr {$lines eq {} ? 0 : "\[[join $lines \n]\]"}]
+        lappend out [if {$lines eq {}} {string cat 0} else {string cat "\[[join $lines \n]\]"}]
         return never
     }
     if {[lindex $status 0] eq "literal"} {
@@ -2308,7 +2319,11 @@ proc core::compiler::CompileHandle {ctxVar e} {
     set names [N $e handlerNames]
     set scopes [N $e handlerScopes]
     set bodies [N $e handlerBodies]
-    set payloads [expr {[dict exists [dict get $hir exprs $e] handlerPayloads] ? [N $e handlerPayloads] : {}}]
+    if {[dict exists [dict get $hir exprs $e] handlerPayloads]} {
+        set payloads [N $e handlerPayloads]
+    } else {
+        set payloads {}
+    }
     set parentFrame [CurrentFrameExpr $ctx]
 
     set stVar [NewTemp]

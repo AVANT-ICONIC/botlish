@@ -136,7 +136,7 @@ proc core::cabi::operatingSystems {} {
 proc core::cabi::platformOf {name} {
     variable platforms
     set root [lindex [split [string map {:: \x00} $name] \x00] 0]
-    return [expr {[dict exists $platforms $root] ? [dict get $platforms $root] : ""}]
+    return [dict getdef $platforms $root ""]
 }
 
 # The name of operating system OS in a message (macOS for macos).
@@ -177,7 +177,10 @@ proc core::cabi::hostTarget {} {
         return ""
     }
     set name $os-$arch
-    return [expr {[isTarget $name] ? $name : ""}]
+    if {[isTarget $name]} {
+        return $name
+    }
+    return ""
 }
 
 # The architecture (a target's `arch`) of the machine this process runs on,
@@ -199,7 +202,10 @@ proc core::cabi::hostArchitecture {} {
 # native ones refuse it (it is not the host's target).
 proc core::cabi::systemTarget {os} {
     set name $os-[hostArchitecture]
-    return [expr {[isTarget $name] ? $name : ""}]
+    if {[isTarget $name]} {
+        return $name
+    }
+    return ""
 }
 
 # The C integer scalar names (ffi::c::NAME), in declaration order.
@@ -495,10 +501,10 @@ proc core::cabi::NormalizeForeign {name contract arity} {
     variable accesses
     variable escapes
     if {[catch {dict size $contract}] || ![dict exists $contract params] || ![dict exists $contract result]
-            || [lmap key [dict keys $contract] {expr {$key in {vars params result provenance} ? [continue] : $key}}] ne {}} {
+            || [lmap key [dict keys $contract] {if {$key in {vars params result provenance}} {continue} else {set key}}] ne {}} {
         error "core::native::register: bad -foreign \"$contract\" for \"$name\" (expected {vars {...} params {...} result R ?provenance PR?})"
     }
-    set vars [expr {[dict exists $contract vars] ? [dict get $contract vars] : {}}]
+    set vars [dict getdef $contract vars {}]
     set params [dict get $contract params]
     if {$arity eq "*" || [llength $params] != $arity} {
         error "core::native::register: -foreign of \"$name\" must describe its $arity parameter(s)"
@@ -524,8 +530,8 @@ proc core::cabi::NormalizeForeign {name contract arity} {
         }
         set entry [dict create name $pname type $type]
         if {$pointer} {
-            set access [expr {[dict exists $param access] ? [dict get $param access] : "unknown"}]
-            set escape [expr {[dict exists $param escape] ? [dict get $param escape] : "unknown"}]
+            set access [dict getdef $param access "unknown"]
+            set escape [dict getdef $param escape "unknown"]
             if {$access ni $accesses || $escape ni $escapes} {
                 error "core::native::register: -foreign parameter \"$pname\" of \"$name\": access must be one of $accesses and escape one of $escapes"
             }
@@ -538,7 +544,7 @@ proc core::cabi::NormalizeForeign {name contract arity} {
         lappend normalized $entry
     }
     set result [CanonicalTerm [dict get $contract result]]
-    set provenance [expr {[dict exists $contract provenance] ? [dict get $contract provenance] : "unknown"}]
+    set provenance [dict getdef $contract provenance "unknown"]
     if {$provenance ne "unknown"} {
         if {[lindex $result 0] ne "cptr" || [llength $result] != 2} {
             error "core::native::register: -foreign of \"$name\": only a data pointer result has a provenance"
@@ -637,7 +643,11 @@ proc core::cabi::ForeignBoundary {name impl args} {
     set opened {}
     set writes {}
     foreach arg $args param [dict get $contract params] {
-        set kind [expr {[dict exists $param access] ? [OwnerKind $arg] : ""}]
+        if {[dict exists $param access]} {
+            set kind [OwnerKind $arg]
+        } else {
+            set kind ""
+        }
         if {$kind eq ""} {
             lappend callArgs $arg
             continue
@@ -885,7 +895,7 @@ proc core::cabi::installBorrowFixture {} {
 # the arguments as ForeignBoundary passes them (an exposure or a raw address
 # for a pointer, an Int otherwise).
 proc core::cabi::FixtureImpl {behavior name args} {
-    set ints [lmap a $args {expr {[lindex $a 0] eq "int" ? [core::value::intOf $a] : ""}}]
+    set ints [lmap a $args {if {[lindex $a 0] eq "int"} {core::value::intOf $a} else {string cat ""}}]
     switch -- $behavior {
         read - read-reentrant {
             set bytes [ExposedBytes [lindex $args 0] 0 [lindex $ints 1] $name]

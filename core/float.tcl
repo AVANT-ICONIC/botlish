@@ -13,8 +13,13 @@
 #     type's largest finite number, and a division by zero (0.0 / 0.0
 #     included), has no value: the operation completes with the declared
 #     builtin error NonFiniteFloat, the same for every width -- the error
-#     names the condition, not a type. A result that rounds to zero is zero
-#     (the positive one).
+#     names the condition, not a type. Its payload says which non-finite
+#     result the operation had, {result: NonFiniteResult}: the builtin enum's
+#     PositiveInfinity, NegativeInfinity or NotANumber (0.0 / 0.0). It is a
+#     fact about the failure, for the handler at the boundary where it
+#     happened; no value ever is NaN or an infinity, and no operation tests a
+#     value for being one. A result that rounds to zero is zero (the positive
+#     one).
 #   * Negation and the comparisons are exact and never fail. == is
 #     core::value::equal: exact equality of the two numbers.
 #
@@ -73,18 +78,50 @@ proc core::float::Round {type x} {
 }
 
 # {ok VALUE}: the TYPE value of X, a Tcl double result already rounded to
-# TYPE; or {error NonFiniteFloat} when X is not finite.
+# TYPE; or {error NonFiniteFloat RESULT} when X is not finite, RESULT the
+# NonFiniteResult case naming it (Classify).
 proc core::float::Make {type x} {
     if {![expr {isfinite($x)}]} {
-        return {error NonFiniteFloat}
+        return [list error NonFiniteFloat [Classify $x]]
     }
     return [list ok [core::value::float $type $x]]
+}
+
+# The NonFiniteResult case of the non-finite double X: NotANumber for NaN,
+# else the infinity of X's sign.
+proc core::float::Classify {x} {
+    if {[expr {isnan($x)}]} {
+        return NotANumber
+    }
+    if {$x > 0} {
+        return PositiveInfinity
+    }
+    return NegativeInfinity
+}
+
+# The NonFiniteResult case of a division of the finite double X by zero:
+# 0.0 / 0.0 is NotANumber, any other dividend the infinity of its sign (the
+# divisor is the one zero, whose sign is positive).
+proc core::float::DivisionByZero {x} {
+    if {$x == 0} {
+        return NotANumber
+    }
+    if {$x > 0} {
+        return PositiveInfinity
+    }
+    return NegativeInfinity
+}
+
+# NonFiniteFloat's payload for the NonFiniteResult case RESULT: the value of
+# its anonymous struct type {result: NonFiniteResult}.
+proc core::float::Payload {result} {
+    return [core::value::structOf [list {} result] [list [core::value::enumValue NonFiniteResult $result]]]
 }
 
 # The completion of the operation OP (`operators`) of the float type TYPE on
 # the Botlish values ARGS, which have the operation's parameter types:
 # {ok VALUE} (a TYPE value, or a Boolean of a comparison) or {error
-# NonFiniteFloat}. The one computation of every float operation: the
+# NonFiniteFloat RESULT} (Make). The one computation of every float operation: the
 # natives' and a static analysis's (-fold).
 proc core::float::apply {type op args} {
     set xs [lmap v $args {expr {double([core::value::floatOf $v])}}]
@@ -97,7 +134,7 @@ proc core::float::apply {type op args} {
             if {$y == 0} {
                 # Every quotient by zero is non-finite (an infinity, or NaN
                 # for 0.0 / 0.0), whatever the dividend.
-                return {error NonFiniteFloat}
+                return [list error NonFiniteFloat [DivisionByZero $x]]
             }
             set r [catch {expr {$x / $y}} z]
         }
@@ -112,17 +149,18 @@ proc core::float::apply {type op args} {
     }
     if {$r} {
         # An arithmetic domain error of Tcl's (a NaN result): no value.
-        return {error NonFiniteFloat}
+        return {error NonFiniteFloat NotANumber}
     }
     return [Make $type [Round $type $z]]
 }
 
 # The TYPE value nearest the Int value N (ties to even): {ok VALUE}, or
-# {error NonFiniteFloat} when N's magnitude rounds beyond TYPE's range.
+# {error NonFiniteFloat RESULT} when N's magnitude rounds beyond TYPE's range
+# (the infinity of N's sign).
 proc core::float::FromInt {type n} {
     set i [core::value::intOf $n]
     if {[catch {expr {double($i)}} x]} {
-        return {error NonFiniteFloat}
+        return [list error NonFiniteFloat [expr {$i > 0 ? "PositiveInfinity" : "NegativeInfinity"}]]
     }
     return [Make $type [Round $type $x]]
 }
@@ -259,7 +297,8 @@ proc core::float::Complete {name completion} {
     if {[lindex $completion 0] eq "ok"} {
         return [lindex $completion 1]
     }
-    core::native::failDeclared NonFiniteFloat "$name: the result is not a finite number"
+    set result [lindex $completion 2]
+    core::native::failDeclared NonFiniteFloat "$name: the result is not a finite number ($result)" [Payload $result]
 }
 
 proc core::float::Operation {type operator op args} {
@@ -300,7 +339,7 @@ proc core::float::Fold {type kinds command args} {
     if {[lindex $completion 0] eq "ok"} {
         return [list value [lindex $completion 1]]
     }
-    return $completion
+    return [lrange $completion 0 1]
 }
 
 # The root native `/`: reached only by a `/` no floating-point operand
@@ -309,6 +348,12 @@ proc core::float::Fold {type kinds command args} {
 proc core::float::NoDivision {a b} {
     core::semanticError TYPE "/: Botlish has no integer division; / divides floating-point values (got [core::value::show $a] / [core::value::show $b])"
 }
+
+# The payload of NonFiniteFloat (core/native.tcl declares the error itself):
+# which non-finite result the failed operation had -- every width's, so the
+# enum names results, never a type. Visible in every program, like the error.
+core::native::declareEnum NonFiniteResult {PositiveInfinity NegativeInfinity NotANumber}
+core::native::declareErrorPayload NonFiniteFloat {result {enum NonFiniteResult}}
 
 core::native::register / -arity 2 -impl core::float::NoDivision -context-free 1
 

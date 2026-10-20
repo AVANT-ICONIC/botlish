@@ -172,7 +172,7 @@ proc hir::methodfilter::DefinedType {hir b} {
     set binding [dict get $hir bindings $b]
     if {[dict get $binding kind] eq "param"} {
         set scope [dict get $binding scope]
-        set owner [expr {[dict exists $hir scopes $scope owner] ? [dict get $hir scopes $scope owner] : ""}]
+        set owner [dict getdef $hir scopes $scope owner ""]
         if {$owner ne "" && [dict exists $hir exprs $owner params]} {
             set i [lsearch -exact [dict get $hir exprs $owner params] $b]
             if {$i >= 0} {

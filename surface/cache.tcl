@@ -99,8 +99,7 @@ proc surface::cache::Key {path source mode strict {target ""} {root ""}} {
         path $path source $source library $::core::libraryDir \
         libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
         root $root \
-        scheduler [expr {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]
-            ? $::env(BOTLISH_STATIC_SCHEDULER) : ""}]]
+        scheduler [if {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]} {set ::env(BOTLISH_STATIC_SCHEDULER)} else {string cat ""}]]
 }
 
 proc surface::cache::EntryPath {dir key} {
@@ -112,7 +111,10 @@ proc surface::cache::EntryPath {dir key} {
 proc surface::cache::Contents {path existsVar} {
     upvar 1 $existsVar exists
     set exists [file isfile $path]
-    return [expr {$exists ? [core::ReadFile $path] : ""}]
+    if {$exists} {
+        return [core::ReadFile $path]
+    }
+    return ""
 }
 
 # HIR's dependencies besides the program itself: {PATH EXISTS TEXT} for the
@@ -129,7 +131,11 @@ proc surface::cache::Contents {path existsVar} {
 # changes what the build would do.
 proc surface::cache::Dependencies {hir reads {target ""} {root ""}} {
     set target [hir::cabi::ResolveTarget $target]
-    set arch [expr {$target eq "" ? "" : [dict get [core::cabi::target $target] arch]}]
+    if {$target eq ""} {
+        set arch ""
+    } else {
+        set arch [dict get [core::cabi::target $target] arch]
+    }
     set paths {}
     dict for {ns environment} [dict get $hir declarations imports] {
         set imported [dict get $environment namespaces]

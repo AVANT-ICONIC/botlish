@@ -478,19 +478,35 @@ proc core::type::integerFacts {type} {
             set values [lindex $domain 1]
             set facts [dict create min [lindex $values 0] max [lindex $values end] exact $values]
         }
-        set result [expr {$result eq {} ? $facts : [IntersectIntegerFacts $result $facts]}]
+        if {$result eq {}} {
+            set result $facts
+        } else {
+            set result [IntersectIntegerFacts $result $facts]
+        }
     }
     return $result
 }
 
 proc core::type::IntersectIntegerFacts {a b} {
-    set lo [expr {[dict get $a min] > [dict get $b min] ? [dict get $a min] : [dict get $b min]}]
-    set hi [expr {[dict get $a max] < [dict get $b max] ? [dict get $a max] : [dict get $b max]}]
+    if {[dict get $a min] > [dict get $b min]} {
+        set lo [dict get $a min]
+    } else {
+        set lo [dict get $b min]
+    }
+    if {[dict get $a max] < [dict get $b max]} {
+        set hi [dict get $a max]
+    } else {
+        set hi [dict get $b max]
+    }
     set exact {}
     foreach source [list $a $b] {
         if {![dict exists $source exact]} { continue }
         set values [lmap v [dict get $source exact] {if {$v >= $lo && $v <= $hi} {set v} else continue}]
-        set exact [expr {$exact eq {} ? $values : [lmap v $exact {if {$v in $values} {set v} else continue}]}]
+        if {$exact eq {}} {
+            set exact $values
+        } else {
+            set exact [lmap v $exact {if {$v in $values} {set v} else continue}]
+        }
     }
     set result [dict create min $lo max $hi]
     if {$exact ne {}} { dict set result exact $exact }

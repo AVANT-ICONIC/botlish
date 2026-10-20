@@ -308,7 +308,11 @@ proc surface::lexer::tokenize {source file} {
                     set end [expr {$j + 1}]
                 }
                 set text [string range $source $i $end-1]
-                set kind [expr {$text in $keywords ? $text : "IDENT"}]
+                if {$text in $keywords} {
+                    set kind $text
+                } else {
+                    set kind "IDENT"
+                }
                 lappend tokens [Token $kind $text $text [Span $file $i $end $line $lineStart]]
                 set i $end
                 if {$end > $j} {
@@ -341,7 +345,11 @@ proc surface::lexer::tokenize {source file} {
                     }
                 }
                 if {$found eq ""} {
-                    set what [expr {[string is print $c] ? "\"$c\"" : [format "U+%04X" [scan $c %c]]}]
+                    if {[string is print $c]} {
+                        set what "\"$c\""
+                    } else {
+                        set what [format "U+%04X" [scan $c %c]]
+                    }
                     lappend skipped [llength $diagnostics]
                     Report diagnostics $file $i $line $lineStart 1 "unexpected character $what"
                     incr i
@@ -623,7 +631,11 @@ proc surface::lexer::Char {source start file line lineStart diagnosticsVar {unte
                 "not a Unicode scalar value: surrogates (U+D800..U+DFFF) are never valid UnicodeChar values"
         }
     }
-    set value [expr {[llength $scalars] == 1 ? [lindex $scalars 0] : 0}]
+    if {[llength $scalars] == 1} {
+        set value [lindex $scalars 0]
+    } else {
+        set value 0
+    }
     return [Token CHAR [string range $source $start $i-1] $value \
         [Span $file $start $i $line $lineStart]]
 }

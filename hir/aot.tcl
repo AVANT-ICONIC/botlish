@@ -191,7 +191,11 @@ proc hir::aot::context {hir} {
     set diagnostics [dict create]
     foreach diagnostic [hir::diagnostics $hir] {
         set e [dict get $diagnostic expr]
-        set region [expr {$e ne "" && [dict exists $hir exprs $e] ? [RegionOf $hir $e] : "program"}]
+        if {$e ne "" && [dict exists $hir exprs $e]} {
+            set region [RegionOf $hir $e]
+        } else {
+            set region "program"
+        }
         dict lappend diagnostics $region $diagnostic
     }
     set statics [StaticBlocks $hir]
@@ -333,7 +337,7 @@ proc hir::aot::analyzeRegion {hir region {context ""}} {
         set r [NewRegion $hir program <program> \
             [dict get $hir scopes [hir::top $hir] origin] {} "" {}]
     } else {
-        set name [expr {[dict exists $context names $region] ? [dict get $context names $region] : ""}]
+        set name [dict getdef $context names $region ""]
         set r [NewRegion $hir $region $name [hir::get $hir $region origin] \
             [lmap b [hir::get $hir $region params] {
                 dict create binding $b name [BindingName $hir $b] \
@@ -381,7 +385,10 @@ proc hir::aot::NewRegion {hir id name origin params result captures} {
 
 proc hir::aot::RegionOf {hir e} {
     set invocation [dict get $hir scopes [hir::get $hir $e scope] invocation]
-    return [expr {$invocation eq "" ? "program" : $invocation}]
+    if {$invocation eq ""} {
+        return "program"
+    }
+    return $invocation
 }
 
 proc hir::aot::BindingName {hir b} {
@@ -411,7 +418,10 @@ proc hir::aot::BoundBlock {hir b} {
         return ""
     }
     set value [hir::get $hir [dict get $binding declaredBy] value]
-    return [expr {[hir::kind $hir $value] eq "block" ? $value : ""}]
+    if {[hir::kind $hir $value] eq "block"} {
+        return $value
+    }
+    return ""
 }
 
 # Blocks that need no environment: every binding they capture is bound to
@@ -715,7 +725,11 @@ proc hir::aot::Require {hir stateVar region op arg type error {what ""}} {
     dict set state reported $arg 1
     set kind [hir::types::kindOf $argType]
     set base [core::type::base $type]
-    set what [expr {$what eq "" ? "the condition" : "$what"}]
+    if {$what eq ""} {
+        set what "the condition"
+    } else {
+        set what "$what"
+    }
     if {$kind eq ""} {
         set cause [Cause $hir $arg]
         set blockerKind [dict get {
@@ -812,7 +826,7 @@ proc hir::aot::CauseText {hir cause} {
         }
         block-result {
             set name [BlockName $hir [dict get $cause block]]
-            return "the result of [expr {$name eq "" ? "block [dict get $cause block]" : $name}] at $at"
+            return "the result of [if {$name eq ""} {string cat "block [dict get $cause block]"} else {set name}] at $at"
         }
         dynamic-result {
             return "the result of the dynamic call at $at"
@@ -835,7 +849,11 @@ proc hir::aot::CauseText {hir cause} {
 proc hir::aot::Blocker {hir kind e op requires cause message} {
     set class [expr {$kind in {DynamicCall DynamicBinding UnresolvedBinding UnresolvedControl StaticError}
         ? "semantic" : "representation"}]
-    set origin [expr {$e ne "" && [dict exists $hir exprs $e] ? [hir::get $hir $e origin] : ""}]
+    if {$e ne "" && [dict exists $hir exprs $e]} {
+        set origin [hir::get $hir $e origin]
+    } else {
+        set origin ""
+    }
     return [dict create kind $kind class $class expr $e origin $origin \
         location [Location $hir $origin] operation $op requires $requires \
         cause [dict merge [dict create cause "" expr "" binding "" native "" block ""] $cause] \
@@ -881,7 +899,10 @@ proc hir::aot::Summarize {region} {
 
 proc hir::aot::Worse {a b} {
     variable statusRank
-    return [expr {[dict get $statusRank $a] >= [dict get $statusRank $b] ? $a : $b}]
+    if {[dict get $statusRank $a] >= [dict get $statusRank $b]} {
+        return $a
+    }
+    return $b
 }
 
 proc hir::aot::Transitive {regions} {
@@ -916,7 +937,11 @@ proc hir::aot::Location {hir origin} {
     }
     if {[dict exists $origin file] && [dict exists $origin line]} {
         set file [dict get $origin file]
-        set path [expr {[dict exists $hir files $file] ? [dict get $hir files $file path] : $file}]
+        if {[dict exists $hir files $file]} {
+            set path [dict get $hir files $file path]
+        } else {
+            set path $file
+        }
         return [dict create file $path line [dict get $origin line] \
             column [dict get $origin column] node [dict get $origin node]]
     }
@@ -961,7 +986,7 @@ proc hir::aot::explain {hir {analysis ""}} {
             set params [lmap p [dict get $region params] {
                 string cat [dict get $p name] " : " [hir::types::show [dict get $p type]]
             }]
-            lappend lines "  params:   [expr {$params eq "" ? "(none)" : [join $params {, }]}]   result: [hir::types::show [dict get $region result]]"
+            lappend lines "  params:   [if {$params eq ""} {string cat "(none)"} else {join $params {, }}]   result: [hir::types::show [dict get $region result]]"
             if {[dict get $region captures] ne ""} {
                 lappend lines "  captures: [join [lmap c [dict get $region captures] {
                     string cat [dict get $c name] " (" [dict get $c class] ")"
@@ -996,7 +1021,7 @@ proc hir::aot::explain {hir {analysis ""}} {
             lappend lines "  note:     $note"
         }
         set requirements [dict get $region requirements]
-        lappend lines "  runtime:  [expr {$requirements eq "" ? "none" : [join $requirements {, }]}]"
+        lappend lines "  runtime:  [if {$requirements eq ""} {string cat "none"} else {join $requirements {, }}]"
         if {[dict get $region unreachable]} {
             lappend lines "  unreachable expressions skipped: [dict get $region unreachable]"
         }
@@ -1015,7 +1040,11 @@ proc hir::aot::CallSummary {region} {
                 dict incr natives [dict get $fact native]
             }
             direct-call {
-                set label [expr {[dict get $fact name] eq "" ? "block [dict get $fact block]" : [dict get $fact name]}]
+                if {[dict get $fact name] eq ""} {
+                    set label "block [dict get $fact block]"
+                } else {
+                    set label [dict get $fact name]
+                }
                 set flags {}
                 if {[dict get $fact self]} { lappend flags self }
                 lappend flags [expr {[dict get $fact tail] ? "tail" : "non-tail"}]
@@ -1029,7 +1058,7 @@ proc hir::aot::CallSummary {region} {
     set parts {}
     if {[dict size $natives]} {
         lappend parts "natives: [join [lmap {name count} $natives {
-            expr {$count > 1 ? "$name x$count" : $name}
+            if {$count > 1} {string cat "$name x$count"} else {set name}
         }] {, }]"
     }
     if {$blocks ne ""} {

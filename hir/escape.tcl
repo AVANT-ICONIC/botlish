@@ -178,7 +178,11 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
         if {[llength $layout] != $n || [lsort -integer [dict get $node slots]] ne [Iota $n]} {
             return ""
         }
-        set id [expr {[dict get $node named] ? [dict get $node structId] : ""}]
+        if {[dict get $node named]} {
+            set id [dict get $node structId]
+        } else {
+            set id ""
+        }
         return [list local [list $n [list $id $layout]] {}]
     }
     if {$kind eq "if"} {
@@ -337,7 +341,10 @@ proc hir::escape::SyscallNative {view e} {
         return ""
     }
     set name [dict get [hir::symbol $view $target] name]
-    return [expr {[core::linuxabi::isSyscall $name] ? $name : ""}]
+    if {[core::linuxabi::isSyscall $name]} {
+        return $name
+    }
+    return ""
 }
 
 # The register field expressions of syscall transport call E (VIEW) whose
@@ -790,11 +797,19 @@ proc hir::escape::CallSites {hir spec} {
 proc hir::escape::RegionInfo {hir spec id} {
     set instance [dict get $spec instances $id]
     set block [dict get $instance block]
-    set region [expr {$block eq "program" ? "program" : $block}]
+    if {$block eq "program"} {
+        set region "program"
+    } else {
+        set region $block
+    }
     set view [hir::specialize::view $hir $spec $id]
     set context [dict get $spec context]
     set exprs [dict get $context exprs $region]
-    set topBody [expr {$region eq "program" ? [hir::roots $view] : [hir::get $view $region body]}]
+    if {$region eq "program"} {
+        set topBody [hir::roots $view]
+    } else {
+        set topBody [hir::get $view $region body]
+    }
     set trailing [TrailingPositions $view $topBody $exprs]
     set captured [dict create]
     set refsByBinding [dict create]
@@ -1249,7 +1264,7 @@ proc hir::escape::NativeUseTag {name} {
 proc hir::escape::UseTag {info r {regions {}} {deny {}}} {
     set view [dict get $info view]
     set parent [dict get $info parent]
-    set pe [expr {[dict exists $parent $r] ? [dict get $parent $r] : ""}]
+    set pe [dict getdef $parent $r ""]
     if {$pe eq ""} {
         return [expr {[dict exists [dict get $info trailing] $r] ? "result" : "other"}]
     }
@@ -1319,7 +1334,7 @@ proc hir::escape::UseVerdict {candidates regions aliasOf id b desc isParam bindE
     set view [dict get $info view]
     set refsByBinding [dict get $info refsByBinding]
     set argPos [dict get $info argPos]
-    set refs [expr {[dict exists $refsByBinding $b] ? [dict get $refsByBinding $b] : {}}]
+    set refs [dict getdef $refsByBinding $b {}]
     lassign $desc n shape
     set structural 0
     set forwards 0
@@ -1344,7 +1359,11 @@ proc hir::escape::UseVerdict {candidates regions aliasOf id b desc isParam bindE
     set projByRecv [dict get $info projByRecv]
     set bindValue [dict get $info bindValue]
     set loopOf [dict get $info loopOf]
-    set bindLoop [expr {$bindExpr eq "" || ![dict exists $loopOf $bindExpr] ? "?" : [dict get $loopOf $bindExpr]}]
+    if {$bindExpr eq "" || ![dict exists $loopOf $bindExpr]} {
+        set bindLoop "?"
+    } else {
+        set bindLoop [dict get $loopOf $bindExpr]
+    }
     set wordUse [dict get $info wordUse]
     foreach r $refs {
         if {[dict exists $projByRecv $r]} {
@@ -1467,7 +1486,7 @@ proc hir::escape::Eligible {rawLocal rawParam regions aliasOf {deny {}}} {
         dict for {key desc} $candidates {
             lassign $key id b
             set verdict [UseVerdict $candidates $regions $aliasOf $id $b $desc [dict exists $isParam $key] \
-                [expr {[dict exists $bindExprs $key] ? [dict get $bindExprs $key] : ""}] $deny]
+                [dict getdef $bindExprs $key ""] $deny]
             lassign $verdict reason structural forwards mats
             if {$reason eq "" && [dict exists $aliasOf $id $b]
                     && ![dict exists $candidates [list $id [dict get $aliasOf $id $b]]]} {
@@ -1545,7 +1564,7 @@ proc hir::escape::TransportPlan {spec regions callSites arity retDepth eligible 
         set desc [dict get $eligible $key]
         set info [dict get $regions $id]
         set view [dict get $info view]
-        set refs [expr {[dict exists [dict get $info refsByBinding] $b] ? [dict get [dict get $info refsByBinding] $b] : {}}]
+        set refs [dict getdef [dict get $info refsByBinding] $b {}]
         set layout [lindex $desc 1 1]
         set argPos [dict get $info argPos]
         set projByRecv [dict get $info projByRecv]
@@ -1696,7 +1715,7 @@ proc hir::escape::WellFormedStruct {view e} {
 # literal.
 proc hir::escape::LiteralTree {view e} {
     set node [hir::node $view $e]
-    set shape [list [expr {[dict get $node named] ? [dict get $node structId] : ""}] [dict get $node layout]]
+    set shape [list [if {[dict get $node named]} {dict get $node structId} else {string cat ""}] [dict get $node layout]]
     set children [dict create]
     foreach name [dict get $node names] f [dict get $node fields] {
         if {[hir::kind $view $f] eq "struct" && [WellFormedStruct $view $f]} {
@@ -1913,7 +1932,7 @@ proc hir::escape::NestingPlan {hir spec regions callSites arity retDepth eligibl
         set view [dict get $info view]
         set parent [dict get $info parent]
         foreach pe [dict values [dict get $info projByRecv]] {
-            set up [expr {[dict exists $parent $pe] ? [dict get $parent $pe] : ""}]
+            set up [dict getdef $parent $pe ""]
             if {$up ne "" && [hir::kind $view $up] eq "project" && [hir::get $view $up receiver] eq $pe} {
                 continue
             }
@@ -1960,9 +1979,17 @@ proc hir::escape::NestingPlan {hir spec regions callSites arity retDepth eligibl
             if {[lindex $k 0] eq "lit"} {
                 lassign $k - id e
                 set t [LiteralTree [dict get $regions $id view] $e]
-                set tree [expr {$tree eq "" ? $t : [IntersectTrees $tree $t]}]
+                if {$tree eq ""} {
+                    set tree $t
+                } else {
+                    set tree [IntersectTrees $tree $t]
+                }
             } else {
-                set d [expr {[lindex $k 0] eq "res" ? [dict get $arity [lindex $k 1]] : [dict get $eligible [lrange $k 1 2]]}]
+                if {[lindex $k 0] eq "res"} {
+                    set d [dict get $arity [lindex $k 1]]
+                } else {
+                    set d [dict get $eligible [lrange $k 1 2]]
+                }
                 if {$shape eq ""} {
                     set shape [lindex $d 1]
                 }
@@ -1979,7 +2006,7 @@ proc hir::escape::NestingPlan {hir spec regions callSites arity retDepth eligibl
         foreach k $members {
             switch -- [lindex $k 0] {
                 par {
-                    set tinfo [expr {[dict exists $transport [lrange $k 1 2]] ? [dict get $transport [lrange $k 1 2]] : {}}]
+                    set tinfo [dict getdef $transport [lrange $k 1 2] {}]
                     if {$tinfo ne ""} {
                         set ea [expr {max($ea, [dict get $tinfo up] + [dict get $tinfo down])}]
                         set er [expr {max($er, [dict get $tinfo ret])}]
@@ -1993,7 +2020,7 @@ proc hir::escape::NestingPlan {hir spec regions callSites arity retDepth eligibl
                 }
             }
         }
-        set blockedPaths [expr {[dict exists $blocked $root] ? [dict get $blocked $root] : {}}]
+        set blockedPaths [dict getdef $blocked $root {}]
         lassign [ChooseCut $structOpts $tree $blockedPaths $ceiling $ea $er $cyc] cut width0 width opened closed score budget
         if {$opened eq "" && $closed eq ""} {
             continue
@@ -2274,7 +2301,7 @@ proc hir::escape::DirectRoots {regions arity structOpts} {
         set view [dict get $info view]
         set parent [dict get $info parent]
         foreach pe [dict values [dict get $info projByRecv]] {
-            set up [expr {[dict exists $parent $pe] ? [dict get $parent $pe] : ""}]
+            set up [dict getdef $parent $pe ""]
             if {$up ne "" && [hir::kind $view $up] eq "project" && [hir::get $view $up receiver] eq $pe} {
                 continue
             }
@@ -2369,11 +2396,11 @@ proc hir::escape::Census {spec regions arity resultWhy wants virtual paramVirtua
     set records {}
     set context [dict get $spec context]
     set selfTails [dict get $context selfTails]
-    set deny [expr {[dict exists $ctx deny] ? [dict get $ctx deny] : {}}]
-    set transport [expr {[dict exists $ctx transport] ? [dict get $ctx transport] : {}}]
-    set retDepth [expr {[dict exists $ctx retDepth] ? [dict get $ctx retDepth] : {}}]
-    set retTop [expr {[dict exists $ctx retTop] ? [dict get $ctx retTop] : {}}]
-    set nested [expr {[dict exists $ctx nested] ? [dict get $ctx nested] : {}}]
+    set deny [dict getdef $ctx deny {}]
+    set transport [dict getdef $ctx transport {}]
+    set retDepth [dict getdef $ctx retDepth {}]
+    set retTop [dict getdef $ctx retTop {}]
+    set nested [dict getdef $ctx nested {}]
     # literal origin -> its class record
     set literalClass [dict create]
     foreach rec $nested {
@@ -2418,8 +2445,12 @@ proc hir::escape::Census {spec regions arity resultWhy wants virtual paramVirtua
                 }
                 set v $up
             }
-            set pe [expr {[dict exists $parent $v] ? [dict get $parent $v] : ""}]
-            set pkind [expr {$pe eq "" ? "" : [hir::kind $view $pe]}]
+            set pe [dict getdef $parent $v ""]
+            if {$pe eq ""} {
+                set pkind ""
+            } else {
+                set pkind [hir::kind $view $pe]
+            }
             if {[dict exists $context discarded $e]} {
                 # Statement position, value unused: its fields are evaluated
                 # for their effects and no object is built.
@@ -2454,7 +2485,7 @@ proc hir::escape::Census {spec regions arity resultWhy wants virtual paramVirtua
                 }
             } elseif {$pkind eq "call"} {
                 set argIndex [lsearch -exact [hir::get $view $pe args] $v]
-                set callee [expr {[dict exists [dict get $instance calls] $pe] ? [dict get [dict get $instance calls] $pe] : ""}]
+                set callee [dict getdef [dict get $instance calls] $pe ""]
                 set virtualParam 0
                 if {$callee ne "" && $argIndex >= 0 && [dict exists $regions $callee]} {
                     set cblock [dict get [dict get $regions $callee instance] block]
@@ -2472,12 +2503,16 @@ proc hir::escape::Census {spec regions arity resultWhy wants virtual paramVirtua
             } elseif {$pkind eq "struct"} {
                 set reason "nested field"
             } else {
-                set reason [expr {$pe eq "" ? "other" : [UseTag $info $v $regions $deny]}]
+                if {$pe eq ""} {
+                    set reason "other"
+                } else {
+                    set reason [UseTag $info $v $regions $deny]
+                }
             }
-            set desc [list $n [list [expr {[dict get $node named] ? [dict get $node structId] : ""}] [dict get $node layout]]]
+            set desc [list $n [list [if {[dict get $node named]} {dict get $node structId} else {string cat ""}] [dict get $node layout]]]
             set rec [dict create instance $id label [hir::specialize::label $spec $id] expr $e \
                 desc $desc named [dict get $node named] width $n class $class \
-                reason [expr {$class eq "materialized" ? $reason : ""}] mats $mats \
+                reason [if {$class eq "materialized"} {set reason} else {string cat ""}] mats $mats \
                 structural $structural dest $dest parentKind $pkind nested "" physical 0 transportedWidth $n \
                 argEdges 0 retEdges 0 cyclic 0 score 0.0 budget 0.0 live $n where none frontierAt ""]
             dict set byExpr [list $id $e] $rec
@@ -2520,7 +2555,7 @@ proc hir::escape::Census {spec regions arity resultWhy wants virtual paramVirtua
             set node $up
         }
         set outerKey [list $id $node]
-        set outer [expr {[dict exists $byExpr $outerKey] ? [dict get $byExpr $outerKey] : {}}]
+        set outer [dict getdef $byExpr $outerKey {}]
         set nestedTag "closed:independent-use"
         if {[dict exists $literalClass [list lit $id $node]]} {
             set cr [dict get $literalClass [list lit $id $node]]
@@ -2600,7 +2635,7 @@ proc hir::escape::Physical {rec} {
 # parameter receives it unchanged).
 proc hir::escape::ForwardKeys {regions id b} {
     set info [dict get $regions $id]
-    set refs [expr {[dict exists [dict get $info refsByBinding] $b] ? [dict get [dict get $info refsByBinding] $b] : {}}]
+    set refs [dict getdef [dict get $info refsByBinding] $b {}]
     set keys {}
     foreach r $refs {
         if {![dict exists [dict get $info argPos] $r]} {
@@ -2711,7 +2746,7 @@ proc hir::escape::CensusFrontier {rec} {
 }
 
 proc hir::escape::structOptsOf {analysis} {
-    return [expr {[dict exists $analysis structOpts] ? [dict get $analysis structOpts] : {}}]
+    return [dict getdef $analysis structOpts {}]
 }
 
 # The planning facts of ANALYSIS (audit only): {params RESULTS NESTED DENY}
@@ -2732,14 +2767,14 @@ proc hir::escape::transportFacts {analysis} {
             dict set results $id [dict create width [lindex $desc 0] depth $depth edges $edges score $score budget $budget ok $ok]
         }
     }
-    return [dict create params [expr {[dict exists $analysis transport] ? [dict get $analysis transport] : {}}] \
-        results $results nested [expr {[dict exists $analysis nested] ? [dict get $analysis nested] : {}}] \
-        deny [expr {[dict exists $analysis deny] ? [dict get $analysis deny] : {}}]]
+    return [dict create params [dict getdef $analysis transport {}] \
+        results $results nested [dict getdef $analysis nested {}] \
+        deny [dict getdef $analysis deny {}]]
 }
 
 # The census of ANALYSIS: one record per struct construction, see Census.
 proc hir::escape::census {analysis} {
-    return [expr {[dict exists $analysis census] ? [dict get $analysis census] : {}}]
+    return [dict getdef $analysis census {}]
 }
 
 proc hir::escape::wants {analysis id} {
@@ -2749,14 +2784,20 @@ proc hir::escape::wants {analysis id} {
 # The field count of instance ID's recognized result, or "".
 proc hir::escape::arity {analysis id} {
     set arity [dict get $analysis arity]
-    return [expr {[dict exists $arity $id] ? [lindex [dict get $arity $id] 0] : ""}]
+    if {[dict exists $arity $id]} {
+        return [lindex [dict get $arity $id] 0]
+    }
+    return ""
 }
 
 # The shape ({ID LAYOUT}) of instance ID's recognized *struct* result, "" for
 # a List result or no recognized result.
 proc hir::escape::resultShape {analysis id} {
     set arity [dict get $analysis arity]
-    return [expr {[dict exists $arity $id] ? [lindex [dict get $arity $id] 1] : ""}]
+    if {[dict exists $arity $id]} {
+        return [lindex [dict get $arity $id] 1]
+    }
+    return ""
 }
 
 proc hir::escape::virtualArity {analysis id b} {
@@ -2801,17 +2842,26 @@ proc hir::escape::paramVirtualShape {analysis id b} {
 # ID's recognized result, of virtual local B, of virtual parameter B.
 proc hir::escape::resultCut {analysis id} {
     set arity [dict get $analysis arity]
-    return [expr {[dict exists $arity $id] ? [lindex [dict get $arity $id] 2] : ""}]
+    if {[dict exists $arity $id]} {
+        return [lindex [dict get $arity $id] 2]
+    }
+    return ""
 }
 
 proc hir::escape::virtualCut {analysis id b} {
     set virtual [dict get $analysis virtual]
-    return [expr {[dict exists $virtual $id $b] ? [lindex [dict get $virtual $id $b] 2] : ""}]
+    if {[dict exists $virtual $id $b]} {
+        return [lindex [dict get $virtual $id $b] 2]
+    }
+    return ""
 }
 
 proc hir::escape::paramVirtualCut {analysis id b} {
     set paramVirtual [dict get $analysis paramVirtual]
-    return [expr {[dict exists $paramVirtual $id $b] ? [lindex [dict get $paramVirtual $id $b] 2] : ""}]
+    if {[dict exists $paramVirtual $id $b]} {
+        return [lindex [dict get $paramVirtual $id $b] 2]
+    }
+    return ""
 }
 
 # {ROOT DESC} of field projection chain E of instance ID when its root is a
@@ -2882,10 +2932,8 @@ proc hir::escape::explain {hir spec analysis} {
     set lines {}
     foreach id [dict get $spec used] {
         set n [arity $analysis $id]
-        set bindings [expr {[dict exists [dict get $analysis virtual] $id]
-            ? [dict get [dict get $analysis virtual] $id] : {}}]
-        set params [expr {[dict exists [dict get $analysis paramVirtual] $id]
-            ? [dict get [dict get $analysis paramVirtual] $id] : {}}]
+        set bindings [dict getdef [dict get $analysis virtual] $id {}]
+        set params [dict getdef [dict get $analysis paramVirtual] $id {}]
         if {$n eq "" && $bindings eq "" && $params eq ""} {
             continue
         }

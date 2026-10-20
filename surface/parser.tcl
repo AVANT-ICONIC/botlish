@@ -591,7 +591,7 @@ proc surface::parser::Program {pVar} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $direct
         }
-        set direct [expr {[dict exists $p directSpan] ? [dict get $p directSpan] : ""}]
+        set direct [dict getdef $p directSpan ""]
         Synchronize p
         Failed p $first [lindex [dict get $options -errorcode] 2]
     }
@@ -1498,7 +1498,11 @@ proc surface::parser::ExternParam {pVar fn} {
                     "unknown fact \"$text\" of parameter \"$pname\" of extern c fn \"$fn\": a pointer parameter states its access (read, write) and its escape (noescape, proven noescape, captures); an unstated fact is unknown"
             }
         }
-        set factsSpan [expr {$factsSpan eq "" ? $span : [surface::ast::cover $factsSpan $span]}]
+        if {$factsSpan eq ""} {
+            set factsSpan $span
+        } else {
+            set factsSpan [surface::ast::cover $factsSpan $span]
+        }
     }
     if {[Kind p] in {.. .}} {
         FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
@@ -1565,8 +1569,7 @@ proc surface::parser::Statements {pVar stop} {
             Synchronize p
         }
         Failed p $token [lindex [dict get $options -errorcode] 2]
-        set end [expr {[dict get $p last start] >= [dict get $token span start]
-            ? [dict get $p last] : [dict get $token span]}]
+        set end [if {[dict get $p last start] >= [dict get $token span start]} {dict get $p last} else {dict get $token span}]
         lappend body [surface::ast::node error [surface::ast::cover [dict get $token span] $end]]
     }
     return $body
@@ -2158,7 +2161,11 @@ proc surface::parser::FnType {pVar fn {kind fn}} {
         set token [Peek p]
         switch -- [dict get $token kind] {
             IDENT - return - errors {
-                set field [expr {[dict get $token kind] eq "IDENT" ? [dict get $token value] : [dict get $token kind]}]
+                if {[dict get $token kind] eq "IDENT"} {
+                    set field [dict get $token value]
+                } else {
+                    set field [dict get $token kind]
+                }
             }
             default {
                 Fail $token "expected a field name (args, return or errors) in the $what, found [Describe $token]"
@@ -2287,7 +2294,7 @@ proc surface::parser::Function {pVar} {
         params $params flags $flags contexts $contexts paramsSpan [SpanFrom p [dict get $open span]] \
         resultType [dict get $body resultType] resultTypeSpan [dict get $body resultTypeSpan] \
         errors [dict get $body errors] proves [dict get $body proves] body $body \
-        nomethod $nomethod nomethodSpan [expr {$nomethod ? [dict get $modifiers nomethod] : ""}] \
+        nomethod $nomethod nomethodSpan [if {$nomethod} {dict get $modifiers nomethod} else {string cat ""}] \
         resume $resume]
 }
 
@@ -2874,7 +2881,11 @@ proc surface::parser::LoopClause {pVar} {
     set name [dict get $nameToken value]
     set nameSpan [dict get $nameToken span]
     set dispatch [Peek p]
-    set dispatchWord [expr {[dict get $dispatch kind] eq "IDENT" ? [dict get $dispatch value] : ""}]
+    if {[dict get $dispatch kind] eq "IDENT"} {
+        set dispatchWord [dict get $dispatch value]
+    } else {
+        set dispatchWord ""
+    }
     switch -- $dispatchWord {
         in {
             Advance p
@@ -2913,7 +2924,11 @@ proc surface::parser::LoopCount {pVar name nameSpan direction} {
     }
     set first [LoopOperand p]
     set keywordToken [Peek p]
-    set word [expr {[dict get $keywordToken kind] eq "IDENT" ? [dict get $keywordToken value] : ""}]
+    if {[dict get $keywordToken kind] eq "IDENT"} {
+        set word [dict get $keywordToken value]
+    } else {
+        set word ""
+    }
     switch -- $word {
         to { set endKind exclusive }
         through { set endKind inclusive }
@@ -3444,7 +3459,10 @@ proc surface::parser::PatternEnd {pVar {from 0}} {
             \} - ] - ) {
                 incr depth -1
                 if {$depth == 0} {
-                    return [expr {[Kind p [expr {$i + 1}]] eq "=" ? $i : -1}]
+                    if {[Kind p [expr {$i + 1}]] eq "="} {
+                        return $i
+                    }
+                    return -1
                 }
             }
             NEWLINE - INDENT - DEDENT - EOF {
@@ -3597,7 +3615,7 @@ proc surface::parser::Pattern {pVar} {
                     }
                     [ {
                         ListDestructuringError [surface::ast::cover [dict get $target span] \
-                            [expr {[PatternEnd p] >= 0 ? [dict get [Peek p [PatternEnd p]] span] : [dict get $target span]}]]
+                            [if {[PatternEnd p] >= 0} {dict get [Peek p [PatternEnd p]] span} else {dict get $target span}]]
                     }
                     default {
                         Fail $target "expected a binding name or a nested \"\{...\}\" pattern after \"[dict get $token value]:\", found [Describe $target]"
@@ -3753,6 +3771,6 @@ proc surface::parser::StructDecl {pVar} {
     set context [dict exists $modifiers context]
     return [surface::ast::node structdecl [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] fields $fields \
-        opaque $opaque opaqueSpan [expr {$opaque ? [dict get $modifiers opaque] : ""}] \
-        context $context contextSpan [expr {$context ? [dict get $modifiers context] : ""}]]
+        opaque $opaque opaqueSpan [if {$opaque} {dict get $modifiers opaque} else {string cat ""}] \
+        context $context contextSpan [if {$context} {dict get $modifiers context} else {string cat ""}]]
 }

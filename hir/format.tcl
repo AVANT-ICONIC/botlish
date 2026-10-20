@@ -119,7 +119,7 @@ proc hir::format::TypeDecl {entry} {
         # identity, its resolved carrier, and the one module that may mint
         # it. Read back by hir::read::TypeDeclLine.
         set owner [dict get $entry owner]
-        return "refined type [dict get $entry name] carrier [hir::types::show [dict get $entry carrier]] owner [expr {$owner eq "" ? "-" : $owner}]"
+        return "refined type [dict get $entry name] carrier [hir::types::show [dict get $entry carrier]] owner [if {$owner eq ""} {string cat "-"} else {set owner}]"
     }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "enum"} {
         # An enum declaration (hir/enums.tcl, ENUMS.md): "enum ID name NAME ns
@@ -127,7 +127,7 @@ proc hir::format::TypeDecl {entry} {
         # closed case set in declaration order. Read back by hir::read::
         # EnumDeclLine.
         set ns [dict get $entry namespace]
-        return "enum [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] cases [join [dict get $entry cases] {, }]"
+        return "enum [dict get $entry id] name [dict get $entry name] ns [if {$ns eq ""} {string cat "-"} else {set ns}] cases [join [dict get $entry cases] {, }]"
     }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "layout"} {
         # A layout declaration (hir/layouts.tcl, BINARY-LAYOUT.md): "layout
@@ -140,7 +140,7 @@ proc hir::format::TypeDecl {entry} {
                 [hir::layouts::FieldTypeText [dict get $field type]] [dict get $field offset]
         }]
         set ns [dict get $entry namespace]
-        return "layout [dict get $entry id] ns [expr {$ns eq "" ? "-" : $ns}] size [dict get $entry size] align [dict get $entry align] fields [join $fields {, }]"
+        return "layout [dict get $entry id] ns [if {$ns eq ""} {string cat "-"} else {set ns}] size [dict get $entry size] align [dict get $entry align] fields [join $fields {, }]"
     }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "struct"} {
         # A struct declaration (hir/structs.tcl): "struct ID name NAME ns NS
@@ -157,7 +157,7 @@ proc hir::format::TypeDecl {entry} {
         if {[dict exists $entry context] && [dict get $entry context]} {
             append opaque "context "
         }
-        return "struct [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] ${opaque}fields [join $fields {, }]"
+        return "struct [dict get $entry id] name [dict get $entry name] ns [if {$ns eq ""} {string cat "-"} else {set ns}] ${opaque}fields [join $fields {, }]"
     }
     set domain [dict get $entry domain]
     if {[lindex $domain 0] eq {interval}} {
@@ -189,7 +189,7 @@ proc hir::format::ErrorDecl {hir name} {
         format {%s: %s} $field [hir::types::show $type]
     }]
     set ns [dict get $entry namespace]
-    return "error $name ns [expr {$ns eq "" ? "-" : $ns}] payload [join $fields {, }]"
+    return "error $name ns [if {$ns eq ""} {string cat "-"} else {set ns}] payload [join $fields {, }]"
 }
 
 # One line for a trait declaration (TRAITS.md, HIR's `traits`): "trait ID
@@ -211,7 +211,7 @@ proc hir::format::TraitDecl {entry} {
     set ns [dict get $entry namespace]
     # A context trait (CONTEXT-TRAITS.md) carries its modifier.
     set context [expr {[dict exists $entry context] && [dict get $entry context] ? " context" : ""}]
-    return "trait [dict get $entry id]$context owner [expr {$ns eq "" ? "-" : $ns}] requires [join $reqs { ; }]"
+    return "trait [dict get $entry id]$context owner [if {$ns eq ""} {string cat "-"} else {set ns}] requires [join $reqs { ; }]"
 }
 
 # One line for a trait-polymorphic source function the monomorphized program
@@ -219,7 +219,11 @@ proc hir::format::TraitDecl {entry} {
 # -> R clones (C, ...)" (R "-" when undeclared).
 proc hir::format::TraitFunction {name fn} {
     set params [join [lmap {p t} [dict get $fn params] {format {%s: %s} $p [hir::types::show $t]}] {, }]
-    set result [expr {[dict get $fn result] eq "" ? "-" : [hir::types::show [dict get $fn result]]}]
+    if {[dict get $fn result] eq ""} {
+        set result "-"
+    } else {
+        set result [hir::types::show [dict get $fn result]]
+    }
     return "traitfn $name ($params) -> $result clones ([join [lmap {c w} [dict get $fn clones] {set c}] {, }])"
 }
 
@@ -361,7 +365,11 @@ proc hir::format::Expr {hir e indent origins linesVar} {
         }
         ref {
             set b [dict get $node binding]
-            set label [expr {$b eq "" ? "? [dict get $node name]" : [BindingLabel $hir $b]}]
+            if {$b eq ""} {
+                set label "? [dict get $node name]"
+            } else {
+                set label [BindingLabel $hir $b]
+            }
             Line $hir $e "ref $label" $indent $origins lines
         }
         bind {
@@ -551,7 +559,7 @@ proc hir::format::Expr {hir e indent origins linesVar} {
         }
         return - break - continue {
             set target [dict get $node target]
-            set text "[dict get $node kind] -> [expr {$target eq "" ? "?" : $target}]"
+            set text "[dict get $node kind] -> [if {$target eq ""} {string cat "?"} else {set target}]"
             Line $hir $e $text $indent $origins lines
             if {[dict get $node kind] ne "continue" && [dict get $node value] ne ""} {
                 Expr $hir [dict get $node value] $inner $origins lines
@@ -570,7 +578,11 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             # "struct payload(NAME) (...)": anonymous, checked against error
             # NAME's declared payload.
             set id [dict get $node structId]
-            set who [expr {[dict get $node named] && $id ne "" ? $id : "anon"}]
+            if {[dict get $node named] && $id ne ""} {
+                set who $id
+            } else {
+                set who "anon"
+            }
             if {[dict exists $node payloadOf]} {
                 set who "payload([dict get $node payloadOf])"
             }
@@ -600,7 +612,7 @@ proc hir::format::Expr {hir e indent origins linesVar} {
         handle {
             Line $hir $e handle $indent $origins lines
             Expr $hir [dict get $node call] $inner $origins lines
-            set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+            set payloads [dict getdef $node handlerPayloads {}]
             set index -1
             foreach name [dict get $node handlerNames] s [dict get $node handlerScopes] \
                     body [dict get $node handlerBodies] {

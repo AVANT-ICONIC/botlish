@@ -103,6 +103,12 @@ pub fn current_program<R>(f: impl FnOnce(&ProgramInfo) -> R) -> R {
     PROGRAM.with(|p| f(p.borrow().as_ref().expect("no native program is running")))
 }
 
+/// Runs F with the program currently executing on this thread, if there is
+/// one (a runtime unit test runs none).
+pub fn try_current_program<R>(f: impl FnOnce(&ProgramInfo) -> R) -> Option<R> {
+    PROGRAM.with(|p| p.borrow().as_ref().map(|program| f(program)))
+}
+
 #[repr(C)]
 pub struct Vm {
     pub ss_top: *mut Value,

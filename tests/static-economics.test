@@ -1534,7 +1534,7 @@ test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-U
     set text [read $f]
     close $f
     set kinds [lsort -unique [lmap {- kind} [regexp -all -inline {\[list (?:reject )?(AFFINE-[A-Z-]+|USE-AFTER-MOVE)\M} $text] {set kind}]]
-    list [regexp {set scopes \[expr \{!\$accepted } [info body hir::affine::verify]] \
+    list [regexp {if \{!\$accepted \|\| [^\n]*\} \{\n\s*set scopes \{\}} [info body hir::affine::verify]] \
         [expr {$kinds eq [lsort $hir::staticdeps::ownershipKinds]}] \
         [regexp {format \{call to %s } [info body hir::semantic::Derived]]
 } -result {1 1 1}

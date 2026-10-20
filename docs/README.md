@@ -170,8 +170,11 @@ integer division). A result that is not a finite number -- an overflow, any
 division by zero, NaN -- fails with the declared builtin error
 `NonFiniteFloat`, which a handler catches and an `errors` clause admits like
 any declared error; with exactly known operands the compiler computes the
-operation while compiling and a non-finite result is `KNOWN-ERROR`. Negative
-zero is zero. Float64 is the first of a family of primitive floating-point
+operation while compiling and a non-finite result is `KNOWN-ERROR`. The
+error's payload says which non-finite result it was, `{result:
+NonFiniteResult}` (`PositiveInfinity`, `NegativeInfinity` or `NotANumber`,
+a builtin enum): a fact about that failure for the handler where it
+happened, never a value. Negative zero is zero. Float64 is the first of a family of primitive floating-point
 types (`core/type.tcl`'s `floats`; other widths are expected later), and
 representation-sensitive IEEE behavior -- bit patterns, NaN payloads, signed
 zero, rounding modes -- is not part of the programming model.

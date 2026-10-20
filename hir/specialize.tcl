@@ -227,12 +227,11 @@ proc hir::specialize::analyze {hir args} {
     set state [dict create hir $hir context $context \
         specialize [dict get $options -specialize] callFactsOpt [dict get $options -call-facts-opt] \
         exactCallableOpt [dict get $options -exact-callable-opt] \
-        exactLimit [expr {[dict get $options -exact-callable-limit] ne ""
-            ? [dict get $options -exact-callable-limit] : $exactLimit}] \
+        exactLimit [if {[dict get $options -exact-callable-limit] ne ""} {dict get $options -exact-callable-limit} else {set exactLimit}] \
         instances [dict create] keys [dict create] byBlock [dict create] \
         seeds [dict create] deps [dict create] refs [dict create] \
         queue {} next 0 current "" building {} analyses 0 \
-        refinementFacts [expr {[dict get $options -specialize] ? [RefinementFacts $hir] : {}}]]
+        refinementFacts [if {[dict get $options -specialize]} {RefinementFacts $hir} else {string cat {}}]]
     try {
         Instance program {}
         if {[dict get $state specialize]} {
@@ -258,8 +257,7 @@ proc hir::specialize::analyze {hir args} {
         # CloseCallers already ran blockescape over the identical frozen graph
         # (it reads only structure and calls/edges/values/used, which that
         # pass never writes), so its result is reused rather than recomputed.
-        set be [expr {[dict exists $state blockescape] ? [dict get $state blockescape]
-            : [hir::blockescape::analyze $hir $analysis]}]
+        set be [if {[dict exists $state blockescape]} {dict get $state blockescape} else {hir::blockescape::analyze $hir $analysis}]
         dict set analysis closed [ClosedInstances $hir $analysis $be]
         dict set analysis dormant [DormantInstances $analysis $be]
         return $analysis
@@ -286,7 +284,11 @@ proc hir::specialize::Instance {block keyArgs} {
         set keyArgs [lmap k $keyArgs {CoarseCallable $k}]
     }
     set generic [expr {$block eq "program" || [lsearch -exact -not $keyArgs any] < 0}]
-    set key [expr {$block eq "program" ? "program" : [list $block $keyArgs]}]
+    if {$block eq "program"} {
+        set key "program"
+    } else {
+        set key [list $block $keyArgs]
+    }
     if {!$generic && ![dict exists $state keys $key]
             && ([dict size [dict get $state instances]] >= $instanceLimit
                 || [LiveSpecializations $block] >= $limit)} {
@@ -300,14 +302,13 @@ proc hir::specialize::Instance {block keyArgs} {
     set id i[dict get $state next]
     dict incr state next
     set context [dict get $state context]
-    set name [expr {$block eq "program" ? "<program>"
-        : [dict exists $context names $block] ? [dict get $context names $block] : ""}]
+    set name [if {$block eq "program"} {string cat "<program>"} elseif {[dict exists $context names $block]} {dict get $context names $block} else {string cat ""}]
     dict set state instances $id [dict create id $id block $block name $name args $keyArgs \
         generic $generic result never seeds {} calls {} creates {} values {} edges {} \
         overlay "" reachable {} passes 0]
     dict set state keys $key $id
     dict set state refs $id 0
-    dict set state byBlock $block [concat         [expr {[dict exists $state byBlock $block] ? [dict get $state byBlock $block] : {}}] [list $id]]
+    dict set state byBlock $block [concat         [dict getdef $state byBlock $block {}] [list $id]]
     Requeue $id
     return $id
 }
@@ -320,7 +321,11 @@ proc hir::specialize::LiveSpecializations {block} {
         return 0
     }
     set current [dict get $state current]
-    set pending [expr {$current eq "" ? {} : [dict values [dict get $state instances $current calls]]}]
+    if {$current eq ""} {
+        set pending {}
+    } else {
+        set pending [dict values [dict get $state instances $current calls]]
+    }
     set count 0
     foreach id [dict get $state byBlock $block] {
         if {![dict get $state instances $id generic]
@@ -339,7 +344,11 @@ proc hir::specialize::LiveExactSpecializations {block} {
         return 0
     }
     set current [dict get $state current]
-    set pending [expr {$current eq "" ? {} : [dict values [dict get $state instances $current calls]]}]
+    if {$current eq ""} {
+        set pending {}
+    } else {
+        set pending [dict values [dict get $state instances $current calls]]
+    }
     set count 0
     foreach id [dict get $state byBlock $block] {
         if {[dict get $state instances $id generic] || ![HasExactCallable [dict get $state instances $id args]]} {
@@ -450,7 +459,12 @@ proc hir::specialize::ElementKeyType {type} {
         return $type
     }
     set kind [hir::types::kindOf $type]
-    return [expr {$type eq "never" ? "never" : $kind eq "" ? "any" : $kind}]
+    if {$type eq "never"} {
+        return "never"
+    } elseif {$kind eq ""} {
+        return "any"
+    }
+    return $kind
 }
 
 # 1 if KEY (a key type) names an exact callable.
@@ -492,7 +506,10 @@ proc hir::specialize::JoinKey {a b} {
     if {[IsCallableKey $a] && [IsCallableKey $b]} {
         set ca [CoarseCallable $a]
         set cb [CoarseCallable $b]
-        return [expr {$ca eq $cb ? $ca : "any"}]
+        if {$ca eq $cb} {
+            return $ca
+        }
+        return "any"
     }
     return [hir::types::lub $a $b]
 }
@@ -696,8 +713,7 @@ proc hir::specialize::RefinementFacts {hir} {
                     continue
                 }
                 set argType [hir::typeOf $hir $a]
-                set evidence [expr {$argType eq "never" || [hir::types::IsSpecific $argType]
-                    ? {} : [core::type::evidenceOf $argType]}]
+                set evidence [if {$argType eq "never" || [hir::types::IsSpecific $argType]} {string cat {}} else {core::type::evidenceOf $argType}]
                 if {![dict exists $has $p]} {
                     dict set proven $p $evidence
                     dict set has $p 1
@@ -742,7 +758,7 @@ proc hir::specialize::Analyze {id} {
         dict set state instances $id creates {}
 
         set types [dict create]
-        set seeds [expr {[dict exists $state seeds $block] ? [dict get $state seeds $block] : {}}]
+        set seeds [dict getdef $state seeds $block {}]
         if {$block ne "program"} {
             dict for {b type} $seeds {
                 dict set types $b $type
@@ -773,8 +789,7 @@ proc hir::specialize::Analyze {id} {
                     # directly rather than routed through narrow) or an
                     # already-specialized scalar key sharing the declared
                     # type's base, unioned with its evidence via narrow.
-                    set type [expr {[hir::types::IsSpecific $declaredType]
-                        ? $declaredType : [hir::types::narrow $type $declaredType]}]
+                    set type [if {[hir::types::IsSpecific $declaredType]} {set declaredType} else {hir::types::narrow $type $declaredType}]
                 } elseif {([hir::types::IsList $type] && [hir::types::IsList $declaredType])
                         || ([hir::types::IsSet $type] && [hir::types::IsSet $declaredType])
                         || ([hir::types::IsMutVec $type] && [hir::types::IsMutVec $declaredType])
@@ -822,13 +837,13 @@ proc hir::specialize::Analyze {id} {
         foreach e [dict get $state context exprs $block] {
             set node [dict get $scratch exprs $e]
             set base [dict get $semantic exprs $e]
-            set known [expr {[dict exists $node known] ? [dict get $node known] : ""}]
+            set known [dict getdef $node known ""]
             # Equal type forms have equal TypeIds: scratch interns into a copy
             # of the semantic type table.
             set target [InstanceTarget $scratch $node $base]
             if {[dict get $node type] ne [dict get $base type]
                     || [dict get $node reachable] != [dict get $base reachable]
-                    || $known ne [expr {[dict exists $base known] ? [dict get $base known] : ""}]
+                    || $known ne [dict getdef $base known ""]
                     || $target ne ""} {
                 dict set overlay $e [OverlayEntry [hir::typeOf $scratch $e] $known [dict get $node reachable] $target]
             }
@@ -974,7 +989,7 @@ proc hir::specialize::Handle {op args} {
                     # closed-caller theorem (ClosedSet) exactly as before.
                     variable closureIntKeyOpt
                     set keyArgs [lmap k $keyArgs {
-                        expr {[IsExactCallableKey $k] || ($closureIntKeyOpt && $k eq "int") ? $k : "any"}
+                        if {[IsExactCallableKey $k] || ($closureIntKeyOpt && $k eq "int")} {set k} else {string cat "any"}
                     }]
                 }
             }
@@ -1020,10 +1035,10 @@ proc hir::specialize::Handle {op args} {
         }
         create {
             lassign $args e seeds
-            set old [expr {[dict exists $state seeds $e] ? [dict get $state seeds $e] : {}}]
+            set old [dict getdef $state seeds $e {}]
             set merged $old
             dict for {b type} $seeds {
-                set before [expr {[dict exists $old $b] ? [dict get $old $b] : "never"}]
+                set before [dict getdef $old $b "never"]
                 dict set merged $b [hir::types::lub $before $type]
             }
             if {$merged ne $old} {
@@ -1433,7 +1448,10 @@ proc hir::specialize::CombineCallerTheorem {type fact} {
         return $type
     }
     if {![hir::types::IsSpecific $type]} {
-        return [expr {[hir::types::IsSpecific $fact] ? $fact : [hir::types::narrow $type $fact]}]
+        if {[hir::types::IsSpecific $fact]} {
+            return $fact
+        }
+        return [hir::types::narrow $type $fact]
     }
     if {([hir::types::IsList $type] && [hir::types::IsList $fact])
             || ([hir::types::IsSet $type] && [hir::types::IsSet $fact])} {
@@ -1502,8 +1520,7 @@ proc hir::specialize::Reanalyze {id argTypes} {
         set type $keyType
         if {$declaredType ne {}} {
             if {![hir::types::IsSpecific $type]} {
-                set type [expr {[hir::types::IsSpecific $declaredType]
-                    ? $declaredType : [hir::types::narrow $type $declaredType]}]
+                set type [if {[hir::types::IsSpecific $declaredType]} {set declaredType} else {hir::types::narrow $type $declaredType}]
             } elseif {([hir::types::IsList $type] && [hir::types::IsList $declaredType])
                     || ([hir::types::IsSet $type] && [hir::types::IsSet $declaredType])
                         || ([hir::types::IsMutVec $type] && [hir::types::IsMutVec $declaredType])
@@ -1539,11 +1556,11 @@ proc hir::specialize::Reanalyze {id argTypes} {
     foreach e [dict get $state context exprs $block] {
         set node [dict get $scratch exprs $e]
         set base [dict get $hir exprs $e]
-        set known [expr {[dict exists $node known] ? [dict get $node known] : ""}]
+        set known [dict getdef $node known ""]
         set target [InstanceTarget $scratch $node $base]
         if {[dict get $node type] ne [dict get $base type]
                 || [dict get $node reachable] != [dict get $base reachable]
-                || $known ne [expr {[dict exists $base known] ? [dict get $base known] : ""}]
+                || $known ne [dict getdef $base known ""]
                 || $target ne ""} {
             dict set overlay $e [OverlayEntry [hir::typeOf $scratch $e] $known [dict get $node reachable] $target]
         }
@@ -1597,7 +1614,11 @@ proc hir::specialize::CloseCallers {} {
     variable passLimit
     variable closeCallersRoundLimit
     variable closeCallersConverged
-    set roundLimit [expr {$closeCallersRoundLimit ne "" ? $closeCallersRoundLimit : $passLimit}]
+    if {$closeCallersRoundLimit ne ""} {
+        set roundLimit $closeCallersRoundLimit
+    } else {
+        set roundLimit $passLimit
+    }
     set hir [dict get $state hir]
     set baseline [dict get $state instances]
     set snapshot [dict create specialize 1 instances $baseline \
@@ -1771,7 +1792,7 @@ proc hir::specialize::closedAudit {hir analysis} {
         }]
         lappend lines [format "%-8s %-40s closed=%d range-open=%d callers=%d exact=\[%s\] dormant=%d  (%s)" \
             $id [label $analysis $id] $closed [dict exists $open $id] \
-            [expr {[dict exists $callers $id] ? [dict get $callers $id] : 0}] [join $exact {, }] \
+            [dict getdef $callers $id 0] [join $exact {, }] \
             [dict exists $dormant $id] $why]
     }
     return [join $lines \n]
@@ -1792,7 +1813,7 @@ proc hir::specialize::closedCallerTheorem {hir analysis id} {
     if {![dict exists $facts $id]} {
         return [lrepeat [llength [dict get $analysis instances $id args]] any]
     }
-    return [lmap t [dict get $facts $id] {expr {$t eq "" ? "any" : $t}}]
+    return [lmap t [dict get $facts $id] {if {$t eq ""} {string cat "any"} else {set t}}]
 }
 
 # specialize 0: one generic instance per block, with the semantic types and
@@ -1862,7 +1883,7 @@ proc hir::specialize::Order {ids} {
     variable state
     set keyed [lmap id $ids {
         set block [dict get $state instances $id block]
-        list [expr {$block eq "program" ? 0 : [dict get $state context positions $block]}] \
+        list [if {$block eq "program"} {string cat 0} else {dict get $state context positions $block}] \
             [string range $id 1 end] $id
     }]
     return [lmap entry [lsort -integer -index 0 [lsort -integer -index 1 $keyed]] {
@@ -2111,9 +2132,9 @@ proc hir::specialize::explain {hir {analysis ""}} {
         append header "   \[$id, [hir::aot::LocationText [dict get $region location]]\]"
         lappend lines $header
         if {$block ne "program"} {
-            lappend lines "  params:   [expr {[dict get $region params] eq "" ? "(none)" : [join [lmap p [dict get $region params] {
+            lappend lines "  params:   [if {[dict get $region params] eq ""} {string cat "(none)"} else {join [lmap p [dict get $region params] {
                 string cat [dict get $p name] " : " [hir::types::show [dict get $p type]]
-            }] {, }]}]"
+            }] {, }}]"
             lappend lines "  result:   [hir::types::show [dict get $instance result]]"
         }
         set calls [lsort -unique [lmap {e target} [dict get $instance calls] {label $analysis $target}]]
@@ -2126,7 +2147,7 @@ proc hir::specialize::explain {hir {analysis ""}} {
             lappend lines "    [hir::aot::LocationText [dict get $blocker location]]  [dict get $blocker expr]  [dict get $blocker kind]: [dict get $blocker message]"
         }
         set requirements [dict get $region requirements]
-        lappend lines "  runtime:  [expr {$requirements eq "" ? "none" : [join $requirements {, }]}]"
+        lappend lines "  runtime:  [if {$requirements eq ""} {string cat "none"} else {join $requirements {, }}]"
         lappend lines ""
     }
     set summary [summary $hir $analysis $regions]

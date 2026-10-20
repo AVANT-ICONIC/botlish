@@ -96,7 +96,7 @@ proc hir::borrow::Contract {hir node} {
         return ""
     }
     set meta [core::native::metadata [dict get [hir::symbol $hir $target] name]]
-    return [expr {[dict exists $meta foreign] ? [dict get $meta foreign] : ""}]
+    return [dict getdef $meta foreign ""]
 }
 
 # 1 if pointee POINTEE may be byte storage: ffi::c::Void, or a C integer
@@ -165,7 +165,7 @@ proc hir::borrow::Parameters {hir e contract} {
 # or an explicit imprint.
 proc hir::borrow::ImprintArgTypes {contract argTypes} {
     return [lmap param [dict get $contract params] argType $argTypes {
-        expr {[hir::types::IsCPtr [dict get $param type]] && [IsOwner $argType] ? "" : $argType}
+        if {[hir::types::IsCPtr [dict get $param type]] && [IsOwner $argType]} {string cat ""} else {set argType}
     }]
 }
 
@@ -223,14 +223,14 @@ proc hir::borrow::Type {hirVar e meta argTypes} {
 # -1.
 proc hir::borrow::resultAlias {hir e} {
     set node [dict get $hir exprs $e]
-    return [expr {[dict exists $node resultAlias] ? [dict get $node resultAlias] : -1}]
+    return [dict getdef $node resultAlias -1]
 }
 
 # The exposures call E records ({INDEX ACCESS NAME} per exposed argument),
 # or {}.
 proc hir::borrow::transports {hir e} {
     set node [dict get $hir exprs $e]
-    return [expr {[dict exists $node borrows] ? [dict get $node borrows] : {}}]
+    return [dict getdef $node borrows {}]
 }
 
 # The diagnostics of call E (NODE) of the -foreign native NAME
@@ -268,7 +268,7 @@ proc hir::borrow::VerifyCall {hirVar ranges e node name} {
 # The replayed refusal of call E (VerifyCall), or "".
 proc hir::borrow::refused {hir e} {
     set node [dict get $hir exprs $e]
-    return [expr {[dict exists $node borrowRefused] ? [dict get $node borrowRefused] : ""}]
+    return [dict getdef $node borrowRefused ""]
 }
 
 # The problems of VerifyCall, as {KIND MESSAGE EXPR}.
@@ -305,7 +305,11 @@ proc hir::borrow::Problems {hir ranges e node name} {
             }
         }
         set declared [dict get $param type]
-        set argRange [expr {$ranges ne "" && [dict exists $ranges $arg] ? [dict get $ranges $arg] : [hir::range::unknown]}]
+        if {$ranges ne "" && [dict exists $ranges $arg]} {
+            set argRange [dict get $ranges $arg]
+        } else {
+            set argRange [hir::range::unknown]
+        }
         if {[hir::range::ProvesValueAcceptedBy $argType $argRange $declared]} {
             continue
         }

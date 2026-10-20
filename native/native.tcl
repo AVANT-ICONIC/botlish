@@ -595,7 +595,7 @@ proc native::NirHops {text} {
     foreach line [split $text \n] {
         if {[regexp {^func (\d+) "[^"]*" params=\d+.* pnames="([^"]*)"} $line -> id pnames]} {
             set current $id
-            dict set dotted $id [llength [lmap p $pnames {expr {[regexp {\.\d+$} $p] ? $p : [continue]}}]]
+            dict set dotted $id [llength [lmap p $pnames {if {[regexp {\.\d+$} $p]} {set p} else {continue}}]]
         }
     }
     foreach line [split $text \n] {
@@ -650,7 +650,11 @@ proc native::TransportMetrics {records text facts} {
         }
         dict incr frontier [dict get $rec frontier]
         incr afterLocal [dict get $rec afterLocalUse]
-        set tag [expr {[dict get $rec class] eq "materialized" ? [dict get $rec reason] : [lindex [dict get $rec mats] 0]}]
+        if {[dict get $rec class] eq "materialized"} {
+            set tag [dict get $rec reason]
+        } else {
+            set tag [lindex [dict get $rec mats] 0]
+        }
         if {$tag ne ""} {
             if {$tag eq "transport-budget"} {
                 dict incr causes budget
@@ -693,7 +697,7 @@ proc native::transportCensusText {hir args} {
             }
             lappend lines [format "%-34s %-6s %s%d-field -> %d  %-9s args=%d rets=%d%s score=%.1f/%.1f frontier=%s%s phys=%d  %s" \
                 $label $expr [expr {$named ? "named " : ""}] $width $transportedWidth $where $argEdges $retEdges \
-                [expr {$cyclic ? " cyclic" : ""}] $score $budget $frontier[expr {$frontierAt ne "" ? "@$frontierAt" : ""}] [expr {$afterLocalUse ? " (after local use)" : ""}] $physical $what]
+                [expr {$cyclic ? " cyclic" : ""}] $score $budget $frontier[if {$frontierAt ne ""} {string cat "@$frontierAt"} else {string cat ""}] [expr {$afterLocalUse ? " (after local use)" : ""}] $physical $what]
         }
     }
     foreach cls [dict get $c nested] {

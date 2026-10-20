@@ -85,20 +85,29 @@ namespace eval hir::errordecls {
 # The canonical identity of the error NAME declared by module NS ("" for the
 # entry program): NS::NAME, or NAME.
 proc hir::errordecls::canonical {ns name} {
-    return [expr {$ns eq "" ? $name : "${ns}::$name"}]
+    if {$ns eq ""} {
+        return $name
+    }
+    return "${ns}::$name"
 }
 
 # The declared (short) name of the error with canonical identity ID.
 proc hir::errordecls::shortName {id} {
     set cut [string last :: $id]
-    return [expr {$cut < 0 ? $id : [string range $id [expr {$cut + 2}] end]}]
+    if {$cut < 0} {
+        return $id
+    }
+    return [string range $id [expr {$cut + 2}] end]
 }
 
 # The declaring module of the error with canonical identity ID ("" for the
 # entry program's and the runtime's builtin errors).
 proc hir::errordecls::namespaceOf {id} {
     set cut [string last :: $id]
-    return [expr {$cut < 0 ? "" : [string range $id 0 [expr {$cut - 1}]]}]
+    if {$cut < 0} {
+        return ""
+    }
+    return [string range $id 0 [expr {$cut - 1}]]
 }
 
 # The canonical identity the error spelling SPELLING denotes in code of
@@ -115,7 +124,10 @@ proc hir::errordecls::namespaceOf {id} {
 proc hir::errordecls::resolve {spelling ns} {
     variable current
     if {[string first :: $spelling] >= 0} {
-        return [expr {$spelling in $current ? $spelling : ""}]
+        if {$spelling in $current} {
+            return $spelling
+        }
+        return ""
     }
     if {$ns ne "" && "${ns}::$spelling" in $current} {
         return "${ns}::$spelling"
@@ -145,7 +157,7 @@ proc hir::errordecls::unknownReason {spelling ns} {
     }
     set reason "no \"error $spelling\" declaration is visible"
     set owners [lmap id $current {
-        expr {[shortName $id] eq $spelling && [namespaceOf $id] ne $ns ? $id : [continue]}
+        if {[shortName $id] eq $spelling && [namespaceOf $id] ne $ns} {set id} else {continue}
     }]
     if {$owners ne {}} {
         append reason " here (a module's error is named qualified outside its module: [join $owners {, }])"
@@ -190,7 +202,7 @@ proc hir::errordecls::apply {decls} {
     set described [dict create]
     foreach decl $decls {
         set short [dict get $decl name]
-        set ns [expr {[dict exists $decl namespace] ? [dict get $decl namespace] : ""}]
+        set ns [dict getdef $decl namespace ""]
         set name [canonical $ns $short]
         if {[core::native::isBuiltinError $short]} {
             Fail [dict get $decl nameSpan] "error \"$short\" is already declared (a builtin error of the runtime)"
@@ -200,7 +212,7 @@ proc hir::errordecls::apply {decls} {
         }
         dict set seen $name [dict get $decl nameSpan]
         lappend order $name
-        set fields [expr {[dict exists $decl fields] ? [dict get $decl fields] : {}}]
+        set fields [dict getdef $decl fields {}]
         if {$fields eq {}} continue
         set names {}
         set raw {}
@@ -283,14 +295,17 @@ proc hir::errordecls::applyEntries {names entries} {
         }
         dict set payloads $name [dict create names $fieldNames types [dict get $entry fields] raw {} \
             spans $spans typeSpans $spans span "" \
-            namespace [expr {[dict exists $entry namespace] ? [dict get $entry namespace] : ""}]]
+            namespace [dict getdef $entry namespace ""]]
     }
 }
 
-# 1 if error NAME declares a payload (at least one field).
+# 1 if error NAME declares a payload (at least one field). A builtin error's
+# payload is the runtime's (core::native::declareErrorPayload: NonFiniteFloat
+# carries {result: NonFiniteResult}), the same in every program, so it is no
+# entry of a program's own registration and never in its HIR text.
 proc hir::errordecls::hasPayload {name} {
     variable payloads
-    return [dict exists $payloads $name]
+    return [expr {[dict exists $payloads $name] || [core::native::builtinPayload $name] ne {}}]
 }
 
 # The payload fields of error NAME, {FIELD TYPE ...} in declaration order
@@ -298,7 +313,7 @@ proc hir::errordecls::hasPayload {name} {
 proc hir::errordecls::fields {name} {
     variable payloads
     if {![dict exists $payloads $name]} {
-        return {}
+        return [core::native::builtinPayload $name]
     }
     return [dict get $payloads $name types]
 }
@@ -307,7 +322,7 @@ proc hir::errordecls::fields {name} {
 proc hir::errordecls::fieldNames {name} {
     variable payloads
     if {![dict exists $payloads $name]} {
-        return {}
+        return [dict keys [core::native::builtinPayload $name]]
     }
     return [dict get $payloads $name names]
 }
@@ -315,7 +330,7 @@ proc hir::errordecls::fieldNames {name} {
 # The declared type of payload field FIELD of error NAME, or "".
 proc hir::errordecls::fieldType {name field} {
     set types [fields $name]
-    return [expr {[dict exists $types $field] ? [dict get $types $field] : ""}]
+    return [dict getdef $types $field ""]
 }
 
 # The static type of error NAME's payload: the anonymous struct type of its

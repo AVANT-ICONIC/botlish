@@ -58,14 +58,30 @@
 
 namespace eval hir::enums {
     # ID -> {id ID name NAME namespace NS cases {CASE ...} descriptors
-    # {CASE DESCRIPTOR ...} span SPAN}
+    # {CASE DESCRIPTOR ...} span SPAN}; a builtin enum's entry also has
+    # `builtin 1` (Reset).
     variable registry [dict create]
 }
 
+# Drops the previous compilation's enums. The runtime's builtin enums
+# (core::native::declareEnum: NonFiniteResult, the type of NonFiniteFloat's
+# payload field) are registered again: every compilation has them, under
+# their bare names, like the builtin errors, and none is ever in a program's
+# own `sourceTypes`.
 proc hir::enums::Reset {} {
     variable registry
     set registry [dict create]
+    dict for {id cases} [core::native::builtinEnums] {
+        set descriptors [dict create]
+        foreach case $cases {
+            dict set descriptors $case [dict create name $case span "" payload {}]
+        }
+        dict set registry $id [dict create id $id name $id namespace "" cases $cases \
+            descriptors $descriptors span "" builtin 1]
+    }
 }
+
+hir::enums::Reset
 
 proc hir::enums::Fail {span message {kind TYPE}} {
     core::semanticError $kind "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
@@ -74,7 +90,10 @@ proc hir::enums::Fail {span message {kind TYPE}} {
 # The declaration identity of an enum NAME declared in module NAMESPACE (""
 # for the entry program).
 proc hir::enums::identity {name namespace} {
-    return [expr {$namespace eq "" ? $name : "${namespace}::${name}"}]
+    if {$namespace eq ""} {
+        return $name
+    }
+    return "${namespace}::${name}"
 }
 
 # 1 if ID is a registered enum declaration identity.
@@ -95,7 +114,10 @@ proc hir::enums::lookup {name {ns ""}} {
         return ""
     }
     if {[string first :: $name] >= 0} {
-        return [expr {[dict exists $registry $name] ? $name : ""}]
+        if {[dict exists $registry $name]} {
+            return $name
+        }
+        return ""
     }
     set own [identity $name $ns]
     if {[dict exists $registry $own]} {
@@ -104,6 +126,11 @@ proc hir::enums::lookup {name {ns ""}} {
     set imported [hir::imports::typeNamed $ns $name]
     if {$imported ne "" && [dict exists $registry $imported]} {
         return $imported
+    }
+    if {[core::native::isBuiltinEnum $name]} {
+        # A builtin enum, visible in every module (no module declares or
+        # imports its name: apply, surface/modules.tcl).
+        return $name
     }
     return ""
 }
@@ -246,7 +273,8 @@ proc hir::enums::apply {decls} {
             set name [lindex [split [string map {:: \x01} $id] \x01] end]
         }
         if {$name in {Int any never Fn Coroutine enum} || [core::type::isBuiltinName $name]
-                || [core::type::valid $id] || [dict exists $::hir::types::constructors $name]} {
+                || [core::type::valid $id] || [dict exists $::hir::types::constructors $name]
+                || [core::native::isBuiltinEnum $name]} {
             Fail [dict get $decl nameSpan] "\"$name\" cannot be declared as an enum: the name is already a built-in or declared type"
         }
         if {[dict exists $registry $id]} {

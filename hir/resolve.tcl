@@ -352,7 +352,10 @@ proc hir::resolve::LexicalTarget {hirVar s name} {
                 return ambient
             }
             root {
-                return [expr {$name in [RootNames] ? [list root $name] : ""}]
+                if {$name in [RootNames]} {
+                    return [list root $name]
+                }
+                return ""
             }
         }
     }
@@ -438,10 +441,14 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} 
             set arity ""
         } elseif {[llength $target] == 2} {
             set identity native:$name
-            set arity [expr {[core::native::exists $name] ? [dict get [core::native::metadata $name] arity] : ""}]
+            if {[core::native::exists $name]} {
+                set arity [dict get [core::native::metadata $name] arity]
+            } else {
+                set arity ""
+            }
         } else {
             set identity [CandidateIdentity hir $target]
-            set arity [CandidateArity hir [expr {[string match binding:* $identity] ? [string range $identity 8 end] : $target}]]
+            set arity [CandidateArity hir [if {[string match binding:* $identity]} {string range $identity 8 end} else {set target}]]
         }
         if {![dict exists $found $identity]} {
             dict set found $identity [dict create display $name kind lexical ns "" identity $identity]
@@ -461,7 +468,10 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} 
         if {$arity ne "" && $arity ne "*" && $arity != $argCount} continue
         set c
     }]
-    return [expr {$fitting ne "" ? $fitting : $all}]
+    if {$fitting ne ""} {
+        return $fitting
+    }
+    return $all
 }
 
 # The key naming the method-style call NODE (a call syntax node) across
@@ -496,7 +506,7 @@ proc hir::resolve::MethodChoice {hirVar e node candidates} {
             }
         }
     }
-    dict set hir methodCalls [expr {$key ne "" ? $key : $e}] [dict create expr $e \
+    dict set hir methodCalls [if {$key ne ""} {set key} else {set e}] [dict create expr $e \
         name [dict get [dict get $node callee] name] \
         candidates [lmap c $candidates {dict get $c display}] chosen [dict get $chosen display]]
     return $chosen
@@ -706,14 +716,22 @@ proc hir::resolve::ResolveProofs {hirVar e node params declaredTypes declared ct
         set typeText [ShowTypeExpr [dict get $clause type]]
         set index [lsearch -exact $ordinary $name]
         if {$index < 0} {
-            set flags [expr {[dict exists $node flags] ? [lmap f [dict get $node flags] {lindex $f 0}] : {}}]
-            set contexts [expr {[dict exists $node contextParams] ? [lmap c [dict get $node contextParams] {lindex $c 0}] : {}}]
+            if {[dict exists $node flags]} {
+                set flags [lmap f [dict get $node flags] {lindex $f 0}]
+            } else {
+                set flags {}
+            }
+            if {[dict exists $node contextParams]} {
+                set contexts [lmap c [dict get $node contextParams] {lindex $c 0}]
+            } else {
+                set contexts {}
+            }
             if {$name in $flags} {
                 set why "\"$name\" is a flag, not an ordinary parameter"
             } elseif {$name in $contexts} {
                 set why "\"$name\" is a context parameter, not an ordinary parameter"
             } else {
-                set why "the function has no parameter \"$name\" (its parameters: [expr {$ordinary eq {} ? "none" : [join $ordinary {, }]}])"
+                set why "the function has no parameter \"$name\" (its parameters: [if {$ordinary eq {}} {string cat "none"} else {join $ordinary {, }}])"
             }
             hir::DiagnoseAt hir PROOF-CLAUSE "proof clause \"proves $name: $typeText\" must name one of the function's ordinary parameters: $why" $e $paramOrigin
             continue
@@ -864,13 +882,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 SetField hir $e nomethod 1
             }
             set params {}
-            set paramTypes [expr {[dict exists $node paramTypes] ? [dict get $node paramTypes]
-                : [lrepeat [llength [dict get $node params]] {}]}]
+            set paramTypes [if {[dict exists $node paramTypes]} {dict get $node paramTypes} else {lrepeat [llength [dict get $node params]] {}}]
             set declaredParamTypes {}
             foreach param [dict get $node params] paramType $paramTypes {
                 lassign $param name paramOrigin
-                set first [expr {[dict exists $hir scopes $bodyScope names $name]
-                    ? [dict get $hir scopes $bodyScope names $name] : ""}]
+                set first [dict getdef $hir scopes $bodyScope names $name ""]
                 set b [NewBinding hir $name param $bodyScope $paramOrigin]
                 if {$first ne ""} {
                     # Only reachable from syntax built without core IR's shape
@@ -940,7 +956,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             lassign [hir::flags::Declare hir $e $node $bodyScope [CtxNamespace $ctx]] flagBindings flagTypes
             lappend params {*}$flagBindings
             lappend declaredParamTypes {*}$flagTypes
-            SetField hir $e flags [lmap flag [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] {lindex $flag 0}]
+            SetField hir $e flags [lmap flag [dict getdef $node flags {}] {lindex $flag 0}]
             # The context section (CONTEXTS.md): not parameters. Each entry
             # is an ordinary local of the body, bound first, to the installed
             # context of its type (hir::contexts::DeclareParams).
@@ -953,7 +969,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e declaredParamTypes $declaredParamTypes
             SetField hir $e captures {}
             SetField hir $e staticRefs {}
-            set declared [expr {[dict exists $node declaredResult] ? [dict get $node declaredResult] : {}}]
+            set declared [dict getdef $node declaredResult {}]
             if {$declared ne {}} {
                 if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx] 1} normalized options]} {
                     hir::Diagnose hir [TypeErrorKind $options TYPE] [format {unknown or invalid result type %s: %s} [ShowTypeExpr $declared] $normalized] $e
@@ -970,7 +986,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
             if {$resultWitness ne ""} {
                 # A declared trait result: the witness the plan proved it has.
                 SetField hir $e traitResult $declared
-                set declared [expr {$resultWitness eq "-" ? {} : $resultWitness}]
+                if {$resultWitness eq "-"} {
+                    set declared {}
+                } else {
+                    set declared $resultWitness
+                }
             }
             SetField hir $e declaredResult $declared
             SetField hir $e resultType ""
@@ -982,7 +1002,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             # resolved parameters and result: the generic metadata every
             # consumer reads (hir/refine.tcl), never a predicate's name.
             SetField hir $e proofs [ResolveProofs hir $e $node $params $declaredParamTypes $declared $ctx]
-            set declaredErrorPairs [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+            set declaredErrorPairs [dict getdef $node declaredErrors {}]
             set errorNames {}
             set seenErrors [dict create]
             foreach pair $declaredErrorPairs {
@@ -1036,7 +1056,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 return $e
             }
             set layoutNative [LayoutNative $written]
-            set layoutRole [expr {$layoutNative eq "" || [dict exists $node method] ? "" : [hir::layouts::Role $layoutNative]}]
+            if {$layoutNative eq "" || [dict exists $node method]} {
+                set layoutRole ""
+            } else {
+                set layoutRole [hir::layouts::Role $layoutNative]
+            }
             if {[hir::layouts::RoleOf $layoutRole query] ne ""} {
                 # A compile-time fact of a layout (BINARY-LAYOUT.md):
                 # binary::layout_length(L) is L's size, a constant.
@@ -1430,7 +1454,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # ignored payload that owns affine values gets a hidden
                 # binding, so it is released by the ordinary rules
                 # (hir/affine.tcl) -- never left to a collector.
-                set payload [expr {[dict exists $handler payload] ? [dict get $handler payload] : ""}]
+                set payload [dict getdef $handler payload ""]
                 set binding ""
                 if {$payload ne ""} {
                     set binding [NewBinding hir [dict get $payload name] param $branch [dict get $payload origin]]
@@ -1539,7 +1563,7 @@ proc hir::resolve::CoroutineResume {hirVar e ctx} {
 # The module namespace ("" for the entry program) the code of CTX is in:
 # what an unqualified struct name resolves against.
 proc hir::resolve::CtxNamespace {ctx} {
-    return [expr {[dict exists $ctx namespace] ? [dict get $ctx namespace] : ""}]
+    return [dict getdef $ctx namespace ""]
 }
 
 # Resolves struct construction E (STRUCTS.md): the field initializers in
@@ -1596,7 +1620,11 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
         } else {
             set tns [dict get $typeRef namespace]
             set tname [dict get $typeRef name]
-            set spelling [expr {$tns eq "" ? $tname : "${tns}::$tname"}]
+            if {$tns eq ""} {
+                set spelling $tname
+            } else {
+                set spelling "${tns}::$tname"
+            }
             set id [hir::structs::lookup $spelling $ns]
             if {$id eq ""} {
                 set why [expr {[hir::structs::IsOtherType $tname] && $tns eq ""
@@ -1816,7 +1844,11 @@ proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
     upvar 1 $hirVar hir
     set written [dict get $node callee]
     if {[lindex $action 0] in {context unreachable dead}} {
-        set origin [expr {[dict exists $node method] ? [dict get $written nameOrigin] : [dict get $written origin]}]
+        if {[dict exists $node method]} {
+            set origin [dict get $written nameOrigin]
+        } else {
+            set origin [dict get $written origin]
+        }
         set c [hir::NewId hir expr]
         dict set hir exprs $c [dict create id $c kind ref origin $origin scope [dict get $ctx scope] type "" reachable 1]
         if {[lindex $action 0] eq "unreachable"} {
@@ -1968,7 +2000,10 @@ proc hir::resolve::LayoutNative {written} {
         return ""
     }
     set name [dict get $written name]
-    return [expr {[hir::layouts::Role $name] ne "" ? $name : ""}]
+    if {[hir::layouts::Role $name] ne ""} {
+        return $name
+    }
+    return ""
 }
 
 proc hir::resolve::LayoutNotAValueMessage {name} {

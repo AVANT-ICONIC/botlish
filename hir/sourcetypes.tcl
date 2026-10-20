@@ -226,7 +226,10 @@ proc hir::sourcetypes::Identity {decl} {
     }
     set ns [dict get $decl namespace]
     set name [dict get $decl name]
-    return [expr {$ns eq "" ? $name : "${ns}::$name"}]
+    if {$ns eq ""} {
+        return $name
+    }
+    return "${ns}::$name"
 }
 
 # The identity the parent type spelled PARENT in DECL's declaration denotes,
@@ -241,7 +244,11 @@ proc hir::sourcetypes::ParentIdentity {decl byName} {
     if {$parent eq "Int"} {
         return Int
     }
-    set own [expr {$ns eq "" ? $parent : "${ns}::$parent"}]
+    if {$ns eq ""} {
+        set own $parent
+    } else {
+        set own "${ns}::$parent"
+    }
     if {[dict exists $byName $own]} {
         return $own
     }
@@ -365,7 +372,7 @@ proc hir::sourcetypes::CheckDeclaredName {decl} {
         return
     }
     if {$name in {Int any never Fn} || [core::type::isBuiltinName $name]
-            || [dict exists $::hir::types::constructors $name]} {
+            || [dict exists $::hir::types::constructors $name] || [core::native::isBuiltinEnum $name]} {
         Fail [dict get $decl nameSpan] \
             "type \"$name\" cannot be declared: the name is already a built-in type"
     }
@@ -396,8 +403,7 @@ proc hir::sourcetypes::RegisterRefinement {decl structDecls} {
                 REFINEMENT-CARRIER
         }
         foreach struct $structDecls {
-            set structId [expr {[dict get $struct namespace] eq "" ? [dict get $struct name]
-                : "[dict get $struct namespace]::[dict get $struct name]"}]
+            set structId [if {[dict get $struct namespace] eq ""} {dict get $struct name} else {string cat "[dict get $struct namespace]::[dict get $struct name]"}]
             if {$spelled eq $structId || ($spelled eq [dict get $struct name] && [dict get $struct namespace] eq $ns)} {
                 Fail [dict get $decl carrierSpan] \
                     "invalid refinement carrier $carrierText for \"$id\": $structId is a struct type, and refinements of struct values are not supported yet (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)" \
@@ -527,7 +533,7 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
     # the loader synthesizes for the compilation's C target
     # (hir::cabi::NamespaceTypeDecls), or its HIR text read back. Its short
     # name may be a built-in one (ffi::c::Int): its identity is qualified.
-    set cabi [expr {[dict exists $decl cabi] ? [dict get $decl cabi] : ""}]
+    set cabi [dict getdef $decl cabi ""]
     if {$name eq "Int" && $cabi eq ""} {
         Fail [dict get $decl nameSpan] \
             "\"Int\" is the compiler's own built-in integer type and cannot be redeclared"
@@ -563,7 +569,7 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
     }
     core::type::register $id -base int -parents $parents -integer-domain $domain -source 1 -c-abi $cabi
     lappend generation [list type $id]
-    set entry [dict create name $id parent [expr {$parentName eq "Int" ? "Int" : $parentId}] \
+    set entry [dict create name $id parent [if {$parentName eq "Int"} {string cat "Int"} else {set parentId}] \
         domain [dict get [core::type::metadata $id] integerDomain]]
     if {$cabi ne ""} {
         dict set entry cabi $cabi

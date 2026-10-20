@@ -112,7 +112,11 @@ proc hir::foreign::apply {decls linkDecls} {
     foreach decl $decls {
         set ns [dict get $decl namespace]
         set name [dict get $decl name]
-        set key [expr {$ns eq "" ? $name : "${ns}::$name"}]
+        if {$ns eq ""} {
+            set key $name
+        } else {
+            set key "${ns}::$name"
+        }
         set where [expr {$ns eq "" ? "the entry program" : "module \"$ns\""}]
         set what "extern c fn \"$name\""
         if {[dict exists $registry $key]} {
@@ -182,13 +186,17 @@ proc hir::foreign::apply {decls linkDecls} {
             }
             set provenance $written
         }
-        set symbol [expr {[dict get $decl symbol] ne "" ? [dict get $decl symbol] : $name}]
+        if {[dict get $decl symbol] ne ""} {
+            set symbol [dict get $decl symbol]
+        } else {
+            set symbol $name
+        }
         set contract [dict create params $params result $result provenance $provenance]
         set native [nativeName $key]
         set abi [dict create params $abiParams result [AbiClass $result]]
         set kinds [lmap p $params {
             set t [dict get $p type]
-            expr {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t] ? "any" : ($t in {bool Float64} ? $t : "int")}
+            if {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t]} {string cat "any"} elseif {$t in {bool Float64}} {set t} else {string cat "int"}
         }]
         set extern [dict create key $key namespace $ns name $name symbol $symbol abi $abi]
         # A double C returns is a Float64 only when it is finite: the call
@@ -273,7 +281,7 @@ proc hir::foreign::tables {} {
 # HIR's extern c fn declarations (its `foreign` side table): KEY -> {key
 # namespace name symbol native origin contract abi}.
 proc hir::foreign::declarations {hir} {
-    return [expr {[dict exists $hir foreign] ? [dict get $hir foreign] : {}}]
+    return [dict getdef $hir foreign {}]
 }
 
 # HIR's link plan: the library names, in order.

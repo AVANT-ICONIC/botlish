@@ -139,7 +139,11 @@ proc core::coroutines::resumeImpl {handle args} {
     if {[llength $args] > 1} {
         core::semanticError ARITY "a coroutine is resumed with at most one message, got [llength $args]"
     }
-    set message [expr {$args eq "" ? [core::value::unit] : [lindex $args 0]}]
+    if {$args eq ""} {
+        set message [core::value::unit]
+    } else {
+        set message [lindex $args 0]
+    }
     switch -- [dict get $store $id state] {
         suspended {
             return [Segment $id [list [dict get $store $id continuation] $message]]

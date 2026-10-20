@@ -138,7 +138,7 @@ proc hir::static::Accepted {node body position} {
 ====
         if {$position eq "statement"} {
             set binds [lmap n [dict get $node body] {
-                expr {[dict get $n kind] eq "bind" && [dict get $n value kind] ne "block" ? $n : [continue]}
+                if {[dict get $n kind] eq "bind" && [dict get $n value kind] ne "block"} {set n} else {continue}
             }]
             return [concat $binds [list [Reified $node [lindex [dict get $decisions $key] 1]]]]
         }
@@ -152,7 +152,7 @@ proc hir::static::Accepted {node body position} {
 ====
         if {$position eq "statement"} {
             set fns [lmap n [dict get $node body] {
-                expr {[dict get $n kind] eq "bind" && [dict get $n value kind] eq "block" ? $n : [continue]}
+                if {[dict get $n kind] eq "bind" && [dict get $n value kind] eq "block"} {set n} else {continue}
             }]
             return [concat $fns [list [Reified $node [lindex [dict get $decisions $key] 1]]]]
         }

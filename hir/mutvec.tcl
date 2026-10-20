@@ -278,7 +278,7 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
         # another known type cannot be one. (A binding of a type too
         # imprecise to say -- a generic function's parameter -- is a place
         # whose entry copy is dynamic: HeldDescriptor.)
-        return "$what is `[join [concat [list $shown] $fields] .]`, whose binding is not statically a $name\[T\] place (its type is [hir::types::show [expr {$pathType eq "" ? "any" : $pathType}]]): only a binding of a collection type owns a header it may mutate (bind the narrowed value to a name first -- `copy = $shown` -- and mutate that)"
+        return "$what is `[join [concat [list $shown] $fields] .]`, whose binding is not statically a $name\[T\] place (its type is [hir::types::show [if {$pathType eq ""} {string cat "any"} else {set pathType}]]): only a binding of a collection type owns a header it may mutate (bind the narrowed value to a name first -- `copy = $shown` -- and mutate that)"
     }
     if {[hir::affine::IsDestructureTemp $hir $b]} {
         return "$what is not a place"
@@ -319,7 +319,11 @@ proc hir::mutvec::ShareDescriptor {type} {
     }
     if {[hir::types::IsStructLike $type]} {
         variable shareVisiting
-        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {[hir::types::IsNamedStruct $type]} {
+            set id [lindex $type 1]
+        } else {
+            set id ""
+        }
         if {$id ne ""} {
             if {$id in $shareVisiting} {
                 return ""
@@ -375,7 +379,7 @@ proc hir::mutvec::Elaborate {hirVar} {
     if {[hir::mode $hir] ne "program" || ![Used $hir]} {
         return
     }
-    set roots [expr {[dict exists $hir mutvec roots] ? [dict get $hir mutvec roots] : {}}]
+    set roots [dict getdef $hir mutvec roots {}]
     lassign [hir::contexts::Walk $hir] owner parent rootOf calls blocks
     set currentParent $parent
     # The operations that drop affine elements carry the element drop
@@ -387,7 +391,7 @@ proc hir::mutvec::Elaborate {hirVar} {
         set name [hir::affine::NativeName $hir $e]
         if {$name eq "" || [dict get [core::native::metadata $name] dropForm] eq ""} continue
         lassign [dict get [core::native::metadata $name] dropForm] form at
-        set collection [hir::typeOf $hir [expr {$at eq "result" ? $e : [lindex [dict get $node args] $at]}]]
+        set collection [hir::typeOf $hir [if {$at eq "result"} {set e} else {lindex [dict get $node args] $at}]]
         if {[Kind $collection] eq "" || [llength $collection] != 2 || ![hir::types::IsAffine $collection]} continue
         set d [hir::affine::Descriptor $hir [lindex $collection 1]]
         if {$d eq ""} {
@@ -625,7 +629,11 @@ proc hir::mutvec::Convention {hir parent blocks rootSet} {
                 }
                 continue
             }
-            set path [expr {[dict get $node kind] in {ref project} ? [Path $hir $v] : ""}]
+            if {[dict get $node kind] in {ref project}} {
+                set path [Path $hir $v]
+            } else {
+                set path ""
+            }
             if {$path eq ""} continue
             set b [lindex $path 0]
             if {[dict exists $rootSet $b] || [dict exists $convention consumed $b]
@@ -1277,7 +1285,11 @@ proc hir::mutvec::FreshFunctions {hir parent blocks rootSet} {
             foreach x $results {
                 set type [hir::typeOf $hir $x]
                 if {[Fresh $hir $x] || ([ShareDescriptor $type] eq "" && ![MayHoldVector $type])} continue
-                set path [expr {[dict get $hir exprs $x kind] in {ref project} ? [Path $hir $x] : ""}]
+                if {[dict get $hir exprs $x kind] in {ref project}} {
+                    set path [Path $hir $x]
+                } else {
+                    set path ""
+                }
                 if {$path ne "" && [dict exists $rootSet [lindex $path 0]] && [OwnResult $hir $parent $x [lindex $path 0]]} continue
                 dict unset freshFunctions $f
                 set changed 1
@@ -1304,12 +1316,16 @@ proc hir::mutvec::Apply {hirVar wraps} {
         }
         set type [hir::typeOf $hir $e]
         if {$native in [list [ToListNativeOf vector] [ToListNativeOf array]]} {
-            set type [expr {[llength $type] == 2 && [Kind $type] ne "" ? [hir::types::MakeList [lindex $type 1]] : "list"}]
+            if {[llength $type] == 2 && [Kind $type] ne ""} {
+                set type [hir::types::MakeList [lindex $type 1]]
+            } else {
+                set type "list"
+            }
         }
         set call [NewCall hir $native $args $type $e]
         set p [lindex [dict get $parent $e] 0]
         if {$p eq ""} {
-            dict set hir roots [lmap r [dict get $hir roots] {expr {$r eq $e ? $call : $r}}]
+            dict set hir roots [lmap r [dict get $hir roots] {if {$r eq $e} {set call} else {set r}}]
         } else {
             ReplaceChild hir $p $e $call
         }
@@ -1458,7 +1474,7 @@ proc hir::mutvec::EntryRename {hirVar b d} {
     dict set hir scopes $s bindings [linsert $bindings $i $p]
     switch -- [dict get $node kind] {
         block {
-            dict set hir exprs $e params [lmap x [dict get $node params] {expr {$x eq $b ? $p : $x}}]
+            dict set hir exprs $e params [lmap x [dict get $node params] {if {$x eq $b} {set p} else {set x}}]
         }
         listloop {
             dict set hir exprs $e elementBinding $p
@@ -1477,7 +1493,11 @@ proc hir::mutvec::EntryRename {hirVar b d} {
     }
     # The body's first statement: `NAME = share(NAME#entry)`.
     set body [dict get $node body]
-    set at [expr {$body ne {} ? [lindex $body 0] : $e}]
+    if {$body ne {}} {
+        set at [lindex $body 0]
+    } else {
+        set at $e
+    }
     set atNode [dict get $hir exprs $at]
     set r [hir::NewId hir expr]
     dict set hir exprs $r [dict create id $r kind ref origin [dict get $atNode origin] scope $s \

@@ -331,7 +331,10 @@ proc surface::ast::assignIds {program} {
 }
 
 proc surface::ast::Child {parent role} {
-    return [expr {$parent eq "" ? $role : "$parent/$role"}]
+    if {$parent eq ""} {
+        return $role
+    }
+    return "$parent/$role"
 }
 
 proc surface::ast::Statements {statements parent} {
@@ -542,7 +545,10 @@ proc surface::ast::Children {node} {
         methodcall         { return [concat [list [dict get $node receiver]] [dict get $node args]] }
         binary - logical   { return [list [dict get $node left] [dict get $node right]] }
         bind - return - break - destructure - coroutinebind {
-            return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
+            if {[dict get $node value] eq ""} {
+                return {}
+            }
+            return [list [dict get $node value]]
         }
         with - yield       { return [list [dict get $node value]] }
         function - static  { return [list [dict get $node body]] }
@@ -871,7 +877,7 @@ proc surface::ast::Statement {node indent show linesVar} {
             foreach r [dict get $node requirements] {
                 set params [lmap pair [dict get $r params] {
                     lassign $pair name _ type
-                    expr {$type eq "" ? $name : "$name:[showType $type]"}
+                    if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
                 }]
                 set line "${pad}    fn [dict get $r name] ([join $params { }])"
                 if {[dict get $r resultType] ne ""} {
@@ -935,7 +941,7 @@ proc surface::ast::Statement {node indent show linesVar} {
         function {
             set params [lmap pair [dict get $node params] {
                 lassign $pair name _ type
-                expr {$type eq "" ? $name : "$name:[showType $type]"}
+                if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
             }]
             # Explicit join, not a bare "($params)" interpolation: a typed
             # parameter's label can now contain "[" "]" (an applied type,

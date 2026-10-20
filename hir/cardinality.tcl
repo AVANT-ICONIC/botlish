@@ -153,7 +153,7 @@ proc hir::cardinality::FormAdd {a b {sign 1}} {
     lassign $b cb tb
     set terms [dict create {*}$ta]
     dict for {atom coeff} $tb {
-        set n [expr {[dict exists $terms $atom] ? [dict get $terms $atom] : 0}]
+        set n [dict getdef $terms $atom 0]
         set n [expr {$n + $sign * $coeff}]
         if {$n == 0} {
             dict unset terms $atom
@@ -267,7 +267,11 @@ proc hir::cardinality::IntForm {hir e stepsVar} {
     }
     set node [dict get $hir exprs $id]
     set name [NativeName $hir $node]
-    set args [expr {$name eq "" ? {} : [dict get $node args]}]
+    if {$name eq ""} {
+        set args {}
+    } else {
+        set args [dict get $node args]
+    }
     if {$name in {+ -} && [llength $args] == 2} {
         set x [IntForm $hir [lindex $args 0] steps]
         set y [IntForm $hir [lindex $args 1] steps]
@@ -315,7 +319,11 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
     }
     set node [dict get $hir exprs $id]
     set name [NativeName $hir $node]
-    set args [expr {$name eq "" ? {} : [dict get $node args]}]
+    if {$name eq ""} {
+        set args {}
+    } else {
+        set args [dict get $node args]
+    }
     switch -- $name/[llength $args] {
         str::concat/2 {
             return [FormAdd [StrLength $hir [lindex $args 0] steps] [StrLength $hir [lindex $args 1] steps]]
@@ -358,7 +366,10 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
         if {$length ne "" && [lindex $length 1] < [llength $args]} {
             lassign $length how index
             set arg [lindex $args $index]
-            return [expr {$how eq "int" ? [IntForm $hir $arg steps] : [ListLength $hir $arg steps]}]
+            if {$how eq "int"} {
+                return [IntForm $hir $arg steps]
+            }
+            return [ListLength $hir $arg steps]
         }
     }
     return [FormAtom [list cap [list e $id]]]
@@ -471,7 +482,11 @@ proc hir::cardinality::show {hir form} {
     foreach part $parts {
         lassign $part negative text
         if {$out eq ""} {
-            set out [expr {$negative ? "-$text" : $text}]
+            if {$negative} {
+                set out "-$text"
+            } else {
+                set out $text
+            }
         } else {
             append out [expr {$negative ? " - " : " + "}] $text
         }
@@ -515,11 +530,18 @@ proc hir::cardinality::ShowExpr {hir e} {
     switch -- [dict get $node kind] {
         ref {
             set b [dict get $node binding]
-            return [expr {$b eq "" ? [dict get $node name] : [hir::semantic::SourceName $hir $b]}]
+            if {$b eq ""} {
+                return [dict get $node name]
+            }
+            return [hir::semantic::SourceName $hir $b]
         }
         call {
             set callee [dict get $node callee]
-            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "<call>"}]
+            if {[dict get $hir exprs $callee kind] eq "ref"} {
+                set name [hir::semantic::RefName $hir $callee]
+            } else {
+                set name "<call>"
+            }
             return "${name}(...)"
         }
         const { return [lindex [dict get $node literal] end] }

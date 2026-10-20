@@ -272,7 +272,7 @@ proc surface::lower::LayoutDeclOf {node namespace} {
 proc surface::lower::TraitDeclOf {node namespace} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace requirements [dict get $node requirements] span [dict get $node span] \
-        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
+        context [dict getdef $node context 0]]
 }
 
 # The declaration dict of a `structdecl` node declared in module NAMESPACE (""
@@ -283,8 +283,8 @@ proc surface::lower::TraitDeclOf {node namespace} {
 proc surface::lower::StructDeclOf {node namespace} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace fields [dict get $node fields] span [dict get $node span] \
-        opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}] \
-        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
+        opaque [dict getdef $node opaque 0] \
+        context [dict getdef $node context 0]]
 }
 
 # The declaration dict of a `typedecl` node declared in module NAMESPACE (""
@@ -329,7 +329,7 @@ proc surface::lower::TypeDeclOf {node {namespace ""}} {
 proc surface::lower::ErrorDeclOf {node {namespace ""}} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace span [dict get $node span] \
-        fields [expr {[dict exists $node fields] ? [dict get $node fields] : {}}]]
+        fields [dict getdef $node fields {}]]
 }
 
 # The tail both surface::lowerToHir and surface::modules::compileProgramFile

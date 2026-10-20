@@ -92,7 +92,7 @@ proc hir::cabi::HasNamespaceTypes {ns} {
 # every target's. A HIR from HIR text records the target its C integer
 # scalars name (hir::read); one from core IR text none.
 proc hir::cabi::targetOf {hir} {
-    return [expr {[dict exists $hir target] ? [dict get $hir target] : ""}]
+    return [dict getdef $hir target ""]
 }
 
 # Why HIR cannot stand for a compilation for TARGET, or "" when it can: a HIR
@@ -136,7 +136,10 @@ proc hir::cabi::NamespaceTypeDecls {ns target span} {
 # ffi::c), which the loader authorizes like a module's own types.
 proc hir::cabi::IntrinsicTypeNames {ns} {
     variable intrinsicTypes
-    return [expr {$ns eq $::core::cabi::namespace ? $intrinsicTypes : {}}]
+    if {$ns eq $::core::cabi::namespace} {
+        return $intrinsicTypes
+    }
+    return {}
 }
 
 # The C target of the compilation whose declarations are installed: the one
@@ -144,7 +147,10 @@ proc hir::cabi::IntrinsicTypeNames {ns} {
 # hir/read.tcl from HIR text), or "" when no file of it imports ffi::c.
 proc hir::cabi::CompilationTarget {} {
     set info [core::type::cabiOf "$::core::cabi::namespace\::[lindex [core::cabi::scalarNames] 0]"]
-    return [expr {$info eq "" ? "" : [dict get $info target]}]
+    if {$info eq ""} {
+        return ""
+    }
+    return [dict get $info target]
 }
 
 # The spellings of the intrinsic types, as a type expression writes them.
@@ -318,7 +324,11 @@ proc hir::cabi::verify {hirVar} {
             # A C function pointer (or any C address) is no Botlish callable:
             # calling C is the next milestone (C-ABI-TYPES.md).
             set callee [dict get $hir exprs [dict get $node callee]]
-            set name [expr {[dict get $callee kind] eq "ref" ? [hir::semantic::RefName $hir [dict get $node callee]] : "this value"}]
+            if {[dict get $callee kind] eq "ref"} {
+                set name [hir::semantic::RefName $hir [dict get $node callee]]
+            } else {
+                set name "this value"
+            }
             hir::Diagnose hir TYPE [format \
                 {%s is a C %s, %s: Botlish cannot call one yet (calling C is the next milestone)} \
                 $name [expr {[hir::types::IsCFnPtr $calleeType] ? "function pointer" : "pointer"}] \
@@ -376,5 +386,5 @@ proc hir::cabi::ResolveImprint {typeExpr ns {variables {}}} {
     if {$typeExpr eq [VoidName]} {
         return void
     }
-    return [hir::resolve::ResolveTypeExpr $typeExpr $ns [expr {$variables eq "" ? 0 : $variables}]]
+    return [hir::resolve::ResolveTypeExpr $typeExpr $ns [if {$variables eq ""} {string cat 0} else {set variables}]]
 }

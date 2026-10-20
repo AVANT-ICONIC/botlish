@@ -8149,3 +8149,15 @@ tests/float64.test float-c-double-round-trip pass
 tests/float64.test float-c-double-nonfinite-rejected pass
 tests/float64.test float-c-double-tcl-backends pass
 tests/float64.test float-target-independent pass
+tests/float64.test float-nonfinite-payload pass
+tests/float64.test float-nonfinite-payload-binding pass
+tests/float64.test float-nonfinite-payload-enum pass
+tests/float64.test float-nonfinite-payload-module pass
+tests/float64.test float-nonfinite-payload-uncaught pass
+tests/float64.test float-nonfinite-payload-hir pass
+tests/float64.test float-c-double-nonfinite-payload pass
+tests/numeric-looking-names.test nl-no-string-ternary pass
+tests/numeric-looking-names.test nl-the-hazard pass
+tests/numeric-looking-names.test nl-names-front-end pass
+tests/numeric-looking-names.test nl-names-backends pass
+tests/numeric-looking-names.test nl-the-reported-program pass

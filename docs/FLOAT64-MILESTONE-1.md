@@ -60,6 +60,24 @@ m = mean(x, y):
   the compile-time UNHANDLED-ERROR. It is never clamped, and no
   `isnan`/`isinf` exists. The name describes the condition, not the type,
   so every future width will fail with the same error.
+* **Which non-finite result it was** (section 15). The error carries the
+  payload `{result: NonFiniteResult}`, the builtin enum's
+  `PositiveInfinity`, `NegativeInfinity` or `NotANumber`:
+
+  ```botlish
+  fn ratio(a: Float64, b: Float64) -> Float64:
+      a / b:
+          on NonFiniteFloat {result}:
+              if result == NonFiniteResult::NotANumber:
+                  return 0.0
+              -1.0
+  ```
+
+  Overflow and division by zero give the infinity of the result's sign;
+  only `0.0 / 0.0` gives `NotANumber`. Division by `-0.0` is division by
+  zero, the one zero, so `1.0 / -0.0` is `PositiveInfinity`. The payload is
+  a fact about one failure, read by the handler where it happened. No value
+  is ever NaN or an infinity, and no operation tests a value for being one.
 * **Annotations.** `Float64` is a type name wherever a type can be written:
   parameters, results, struct fields, `List[Float64]`, `Fn{...}`
   contracts. An untyped parameter used with a Float64 operand is inferred
@@ -164,9 +182,9 @@ Every path that makes a Float64 checks finiteness before a value exists.
 
 | Path | Where | Check |
 |---|---|---|
-| Tcl backends (interp, compile) | `core::float::apply` -> `Make` | a zero divisor, a Tcl domain error (a NaN result: Tcl raises on `0.0 / 0.0` but returns `Inf` for `1.0 / 0.0` and on overflow), or a result `isfinite` rejects: `{error NonFiniteFloat}`, raised as the declared error |
+| Tcl backends (interp, compile) | `core::float::apply` -> `Make` | a zero divisor, a Tcl domain error (a NaN result: Tcl raises on `0.0 / 0.0` but returns `Inf` for `1.0 / 0.0` and on overflow), or a result `isfinite` rejects: `{error NonFiniteFloat RESULT}` (`Classify`, `DivisionByZero`), raised as the declared error with its payload |
 | Constant folding | the same `core::float::apply` (section 6) | the same code |
-| Native code | `codegen::clif`'s `float_op` | the unboxed result `r + 0.0` (negative zero becomes zero), then `fabs(r) <= f64::MAX` (false for NaN and both infinities); otherwise `rt_float_nonfinite` fails with the builtin error |
+| Native code | `codegen::clif`'s `float_op` | the unboxed result `r + 0.0` (negative zero becomes zero), then `fabs(r) <= f64::MAX` (false for NaN and both infinities); otherwise `rt_float_nonfinite` fails with the builtin error, given the result's class (`non_finite_code`: NaN, or the infinity's sign) |
 | A native called as a value | `runtime::ops`'s `float_apply` (`apply_op`) | the same check in Rust (`FloatType::admit`) |
 | from_int | `rt_f64_from_int`, `core::float::FromIntNative` | an Int beyond the range has no finite nearest value |
 | C results | `codegen::clif`'s foreign call | the same `fabs <= MAX` check on the returned double |
@@ -232,8 +250,9 @@ floating-point parameters filling their own register classes.
   negative zero, so C never receives one.
 * **In:** the returned double is normalized (`+ 0.0`) and checked for
   finiteness before it becomes a Float64. NaN, +Inf or -Inf fail the call
-  with `NonFiniteFloat`, so a declaration whose result is `ffi::c::Double`
-  declares that error, and callers handle it. Negative zero becomes zero.
+  with `NonFiniteFloat`, whose payload says which of the three C returned,
+  so a declaration whose result is `ffi::c::Double` declares that error,
+  and callers handle it. Negative zero becomes zero.
 * The Tcl backends refuse every C call (`NATIVE-ONLY`), these included.
 
 Not added:
@@ -356,7 +375,10 @@ semantics name no platform.
 * A numeric tower, implicit coercions.
 * Integer division.
 * A math library, fast-math, mixed precision.
-* `isnan`/`isinf`, NaN or infinity values, bit casting.
+* `isnan`/`isinf`, NaN or infinity values, bit casting. (The error's
+  `NonFiniteResult` payload, section 15, is a deliberate deviation from the
+  brief: it describes a failure at the boundary where it happened, never a
+  value.)
 * Raw IEEE construction, serialization or float text APIs.
 * Typed locals (section 2).
 
@@ -411,7 +433,7 @@ would need work for another width:
 
 ## 13. Tests
 
-* **`tests/float64.test`** (48 tests, new) covers:
+* **`tests/float64.test`** (55 tests, new) covers:
   * the lexer and parser, and the literal rule;
   * canonical text and Core IR literals;
   * the value kind, negative zero, the family table;
@@ -422,6 +444,11 @@ would need work for another width:
   * NonFiniteFloat: unhandled, at run time (division by +0.0 and -0.0, of a
     positive, a negative and a zero dividend; overflow of + - * and /),
     propagation, decided at compile time, decided equals run;
+  * NonFiniteFloat's payload: the result of every way to fail (overflow,
+    division by +0.0 and -0.0, from_int, a native called as a value, a C
+    result), whole and destructured bindings, the builtin enum in the entry
+    program and in a module, a program's own `fail`, the uncaught rendering,
+    HIR text and interchange;
   * conversions, and parity of the Tcl and native runtimes (from_int, text,
     random arithmetic);
   * HIR text and interchange, NIR, CLIF, GC stress, standalone
@@ -430,8 +457,8 @@ would need work for another width:
     rejection, -0 normalization in both directions, the Tcl refusal;
   * target independence.
 * **`tests/cffi/float-fixture.c`** is the C side.
-* **`tests/golden/float64.bot`** (29 golden tests) ports the
-  source-observable halves of 16 of those tests. Its fragment and census
+* **`tests/golden/float64.bot`** (35 golden tests) ports the
+  source-observable halves of 19 of those tests. Its fragment and census
   rows are in `audit/golden/migration/`. Every row is SPLIT: the Tcl tests
   also pin printed text and messages, so they keep running.
   `audit/golden/tools/perturb.tcl` shows each one can fail.
@@ -462,12 +489,89 @@ would need work for another width:
   must handle or declare `NonFiniteFloat`, as `float64.test` shows.
 * **No Float64-to-String conversion.** Only a program's printed result
   shows a Float64.
-* **Pre-existing bug, not caused or fixed here.** A program that names a
-  binding `nan` fails to compile with
-  `domain error: argument not in valid range (ARITH DOMAIN ...)`. Verified
-  on the base revision: `fn nan(x): x + 1` then `nan(1)`. The cause is Tcl
-  `expr`'s `?:`, which parses a string operand that reads as a number:
-  `nan` raises, and `inf` or `infinity` become `Inf`. Several front-end
-  procedures return a name through such a ternary. The fix is to replace
-  each one with `if`, across many files (mutation-harness texts included),
-  so it is left for its own change. Float64 makes such names likelier.
+* None about names any more: section 16.
+
+## 15. Follow-up: NonFiniteFloat says which result it was
+
+A handler can tell the three non-finite results apart: the error's payload
+is `{result: NonFiniteResult}`. Section 1 shows the language behavior; this
+is how it is built.
+
+* **A builtin enum.** `NonFiniteResult` (`PositiveInfinity`,
+  `NegativeInfinity`, `NotANumber`) is declared by the runtime
+  (`core::native::declareEnum`, in `core/float.tcl`). Every compilation's
+  enum registry has it (`hir::enums::Reset`), under its bare name, in every
+  module, like the builtin errors. No program declares the name, as an
+  enum, struct, trait, type or layout, and no HIR text prints it: a HIR read
+  back gets it from its own registry. Its cases name results, not a type,
+  so every future float width raises the same three.
+* **Builtin error payloads.** `core::native::declareErrorPayload` gives a
+  builtin error the fields of an anonymous struct, and
+  `hir::errordecls::fields` answers for builtin errors from there. The
+  whole payload machinery then applies unchanged: handler destructuring and
+  binding, `fail NonFiniteFloat {result: ...}` in a program's own code, and
+  MISSING-ERROR-PAYLOAD for a bare `fail NonFiniteFloat`. NonFiniteFloat is
+  the only builtin error with a payload.
+* **The Tcl backends** classify in `core::float`:
+  * `Classify` maps a non-finite double to NaN, or to the infinity of its
+    sign.
+  * `DivisionByZero` maps a zero divisor to the dividend's sign, or to
+    NotANumber for `0.0 / 0.0`.
+  * `failDeclared` carries the payload struct to `core::native::invoke`,
+    which checks that a payload-bearing builtin error comes with one.
+* **The native backend** passes the class to
+  `rt_float_nonfinite(vm, code)`:
+  * Generated code computes it from the unboxed result: an `fcmp uno`, then
+    the sign.
+  * `float_apply` and `rt_f64_from_int` compute it in Rust
+    (`non_finite_code`).
+  * The runtime fills the payload slots like any declared error's: the case
+    word and the anonymous shape are the program's own, found in its tables
+    by name.
+  * Native lowering declares that shape and enum in every program whose
+    runtime may raise the error (`RuntimeRaises`, `PayloadTables`). So
+    neither startup and neither image format changed.
+* **Folding** still decides only the error's name: KNOWN-ERROR does not
+  depend on which result it was.
+
+## 16. Follow-up: names Tcl reads as numbers
+
+Before this change, a program naming anything `nan`, `inf` or `infinity`,
+in any letter case, broke the compiler:
+
+* `fn nan(x): x + 1` failed with
+  `domain error: argument not in valid range (ARITH DOMAIN)`;
+* a struct `inf` became `Inf`.
+
+Tcl's `expr` converts its result to a number when the result string looks
+like one. The front end selected names with `expr {$c ? $name : ...}` in
+hundreds of places, so the bug was in the compiler, not in Float64; Float64
+only makes such names likelier. A one-element list of such a name has the
+same problem.
+
+The fix is a rule: the compiler never selects a value that may be a string
+with `expr`'s `?:`.
+
+* 218 `[expr {[dict exists D K] ? [dict get D K] : DEFAULT}]` became
+  `[dict getdef D K DEFAULT]`.
+* Every other ternary that could select a variable, a command result or an
+  interpolation became an `if` (a statement where it was a whole `set` or
+  `return`). `if` never converts its result.
+* Ternaries over numbers, and over constant strings that do not read as
+  numbers, stayed.
+* The mutation harnesses' mutant texts were rewritten with the code they
+  mutate; all 835 still apply.
+
+`tests/numeric-looking-names.test` holds it:
+
+* `nl-no-string-ternary` scans the compiler's sources for a ternary that
+  may select a string.
+* `nl-names-front-end` and `nl-names-backends` compile 27 programs with
+  such names and with names of the same length and letter case that Tcl
+  never reads as numbers. The programs name functions, parameters,
+  locals, fields, structs, enums and cases, errors and payload fields,
+  types, traits, refinements, coroutines, flags, layouts, modules and
+  static blocks. The two outcomes must be the same: diagnostics, warnings,
+  every backend's value and HIR interchange.
+* Planting the old `expr` in two identity procedures makes 19 of the
+  programs differ.

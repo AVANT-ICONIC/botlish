@@ -329,6 +329,78 @@ test float-nonfinite-decided-at-compile-time {a computation of exactly known ope
         }]
 } -result {{[-0.75, 1.5e300, 3.0]} {{KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "*" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this call of "float64::from_int" can never complete normally} {KNOWN-ERROR: this call can never complete normally}}}
 
+# ---------------------------------------------------------------------------
+# NonFiniteFloat's payload: which non-finite result it was
+
+test float-nonfinite-payload {NonFiniteFloat carries {result: NonFiniteResult}: the infinity of the result's sign, or NotANumber for 0.0 / 0.0 -- for overflow, division by zero, from_int and a native called as a value, on every backend} -body {
+    value [string cat "import float64\n" \
+        "fn mul(a: Float64, b: Float64) -> NonFiniteResult:\n    a * b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn div(a: Float64, b: Float64) -> NonFiniteResult:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn add(a: Float64, b: Float64) -> NonFiniteResult:\n    a + b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn sub(a: Float64, b: Float64) -> NonFiniteResult:\n    a - b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn converted(n: int) -> NonFiniteResult:\n" \
+        "    float64::from_int(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "conv = float64::from_int\n" \
+        "fn by_value(n: int) -> NonFiniteResult:\n" \
+        "    conv(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "big = 1.0e308\n" \
+        "\[mul(big, 10.0), mul(-big, 10.0), div(1.0, 0.0), div(-1.0, 0.0), div(0.0, 0.0), div(1.0, -0.0),\n" \
+        " add(big, big), sub(-big, big), converted(shift_left(1, 1100)), converted(0 - shift_left(1, 1100)), by_value(shift_left(1, 1100))\]\n"]
+} -result {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber, NonFiniteResult::PositiveInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity]}
+
+test float-nonfinite-payload-binding {the payload is an ordinary payload: bound whole (an anonymous struct), destructured, renamed, or ignored by a handler without a binding; and it propagates through the functions that declare the error} -body {
+    value [string cat \
+        "fn deep(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n" \
+        "    if n == 0:\n        x * x\n    else:\n        deep(x, n - 1)\n" \
+        "fn whole(x: Float64) -> list:\n" \
+        "    deep(x, 3):\n        on NonFiniteFloat details:\n            return \[details, details.result, details == {result: NonFiniteResult::PositiveInfinity}\]\n" \
+        "    \[\]\n" \
+        "fn renamed(x: Float64) -> bool:\n" \
+        "    deep(x, 2):\n        on NonFiniteFloat {result: what}:\n            return what == NonFiniteResult::PositiveInfinity\n" \
+        "    false\n" \
+        "fn ignored(x: Float64) -> Float64:\n" \
+        "    deep(x, 1):\n        on NonFiniteFloat:\n            -1.0\n" \
+        "big = 1.0e200\n" \
+        "\[whole(big), renamed(big), ignored(big), ignored(2.0)\]\n"]
+} -result {[[{result: NonFiniteResult::PositiveInfinity}, NonFiniteResult::PositiveInfinity, true], true, -1.0, 4.0]}
+
+test float-nonfinite-payload-enum {NonFiniteResult is a builtin enum, visible in every program like NonFiniteFloat: its cases are values, an unknown case is UNKNOWN-ENUM-CASE, no program declares the name, and a program that fails with NonFiniteFloat itself constructs its payload} -body {
+    list [value "x = NonFiniteResult::NotANumber\n\[x, x == NonFiniteResult::NotANumber, x == NonFiniteResult::PositiveInfinity\]\n"] \
+        [rejection "NonFiniteResult::Infinity\n"] \
+        [rejection "enum NonFiniteResult:\n    A\n0\n"] [rejection "struct NonFiniteResult:\n    a: int\n0\n"] \
+        [rejection "fn f(n: int) -> int errors NonFiniteFloat:\n    fail NonFiniteFloat\n0\n"] \
+        [value "fn f(n: int) -> int errors NonFiniteFloat:\n    if n < 0:\n        fail NonFiniteFloat {result: NonFiniteResult::NegativeInfinity}\n    n\nfn g(n: int) -> NonFiniteResult:\n    f(n):\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n\[g(-1), g(1)\]\n"]
+} -result {{[NonFiniteResult::NotANumber, true, false]} {UNKNOWN-ENUM-CASE: enum NonFiniteResult has no case "Infinity" (its cases: PositiveInfinity, NegativeInfinity, NotANumber)} {TYPE: "NonFiniteResult" cannot be declared as an enum: the name is already a built-in or declared type} {TYPE: "NonFiniteResult" cannot be declared as a struct: the name is already a built-in or declared type} {MISSING-ERROR-PAYLOAD: error "NonFiniteFloat" carries a payload, which "fail NonFiniteFloat" must construct: write "fail NonFiniteFloat {result: ...}" (the error's name alone is not its payload)} {[NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}
+
+test float-nonfinite-payload-module {a module names the builtin enum like the entry program: no import, the bare name} -setup {
+    set dir [makeDirectory float-module-[pid]]
+    makeFile "fn classify(a: Float64, b: Float64) -> NonFiniteResult:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" m.bot $dir
+    set main [makeFile "import m\nx = 1.0\ny = 0.0\n\[m::classify(x, y), m::classify(-x, y), m::classify(y, y)\]\n" main.bot $dir]
+} -body {
+    set hir [surface::readProgramFile $main -warnings off -cache ""]
+    lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lrange [outcomeUnderHir $backend $hir] 0 1}]
+} -cleanup {
+    file delete -force $dir
+    unset -nocomplain dir main hir
+} -result {{value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}}
+
+test float-nonfinite-payload-uncaught {an uncaught NonFiniteFloat (only under -strict 0) renders its payload identically on every backend} -body {
+    set hir [surface::compile "fn grow(x: Float64) -> Float64 errors NonFiniteFloat:\n    x * 1.0e300\ny = 0.0 - 1.0e300\ngrow(y)\n" t.bot -strict 0 -warnings off]
+    lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lrange [outcomeUnderHir $backend $hir] 0 2}]
+} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error NonFiniteFloat {result: NonFiniteResult::NegativeInfinity}>}}}
+
+test float-nonfinite-payload-hir {a handler of NonFiniteFloat's payload and NonFiniteResult's cases print as HIR text and read back exactly, and HIR interchange carries them: the builtin enum and payload are every compilation's, never a program's own declarations} -body {
+    set text "fn f(a: Float64, b: Float64) -> bool:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result == NonFiniteResult::NotANumber\n    false\nx = 0.0\nx.f(x)\n"
+    set hir [floatHir $text]
+    set printed [hir::format $hir]
+    set back [hir::interchange::decode [hir::interchange::encode $hir]]
+    list [expr {$printed eq [hir::format [hir::parse $printed]]}] [regexp {const enum \{NonFiniteResult NotANumber\}} $printed] \
+        [regexp {on NonFiniteFloat \S+ payload} $printed] [regexp {error NonFiniteFloat|enum NonFiniteResult} [lindex [split $printed \n] 0]] \
+        [lindex [outcomeUnderHir interp $back] 1] [lindex [outcomeUnderHir cranelift $back] 1]
+} -result {1 1 1 0 true true}
+
 test float-decided-equals-run {a decided operation and the same operation at run time are one computation: the constant result and the run-time result agree bit for bit} -body {
     set pairs {{0.1 0.2} {1.0e-300 1.0e-10} {123456.789 0.001} {3.0 7.0} {1.0e300 0.5}}
     set decided {}
@@ -472,14 +544,15 @@ test float-native-executable {a standalone executable computes, decides and prin
         "fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n    if n == 0:\n        x\n    else:\n        grow(x * 10.0, n - 1)\n" \
         "a = grow(1.5, 300):\n    on NonFiniteFloat:\n        -1.0\n" \
         "b = grow(1.5, 400):\n    on NonFiniteFloat:\n        -1.0\n" \
-        "\[a, b, 0.1 + 0.2, float64::truncate(a) > 0\]\n"]
+        "fn kind(x: Float64) -> NonFiniteResult:\n    x * 1.0e300:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "\[a, b, 0.1 + 0.2, float64::truncate(a) > 0, kind(-1.0e300)\]\n"]
     close $channel
     set hir [surface::readProgramFile $path -warnings off -cache ""]
     set exe [native::executable $hir [file join $dir prog]]
     set output [exec $exe]
     file delete -force $dir
     list [expr {$output eq [lindex [outcomeUnderHir compile $hir] 1]}] $output
-} -result {1 {[1.500000000000003e300, -1.0, 0.30000000000000004, true]}}
+} -result {1 {[1.500000000000003e300, -1.0, 0.30000000000000004, true, NonFiniteResult::NegativeInfinity]}}
 
 # ---------------------------------------------------------------------------
 # C double (ffi::c::Double)
@@ -549,6 +622,18 @@ test float-c-double-nonfinite-rejected {a NaN or an infinity C returns never bec
         "\[probe(0), probe(1), probe(2), z, signbit(z), signbit(0.0 * -1.0), signbit(-1.0)\]\n"]
     floatCValue $main cranelift
 } -result {value {[-1.0, -1.0, -1.0, 0.0, 0, 0, 1]}}
+
+test float-c-double-nonfinite-payload {NonFiniteFloat from a C result says which non-finite double C returned} -constraints floatFixture -body {
+    set main [string cat \
+        "fn special(n: int) -> NonFiniteResult errors NonFiniteFloat:\n" \
+        "    x = if n == 0:\n        positive_infinity()\n    elif n == 1:\n        negative_infinity()\n    else:\n        not_a_number()\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "fn probe(n: int) -> NonFiniteResult:\n" \
+        "    special(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "\[probe(0), probe(1), probe(2)\]\n"]
+    list [floatCValue $main cranelift] [floatCValue $main cranelift-generic]
+} -result {{value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}} {value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}}
 
 test float-c-double-tcl-backends {the Tcl backends refuse a C call at run time, a double one as any other (NATIVE-ONLY)} -body {
     set hir [surface::compile "$::floatBindings\nx = twice(1.5):\n    on NonFiniteFloat:\n        0.0\nx\n" t.bot -warnings off]

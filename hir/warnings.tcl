@@ -77,7 +77,7 @@ proc hir::warnings::New {code message primary secondary {data {}}} {
 
 # The warnings a run attached to HIR ({} when warnings were off or none).
 proc hir::warnings::of {hir} {
-    return [expr {[dict exists $hir warnings] ? [dict get $hir warnings] : {}}]
+    return [dict getdef $hir warnings {}]
 }
 
 proc hir::warnings::stats {} {
@@ -134,7 +134,7 @@ proc hir::warnings::run {hir mode {channel stderr}} {
     }
     # A monomorphized trait program (TRAITS.md) is warned about as written:
     # its checked source build, where each function exists once.
-    set warnings [collect [expr {[dict exists $hir traitSource] ? [dict get $hir traitSource] : $hir}]]
+    set warnings [collect [dict getdef $hir traitSource $hir]]
     if {$mode eq "error" && $warnings ne ""} {
         Raise $hir [lindex $warnings 0]
     }
@@ -211,7 +211,7 @@ proc hir::warnings::KeyCompare {a b} {
 # secondary location -- the shape of main.tcl's own "error: ... (KIND)".
 proc hir::warnings::render {hir warning} {
     set lines [list "[hir::originLocation $hir [dict get $warning primary]]: warning: [dict get $warning message] ([dict get $warning code])"]
-    set note [expr {[dict exists $warning data note] ? [dict get $warning data note] : "related location"}]
+    set note [dict getdef $warning data note "related location"]
     foreach origin [dict get $warning secondary] {
         lappend lines "[hir::originLocation $hir $origin]: note: $note"
     }
@@ -293,7 +293,7 @@ proc hir::warnings::SameReturnValue {hir} {
         if {[dict get $node kind] ne "block" || ![dict get $node reachable]} {
             continue
         }
-        lappend warnings {*}[SameReturnValueIn $hir $e [expr {[dict exists $names $e] ? [dict get $names $e] : ""}]]
+        lappend warnings {*}[SameReturnValueIn $hir $e [dict getdef $names $e ""]]
     }
     return $warnings
 }
@@ -380,7 +380,7 @@ proc hir::warnings::HandlerTails {hir block} {
 proc hir::warnings::Units {tails sites} {
     set units [dict create]
     foreach site $sites {
-        dict set units [expr {[dict exists $tails $site] ? [dict get $tails $site] : $site}] 1
+        dict set units [dict getdef $tails $site $site] 1
     }
     return [dict size $units]
 }
@@ -459,11 +459,14 @@ proc hir::warnings::GroupWarning {hir block name identity exits} {
 
 proc hir::warnings::BindingName {hir b} {
     set binding [dict get $hir bindings $b]
-    return [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]
+    return [dict getdef $binding spelling [dict get $binding name]]
 }
 
 proc hir::warnings::Truncate {text} {
-    return [expr {[string length $text] > 40 ? "[string range $text 0 36]..." : $text}]
+    if {[string length $text] > 40} {
+        return "[string range $text 0 36]..."
+    }
+    return $text
 }
 
 # BLOCK's exits as {SITE VALUE} pairs in source order: SITE is the return or
@@ -539,7 +542,10 @@ proc hir::warnings::Leaves {hir e} {
             }
         }
     }
-    return [expr {[hir::typeOf $hir $e] eq "never" ? {} : [list $e]}]
+    if {[hir::typeOf $hir $e] eq "never"} {
+        return {}
+    }
+    return [list $e]
 }
 
 # 1 if the `if` NODE is one the frontend synthesized for a boolean operator:
@@ -684,9 +690,9 @@ proc hir::warnings::NamedCallee {hir node} {
             set params [expr {[llength [dict get $hir exprs $block params]] - [llength [dict get $hir exprs $block flags]]}]
             # A binding hygiene renamed (NAME#N) is looked up under the
             # spelling the programmer wrote, as the method call would.
-            set spelling [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : $name}]
+            set spelling [dict getdef $binding spelling $name]
             return [dict create identity binding:$b target [list block $block] params $params \
-                method [MemberName $spelling] shown [expr {[dict exists $binding spelling] ? $spelling : $name}]]
+                method [MemberName $spelling] shown [if {[dict exists $binding spelling]} {set spelling} else {set name}]]
         }
     }
     return ""
@@ -695,7 +701,10 @@ proc hir::warnings::NamedCallee {hir node} {
 # The member of a possibly namespace-qualified NAME ("list::at" -> "at").
 proc hir::warnings::MemberName {name} {
     set i [string last :: $name]
-    return [expr {$i < 0 ? $name : [string range $name [expr {$i + 2}] end]}]
+    if {$i < 0} {
+        return $name
+    }
+    return [string range $name [expr {$i + 2}] end]
 }
 
 # HIR as name resolution saw it: hygiene (hir/hygiene.tcl) renamed every
@@ -723,7 +732,7 @@ proc hir::warnings::ResolutionView {hir} {
         set prefix "${ns}::"
         set names [dict create]
         dict for {name b} [dict get $hir scopes $scope names] {
-            dict set names [expr {[string first $prefix $name] == 0 ? [string range $name [string length $prefix] end] : $name}] $b
+            dict set names [if {[string first $prefix $name] == 0} {string range $name [string length $prefix] end} else {set name}] $b
         }
         dict set hir scopes $scope names $names
     }
@@ -922,8 +931,8 @@ proc hir::warnings::FixedArityListReturn {hir} {
             continue
         }
         set warning [FixedArityIn $hir $e \
-            [expr {[dict exists $names $e] ? [dict get $names $e] : ""}] \
-            [expr {[dict exists $selves $e] ? [dict get $selves $e] : ""}]]
+            [dict getdef $names $e ""] \
+            [dict getdef $selves $e ""]]
         if {$warning ne ""} {
             lappend warnings $warning
         }
@@ -1191,7 +1200,7 @@ proc hir::warnings::SameFailure {hir} {
         if {[dict get $node kind] ne "block" || ![dict get $node reachable]} {
             continue
         }
-        lappend warnings {*}[SameFailureIn $hir $e [expr {[dict exists $names $e] ? [dict get $names $e] : ""}]]
+        lappend warnings {*}[SameFailureIn $hir $e [dict getdef $names $e ""]]
     }
     return $warnings
 }
@@ -1233,7 +1242,7 @@ proc hir::warnings::SameFailureIn {hir block name} {
 # The error's name is always the first word.
 proc hir::warnings::FailSites {hir block} {
     set node [dict get $hir exprs $block]
-    set declared [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+    set declared [dict getdef $node declaredErrors {}]
     set sites {}
     foreach e [BodyExprs $hir $block] {
         set node [dict get $hir exprs $e]
@@ -1249,7 +1258,7 @@ proc hir::warnings::FailSites {hir block} {
             if {[dict exists $node value] && [dict get $node value] ne ""} {
                 set identity [hir::exact::Identity $hir [dict get $node value]]
                 lset sites end 1 [list [dict get $node name] \
-                    [expr {$identity eq "" ? [list unproven $e] : $identity}]]
+                    [if {$identity eq ""} {list unproven $e} else {set identity}]]
             }
         }
     }
@@ -1358,7 +1367,7 @@ proc hir::warnings::ProvesNaming {hir} {
 # parameter, declared result unit), or "" for any other shape. (A block read
 # from HIR text records no `flags`.)
 proc hir::warnings::ProvesShape {fn} {
-    set flags [expr {[dict exists $fn flags] ? [dict get $fn flags] : {}}]
+    set flags [dict getdef $fn flags {}]
     if {[llength [dict get $fn params]] - [llength $flags] != 1
             || ![dict exists $fn declaredResult]} {
         return ""
@@ -1631,10 +1640,10 @@ proc hir::warnings::OptionCallee {hir node} {
     if {[dict get $fn kind] ne "block" || $argc != [llength [dict get $fn params]]} {
         return ""
     }
-    set flags [expr {[dict exists $fn flags] ? [dict get $fn flags] : {}}]
+    set flags [dict getdef $fn flags {}]
     set ordinary [expr {[llength [dict get $fn params]] - [llength $flags]}]
     set types [lrange [hir::signatures::entryTypes $hir $block] 0 [expr {$ordinary - 1}]]
-    set shown [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]
+    set shown [dict getdef $binding spelling [dict get $binding name]]
     return [OptionShape [list block $block] $shown $types]
 }
 

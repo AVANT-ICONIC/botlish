@@ -409,6 +409,12 @@ with the declared error NonFiniteFloat. There is no negative zero either:
     operands it computes the operation while compiling, with the same
     rule: a decided failure is the KNOWN-ERROR diagnostic. Negation and
     the comparisons never fail.
+  * NonFiniteFloat's payload is {result: NonFiniteResult}, which
+    non-finite result the operation had: PositiveInfinity,
+    NegativeInfinity or NotANumber (only 0.0 / 0.0). NonFiniteResult is a
+    builtin enum, visible everywhere without an import. It describes the
+    failure to the handler where it happened; no value is ever an
+    infinity or NaN.
   * 1.0 == 1 is false: values of different kinds are never equal.
   * A Float64 prints as the shortest decimal that reads back to the same
     number, always with a point (3.0, 0.1, 1.0e100).
@@ -434,6 +440,20 @@ mean = x.average(2.5):
 [x * 4.0, -x, x < 2.0, 1.0e100 * 1.0e100, mean, 0.1 + 0.2]
 @caption Arithmetic, comparisons, a declared NonFiniteFloat and printing
 @value [6.0, -1.5, true, 1.0e200, 2.0, 0.30000000000000004]
+@end
+
+@example accept
+fn kind(a: Float64, b: Float64) -> NonFiniteResult:
+    a / b:
+        on NonFiniteFloat {result}:
+            return result
+    NonFiniteResult::NotANumber
+
+one = 1.0
+zero = 0.0
+[one.kind(zero), zero.kind(zero), one.kind(-1.0e-320)]
+@caption Which non-finite result each division had
+@value [NonFiniteResult::PositiveInfinity, NonFiniteResult::NotANumber, NonFiniteResult::NegativeInfinity]
 @end
 
 @example reject

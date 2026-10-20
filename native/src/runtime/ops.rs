@@ -2447,18 +2447,54 @@ pub extern "C" fn rt_float_new(p: *mut Vm, ty: u64, bits: u64) -> Value {
     vm(p).new_float(FloatType::from_code(ty), bits)
 }
 
+/// The cases of the builtin enum NonFiniteResult (core/float.tcl), by the
+/// code generated code passes rt_float_nonfinite (codegen::clif's
+/// `non_finite_code`): which non-finite result an operation had.
+pub const NON_FINITE_CASES: [&str; 3] = ["PositiveInfinity", "NegativeInfinity", "NotANumber"];
+
+/// The NonFiniteResult code (NON_FINITE_CASES) of the non-finite number X:
+/// NotANumber for NaN, else the infinity of X's sign.
+pub fn non_finite_code(x: f64) -> u64 {
+    if x.is_nan() {
+        2
+    } else if x > 0.0 {
+        0
+    } else {
+        1
+    }
+}
+
 /// Fails with the declared builtin error NonFiniteFloat: an operation's
-/// result is no finite number. Returns NO_VALUE.
+/// result is no finite number, RESULT (NON_FINITE_CASES) the one it would
+/// have been. The payload {result: NonFiniteResult} goes into the payload
+/// slots like any declared error's (rt_fail_declared_payload): the case word
+/// and the anonymous shape are the program's own, found in its tables by
+/// name -- native lowering declares both in every program whose runtime may
+/// raise the error (native/lower.tcl's PayloadTables). Returns NO_VALUE.
 #[unsafe(no_mangle)]
-pub extern "C" fn rt_float_nonfinite(p: *mut Vm) -> Value {
-    fail_builtin(p, super::error::ERR_NON_FINITE_FLOAT, "NonFiniteFloat")
+pub extern "C" fn rt_float_nonfinite(p: *mut Vm, result: u64) -> Value {
+    let case = NON_FINITE_CASES[(result as usize).min(2)];
+    let payload = super::vm::try_current_program(|program| {
+        let e = program.enums.iter().position(|info| info.name == "NonFiniteResult")?;
+        let c = program.enums[e].cases.iter().position(|name| name == case)?;
+        let s = program.shapes.iter().position(|shape| shape.name.is_none() && shape.fields == ["result"])?;
+        Some((make_enum(e as u32, c as u32), s as u32))
+    })
+    .flatten();
+    let failed = fail_builtin(p, super::error::ERR_NON_FINITE_FLOAT, "NonFiniteFloat");
+    if let Some((word, shape)) = payload {
+        let vm = vm(p);
+        vm.declared_payload.push(word);
+        vm.declared_payload_shape = shape;
+    }
+    failed
 }
 
 /// The value of number X of type TY, or the NonFiniteFloat failure.
 pub(crate) fn float_value(p: *mut Vm, ty: FloatType, x: f64) -> Value {
     match ty.admit(x) {
         Some(bits) => vm(p).new_float(ty, bits),
-        None => rt_float_nonfinite(p),
+        None => rt_float_nonfinite(p, non_finite_code(x)),
     }
 }
 
@@ -2782,7 +2818,7 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     vec![
         h!(rt_type_error, 4),
         h!(rt_float_new, 3),
-        h!(rt_float_nonfinite, 1),
+        h!(rt_float_nonfinite, 2),
         h!(rt_f64_from_int, 2),
         h!(rt_f64_trunc, 2),
         h!(rt_cptr_fixture, 2),

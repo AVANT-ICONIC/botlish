@@ -353,7 +353,10 @@ proc core::forms::CountSize {direction endKind start end} {
     if {$endKind eq "inclusive"} {
         set span [expr {$span + 1}]
     }
-    return [expr {$span > 0 ? $span : 0}]
+    if {$span > 0} {
+        return $span
+    }
+    return 0
 }
 
 # (lockloop (DOMAIN...) (block (P...) BODY...) ?REJECTED?): the lockstep

@@ -65,7 +65,7 @@
         AddArgumentFact $hir result normal [dict get $node args] $index $fact
     }
     set targetNode [dict get $hir exprs $target]
-    set declared [expr {[dict exists $targetNode declaredResult] ? [dict get $targetNode declaredResult] : ""}]
+    set declared [dict getdef $targetNode declaredResult ""]
     if {$declared ne "" && [llength [dict get $node args]] == 1
             && ![catch {core::type::integerFacts $declared} facts] && $facts ne {}} {
         AddArgumentFact $hir result normal [dict get $node args] 0 $declared
@@ -148,7 +148,7 @@ proc hir::range::Paths {hir condition outcome {limit 16}} {
                 foreach path [PathsWithin $hir $test $testOutcome $limit budget] {
                     if {$known ne {}} {
 ====
-                foreach path [expr {$testOutcome ? [PathsWithin $hir $test $testOutcome $limit budget] : [list {}]}] {
+                foreach path [if {$testOutcome} {PathsWithin $hir $test $testOutcome $limit budget} else {list {}}] {
                     if {$known ne {}} {
 >>>>
 

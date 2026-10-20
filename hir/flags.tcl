@@ -89,7 +89,7 @@ proc hir::flags::InterfaceOf {hir callee} {
 # itself with flags).
 proc hir::flags::DeclareFunction {hirVar b block} {
     upvar 1 $hirVar hir
-    set flags [lmap flag [expr {[dict exists $block flags] ? [dict get $block flags] : {}}] {lindex $flag 0}]
+    set flags [lmap flag [dict getdef $block flags {}] {lindex $flag 0}]
     dict set hir bindings $b flagIface [dict create flags $flags ordinary [llength [dict get $block params]]]
 }
 
@@ -127,7 +127,7 @@ proc hir::flags::Declare {hirVar e node bodyScope ns} {
     set types {}
     set seen {}
     set boolType [hir::resolve::ResolveTypeExpr [BoolTypeExpr] $ns]
-    foreach flag [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] {
+    foreach flag [dict getdef $node flags {}] {
         lassign $flag name origin
         set first ""
         if {[dict exists $hir scopes $bodyScope names $name]} {
@@ -162,7 +162,7 @@ proc hir::flags::ResolveCall {hirVar e node ctx} {
     if {[dict get $hir exprs $callee kind] eq "ref"} {
         dict set hir flagAllowed $callee 1
     }
-    set supplied [expr {[dict exists $node flags] ? [dict get $node flags] : {}}]
+    set supplied [dict getdef $node flags {}]
     set iface [InterfaceOf $hir $callee]
     if {$iface eq ""} {
         if {$supplied ne {}} {

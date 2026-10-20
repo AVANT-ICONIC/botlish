@@ -366,7 +366,10 @@ proc hir::types::CanonicalTypeName {name ns} {
         return ${ns}::$name
     }
     set imported [hir::imports::typeNamed $ns $name]
-    return [expr {$imported ne "" ? $imported : $name}]
+    if {$imported ne ""} {
+        return $imported
+    }
+    return $name
 }
 
 # The canonical resolved type for type constructor CTOR applied to ARGS (a
@@ -494,14 +497,17 @@ proc hir::types::MakeCoroutineType {argTypes result errors {depth 0}} {
 # diagnosed, whose resumes are not checked again), whose segments end with
 # values of OUTWARD or one of ERRORS.
 proc hir::types::MakeCoroutine {resume outward errors} {
-    return [MakeCoroutineType [expr {$resume eq "unit" ? {} : [list $resume]}] $outward $errors]
+    return [MakeCoroutineType [if {$resume eq "unit"} {string cat {}} else {list $resume}] $outward $errors]
 }
 
 # The resume protocol of coroutine type TYPE: unit, a named struct type, or
 # any (MakeCoroutine).
 proc hir::types::CoroutineResume {type} {
     set args [dict get [lindex $type 1] args]
-    return [expr {[llength $args] == 0 ? "unit" : [lindex $args 0]}]
+    if {[llength $args] == 0} {
+        return "unit"
+    }
+    return [lindex $args 0]
 }
 proc hir::types::CoroutineOutward {type} { return [dict get [lindex $type 1] return] }
 proc hir::types::CoroutineErrors {type}  { return [dict get [lindex $type 1] errors] }
@@ -545,7 +551,10 @@ proc hir::types::Contract {type} {
         return [lindex $type 1]
     }
     set s [structuralOf $type]
-    return [expr {$s eq "" ? "" : [lindex $s 1]}]
+    if {$s eq ""} {
+        return ""
+    }
+    return [lindex $s 1]
 }
 
 # ---------------------------------------------------------------------------
@@ -720,7 +729,10 @@ proc hir::types::MentionsTrait {type} {
 # (CONTEXT-TRAIT-POSITION, ContextTraitPositionMessage).
 proc hir::types::MentionedContextTrait {type} {
     if {[IsTrait $type]} {
-        return [expr {[hir::traits::isContext [lindex $type 1]] ? [lindex $type 1] : ""}]
+        if {[hir::traits::isContext [lindex $type 1]]} {
+            return [lindex $type 1]
+        }
+        return ""
     }
     set inner {}
     if {[IsList $type] || [IsSet $type] || [IsMutArray $type] || [IsMutVec $type]} {
@@ -760,7 +772,10 @@ proc hir::types::JoinWitness {a b} {
         }
     }
     set all [lsort -unique $all]
-    return [expr {[llength $all] == 1 ? [lindex $all 0] : [linsert $all 0 join]}]
+    if {[llength $all] == 1} {
+        return [lindex $all 0]
+    }
+    return [linsert $all 0 join]
 }
 
 # TYPE as an aggregate element/field: a view is erased to any (the concrete
@@ -768,7 +783,10 @@ proc hir::types::JoinWitness {a b} {
 # "any"), so no List/ImmutableSet/MutableArray/struct type ever has a trait
 # element.
 proc hir::types::Unviewed {type} {
-    return [expr {[IsTrait $type] ? "any" : $type}]
+    if {[IsTrait $type]} {
+        return "any"
+    }
+    return $type
 }
 
 # ---------------------------------------------------------------------------
@@ -844,7 +862,7 @@ proc hir::types::StructLayout {type} {
 proc hir::types::StructField {type name} {
     if {[IsStruct $type]} {
         set fields [lindex $type 1]
-        return [expr {[dict exists $fields $name] ? [dict get $fields $name] : ""}]
+        return [dict getdef $fields $name ""]
     }
     if {[IsNamedStruct $type]} {
         return [hir::structs::fieldType [lindex $type 1] $name]
@@ -927,11 +945,11 @@ proc hir::types::BlockContract {hir e} {
     # only requirement, which, like a native's own -param-types, is
     # re-validated at run time rather than assumed.
     set declared [hir::signatures::entryTypes $hir $e]
-    set errors [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+    set errors [dict getdef $node declaredErrors {}]
     if {[lsearch -exact -not $declared {}] < 0 && $errors eq {}} {
         return ""
     }
-    set args [lmap t $declared {expr {$t eq {} ? "any" : [canonical $t]}}]
+    set args [lmap t $declared {if {$t eq {}} {string cat "any"} else {canonical $t}}]
     return [dict create args $args errors [lsort -unique $errors]]
 }
 
@@ -1160,7 +1178,10 @@ proc hir::types::glb {a b} {
     if {$aNarrower && $bNarrower} {
         # Equivalent under admissibility: a deterministic, operand-order-
         # independent choice.
-        return [expr {$core ? [core::type::narrow $a $b] : [lindex [lsort [list $a $b]] 0]}]
+        if {$core} {
+            return [core::type::narrow $a $b]
+        }
+        return [lindex [lsort [list $a $b]] 0]
     }
     if {$aNarrower} {
         return $a
@@ -1444,7 +1465,11 @@ proc hir::types::Bound {type depth} {
         return [MakeStruct [lindex $type 1] $depth]
     }
     if {[IsExactBlock $type]} {
-        set result [expr {$depth >= $aggregateDepth ? "any" : [Bound [lindex $type 3] [expr {$depth + 1}]]}]
+        if {$depth >= $aggregateDepth} {
+            set result "any"
+        } else {
+            set result [Bound [lindex $type 3] [expr {$depth + 1}]]
+        }
         return [lreplace $type 3 3 $result]
     }
     if {[IsFn $type]} {
@@ -1465,7 +1490,10 @@ proc hir::types::Bound {type depth} {
 # TYPE without a positional shape.
 proc hir::types::Unshaped {type} {
     if {[IsList $type] && [llength $type] == 3} {
-        return [expr {[lindex $type 1] eq "any" ? "list" : [lrange $type 0 1]}]
+        if {[lindex $type 1] eq "any"} {
+            return "list"
+        }
+        return [lrange $type 0 1]
     }
     return $type
 }
@@ -1473,7 +1501,10 @@ proc hir::types::Unshaped {type} {
 # The static type of every element of a value of static type TYPE, if TYPE
 # is a list form; otherwise "".
 proc hir::types::elementOf {type} {
-    return [expr {[IsList $type] ? [lindex $type 1] : ""}]
+    if {[IsList $type]} {
+        return [lindex $type 1]
+    }
+    return ""
 }
 
 # The static type of the loop variable of a loop over a value of static type
@@ -1491,14 +1522,20 @@ proc hir::types::IterationElementOf {type} {
         # it is empty only while held at that type, and a value read back
         # from HIR text or Core IR may have lost the declared type it was
         # filled under -- never a reason to call a loop body dead.)
-        return [expr {[lindex $type 1] eq "never" ? "" : [lindex $type 1]}]
+        if {[lindex $type 1] eq "never"} {
+            return ""
+        }
+        return [lindex $type 1]
     }
     return [elementOf $type]
 }
 
 # The positional shape {P0 ...} of static type TYPE, or "" if not known.
 proc hir::types::shapeOf {type} {
-    return [expr {[IsList $type] && [llength $type] == 3 ? [lindex $type 2] : ""}]
+    if {[IsList $type] && [llength $type] == 3} {
+        return [lindex $type 2]
+    }
+    return ""
 }
 
 # 1 if every value of static type A is a value of static type B.
@@ -1722,7 +1759,10 @@ proc hir::types::lub {a b} {
     }
     if {[IsSpecific $a] || [IsSpecific $b]} {
         set kind [kindOf $a]
-        return [expr {$kind ne "" && $kind eq [kindOf $b] ? $kind : "any"}]
+        if {$kind ne "" && $kind eq [kindOf $b]} {
+            return $kind
+        }
+        return "any"
     }
     return [core::type::lub $a $b]
 }
@@ -1799,7 +1839,10 @@ proc hir::types::narrow {current fact} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
-        return [expr {[subtype $current $fact] ? $current : $fact}]
+        if {[subtype $current $fact]} {
+            return $current
+        }
+        return $fact
     }
     if {[IsFn $current] && $fact in {block native}} {
         # Both facts hold; the contract is the one static checking uses
@@ -2770,7 +2813,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             if {$poison} {
                 return [SetType hir $e [Poison hir $e]]
             }
-            return [SetType hir $e [MakeList [expr {$elemType eq "never" ? "never" : $bodyType}]]]
+            return [SetType hir $e [MakeList [if {$elemType eq "never"} {string cat "never"} else {set bodyType}]]]
         }
         countloop {
             Expr hir ctx [dict get $node start]
@@ -2818,7 +2861,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
                         Poison hir [dict get $domain binding]
                         continue
                     }
-                    lappend facts [dict get $domain binding] [expr {$elemType eq "" ? "any" : $elemType}]
+                    lappend facts [dict get $domain binding] [if {$elemType eq ""} {string cat "any"} else {set elemType}]
                     # An empty domain (listloop's case): every domain has
                     # the one proven cardinality, so the body never runs.
                     set empty [expr {$empty || $elemType eq "never"}]
@@ -2844,7 +2887,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             if {$poison} {
                 return [SetType hir $e [Poison hir $e]]
             }
-            return [SetType hir $e [MakeList [expr {$empty ? "never" : $bodyType}]]]
+            return [SetType hir $e [MakeList [if {$empty} {string cat "never"} else {set bodyType}]]]
         }
         return {
             set value [Expr hir ctx [dict get $node value]]
@@ -2928,7 +2971,10 @@ proc hir::types::Struct {hirVar ctxVar e} {
         # (A poisoned field value leaves a named construction its declared
         # type: the declaration is the contract.)
         set id [dict get $node structId]
-        return [expr {$id eq "" ? "any" : [list nstruct $id]}]
+        if {$id eq ""} {
+            return "any"
+        }
+        return [list nstruct $id]
     }
     if {[dict exists $node payloadOf] && [hir::errordecls::hasPayload [dict get $node payloadOf]]} {
         # An error's payload (ERROR-PAYLOADS.md) has its declared type,
@@ -3052,7 +3098,7 @@ proc hir::types::Handle {hirVar ctxVar e} {
     set node [dict get $hir exprs $e]
     set entry [dict get $ctx reachable]
     set before [dict get $ctx facts]
-    set outerLog [expr {[dict exists $ctx completionLog] ? [dict get $ctx completionLog] : ""}]
+    set outerLog [dict getdef $ctx completionLog ""]
     set hadLog [dict exists $ctx completionLog]
     dict set ctx completionLog {}
     set callType [Expr hir ctx [dict get $node call]]
@@ -3077,8 +3123,12 @@ proc hir::types::Handle {hirVar ctxVar e} {
     # A poisoned handled call: its handlers are walked as ever (each may
     # still run), and the construct is poison.
     set poison [expr {$callType eq "never" && [Poisoned $hir [dict get $node call]]}]
-    set ends [expr {$callType ne "never" || $poison ? [list $completed] : {}}]
-    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    if {$callType ne "never" || $poison} {
+        set ends [list $completed]
+    } else {
+        set ends {}
+    }
+    set payloads [dict getdef $node handlerPayloads {}]
     set index 0
     foreach body [dict get $node handlerBodies] name [dict get $node handlerNames] {
         set payload [lindex $payloads $index]
@@ -3208,13 +3258,17 @@ proc hir::types::Block {hirVar outerVar e self} {
     # in the creating context yet (a bind establishes it before this block
     # is typed, but its type is this block's): exact, with an unknown result
     # here (the body's own analysis assumes one, below).
-    set selfType [expr {$self eq "" ? "" : [blockType $hir $e $arity any]}]
+    if {$self eq ""} {
+        set selfType ""
+    } else {
+        set selfType [blockType $hir $e $arity any]
+    }
     if {[dict exists $outer spec]} {
         # Region inference: the body is a region of its own. Report what
         # this creation captures; calls of the block ask the handler.
         set seeds [dict create]
         foreach b [dict get $node captures] {
-            dict set seeds $b [expr {$b eq $self ? $selfType : [BindingType $hir $outer $b]}]
+            dict set seeds $b [if {$b eq $self} {set selfType} else {BindingType $hir $outer $b}]
         }
         {*}[dict get $outer spec] create $e $seeds
         # The Block's own intrinsic result contract -- its declared result,
@@ -3238,7 +3292,11 @@ proc hir::types::Block {hirVar outerVar e self} {
     set declared [dict get $node declaredResult]
     # A declared trait result is a view whose witness the body decides
     # (hir::traits::ViewResult), so it is inferred like an undeclared one.
-    set assumed [expr {$declared eq {} || [IsTraitConstraint $declared] ? {never} : $declared}]
+    if {$declared eq {} || [IsTraitConstraint $declared]} {
+        set assumed {never}
+    } else {
+        set assumed $declared
+    }
     set attempts [expr {$self eq "" ? 1 : 3}]
     for {set attempt 1} {$attempt <= $attempts} {incr attempt} {
         if {$attempt == $attempts && $attempts > 1} {
@@ -3432,7 +3490,7 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # owner exposed to a foreign pointer parameter establishes
                 # no pointee (hir/borrow.tcl).
                 set result [hir::imprint::Call hir $e $calleeType \
-                    [expr {$foreign eq "" ? $argTypes : [hir::borrow::ImprintArgTypes $foreign $argTypes]}] \
+                    [if {$foreign eq ""} {set argTypes} else {hir::borrow::ImprintArgTypes $foreign $argTypes}] \
                     [dict get $meta imprint result] $result]
             } elseif {[dict exists $node imprint]} {
                 hir::imprint::Call hir $e $calleeType $argTypes $result $result

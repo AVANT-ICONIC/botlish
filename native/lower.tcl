@@ -241,6 +241,12 @@ namespace eval native::lower {
     variable captureLists {}
     variable pending {}
     variable usedNatives {}
+    # NAME -> 1: the payload-bearing builtin errors (core::native::
+    # declareErrorPayload: NonFiniteFloat) the native runtime itself may raise
+    # in this program (RuntimeRaises). The runtime builds such a payload from
+    # the program's own tables, so the header declares its anonymous shape
+    # and its fields' enums (PayloadTables).
+    variable runtimePayloads [dict create]
     # Struct shapes (STRUCTS.md), per program: {ID LAYOUT} -> dense shape
     # number, assigned on first use in deterministic lowering order, and the
     # ordered list of the {ID LAYOUT} keys, emitted as the NIR `shape`
@@ -1320,6 +1326,8 @@ proc native::lower::Program {hirProgram args} {
     variable foreignList
     set foreignIds [dict create]
     set foreignList {}
+    variable runtimePayloads
+    set runtimePayloads [dict create]
 
     set default [expr {[info exists ::env(BOTLISH_NATIVE_SPECIALIZE)]
         && $::env(BOTLISH_NATIVE_SPECIALIZE) eq "0" ? 0 : 1}]
@@ -1355,12 +1363,10 @@ proc native::lower::Program {hirProgram args} {
         && $::env(BOTLISH_NATIVE_CLOSED_CALLER_FACTS_OPT) eq "0" ? 0 : 1}]
     set exactCallableDefault [expr {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_OPT)]
         && $::env(BOTLISH_NATIVE_EXACT_CALLABLE_OPT) eq "0" ? 0 : 1}]
-    set exactLimitDefault [expr {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)]
-        ? $::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT) : ""}]
+    set exactLimitDefault [if {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)]} {set ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)} else {string cat ""}]
     set recursiveRangeDefault [expr {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RESULT_RANGE_OPT)]
         && $::env(BOTLISH_NATIVE_RECURSIVE_RESULT_RANGE_OPT) eq "0" ? 0 : 1}]
-    set recursiveLimitDefault [expr {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)]
-        ? $::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT) : ""}]
+    set recursiveLimitDefault [if {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)]} {set ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)} else {string cat ""}]
     set callEffectsDefault [expr {[info exists ::env(BOTLISH_NATIVE_CALL_EFFECTS_OPT)]
         && $::env(BOTLISH_NATIVE_CALL_EFFECTS_OPT) eq "0" ? 0 : 1}]
     set traversalDefault [expr {[info exists ::env(BOTLISH_NATIVE_STRING_TRAVERSAL_OPT)]
@@ -1489,10 +1495,8 @@ proc native::lower::Program {hirProgram args} {
     set rawDemandOpt [dict get $options -raw-demand-opt]
     set rawMixedPolicy [dict get $options -raw-mixed-policy]
     set abiPlan [native::rawabi::plan $hirProgram $spec $ranges $rawIntAbiOpt $blockEscapeOpt $rawDemandOpt $rawMixedPolicy]
-    set escape [expr {$escapeOpt ? [hir::escape::analyze $hirProgram $spec $paramAggregateOpt $structWidths]
-        : [dict create arity {} wants {} virtual {} paramVirtual {}]}]
-    set stringregion [expr {$stringRegionOpt ? [hir::stringregion::analyze $hirProgram $spec]
-        : [dict create regionOf {} wants {} virtual {}]}]
+    set escape [if {$escapeOpt} {hir::escape::analyze $hirProgram $spec $paramAggregateOpt $structWidths} else {dict create arity {} wants {} virtual {} paramVirtual {}}]
+    set stringregion [if {$stringRegionOpt} {hir::stringregion::analyze $hirProgram $spec} else {dict create regionOf {} wants {} virtual {}}]
     # hir::blockescape.tcl and hir::stringregion.tcl are now independent
     # analyses (composed only here, at lowering time -- see native/lower
     # .tcl's "Block virtualization" and "String regions" sections): a
@@ -1503,16 +1507,12 @@ proc native::lower::Program {hirProgram args} {
     # *region companion* internal variant is the one actually demanded, so
     # this ordering (stringregion before blockescape) is no longer a
     # dependency -- only kept for determinism/readability.
-    set blockescape [expr {$blockEscapeOpt ? [hir::blockescape::analyze $hirProgram $spec]
-        : [dict create virtual {} wants {} flatCaptures {}]}]
-    set traversal [expr {$traversalOpt ? [hir::traversal::analyze $hirProgram $spec $stringregion $escape]
-        : [dict create plans {}]}]
+    set blockescape [if {$blockEscapeOpt} {hir::blockescape::analyze $hirProgram $spec} else {dict create virtual {} wants {} flatCaptures {}}]
+    set traversal [if {$traversalOpt} {hir::traversal::analyze $hirProgram $spec $stringregion $escape} else {dict create plans {}}]
     # Virtual construction (see "Virtual construction" below) runs last: it
     # leaves every binding/variant the analyses above claim to them, and
     # decides plan results from M7.c's closedness proof over blockescape.
-    set construction [expr {$constructionOpt
-        ? [hir::construction::analyze $hirProgram $spec $escape $stringregion $blockescape]
-        : [dict create params {} bindings {} locals {} results {} closed {} regions {}]}]
+    set construction [if {$constructionOpt} {hir::construction::analyze $hirProgram $spec $escape $stringregion $blockescape} else {dict create params {} bindings {} locals {} results {} closed {} regions {}}]
     # The ShortString1 plan (SHORT-STRING.md) runs strictly after the
     # closedness, Range and virtual-construction analyses it composes with,
     # and before any lowering. It reads facts and decides a representation;
@@ -1590,7 +1590,7 @@ proc native::lower::Program {hirProgram args} {
     set order [lmap key [dict keys $functions] {
         lassign [Unkey $key] id mode
         set block [dict get $spec instances $id block]
-        list [expr {$block eq "program" ? 0 : [dict get $context positions $block]}] \
+        list [if {$block eq "program"} {string cat 0} else {dict get $context positions $block}] \
             [string range $id 1 end] \
             [dict get {canonical 0 companion 1 region 1 internal 1 internalregion 1 internalcompanion 1 fields 1 fieldscompanion 1} $mode] $key
     }]
@@ -1618,10 +1618,11 @@ proc native::lower::Program {hirProgram args} {
     foreach name [lsort $usedNatives] {
         set meta [core::native::metadata $name]
         set kinds [lmap type [dict get $meta paramTypes] {
-            expr {$type eq "any" ? "any" : [core::type::base $type]}
+            if {$type eq "any"} {string cat "any"} else {core::type::base $type}
         }]
         lappend header "native [Quote $name] arity=[dict get $meta arity] params=[Quote $kinds] impl=[NativeImpl $name]"
     }
+    PayloadTables
     foreach key $shapeList {
         lassign $key id layout
         if {$id eq ""} {
@@ -1771,7 +1772,7 @@ proc native::lower::Parent {e} {
             }
         }
     }
-    return [expr {[dict exists $parents $e] ? [dict get $parents $e] : ""}]
+    return [dict getdef $parents $e ""]
 }
 
 # How many of the current analysis's representation blockers (guards) are
@@ -2144,7 +2145,7 @@ proc native::lower::ShortCounters {fnVar} {
     foreach key {shortLocals shortLits shortFromTagged shortToTagged shortConstMaterialized shortLen shortEq
             shortJoins shortSlices asciiLocals asciiLits asciiFromTagged asciiToTagged asciiConstMaterialized
             asciiLen asciiEq asciiShortEq asciiToShort asciiJoins} {
-        dict set out $key [expr {[dict exists $fn $key] ? [dict get $fn $key] : 0}]
+        dict set out $key [dict getdef $fn $key 0]
     }
     return $out
 }
@@ -2168,7 +2169,7 @@ proc native::lower::ShortAbiResult {id} {
 # result.
 proc native::lower::ResultShort {fnVar} {
     upvar 1 $fnVar fn
-    return [expr {[dict exists $fn resultShort] ? [dict get $fn resultShort] : ""}]
+    return [dict getdef $fn resultShort ""]
 }
 
 # The tier of expression E of the instance being lowered: `ascii` when the
@@ -2312,7 +2313,11 @@ proc native::lower::Function {id} {
     # ShortString1 ABI: these positions arrive as a ShortString1 scalar
     # (native/shortstring.tcl); every caller of this canonical function
     # passes them the same way.
-    set shortParams [expr {$region eq "program" ? [lrepeat [llength $params] ""] : [ShortAbiParams $id [llength $params]]}]
+    if {$region eq "program"} {
+        set shortParams [lrepeat [llength $params] ""]
+    } else {
+        set shortParams [ShortAbiParams $id [llength $params]]
+    }
     if {$region ne "program" && [ShortAbiResult $id] ne ""} {
         dict set fn resultShort [ShortAbiResult $id]
     }
@@ -2342,7 +2347,11 @@ proc native::lower::Function {id} {
     if {$region ne "program"} {
         dict set fn planResult [hir::construction::resultFamily $construction $id]
     }
-    set contextProblem [expr {$region eq "program" ? [ContextDiagnostic] : ""}]
+    if {$region eq "program"} {
+        set contextProblem [ContextDiagnostic]
+    } else {
+        set contextProblem ""
+    }
     if {$contextProblem ne ""} {
         # A -strict 0 program that failed context verification (CONTEXTS.md):
         # its first context diagnostic is the run's failure; no code whose
@@ -2366,8 +2375,7 @@ proc native::lower::Function {id} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
     # pnames: the parameter names as block error messages show them.
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id] [Quote $name] params=[expr {[llength $params] + $extraParams}] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2494,8 +2502,7 @@ proc native::lower::CompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id companion] [Quote $name] params=[llength $params] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2591,8 +2598,7 @@ proc native::lower::RegionCompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id region] [Quote $name] params=[llength $params] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=3"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2709,8 +2715,7 @@ proc native::lower::InternalFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internal] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2831,8 +2836,7 @@ proc native::lower::InternalRegionCompanionFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internalregion] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key] results=3"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2935,8 +2939,7 @@ proc native::lower::InternalCompanionFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internalcompanion] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3050,8 +3053,7 @@ proc native::lower::FieldsFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id fields] [Quote $name] params=[llength $pnames] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3137,8 +3139,7 @@ proc native::lower::FieldsCompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id fieldscompanion] [Quote $name] params=[llength $pnames] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3534,7 +3535,11 @@ proc native::lower::ReleaseHandles {fnVar items e {result ""}} {
     foreach item $items {
         set plan [hir::affine::DropPlan $hir $item]
         if {$plan eq ""} continue
-        set descriptor [expr {[lindex $plan 0] eq "coroutine" ? "c" : [lindex $plan 1]}]
+        if {[lindex $plan 0] eq "coroutine"} {
+            set descriptor "c"
+        } else {
+            set descriptor [lindex $plan 1]
+        }
         if {[string match b* $item]} {
             set access [Access fn $item]
         } elseif {$item eq $e && [hir::kind $hir $e] eq "struct"
@@ -3687,7 +3692,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
     # (ShortTier): an `if` then joins its branches directly in one register of
     # that kind (each branch value is itself proven, being below the join in
     # the fact lattice, and converts to the join's kind).
-    set shortJoin [expr {$want in {short ascii} && [dict get $node kind] eq "if" ? $want : ""}]
+    if {$want in {short ascii} && [dict get $node kind] eq "if"} {
+        set shortJoin $want
+    } else {
+        set shortJoin ""
+    }
     switch -- [dict get $node kind] {
         const    { lassign [ConstOrRegion fn $e $node $want] result repr }
         ref      { lassign [Ref fn $e $node $want] result repr }
@@ -3751,7 +3760,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                     Emit fn "ret $value" $e
                 }
             } else {
-                set value [Expr fn [dict get $node value] [expr {[ResultRaw fn] ? "rawjoin" : [ResultShort fn] ne "" ? [ResultShort fn] : "tagged"}]]
+                set value [Expr fn [dict get $node value] [if {[ResultRaw fn]} {string cat "rawjoin"} elseif {[ResultShort fn] ne ""} {ResultShort fn} else {string cat "tagged"}]]
                 if {$value ne "never"} {
                     ReleaseHandles fn $after $e
                     Emit fn "ret $value" $e
@@ -3775,7 +3784,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 # nothing downstream reads is filled with unit instead.
                 # A retained accumulator is materialized here
                 # (CollectFinish): it may be a construction plan.
-                set prefix [expr {$accReg eq "discard" ? [Assign fn unit] : [CollectFinish fn $e $accReg]}]
+                if {$accReg eq "discard"} {
+                    set prefix [Assign fn unit]
+                } else {
+                    set prefix [CollectFinish fn $e $accReg]
+                }
                 Emit fn "$resultReg = move $prefix" $e
                 Emit fn "jump $exit" $e
                 dict set fn broken [dict get $node target] 1
@@ -3944,6 +3957,36 @@ proc native::lower::EnumConst {fnVar v e} {
     return [Assign fn "enum [EnumIndex $id] $case" $e]
 }
 
+# Records that the native runtime may raise the declared errors ERRORS (a
+# native's -errors) in this program: each payload-bearing builtin one among
+# them needs its payload's tables (runtimePayloads).
+proc native::lower::RuntimeRaises {errors} {
+    variable runtimePayloads
+    foreach error $errors {
+        if {[core::native::isBuiltinError $error] && [core::native::builtinPayload $error] ne {}} {
+            dict set runtimePayloads $error 1
+        }
+    }
+}
+
+# Declares, in the program's tables, what the runtime needs to build the
+# payload of each builtin error it may raise (runtimePayloads): the payload's
+# anonymous shape and the enum of each enum-typed field. The runtime finds
+# them by name (runtime::ops's fail_non_finite): the numbers stay the
+# program's own.
+proc native::lower::PayloadTables {} {
+    variable runtimePayloads
+    foreach error [dict keys $runtimePayloads] {
+        set type [hir::errordecls::payloadType $error]
+        ShapeIndex {} [hir::types::StructLayout $type]
+        foreach {field fieldType} [hir::errordecls::fields $error] {
+            if {[lindex $fieldType 0] eq "enum"} {
+                EnumIndex [lindex $fieldType 1]
+            }
+        }
+    }
+}
+
 # The dense shape number of {ID LAYOUT} (see shapeIds), assigned on first use.
 proc native::lower::ShapeIndex {id layout} {
     variable shapeIds
@@ -4055,7 +4098,7 @@ proc native::lower::BuildStruct {fnVar shape cut fields e} {
 
 # The shape key ({ID LAYOUT}, ShapeIndex's key) of struct construction NODE.
 proc native::lower::StructShapeOf {node} {
-    return [list [expr {[dict get $node named] ? [dict get $node structId] : ""}] [dict get $node layout]]
+    return [list [if {[dict get $node named]} {dict get $node structId} else {string cat ""}] [dict get $node layout]]
 }
 
 proc native::lower::Struct {fnVar e node} {
@@ -4405,8 +4448,16 @@ proc native::lower::ContextInstallCall {fnVar e node} {
     set arg [lindex [dict get $node args] 0]
     set slot [dict get $contextSlots $id]
     set leaves {}
-    set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
-    set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+    if {[hir::kind $hir $arg] eq "ref"} {
+        set b [hir::get $hir $arg binding]
+    } else {
+        set b ""
+    }
+    if {$b ne "" && [dict exists $fn locals $b]} {
+        set local [dict get $fn locals $b]
+    } else {
+        set local ""
+    }
     if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
         # The installed value held as fields (the hygienic temporary of
         # `with context`, hir/escape.tcl's ctxUse): its leaves without the
@@ -4825,7 +4876,11 @@ proc native::lower::ConstantBytesOf {e} {
             e { set n [ConstantByteElement [lindex $src 1]] }
             v {
                 set v [lindex $src 1]
-                set n [expr {[core::value::kind $v] eq "int" ? [core::value::intOf $v] : ""}]
+                if {[core::value::kind $v] eq "int"} {
+                    set n [core::value::intOf $v]
+                } else {
+                    set n ""
+                }
             }
         }
         if {$n eq "" || $n < 0 || $n > 255} {
@@ -4861,7 +4916,10 @@ proc native::lower::ConstantByteElement {e} {
         return ""
     }
     set n [hir::exact::IntOf $hir [lindex [dict get $node args] 0]]
-    return [expr {$n ne "" && $n >= 0 && $n <= 255 ? $n : ""}]
+    if {$n ne "" && $n >= 0 && $n <= 255} {
+        return $n
+    }
+    return ""
 }
 
 # abi::x86_64::from_bytes (core/bytestore.tcl, ABI-BYTES.md): the raw address
@@ -5022,6 +5080,8 @@ proc native::lower::BorrowCall {fnVar e node} {
     if {!$extern && ![dict exists $natives $name]} {
         Unsupported $e "native $name" "the foreign operation \"$name\" has no native implementation"
     }
+    # (A C double result that is no finite number is NonFiniteFloat.)
+    RuntimeRaises [dict get [core::native::metadata $name] errors]
     set access [dict create]
     set names [dict create]
     foreach borrow [dict get $node borrows] {
@@ -5093,7 +5153,7 @@ proc native::lower::BorrowCall {fnVar e node} {
             lappend fields $result
             continue
         }
-        set i [expr {[dict exists $names $field] ? [dict get $names $field] : -1}]
+        set i [dict getdef $names $field -1]
         if {$i < 0 || ![dict exists $written $i]} {
             throw {NATIVE BUG} "native lowering: write-back field $field of $name has no written argument ($e)"
         }
@@ -5194,8 +5254,16 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
                 throw {NATIVE BUG} "native lowering: binary::emit $e asked for virtual fields (hir::escape never classifies one as a construction)"
             }
             set arg [lindex $args 0]
-            set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
-            set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+            if {[hir::kind $hir $arg] eq "ref"} {
+                set b [hir::get $hir $arg binding]
+            } else {
+                set b ""
+            }
+            if {$b ne "" && [dict exists $fn locals $b]} {
+                set local [dict get $fn locals $b]
+            } else {
+                set local ""
+            }
             if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
                 # The value held as fields (hir/escape.tcl's leafUse): its
                 # leaves without the object, a closed inner struct read with
@@ -5793,7 +5861,7 @@ proc native::lower::Access {fnVar b} {
         return $local
     }
     set region [dict get $fn region]
-    set access [BindingAccess $b [expr {$region eq "program" ? "" : $region}]]
+    set access [BindingAccess $b [if {$region eq "program"} {string cat ""} else {set region}]]
     switch -- $access {
         fnvalue {
             return [list fnvalue [GenericRef [hir::aot::BoundBlock $hir $b]]]
@@ -5845,6 +5913,7 @@ proc native::lower::RootValue {fnVar e binding} {
             }
             if {$name ni $usedNatives} {
                 lappend usedNatives $name
+                RuntimeRaises [dict get [core::native::metadata $name] errors]
             }
             return [Assign fn "native [Quote $name]" $e]
         }
@@ -5921,7 +5990,7 @@ proc native::lower::Bind {fnVar e node} {
                 # the physical object -- if some use ever needs one -- is
                 # built once for both names.
                 set sb [hir::get $hir $valueExpr binding]
-                set source [expr {[dict exists $fn locals $sb] ? [dict get $fn locals $sb] : ""}]
+                set source [dict getdef $fn locals $sb ""]
                 if {[lindex $source 0] ne "virtual" || [lindex $source 2] eq ""} {
                     throw {NATIVE BUG} "native lowering: alias $b of non-virtual binding $sb ($e)"
                 }
@@ -6210,8 +6279,16 @@ proc native::lower::CanSupplyFields {fnVar argExprs fieldWidths {fieldCuts {}}} 
     variable hir
     set i 0
     foreach arg $argExprs {
-        set width [expr {$i < [llength $fieldWidths] ? [lindex $fieldWidths $i] : ""}]
-        set cut [expr {$i < [llength $fieldCuts] ? [lindex $fieldCuts $i] : ""}]
+        if {$i < [llength $fieldWidths]} {
+            set width [lindex $fieldWidths $i]
+        } else {
+            set width ""
+        }
+        if {$i < [llength $fieldCuts]} {
+            set cut [lindex $fieldCuts $i]
+        } else {
+            set cut ""
+        }
         if {$width ne ""} {
             switch -- [hir::kind $hir $arg] {
                 call {}
@@ -6330,8 +6407,16 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
     set regs {}
     set i 0
     foreach arg $argExprs {
-        set width [expr {$i < [llength $fieldWidths] ? [lindex $fieldWidths $i] : ""}]
-        set family [expr {$i < [llength $planSlots] ? [lindex $planSlots $i] : ""}]
+        if {$i < [llength $fieldWidths]} {
+            set width [lindex $fieldWidths $i]
+        } else {
+            set width ""
+        }
+        if {$i < [llength $planSlots]} {
+            set family [lindex $planSlots $i]
+        } else {
+            set family ""
+        }
         if {$family ne ""} {
             # A plan parameter of the target (virtual construction): the
             # argument's construction is handed over as a plan, not
@@ -6342,7 +6427,7 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
             }
             lappend regs [PiecesToPlan fn $pieces $family $arg]
         } elseif {$width ne ""} {
-            set fields [TryFields fn $arg $width [expr {$i < [llength $fieldCuts] ? [lindex $fieldCuts $i] : ""}]]
+            set fields [TryFields fn $arg $width [if {$i < [llength $fieldCuts]} {lindex $fieldCuts $i} else {string cat ""}]]
             if {$fields eq "never"} {
                 return never
             }
@@ -6353,8 +6438,18 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
         } else {
             # A slot is 0 (tagged), 1 (raw Int), `short` (ShortString1) or
             # `ascii` (packed ASCII).
-            set slot [expr {$i < [llength $rawSlots] ? [lindex $rawSlots $i] : 0}]
-            set argWant [expr {$slot in {short ascii} ? $slot : $slot ? "raw" : "tagged"}]
+            if {$i < [llength $rawSlots]} {
+                set slot [lindex $rawSlots $i]
+            } else {
+                set slot 0
+            }
+            if {$slot in {short ascii}} {
+                set argWant $slot
+            } elseif {$slot} {
+                set argWant "raw"
+            } else {
+                set argWant "tagged"
+            }
             if {$argWant eq "raw" && [RawConstArg $arg]} {
                 # A small Int literal handed to a raw parameter is a raw
                 # constant: no tagged constant built only to be unboxed.
@@ -6747,7 +6842,11 @@ proc native::lower::AddressFlowAcrossCall {fnVar e node result} {
                 lappend source $operand
             }
         }
-        set registers [expr {[lindex $result 1] eq "virtual" ? [lindex $result 0] : [list [lindex $result 0]]}]
+        if {[lindex $result 1] eq "virtual"} {
+            set registers [lindex $result 0]
+        } else {
+            set registers [list [lindex $result 0]]
+        }
         foreach register $registers {
             if {$register ne "" && $source ne ""} {
                 dict set fn keepAddr $register $source
@@ -6856,14 +6955,18 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
 
     if {$targetKind eq "block" && [hir::kind $hir $calleeExpr] eq "ref"} {
         set calleeBinding [hir::get $hir $calleeExpr binding]
-        set flattenedTarget [expr {$calleeBinding ne "" ? [hir::blockescape::virtual $blockescape $currentInstance $calleeBinding] : ""}]
+        if {$calleeBinding ne ""} {
+            set flattenedTarget [hir::blockescape::virtual $blockescape $currentInstance $calleeBinding]
+        } else {
+            set flattenedTarget ""
+        }
         if {$flattenedTarget ne ""} {
             # A de-closure-converted binding may have several used instances
             # (one per exact callable target it is called with, for one):
             # blockescape's proof is that every reference is a call to one
             # of them, so THIS call site's own instance -- the one
             # hir::specialize chose for it -- is the callee.
-            set flattenedTarget [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+            set flattenedTarget [dict getdef $fn targets $e ""]
             if {$flattenedTarget eq "" || ![hir::blockescape::wants $blockescape $flattenedTarget]} {
                 throw {NATIVE BUG} "native lowering: call $e of a de-closure-converted binding has no wanted callee instance"
             }
@@ -7016,7 +7119,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         # (mirrors TryStringRegionOp's own "prefer the left operand"
         # narrowing for `==`: the corpus this milestone targets never
         # exercises more than one).
-        set consumerInstance [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+        set consumerInstance [dict getdef $fn targets $e ""]
         if {$consumerInstance ne ""} {
             foreach k [hir::stringregion::consumingParamsOf $stringregion $consumerInstance] {
                 set argExpr [lindex $argExprs $k]
@@ -7083,7 +7186,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         if {$region ne ""} {
             return $region
         }
-        set rawEligible [expr {[dict exists $natives $name] ? [RawEligibleCall $e $argExprs $op] : 0}]
+        if {[dict exists $natives $name]} {
+            set rawEligible [RawEligibleCall $e $argExprs $op]
+        } else {
+            set rawEligible 0
+        }
         set argRegs {}
         foreach arg $argExprs {
             set r [Expr fn $arg [expr {$rawEligible ? "raw" : "tagged"}]]
@@ -7097,7 +7204,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
 
     if {$targetKind eq "block"} {
         set params [hir::get $hir $target params]
-        set instance [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+        set instance [dict getdef $fn targets $e ""]
         # The instance hir::specialize chose; a self tail call that stays in
         # this instance is a loop, and each of its raw-declared parameter
         # slots (RawParams) wants its argument raw directly, rather than
@@ -7114,8 +7221,16 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         # eligibility alone is not enough). Never attempted for a
         # region-result call (wantRegion): the two optimizations do not
         # currently combine.
-        set fieldWidths [expr {$wantRegion ? {} : [FieldWidths $instance $params]}]
-        set fieldCuts [expr {$fieldWidths eq "" ? {} : [FieldCuts $instance $params]}]
+        if {$wantRegion} {
+            set fieldWidths {}
+        } else {
+            set fieldWidths [FieldWidths $instance $params]
+        }
+        if {$fieldWidths eq ""} {
+            set fieldCuts {}
+        } else {
+            set fieldCuts [FieldCuts $instance $params]
+        }
         if {$fieldWidths ne "" && ![CanSupplyFields fn $argExprs $fieldWidths $fieldCuts]} {
             set fieldWidths {}
             set fieldCuts {}
@@ -7143,7 +7258,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             # ShortString1 positions (shortstring.tcl): the callee's plan is
             # authoritative for them too; a position is never both.
             set rawSlots [lmap r $rawSlots s [ShortAbiParams $instance [llength $argExprs]] {
-                expr {$s ne "" ? $s : $r}
+                if {$s ne ""} {set s} else {set r}
             }]
         }
         set planSlots {}
@@ -7247,7 +7362,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             # argument registers.
             return [InlineLeafCall fn $e $node $instance $argRegs]
         }
-        set id [expr {$fieldWidths ne "" ? [FieldsRef $instance] : [FunctionRef $instance]}]
+        if {$fieldWidths ne ""} {
+            set id [FieldsRef $instance]
+        } else {
+            set id [FunctionRef $instance]
+        }
         dict lappend fn calls [list direct $id $self]
         set targetPlan [hir::traversal::plan $traversal $instance]
         if {$targetPlan ne ""} {
@@ -7259,7 +7378,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             lappend argRegs [IntConst fn 0 $e]
         }
         set rawResult [expr {$abiCall && [AbiResult $instance]}]
-        set shortResult [expr {$abiCall ? [ShortAbiResult $instance] : ""}]
+        if {$abiCall} {
+            set shortResult [ShortAbiResult $instance]
+        } else {
+            set shortResult ""
+        }
         set text [string trimright [expr {$target in $envless ? "call $id [join $argRegs { }]" : "callenv $id $callee [join $argRegs { }]"}]]
         if {$rawResult} {
             set result [AssignRaw fn $text $e]
@@ -7729,7 +7852,11 @@ proc native::lower::EmitRegionConsumerBody {fnVar calleeView e b region} {
             dict lappend fn calls [list native $name]
             if {$name eq "==" && [llength $args] == 2} {
                 lassign $args pa pb
-                set litExpr [expr {[IsRefToBinding $calleeView $pa $b] ? $pb : $pa}]
+                if {[IsRefToBinding $calleeView $pa $b]} {
+                    set litExpr $pb
+                } else {
+                    set litExpr $pa
+                }
                 set litValue [hir::get $calleeView $litExpr value]
                 set litReg [Assign fn "str [Quote [core::value::strOf $litValue]]" $litExpr]
                 return [Assign fn "op regioneq $base $start $end $litReg" $e]
@@ -7769,7 +7896,7 @@ proc native::lower::EmitRegionConsumerCondition {fnVar calleeView e b region t f
             foreach role {then else} {
                 set constant [hir::condition::constant $calleeView [dict get $node ${role}Body]]
                 if {$constant ne ""} {
-                    lappend targets [expr {$constant ? $t : $f}]
+                    lappend targets [if {$constant} {set t} else {set f}]
                 } else {
                     set label [NewLabel fn]
                     lappend targets $label
@@ -8193,7 +8320,7 @@ proc native::lower::InlineLeafCall {fnVar e node calleeId callerArgRegs} {
     set savedKnownErrors $knownErrors
     set savedLocals {}
     foreach b $params {
-        lappend savedLocals [expr {[dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+        lappend savedLocals [dict getdef $fn locals $b ""]
     }
 
     set hir $calleeView
@@ -8260,6 +8387,7 @@ proc native::lower::NativeCallOp {e node} {
     }
     set impl [dict get $natives $name]
     set argExprs [dict get $node args]
+    RuntimeRaises [dict get [core::native::metadata $name] errors]
     switch -- [lindex $impl 0] {
         equality {
             if {[llength $argExprs] != 2} {
@@ -8558,7 +8686,10 @@ proc native::lower::ConstantIntValue {e} {
     switch -- [hir::kind $hir $e] {
         const {
             set v [hir::get $hir $e value]
-            return [expr {[core::value::kind $v] eq "int" ? [core::value::intOf $v] : ""}]
+            if {[core::value::kind $v] eq "int"} {
+                return [core::value::intOf $v]
+            }
+            return ""
         }
         call {
             set node [hir::node $hir $e]
@@ -9086,8 +9217,7 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
     dict set fn staticOutcomes {}
     set static [StaticOutcome fn $e $condition]
-    set outcome [expr {$static ne "" ? $static
-        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    set outcome [if {$static ne ""} {set static} else {hir::range::ConditionOutcome $hir $ranges $currentInstance $condition}]
     # An undecided condition with a branch form of its own (`and`, `or`,
     # `not`, `!=`, a Boolean-valued `if`; hir/condition.tcl) is lowered as a
     # branch to the two arms below (Condition), not as a Bool to branch on.
@@ -9141,7 +9271,11 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     }
     set join [NewLabel fn]
     # A virtual struct join (branch merging): one result register per field.
-    set result [expr {$virtualN ne "" ? [NewRegs fn $virtualN] : [NewReg fn]}]
+    if {$virtualN ne ""} {
+        set result [NewRegs fn $virtualN]
+    } else {
+        set result [NewReg fn]
+    }
     if {$rawJoin} {
         # Both branches' values are small Ints (they flow into a raw
         # result's proven-small Range), joined in one raw register.
@@ -9298,7 +9432,7 @@ proc native::lower::BranchDemand {fnVar e t f} {
     if {[hir::kind $hir $e] ne "call" || [hir::affine::releasesOnError $hir $e] ne ""} {
         return [list [Expr fn $e] ""]
     }
-    set outer [expr {[dict exists $fn branch] ? [dict get $fn branch] : ""}]
+    set outer [dict getdef $fn branch ""]
     dict set fn branch [list $e $t $f]
     set test [Expr fn $e]
     set taken ""
@@ -9337,8 +9471,7 @@ proc native::lower::ConditionIf {fnVar e node t f} {
     set key [list $e $condition]
     set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
     set static [StaticOutcome fn $e $condition]
-    set outcome [expr {$static ne "" ? $static
-        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    set outcome [if {$static ne ""} {set static} else {hir::range::ConditionOutcome $hir $ranges $currentInstance $condition}]
     if {$outcome ne ""} {
         # Decided (If): only the branch it decides is lowered.
         if {$static ne ""} {
@@ -9423,7 +9556,10 @@ proc native::lower::BodyTarget {fnVar body t f skippedVar} {
         return ""
     }
     lappend skipped [list $e]
-    return [expr {$outcome ? $t : $f}]
+    if {$outcome} {
+        return $t
+    }
+    return $f
 }
 
 # The outcome (1 or 0) condition E has with no code at all, or "": a Boolean
@@ -9535,7 +9671,7 @@ proc native::lower::JoinKeepAddr {fnVar r v} {
     if {![dict exists $fn keepAddr $v]} {
         return
     }
-    set storages [expr {[dict exists $fn keepAddr $r] ? [dict get $fn keepAddr $r] : {}}]
+    set storages [dict getdef $fn keepAddr $r {}]
     foreach storage [dict get $fn keepAddr $v] {
         if {$storage ni $storages} {
             lappend storages $storage
@@ -9695,7 +9831,7 @@ proc native::lower::ListLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     if {$consuming} {
         set elemReg [Assign fn "op ${drain}takefront $iterReg" $e]
     } else {
@@ -9792,7 +9928,7 @@ proc native::lower::CountBounds {fnVar regs wants raw} {
     if {!$raw} {
         return $regs
     }
-    return [lmap r $regs w $wants {expr {$w eq "raw" ? $r : [RawOf fn $r]}}]
+    return [lmap r $regs w $wants {if {$w eq "raw"} {set r} else {RawOf fn $r}}]
 }
 
 # The representation a numeric loop bound EXPR of loop E is first lowered
@@ -9902,7 +10038,7 @@ proc native::lower::CountLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     dict set fn locals [dict get $node countBinding] [list [expr {$raw ? "rawreg" : "reg"}] $idxReg]
     set bodyValue [Sequence fn [dict get $node body]]
     set usedContinue [dict exists $fn continued $e]
@@ -9992,7 +10128,11 @@ proc native::lower::LockLoop {fnVar e node} {
         }
         lappend raws $raw
         foreach operand $operands kind $kindList {
-            set want [expr {$kind eq "int" ? [CountBoundWant $e $operand $raw] : "tagged"}]
+            if {$kind eq "int"} {
+                set want [CountBoundWant $e $operand $raw]
+            } else {
+                set want "tagged"
+            }
             set reg [Expr fn $operand $want]
             if {$reg eq "never"} {
                 return never
@@ -10070,7 +10210,7 @@ proc native::lower::LockLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     foreach domain $domains state $states {
         if {[dict get $state kind] eq "list"} {
             set elemReg [Assign fn "op listget [dict get $state list] $posReg" $e]
@@ -10192,7 +10332,7 @@ proc native::lower::PayloadNeeded {b body name} {
     }
     set needed {}
     foreach r $refs {
-        set p [expr {[dict exists $parent $r] ? [dict get $parent $r] : ""}]
+        set p [dict getdef $parent $r ""]
         if {$p eq "" || [hir::kind $hir $p] ne "project" || [hir::get $hir $p receiver] ne $r} {
             return all
         }
@@ -10248,7 +10388,7 @@ proc native::lower::Handle {fnVar e node} {
     }
 
     EmitLabel fn $catchLabel
-    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    set payloads [dict getdef $node handlerPayloads {}]
     set index 0
     foreach name $names scopeId $scopes body $bodies {
         set payload [lindex $payloads $index]

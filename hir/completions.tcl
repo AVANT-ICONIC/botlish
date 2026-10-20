@@ -551,7 +551,11 @@ proc hir::completions::staticsOf {hir} {
     # expression's type: without one, no position does (Positions is the
     # costly part of the walk).
     set sites [HasFnTypes $hir]
-    set finals [expr {$sites ? [YieldFinalsOf $hir] : {}}]
+    if {$sites} {
+        set finals [YieldFinalsOf $hir]
+    } else {
+        set finals {}
+    }
     set callers [dict create]
     set transparent [dict create]
     set contravariant {}
@@ -782,7 +786,10 @@ proc hir::completions::ResultOf {type} {
         return [hir::types::FnReturn $type]
     }
     set s [hir::types::structuralOf $type]
-    return [expr {$s eq "" ? "" : [hir::types::FnReturn $s]}]
+    if {$s eq ""} {
+        return ""
+    }
+    return [hir::types::FnReturn $s]
 }
 
 # What a callable of type SOURCE, given structural Fn type TARGET, has erased
@@ -835,7 +842,7 @@ proc hir::completions::YieldFinalsOf {hir} {
     }
     set table [dict get $hir coroutines]
     dict for {thunk info} [dict get $table thunks] {
-        set root [expr {[dict exists $info root] ? [dict get $info root] : ""}]
+        set root [dict getdef $info root ""]
         if {$root eq "" || ![dict exists $hir exprs $root]} {
             continue
         }
@@ -960,7 +967,7 @@ proc hir::completions::PossibleOf {hir} {
     }
     set result [dict create]
     dict for {b equation} $equations {
-        dict set result $b [expr {$equation eq "top" ? [list $erased 0] : [list {} 1]}]
+        dict set result $b [if {$equation eq "top"} {list $erased 0} else {list {} 1}]
     }
     set changed 1
     while {$changed} {
@@ -1074,7 +1081,7 @@ proc hir::completions::Subsume {hirVar ctxVar diagnose guard value final} {
         # What the type shows is the type checker's; what it does not is
         # this check's.
         set shown [concat [hir::types::FnErrors $target] [hir::types::CallableErrors $hir $source]]
-        foreach name [lsort -unique [SubsumedRaises hir ctx $guard [expr {$top ? $value : ""}] $source $target]] {
+        foreach name [lsort -unique [SubsumedRaises hir ctx $guard [if {$top} {set value} else {string cat ""}] $source $target]] {
             if {$name ni $shown} {
                 ReportOutside hir $value $source $target $top $name
             }
@@ -1193,7 +1200,11 @@ proc hir::completions::SubsumedRaises {hirVar ctxVar guard value source target} 
     set here [expr {$value ne "" && [CreatedHere $hir $ctx $value $block]}]
     set captures [dict create]
     foreach c [hir::get $hir $block captures] {
-        set fact [expr {$here ? [BindingFact $hir $ctx $c] : "unknown"}]
+        if {$here} {
+            set fact [BindingFact $hir $ctx $c]
+        } else {
+            set fact "unknown"
+        }
         if {$fact in {clean unknown} && [CleanInput $hir $c]} {
             lassign [Possible $hir $c] errors quiet
             set fact [list contract $errors [expr {$quiet ? {} : "*"}]]
@@ -1278,7 +1289,11 @@ proc hir::completions::ArgChannel {hirVar ctxVar guard args_ argExprs} {
     set lost 0
     set i 0
     foreach a $argExprs {
-        set t [expr {$args_ eq "*" ? "*" : [lindex $args_ $i]}]
+        if {$args_ eq "*"} {
+            set t "*"
+        } else {
+            set t [lindex $args_ $i]
+        }
         incr i
         if {$t ne "*" && ![hir::types::IsFn $t] && ![hir::types::IsCoroutine $t]} {
             continue
@@ -1445,7 +1460,11 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
     switch -- [dict get $node kind] {
         const {
             set v [dict get $node value]
-            set r [expr {[core::value::kind $v] eq {int} ? [hir::range::point [core::value::intOf $v]] : [hir::range::unknown]}]
+            if {[core::value::kind $v] eq {int}} {
+                set r [hir::range::point [core::value::intOf $v]]
+            } else {
+                set r [hir::range::unknown]
+            }
             dict set ctx exprs $e $r
             return $r
         }
@@ -1528,7 +1547,11 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
             # join of every way the function returns, never the fall-through
             # alone (PROOF-FACT-CENSUS.md).
             set value [dict get $node value]
-            set r [expr {$value eq {} ? [hir::range::unknown] : [Eval hir ctx $diagnose $enclosing $guard $value]}]
+            if {$value eq {}} {
+                set r [hir::range::unknown]
+            } else {
+                set r [Eval hir ctx $diagnose $enclosing $guard $value]
+            }
             if {$r ne {never} && [dict get $node target] ne {}} {
                 dict set ctx returned 1
                 dict set ctx returnRange [hir::range::join [dict get $ctx returnRange] $r]
@@ -1569,7 +1592,10 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
         }
         ok - error {
             set r [Eval hir ctx $diagnose $enclosing $guard [dict get $node value]]
-            return [expr {$r eq {never} ? {never} : [hir::range::unknown]}]
+            if {$r eq {never}} {
+                return {never}
+            }
+            return [hir::range::unknown]
         }
         struct {
             # Field values are evaluated (and may fail or return) in written
@@ -2055,7 +2081,10 @@ proc hir::completions::EvalListloop {hirVar ctxVar diagnose enclosing guard e no
     dict set ctx bindings $saved
     dict set ctx exact $savedExact
     RestoreRelations ctx $relations
-    return [expr {$result eq {never} ? {never} : [hir::range::unknown]}]
+    if {$result eq {never}} {
+        return {never}
+    }
+    return [hir::range::unknown]
 }
 
 # 1 if a `break` or `continue` targeting loop LOOP occurs in EXPRS (never
@@ -2098,7 +2127,10 @@ proc hir::completions::LiteralListOf {hir ctx expr} {
     if {[hir::kind $hir $expr] eq {ref}} {
         set b [hir::get $hir $expr binding]
         set exactList [dict get $ctx exactList]
-        return [expr {$b ne {} && [dict exists $exactList $b] ? [dict get $exactList $b] : {}}]
+        if {$b ne {} && [dict exists $exactList $b]} {
+            return [dict get $exactList $b]
+        }
+        return {}
     }
     if {[hir::kind $hir $expr] ne {call}} {
         return {}
@@ -2490,12 +2522,12 @@ proc hir::completions::Fallback {hir target declared argCallables captureFacts} 
     foreach b [hir::get $hir $target params] f $argCallables {
         if {$b eq ""} break
         if {[CleanInput $hir $b]} {
-            lappend facts [expr {$f eq "" ? "unknown" : $f}]
+            lappend facts [if {$f eq ""} {string cat "unknown"} else {set f}]
         }
     }
     foreach c [hir::get $hir $target captures] {
         if {[CleanInput $hir $c]} {
-            lappend facts [expr {[dict exists $captureFacts $c] ? [dict get $captureFacts $c] : "unknown"}]
+            lappend facts [dict getdef $captureFacts $c "unknown"]
         }
     }
     foreach f $facts {
@@ -2584,7 +2616,7 @@ proc hir::completions::IndirectFacts {hirVar ctxVar diagnose guard e callee call
             block {
                 lassign [Recover hir ctx $guard $callee [lindex $fact 1] $argExprs $argRanges $argFacts] sub incomplete
                 set errors [Within $sub $contract]
-                set excess [lmap name $sub {expr {$name in $contract ? [continue] : $name}}]
+                set excess [lmap name $sub {if {$name in $contract} {continue} else {set name}}]
                 if {$diagnose && !$incomplete && $excess ne {}} {
                     # A complete analysis of the exact callable a contract
                     # was proven for, raising beyond it: the boundary check
@@ -2656,7 +2688,7 @@ proc hir::completions::Recover {hirVar ctxVar guard callee target argExprs argRa
 
 # The names of NAMES that are in BOUND.
 proc hir::completions::Within {names bound} {
-    return [lsort -unique [lmap name $names {expr {$name in $bound ? $name : [continue]}}]]
+    return [lsort -unique [lmap name $names {if {$name in $bound} {set name} else {continue}}]]
 }
 
 # Diagnoses call E (target TARGET, an exact block) under its own computed
@@ -2676,7 +2708,11 @@ proc hir::completions::CheckCallLegality {hirVar e target normal errors handled 
     dict set hir exprs $e mayReturnNormally $normal
     if {!$normal} {
         set declared [hir::get $hir $target declaredErrors]
-        set cited [expr {$errors eq {} ? $declared : $errors}]
+        if {$errors eq {}} {
+            set cited $declared
+        } else {
+            set cited $errors
+        }
         hir::Diagnose hir KNOWN-ERROR [format \
             {this call can never complete normally under the facts proven for its arguments here -- it always produces %s; a handler does not make a statically known failure legal} \
             [ErrorsPhrase $cited]] $e
@@ -2696,7 +2732,7 @@ proc hir::completions::CheckCallLegality {hirVar e target normal errors handled 
 # (effectiveErrors, a contract's `errors`).
 proc hir::completions::Unhandled {errors handled enclosing} {
     return [lsort -unique [lmap name $errors {
-        expr {$name ni $handled && $name ni $enclosing ? $name : [continue]}
+        if {$name ni $handled && $name ni $enclosing} {set name} else {continue}
     }]]
 }
 
@@ -2780,7 +2816,7 @@ proc hir::completions::CheckNativeCallLegality {hirVar e name normal errors hand
     }
     if {[dict exists $hir exprs $call resolvedOperator]} {
         lassign [dict get $hir exprs $call resolvedOperator] op type
-        set what [format {%s "%s"} $type [expr {$op eq "neg" ? "-" : $op}]]
+        set what [format {%s "%s"} $type [if {$op eq "neg"} {string cat "-"} else {set op}]]
         set known $what
     } elseif {$extern ne ""} {
         set what [format {call of "%s"} [dict get $extern key]]
@@ -2836,7 +2872,7 @@ proc hir::completions::CheckNativeCallLegality {hirVar e name normal errors hand
 proc hir::completions::NativeDeclaredErrors {hir e name} {
     set meta [core::native::metadata $name]
     if {[dict get $meta completion]} {
-        return [expr {[dict exists $hir exprs $e calleeErrors] ? [dict get $hir exprs $e calleeErrors] : {}}]
+        return [dict getdef $hir exprs $e calleeErrors {}]
     }
     return [dict get $meta errors]
 }
@@ -3328,7 +3364,7 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         }
         set exact [hir::range::ExactOf $indexRange]
         if {$exact ne ""} {
-            set inside [lmap i $exact {expr {$i >= 0 && $i < $n ? $i : [continue]}}]
+            set inside [lmap i $exact {if {$i >= 0 && $i < $n} {set i} else {continue}}]
             if {[llength $inside] == [llength $exact]} {
                 return in
             }
@@ -3503,7 +3539,7 @@ proc hir::completions::analyzeBlock {hir block argRanges argExact argExactLists 
     set result [hir::range::join $result [dict get $ctx returnRange]]
     return [dict create normal $normal \
         errors [lsort -unique [dict keys [dict get $ctx errors]]] \
-        result [expr {$result eq {never} ? [hir::range::unknown] : $result}] \
+        result [if {$result eq {never}} {hir::range::unknown} else {set result}] \
         incomplete [dict get $ctx incomplete]]
 }
 
@@ -3635,7 +3671,7 @@ proc hir::completions::reachedExprs {hir block} {
 # top-level checkBlock walk (dead/unreachable code).
 proc hir::completions::effectiveErrorsOf {hir e} {
     set node [hir::node $hir $e]
-    return [expr {[dict exists $node effectiveErrors] ? [dict get $node effectiveErrors] : {}}]
+    return [dict getdef $node effectiveErrors {}]
 }
 
 # The per-check bounds verdicts checkBlock stamped on native call E
@@ -3645,7 +3681,7 @@ proc hir::completions::effectiveErrorsOf {hir e} {
 # native call -- "no proof", never "proven".
 proc hir::completions::BoundsVerdictsOf {hir e} {
     set node [hir::node $hir $e]
-    return [expr {[dict exists $node boundsVerdicts] ? [dict get $node boundsVerdicts] : {}}]
+    return [dict getdef $node boundsVerdicts {}]
 }
 
 # 1 iff every bounds check of native call E is proven never to fail (every
@@ -3668,7 +3704,7 @@ proc hir::completions::BoundsProven {hir e} {
 
 proc hir::completions::mayReturnNormallyOf {hir e} {
     set node [hir::node $hir $e]
-    return [expr {[dict exists $node mayReturnNormally] ? [dict get $node mayReturnNormally] : 1}]
+    return [dict getdef $node mayReturnNormally 1]
 }
 
 # The Range fact this pass computed for a checked call expression E (item
@@ -3676,5 +3712,5 @@ proc hir::completions::mayReturnNormallyOf {hir e} {
 # reached by a top-level checkBlock walk.
 proc hir::completions::resultRangeOf {hir e} {
     set node [hir::node $hir $e]
-    return [expr {[dict exists $node resultRangeFact] ? [dict get $node resultRangeFact] : [hir::range::unknown]}]
+    return [dict getdef $node resultRangeFact [hir::range::unknown]]
 }

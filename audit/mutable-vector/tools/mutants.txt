@@ -333,7 +333,11 @@ core::native::register mutable_vector::clear
 @@ failed-swap-restores-source a failed call restores its arguments' ownership: after a failed affine swap the replacement's binding owns it again (and releases it a second time)
 ## hir/affine.tcl
 <<<<
-            set entry [expr {$state eq "dead" ? $before : $state}]
+            if {$state eq "dead"} {
+                set entry $before
+            } else {
+                set entry $state
+            }
 ====
             set entry $before
 >>>>
@@ -497,18 +501,34 @@ core::native::register mutable_vector::clear
 @@ continue-leaks `continue` leaks the current affine element (no exit releases on continue)
 ## hir/affine.tcl
 <<<<
-                set keep [expr {[dict get $node kind] eq "continue" ? $loop : ""}]
+                if {[dict get $node kind] eq "continue"} {
+                    set keep $loop
+                } else {
+                    set keep ""
+                }
 ====
                 if {[dict get $node kind] eq "continue"} continue
-                set keep [expr {[dict get $node kind] eq "continue" ? $loop : ""}]
+                if {[dict get $node kind] eq "continue"} {
+                    set keep $loop
+                } else {
+                    set keep ""
+                }
 >>>>
 
 @@ break-leaks-suffix `break` leaks the remaining suffix of a consuming loop
 ## hir/affine.tcl
 <<<<
-                set keep [expr {[dict get $node kind] eq "continue" ? $loop : ""}]
+                if {[dict get $node kind] eq "continue"} {
+                    set keep $loop
+                } else {
+                    set keep ""
+                }
 ====
-                set keep [expr {[dict get $node kind] in {break continue} ? $loop : ""}]
+                if {[dict get $node kind] in {break continue}} {
+                    set keep $loop
+                } else {
+                    set keep ""
+                }
 >>>>
 
 @@ exit-leaks-suffix `return`, `fail` and a propagated error leak the remaining suffix of a consuming loop (only `break` releases it)

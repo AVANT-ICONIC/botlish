@@ -144,7 +144,7 @@
         }
 ====
         suspended {
-            set previous [expr {[dict exists $store $id last] ? [dict get $store $id last] : [core::value::unit]}]
+            set previous [dict getdef $store $id last [core::value::unit]]
             dict set store $id last $message
             return [Segment $id [list [dict get $store $id continuation] $previous]]
         }
@@ -294,7 +294,11 @@
         set s [structuralOf $a]
         return [expr {$s ne "" && [FnSubtype $s $b]}]
 ====
-        set s [expr {[IsCoroutine $a] ? [list fn [lindex $a 1]] : [structuralOf $a]}]
+        if {[IsCoroutine $a]} {
+            set s [list fn [lindex $a 1]]
+        } else {
+            set s [structuralOf $a]
+        }
         return [expr {$s ne "" && [FnSubtype $s $b]}]
 >>>>
 
@@ -499,7 +503,7 @@
 ## compiler/compiler.tcl
 <<<<
         foreach item [hir::affine::releasesAfter $hir $e] {
-            CompileRelease ctx $item [expr {$item eq $e ? $result : ""}]
+            CompileRelease ctx $item [if {$item eq $e} {set result} else {string cat ""}]
         }
 ====
 >>>>

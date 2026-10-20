@@ -168,7 +168,11 @@ proc native::rawabi::Position {enabled isClosed isInt range} {
 # parameter) are tagged.
 proc native::rawabi::params {plan id n} {
     set out {}
-    set kinds [expr {[dict exists $plan $id] ? [dict get $plan $id params] : {}}]
+    if {[dict exists $plan $id]} {
+        set kinds [dict get $plan $id params]
+    } else {
+        set kinds {}
+    }
     for {set i 0} {$i < $n} {incr i} {
         lappend out [expr {[lindex $kinds $i] eq "rawint"}]
     }
@@ -208,7 +212,7 @@ proc native::rawabi::explain {hir spec ranges plan id} {
             kind [dict get $p params] reason [dict get $p paramReasons] \
             eligible [dict get $p paramEligible] trace [dict get $p paramTrace] {
         append out "    $name:\n"
-        append out "      type [expr {$key eq "int" ? "Int" : [hir::specialize::ShowKey $key]}]\n"
+        append out "      type [if {$key eq "int"} {string cat "Int"} else {hir::specialize::ShowKey $key}]\n"
         append out "      entry [hir::range::show $range]\n"
         append out "      fitsSmall [Yes $range]\n"
         append out "      RawInt eligible [expr {$eligible ? "yes" : "no"}]\n"
@@ -219,7 +223,7 @@ proc native::rawabi::explain {hir spec ranges plan id} {
     set range [dict get $instRanges result]
     append out "  result:\n"
     set resultType [dict get $instance result]
-    append out "    type [expr {[hir::types::kindOf $resultType] eq "int" ? "Int" : [hir::types::show $resultType]}]\n"
+    append out "    type [if {[hir::types::kindOf $resultType] eq "int"} {string cat "Int"} else {hir::types::show $resultType}]\n"
     append out "    range [hir::range::show $range]\n"
     append out "    fitsSmall [Yes $range]\n"
     append out "    RawInt eligible [expr {[dict get $p resultEligible] ? "yes" : "no"}]\n"
@@ -242,7 +246,11 @@ proc native::rawabi::ShowTrace {eligible trace {indent "      "}} {
         lassign [lrange $trace 1 2] steps tagged
         return "${indent}raw demand: [join $steps { -> }]\n${indent}but tagged consumers too: [join $tagged {, }] (mixed use: boxed)\n"
     }
-    set what [expr {$items eq "" ? "none" : [join $items {, }]}]
+    if {$items eq ""} {
+        set what "none"
+    } else {
+        set what [join $items {, }]
+    }
     return "${indent}raw demand: none (tagged consumers: $what)\n"
 }
 
@@ -738,7 +746,7 @@ proc native::rawabi::Walk {e sink why} {
             set value [dict get $node value]
             if {$value ne ""} {
                 set loop [dict get $node target]
-                set target [expr {[dict exists $W(loops) $loop] ? [dict get $W(loops) $loop] : ""}]
+                set target [dict getdef $W(loops) $loop ""]
                 Walk $value $target "break value"
             }
         }

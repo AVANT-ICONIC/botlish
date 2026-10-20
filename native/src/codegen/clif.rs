@@ -1086,7 +1086,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             let bad = self.b.create_block();
             self.b.ins().brif(finite, ok, &[], bad, &[]);
             self.b.switch_to_block(bad);
-            self.fail_with("rt_float_nonfinite", &[self.vm]);
+            let result = self.non_finite_code(r);
+            self.fail_with("rt_float_nonfinite", &[self.vm, result]);
             self.b.switch_to_block(ok);
             let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
             let code = self.iconst(FloatType::Float64.code());
@@ -2548,6 +2549,20 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         }
     }
 
+    /// The NonFiniteResult code (runtime::ops's NON_FINITE_CASES) of the
+    /// non-finite number R, as runtime::ops's non_finite_code computes it:
+    /// 2 (NotANumber) for NaN, else 0 or 1, the infinity of R's sign.
+    fn non_finite_code(&mut self, r: ir::Value) -> ir::Value {
+        let nan = self.b.ins().fcmp(FloatCC::Unordered, r, r);
+        let zero = self.b.ins().f64const(0.0);
+        let positive = self.b.ins().fcmp(FloatCC::GreaterThan, r, zero);
+        let plus = self.iconst(0);
+        let minus = self.iconst(1);
+        let infinity = self.b.ins().select(positive, plus, minus);
+        let not_a_number = self.iconst(2);
+        self.b.ins().select(nan, not_a_number, infinity)
+    }
+
     /// The floating-point operation OP of type TY on the values A
     /// (runtime::ops's float_apply computes the same): a comparison is one
     /// `fcmp` (ordered: no operand is ever NaN); an arithmetic result has its
@@ -2555,7 +2570,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// unless it is a negation, is checked finite -- |r| <= the largest
     /// finite number, false for an infinity and for NaN -- before it is
     /// boxed (rt_float_new); a non-finite one fails with NonFiniteFloat
-    /// (rt_float_nonfinite). One runtime call on every path, as a safepoint
+    /// (rt_float_nonfinite, given which non-finite result it was). One runtime call on every path, as a safepoint
     /// needs (codegen::roots).
     fn float_op(&mut self, ty: FloatType, op: nir::FloatOp, a: &[ir::Value]) -> ir::Value {
         use nir::FloatOp::*;
@@ -2602,7 +2617,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     let bad = self.b.create_block();
                     self.b.ins().brif(finite, ok, &[], bad, &[]);
                     self.b.switch_to_block(bad);
-                    self.fail_with("rt_float_nonfinite", &[self.vm]);
+                    let result = self.non_finite_code(r);
+                    self.fail_with("rt_float_nonfinite", &[self.vm, result]);
                     self.b.switch_to_block(ok);
                 }
                 let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
