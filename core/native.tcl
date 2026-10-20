@@ -68,6 +68,14 @@
 #                   name:
 #                     int K           the Int argument K (allocate's capacity)
 #                     list K          the length of List argument K
+#   keepsLength     0 | 1 (default 0): the operation mutates its receiver
+#                   (ownership role `place`) without changing its length --
+#                   it replaces elements in place (a swap, a set, a copy into
+#                   an array) and never adds or removes one, whether it
+#                   succeeds or fails. Static analyses that track a mutable
+#                   collection's length (hir/cardinality.tcl) read it by
+#                   registration, never by name; a mutating operation that
+#                   does not say so may change the length.
 #   dropForm        "" or {NAME AT}: the operation's element-dropping variant
 #                   NAME, which takes the element drop descriptor as an extra
 #                   last argument, so that the elements the operation removes,
@@ -381,7 +389,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
+        -result-length {} -keeps-length 0 -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -404,6 +412,9 @@ proc core::native::register {name args} {
     }
     if {[dict get $options -completion] ni {0 1}} {
         error "core::native::register: -completion of \"$name\" must be 0 or 1"
+    }
+    if {[dict get $options -keeps-length] ni {0 1}} {
+        error "core::native::register: -keeps-length of \"$name\" must be 0 or 1"
     }
     set testsType [dict get $options -tests-type]
     if {$testsType ne ""} {
@@ -489,6 +500,9 @@ proc core::native::register {name args} {
     if {$ownership ne "" && ($arity eq "*" ? [llength $ownership] == 0 : [llength $ownership] != $arity)} {
         error "core::native::register: -ownership of \"$name\" must list [expr {$arity eq "*" ? "its leading" : $arity}] role(s)"
     }
+    if {[dict get $options -keeps-length] && [lindex $ownership 0] ne "place"} {
+        error "core::native::register: -keeps-length of \"$name\" needs a receiver it mutates (-ownership role place for argument 0)"
+    }
     set errorsFrom [dict get $options -errors-from]
     if {$errorsFrom ne "" && (![string is digit -strict $errorsFrom] || $arity eq "*" || $errorsFrom >= $arity
             || ![dict get $options -completion])} {
@@ -547,7 +561,8 @@ proc core::native::register {name args} {
         resultShape $shape resultRange $range \
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
-        ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
+        ownership $ownership errorsFrom $errorsFrom resultLength $length \
+        keepsLength [dict get $options -keeps-length] dropForm $dropForm \
         layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern]]
     return [core::value::native $name]
 }

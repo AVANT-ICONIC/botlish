@@ -5093,6 +5093,7 @@ tests/proven-bounds.test bounds-vector-same-place-lockstep pass
 tests/proven-bounds.test bounds-vector-snapshots-fail pass
 tests/proven-bounds.test bounds-vector-snapshots-lockstep pass
 tests/proven-bounds.test bounds-vector-snapshots-rejected pass
+tests/proven-bounds.test bounds-vector-static-block pass
 tests/proven-bounds.test bounds-vector-unmutated-proven pass
 tests/proven-bounds.test bounds-verdict-index pass
 tests/proven-bounds.test bounds-verdict-literal-loop-walks pass

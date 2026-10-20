@@ -384,15 +384,15 @@ core::native::register mutable_array::at -arity 2 -impl core::mutarray::at \
     -param-types {mutarray int} -result-type any -runtime range-check \
     -result-shape {mutarray-element 0} -errors IndexNotFound -bounds {index mutarray 0 1} \
     -ownership {copy-out observe}
-core::native::register mutable_array::set -arity 3 -impl core::mutarray::set_ \
+core::native::register mutable_array::set -arity 3 -impl core::mutarray::set_ -keeps-length 1 \
     -param-types {mutarray int any} -result-type unit -runtime {range-check mutarray-mutate} \
     -errors IndexNotFound -bounds {index mutarray 0 1} -drop-form {mutable_array#set_drop 0} \
     -ownership {place observe move}
-core::native::register mutable_array::swap -arity 3 -impl core::mutarray::swap \
+core::native::register mutable_array::swap -arity 3 -impl core::mutarray::swap -keeps-length 1 \
     -param-types {mutarray int any} -result-type any -runtime {range-check mutarray-mutate} \
     -result-shape {mutarray-element 0} -errors IndexNotFound -bounds {index mutarray 0 1} \
     -drop-form {mutable_array#swap_drop 0} -ownership {place observe move}
-core::native::register mutable_array::copy -arity 5 -impl core::mutarray::copy \
+core::native::register mutable_array::copy -arity 5 -impl core::mutarray::copy -keeps-length 1 \
     -param-types {mutarray int mutarray int int} -result-type unit -runtime {range-check mutarray-mutate} \
     -errors {LowerUnderrun UpperOverrun} \
     -bounds {slices {mutarray 0 1 {sum 1 4}} {mutarray 2 3 {sum 3 4}}} \
@@ -410,10 +410,10 @@ core::native::register mutable_array#consume -arity 1 -impl core::mutarray::cons
 core::native::register mutable_array#take_front -arity 1 -impl core::mutarray::takeFront \
     -param-types {mutarray} -result-type any -runtime mutarray-mutate -result-shape {mutarray-element 0} \
     -ownership {place}
-core::native::register mutable_array#swap_drop -arity 4 -impl core::mutarray::swapDrop \
+core::native::register mutable_array#swap_drop -arity 4 -impl core::mutarray::swapDrop -keeps-length 1 \
     -param-types {mutarray int any str} -result-type any -runtime {range-check mutarray-mutate} \
     -result-shape {mutarray-element 0} -errors IndexNotFound -ownership {place observe move observe}
-core::native::register mutable_array#set_drop -arity 4 -impl core::mutarray::setDrop \
+core::native::register mutable_array#set_drop -arity 4 -impl core::mutarray::setDrop -keeps-length 1 \
     -param-types {mutarray int any str} -result-type unit -runtime {range-check mutarray-mutate} \
     -errors IndexNotFound -ownership {place observe move observe}
 core::native::register mutable_array#generate_drop -arity 3 -impl core::mutarray::generateDrop \

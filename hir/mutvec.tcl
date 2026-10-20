@@ -279,10 +279,14 @@ proc hir::mutvec::OperationValueProblem {hir e} {
     if {[NativeOpKind $op] ne "mutate"} {
         return ""
     }
-    set receiver [lindex [dict get [core::native::metadata $op] paramTypes] 0]
+    set meta [core::native::metadata $op]
+    set receiver [lindex [dict get $meta paramTypes] 0]
     set kind [expr {[core::type::base $receiver] eq "mutarray" ? "array" : "vector"}]
     set name [KindName $kind]
-    return "$op mutates its receiver in place, so it can only be called, never used as a value: a call through a function value has no receiver this check can see, and would update whatever $name its caller passes -- a copy, whose update is lost, or a place's own header (call it on a place, `v.[namespace tail $op](...)`, or wrap it in a function of your own that takes the $kind and returns it)"
+    # The call on a place, spelled the way the operation can be called: a
+    # nomethod operation only as a function.
+    set call [expr {[dict get $meta nomethod] ? "${op}(v, ...)" : "v.[namespace tail $op](...)"}]
+    return "$op mutates its receiver in place, so it can only be called, never used as a value: a call through a function value has no receiver this check can see, and would update whatever $name its caller passes -- a copy, whose update is lost, or a place's own header (call it on a place, `$call`, or wrap it in a function of your own that takes the $kind and returns it)"
 }
 
 # Why receiver R of mutating call E is not a place, or "".
