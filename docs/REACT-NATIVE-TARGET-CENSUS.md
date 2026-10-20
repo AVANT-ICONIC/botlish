@@ -187,7 +187,7 @@ missing piece), **blocked** (needs a named milestone), **absent**.
 | Plugin loading / subcommands | | | none; main.tcl not sourceable (`main.tcl:328-341,686`) | absent | section 7 | plugin facility |
 | Machine-readable diagnostics | | | text only (`main.tcl:353-384`) | absent | | `-diagnostics json` or a Tcl API |
 | Cross-compile toolchain discovery | NDK not used by Botlish | Xcode not used | rustc picks the host linker (`aot.rs:304`) | absent | | not needed for static libraries |
-| React Native packaging | works (CI) | see section 9 | | works | section 9 | productize the generator |
+| React Native packaging and calls from JS | release build links Botlish into both 64-bit ABIs (CI); emulator run: see section 9 | runs in a stock app on the simulator (CI), with the program object's platform retagged | | works | section 9 | productize the generator; ISA from the triple |
 
 ## 4. Type mapping matrix
 
@@ -724,7 +724,10 @@ The probe library (`rnprobe_*`) and a second one from a different module
 
 Runs on the census branch:
 [run 1](https://github.com/mwagner-webdev/botlish/actions/runs/39455138158),
-[run 2](https://github.com/mwagner-webdev/botlish/actions/runs/39457386646).
+[run 2](https://github.com/mwagner-webdev/botlish/actions/runs/39457386646),
+[run 4](https://github.com/mwagner-webdev/botlish/actions/runs/39460827625)
+and [run 5](https://github.com/mwagner-webdev/botlish/actions/runs/39464674965).
+Run 3 was cancelled; run 4 replaced it.
 
 **Android arm64-v8a library** (ubuntu-24.04-arm, run 1):
 
@@ -812,7 +815,51 @@ Run 2 rebuilt the same package with the two new exports:
   records the app's own log and process state, and runs the C stand-in as
   a control.
 
-@@RUN4IOS@@
+[Run 4](https://github.com/mwagner-webdev/botlish/actions/runs/39460827625)
+repeated both builds (A failed with the same `ld` message, B succeeded) and
+ran build B. **Botlish code ran inside the stock React Native app on the
+iOS simulator.**
+
+* The simulator booted in 1 min 36 s; the app launched as process 15423.
+* Every probe line reached the log stream within the first second, all as
+  the host spike predicted:
+
+  ```
+  BOTLISH_PROBE add(2, 3) => 5
+  BOTLISH_PROBE add(2**53 - 1, 1) threw RangeError BOTLISH_INT_RANGE "add: the result is not a safe integer"
+  BOTLISH_PROBE add(1.5, 1) threw TypeError BOTLISH_ARGUMENT "add: argument 0 must be a safe integer"
+  BOTLISH_PROBE reverse("héllo, wörld") => "dlröw ,olléh"
+  BOTLISH_PROBE reverse("a😀b") => "b😀a"
+  BOTLISH_PROBE requirePositive(5) => 5
+  BOTLISH_PROBE requirePositive(-1) threw Error NotPositive "requirePositive: uncaught propagated error: <error NotPositive>"
+  BOTLISH_PROBE depth(1000) => 1000
+  BOTLISH_PROBE same("añb", "añb") => true
+  BOTLISH_PROBE pick(false, "left", "right") => "right"
+  BOTLISH_PROBE 100000 reverse calls => "y99999x" in 190 ms
+  BOTLISH_PROBE done
+  ```
+
+* So on the device side, the whole chain held:
+  * the Mac's native backend made the machine code; its platform tag was
+    the only change;
+  * the runtime was built for `aarch64-apple-ios-sim`;
+  * Codegen's spec and the generated adapter ran in a release build, with
+    the JS bundled into the app and Hermes running it;
+  * the module was registered by the package's `RCTModuleProvider`, which
+    the app's own Codegen found through `modulesProvider`.
+* A call cost about 1.9 µs, against 0.8 to 1.3 on the Linux host. That is
+  JS's loop and string building included, on a shared CI Mac running a
+  simulator.
+* The C stand-in control was not needed, and did not run.
+* `depth(1000)` ran on React Native's JS thread. The stack table above says
+  how far beyond that it would go.
+* Run 2 built the same app from the same sources and ran the same script,
+  and saw no line. The likely cause is the log stream, not the app:
+  * run 4's lines are timestamped before `simctl launch` had even returned;
+  * a stream that attached later than its three-second head start would
+    miss every one.
+
+@@RUN5IOS@@
 
 ## 10. Proposed implementation slices
 
