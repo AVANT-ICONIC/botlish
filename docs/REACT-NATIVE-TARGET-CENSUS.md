@@ -858,8 +858,12 @@ iOS simulator.**
   * run 4's lines are timestamped before `simctl launch` had even returned;
   * a stream that attached later than its three-second head start would
     miss every one.
-
-@@RUN5IOS@@
+* [Run 5](https://github.com/mwagner-webdev/botlish/actions/runs/39464674965)
+  launched only once the stream had printed its header. That took 7 s,
+  more than the old head start, which fits that explanation without proving
+  it. Run 5 then printed the same twelve lines, the 100,000 calls in 150 ms.
+  Of the three runs that reached the simulator, runs 4 and 5 saw every
+  line, and run 2, with the shorter head start, saw none.
 
 ## 10. Proposed implementation slices
 
