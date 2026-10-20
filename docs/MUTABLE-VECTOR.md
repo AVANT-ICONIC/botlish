@@ -15,7 +15,11 @@
 > at the reference: a call through the value names no place, so it mutated
 > whatever header its caller passed, behind the copies the elaboration
 > writes only for places it sees mutated (`c = v; p(v, 4)` changed `c`).
-> The operations that only read (length, at) may be values.
+> The operations that only read (length, at) may be values. A loop's length
+> over a vector (COLLECTING-LOOPS.md, "Iteration domains and cardinality")
+> counts only the operations that may resize it: `swap` is registered
+> `-keeps-length` (core/native.tcl), so two loops around a swap have one
+> length.
 
 `MutableVector[T]`: a growable mutable value, affine exactly when its
 elements are.

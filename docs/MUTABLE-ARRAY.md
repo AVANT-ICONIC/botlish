@@ -379,7 +379,10 @@ name. The roles: `observe`, `place`, `move`, `element`, `repeat`, `factory`,
 `copy-out`, `equality`, `resume`, `message`, `release`, `erase` (the
 default). Beside it, the registration carries what the passes used to key on
 names: `-drop-form` (the element-dropping variant), `-result-length` (a
-constructor's length for hir/cardinality.tcl), `-errors-from`, and the
+constructor's length for hir/cardinality.tcl), `-keeps-length` (a mutating
+operation that replaces elements and never changes its receiver's length:
+set, swap, copy, a vector's swap -- hir/cardinality.tcl's `Resizes`; an
+operation that does not say so may resize), `-errors-from`, and the
 receiver role that makes a native a collection operation
 (`hir::mutvec::OpKind`).
 
@@ -1111,7 +1114,7 @@ reference semantics:
 | file | role |
 |---|---|
 | `core/mutarray.tcl` | Tcl runtime: headers over shared Tcl lists, operations, registrations with roles |
-| `core/native.tcl` | `-ownership`, `-errors-from`, `-result-length`, `-drop-form`; the role vocabulary |
+| `core/native.tcl` | `-ownership`, `-errors-from`, `-result-length`, `-keeps-length`, `-drop-form`; the role vocabulary |
 | `core/mutvec.tcl`, `core/affine.tcl` | shares (`h` for arrays, `d` dynamic), the `a` drop, the kind-generic drain |
 | `lib/mutable_array.bot` | `get` only |
 | `hir/types.tcl` | affinity, covariant subtype, lub, narrow, `MentionsMutable` |
@@ -1120,7 +1123,7 @@ reference semantics:
 | `hir/affine.tcl` | `NativeConsumer` (roles), consuming loops over arrays |
 | `hir/mutvec.tcl` | places, copies, copy elision, dropping forms -- kind-generic, metadata-driven |
 | `hir/specialize.tcl`, `hir/semantic.tcl` | affine array keys; declared mutable parameters |
-| `hir/cardinality.tcl` | constructor lengths from `-result-length` |
+| `hir/cardinality.tcl` | constructor lengths from `-result-length`; `-keeps-length` for a vector's length across a mutation |
 | `native/src/runtime/{value,ops,mutvec,affine,heap,metrics,show}.rs` | native runtime |
 | `native/lower.tcl`, `native/src/nir.rs`, `native/src/codegen/clif.rs` | native lowering |
 | `tests/mutable-array.test` | this milestone's tests |

@@ -554,7 +554,27 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   loop through an `any`-typed path was walked (and emptied) there while the
   other backends raised the loop's TYPE error; it now requires a List like
   them, and only a loop the compiler marks consuming moves a vector's
-  elements out (`mv-untyped-loop`).
+  elements out (`mv-untyped-loop`). The third round narrowed the
+  rule to what soundness needs, recovering sound proofs the second had
+  dropped: only an operation that may change a length counts (a swap is
+  registered `-keeps-length`); a vector keeps its key's length unless a
+  place its own value was copied through is resized (so `u = v;
+  u.push(x)` leaves `v` and `w = v` one length); a place is a context
+  member by its root, so a local copy `items = log.items` is a place of
+  its own; a call is a site of a context member only when it may reach
+  the installed context (its callee requires the context, directly or
+  through what it calls, it runs or resumes a coroutine, or it is a
+  function value given an affine argument, which may carry a handle);
+  and the first run of an `if` branch or a handler, entered with no site
+  before it, continues the run before the statement (a loop in a branch
+  before the branch's own push, a `static compile:` block among them). A
+  lockstep diagnostic now records the evaluations it locates as related
+  origins. What stays unrelated: two loops with a resize of the vector
+  between them on some path, a pop's shorter length read against the
+  longer earlier one (a size form states equalities, no order), and an
+  operation that mutates taken as a value (rejected, even when its
+  receiver is a temporary: telling that apart would need the flow of
+  function values).
 
 ### CP-4. Facts do not cross a call
 
