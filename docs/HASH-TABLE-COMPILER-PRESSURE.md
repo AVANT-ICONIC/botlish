@@ -746,10 +746,13 @@ Not prototyped.
   Both are fixed in the proof, not the lowering: every self call is a step
   of the proof (the same step or none, inside the guard's continuing side),
   and a call bound must be determined by arguments that are themselves
-  invariant -- unchanged parameters, fields of them, and bindings from
+  invariant -- unchanged parameters, context parameters, fields of them,
+  structs, `if` values and closures built from them, and bindings from
   outside the function only when every self call runs the same closure (a
   self call through a parameter can reach another closure, with another
-  captured bound) (PROOF-FACT-CENSUS.md, F.2). `tests/hir-range.test` and
+  captured bound) -- through natives classified repeatable or registered
+  `-mutation-stable` (an array's capacity, which no mutation changes)
+  (PROOF-FACT-CENSUS.md, F.2). `tests/hir-range.test` and
   `tests/native-mod-lowering.test` have the reproducers, and the fuzzer
   generates both shapes (a non-tail self call; a varying or invariant
   native bound, checked against a model at 1114112 calls deep).

@@ -450,6 +450,71 @@ test range-induction-outside-binding-bound {a bound over a top-level binding or 
     lappend out [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
 } -result [list "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" {bound not stable} {bound not stable} {24 24 24 24}]
 
+# More values every invocation computes alike: a struct built of invariant
+# fields, an `if` value whose condition and branches are invariant, a closure
+# the invocation makes over invariant captures, a context parameter (one
+# installed value of its type for the whole run), and a native registered
+# -mutation-stable over an unchanged argument (a MutableArray's capacity,
+# whatever is set in it). Each built from a value that changes on the self
+# call is not invariant: the `if` then picks a different branch, the closure
+# captures another value, the array is another array.
+test range-induction-invariant-bound-values {str::length of a field of a struct built from an unchanged parameter, of an `if` value over unchanged parameters, of a call of a closure the invocation makes over an unchanged parameter (also a recursive one, which captures itself), char::scalar_value of a context parameter's field, and mutable_array::capacity of an unchanged array set in every step are bounds (i in [0, smallMax], or [0, 0x10FFFF]); the same shapes over a value the self call changes are not ("bound not stable")} -body {
+    set struct "import str\nstruct P:\n    name: str\n    n: int\n\n"
+    set sources [list \
+        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import str\nfn f(i: int, s: str, u: str, d: bool, acc: int) -> int:\n    t = if d:\n        s\n    else:\n        u\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, d, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", true, 0)" \
+        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        str::concat(x, s)\n    if i == str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str, k: int) -> str:\n        if k == 0:\n            str::concat(x, s)\n        else:\n            g(x, k - 1)\n    if i == str::length(g(\"!\", 2)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import char\ncontext struct Cfg:\n    c: UnicodeChar\n\nfn f(i: int, acc: int, context cfg: Cfg) -> int:\n    if i == char::scalar_value(cfg.c):\n        acc\n    else:\n        f(i + 1, acc + mod(1000, i + 1))\n\nwith context Cfg {c: 'e'}\nf(0, 0)" \
+        "import mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == mutable_array::capacity(a):\n        acc\n    else:\n        a.set(0, i):\n            on IndexNotFound:\n                unit\n        f(i + 1, a, acc + mod(1000, i + 1))\n\nf(0, mutable_array::create(10, 0), 0)" \
+        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import str\nfn f(i: int, s: str, u: str, acc: int) -> int:\n    t = if i > 2:\n        s\n    else:\n        u\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", 0)" \
+        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        str::concat(x, s)\n    if i == str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == mutable_array::capacity(a):\n        acc\n    else:\n        f(i + 1, mutable_array::create(i + 3, 0), acc + mod(1000, i + 1))\n\nf(0, mutable_array::create(10, 0), 0)"]
+    lmap source $sources {
+        lassign [rangeOf $source] hir spec analysis
+        set id [rangeInstance $spec f]
+        set r [inductionOf $analysis $id 0]
+        expr {$r ne "" ? $r : [hir::induction::reason [dict get $analysis induction] $id 0]}
+    }
+} -result [list "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" {[0, 1114111]} "\[0, $hir::range::smallMax\]" {bound not stable} {bound not stable} {bound not stable} {bound not stable}]
+
+# Reading a binding the bound reaches through many paths asks about it once:
+# a chain of locals, each read three times by the next, costs a question per
+# local, not 3^N (without that, ten locals took 59049 questions and fourteen
+# 85 s). Invariant's depth limit still declines a chain as long as forty.
+proc InvariantChainSource {n} {
+    set source "import str\nfn f(i: int, s: str, acc: int) -> int:\n    t0 = s\n"
+    for {set k 1} {$k <= $n} {incr k} {
+        set j [expr {$k - 1}]
+        append source "    t$k = if str::length(t$j) == 0:\n        t$j\n    else:\n        t$j\n"
+    }
+    append source "    if i == str::length(t$n):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)"
+    return $source
+}
+proc CountInvariant {args} {
+    incr ::invariantCalls
+}
+test range-induction-invariant-shared-bindings {a bound over a chain of locals each read three times by the next is decided with a question per local: a chain of ten keeps the fact with fewer than 200 calls of Invariant, a chain of forty is declined ("bound not stable")} -body {
+    set out {}
+    foreach n {10 40} {
+        set ::invariantCalls 0
+        trace add execution hir::induction::Invariant enter CountInvariant
+        try {
+            lassign [rangeOf [InvariantChainSource $n]] hir spec analysis
+        } finally {
+            trace remove execution hir::induction::Invariant enter CountInvariant
+        }
+        set id [rangeInstance $spec f]
+        set r [inductionOf $analysis $id 0]
+        lappend out [expr {$r ne "" ? $r : [hir::induction::reason [dict get $analysis induction] $id 0]}]
+        if {$n == 10} {
+            lappend out [expr {$::invariantCalls < 200}]
+        }
+    }
+    set out
+} -result [list "\[0, $hir::range::smallMax\]" 1 {bound not stable}]
+
 # ---------------------------------------------------------------------------
 # Parameter branch narrowing (this milestone's Part A): the same
 # ComparisonNarrowing machinery hir/range.tcl already had for `local`

@@ -674,12 +674,18 @@ legality side, which has none by design.
     passed through unchanged, or a call with a registered result Range
     whose value is the same in every invocation (`BoundRange`,
     `Invariant`). That is a call determined by its argument values (a
-    native classified so, `hir::repeatable::Native`, or a function whose
-    body is, `hir::repeatable::Block`) over invariant arguments: literals,
-    unchanged parameters, root bindings, locals bound to invariant values,
-    fields of invariant values, and bindings from outside the function
-    (captured, top-level, module-static) when every self call invokes the
-    running closure (`SameClosure`: through the function's own binding).
+    native classified so, `hir::repeatable::Native`, or registered
+    `-mutation-stable`, its result fixed however the mutable values behind
+    its arguments are mutated in place, like `mutable_array::capacity`; or a
+    function whose body is determined by its arguments,
+    `hir::repeatable::Block`) over invariant arguments: literals, unchanged
+    parameters, root bindings, context parameters (one installed value per
+    context type, installed once at the top level), locals bound to
+    invariant values, fields of invariant values, structs and `if` values
+    built of invariant parts, closures the invocation makes over invariant
+    captures, and bindings from outside the function (captured, top-level,
+    module-static) when every self call invokes the running closure
+    (`SameClosure`: through the function's own binding).
     A registered result Range alone is not enough: `i == char::scalar_value(c)`
     with `c` recomputed every step can be stepped past, and so can a
     captured `c` when a self call reaches another closure of the same
@@ -696,9 +702,9 @@ legality side, which has none by design.
   * recursion with no self tail call (not attempted);
   * a non-tail self call with another step, or outside the guard's
     continuing side (it is counted, and the proof declines);
-  * a bound read through a native that reads a mutable object, even an
-    unchanged one (`mutable_array::capacity`: the registry does not say
-    which observations no mutation changes);
+  * a bound read through a native neither classified repeatable nor
+    registered `-mutation-stable`, even over an unchanged argument
+    (`mutable_vector::length`, which a push in the body changes; `hash`);
   * steps of 2 or more ("step may skip equality terminator",
     `range-induction-3`);
   * caller-propagated (non-literal) seeds.

@@ -393,6 +393,64 @@ fn same(i: int, n: int, d: int) -> int:
         [list [sourceAgree $text]]
 } -result {rimodtotal rimodtotal rimodtotal rimodtotal rimodtotal {value {[1, 22, 1, 1, 27]}}}
 
+test mod-lowering-invariant-values-kept {the induction facts of bounds built of values every invocation reads alike select rimodtotal too: a field of a struct built from an unchanged parameter, an `if` value over unchanged parameters, a closure the invocation makes over an unchanged parameter, a context parameter's field, and the capacity of an unchanged array that every step sets} -body {
+    set text {import str
+import char
+import mutable_array
+
+struct P:
+    name: str
+    n: int
+
+context struct Cfg:
+    c: UnicodeChar
+
+fn built(i: int, s: str, acc: int) -> int:
+    if i == str::length(P{name: s, n: 1}.name):
+        acc
+    else:
+        built(i + 1, s, acc + mod(1000, i + 1))
+
+fn chosen(i: int, s: str, u: str, d: bool, acc: int) -> int:
+    t = if d:
+        s
+    else:
+        u
+    if i == str::length(t):
+        acc
+    else:
+        chosen(i + 1, s, u, d, acc + mod(1000, i + 1))
+
+fn closure(i: int, s: str, acc: int) -> int:
+    fn g(x: str) -> str:
+        str::concat(x, s)
+    if i == str::length(g("!")):
+        acc
+    else:
+        closure(i + 1, s, acc + mod(1000, i + 1))
+
+fn installed(i: int, acc: int, context cfg: Cfg) -> int:
+    if i == char::scalar_value(cfg.c):
+        acc
+    else:
+        installed(i + 1, acc + mod(1000, i + 1))
+
+fn capacity(i: int, a: MutableArray[int], acc: int) -> int:
+    if i == mutable_array::capacity(a):
+        acc
+    else:
+        a.set(0, i):
+            on IndexNotFound:
+                unit
+        capacity(i + 1, a, acc + mod(1000, i + 1))
+
+with context Cfg {c: 'e'}
+[built(0, "ab", 0), chosen(0, "abc", "x", true, 0), closure(0, "ab", 0), installed(0, 0), capacity(0, mutable_array::create(4, 0), 0)]}
+    set nir [nirOf $text]
+    concat [lmap name {built chosen closure installed capacity} {ModOps [FunctionBody $nir $name]}] \
+        [list [sourceAgree $text]]
+} -result {rimodtotal rimodtotal rimodtotal rimodtotal rimodtotal {value {[0, 1, 1, 2501, 1]}}}
+
 test mod-lowering-loop-gc-stress {mod in a self-tail loop that allocates every iteration, with a fresh String live across a call of a function whose only op is the raw rimod (so the call is no safepoint), computes the same values under GC stress, collecting at every allocation} -body {
     set text {import str
 fn reduce(x: int, d: int) -> int:

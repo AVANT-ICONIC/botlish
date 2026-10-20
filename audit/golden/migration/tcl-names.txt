@@ -2388,7 +2388,9 @@ tests/hir-range.test range-induction-alternate-path pass
 tests/hir-range.test range-induction-ambiguous-guards pass
 tests/hir-range.test range-induction-closed-instance-unchanged pass
 tests/hir-range.test range-induction-invariant-bound-shapes pass
+tests/hir-range.test range-induction-invariant-bound-values pass
 tests/hir-range.test range-induction-invariant-nested-bound pass
+tests/hir-range.test range-induction-invariant-shared-bindings pass
 tests/hir-range.test range-induction-mutable-length-bound pass
 tests/hir-range.test range-induction-nested-1 pass
 tests/hir-range.test range-induction-nested-2 pass
@@ -4254,6 +4256,7 @@ tests/native-mod-lowering.test mod-lowering-checked-nir pass
 tests/native-mod-lowering.test mod-lowering-effects pass
 tests/native-mod-lowering.test mod-lowering-induction-forms-kept pass
 tests/native-mod-lowering.test mod-lowering-invariant-bounds-kept pass
+tests/native-mod-lowering.test mod-lowering-invariant-values-kept pass
 tests/native-mod-lowering.test mod-lowering-loop-gc-stress pass
 tests/native-mod-lowering.test mod-lowering-mask-nir pass
 tests/native-mod-lowering.test mod-lowering-mask-tagged-nir pass

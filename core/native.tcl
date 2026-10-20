@@ -211,6 +211,18 @@
 #                                     hir::range's small-Int maximum -- never
 #                                     merely assumed (see MAX_COLLECTION_LENGTH
 #                                     there)
+#   mutationStable  0 | 1 (default 0): the result is fixed by the argument
+#                   values and by nothing an in-place mutation changes -- a
+#                   call through the same binding gives the same result
+#                   before and after any mutation of the value it holds
+#                   (a MutableArray's capacity, fixed when the array is
+#                   made) -- and the call reads no execution environment.
+#                   Pure metadata, a guarantee the implementation upholds,
+#                   independent of -context-free (which also governs what
+#                   may be evaluated before run time or folded into static
+#                   storage, and which no reader of a mutable value is):
+#                   hir/induction.tcl reads it to know a call has one value
+#                   for a whole recursion.
 #
 # OWNERSHIP ROLES (-ownership; AFFINE-VALUES.md, MUTABLE-ARRAY.md). Each role
 # says what the operation does with the argument's value, so the one question
@@ -381,7 +393,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
+        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {} -mutation-stable 0]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -404,6 +416,9 @@ proc core::native::register {name args} {
     }
     if {[dict get $options -completion] ni {0 1}} {
         error "core::native::register: -completion of \"$name\" must be 0 or 1"
+    }
+    if {[dict get $options -mutation-stable] ni {0 1}} {
+        error "core::native::register: -mutation-stable of \"$name\" must be 0 or 1"
     }
     set testsType [dict get $options -tests-type]
     if {$testsType ne ""} {
@@ -548,7 +563,8 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern]]
+        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern] \
+        mutationStable [dict get $options -mutation-stable]]
     return [core::value::native $name]
 }
 

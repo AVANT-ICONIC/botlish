@@ -271,7 +271,8 @@ proc hir::induction::BoundRange {hir e ctx seeds} {
             return [hir::range::SeedRange $hir $e]
         }
         call {
-            if {![Invariant $hir $e $ctx]} {
+            set memo [dict create]
+            if {![Invariant $hir $e $ctx memo]} {
                 return [hir::range::unknown]
             }
             return [hir::range::SeedRange $hir $e]
@@ -291,28 +292,35 @@ proc hir::induction::BoundRange {hir e ctx seeds} {
 # 1 if expression E, written in the body of the instance CTX describes
 # (BoundRange), has the same value in every invocation a chain of its self
 # calls makes. Bindings never change (only a native can read a mutable
-# object behind one, and the rule for calls below admits no such native), so
-# the question is which binding each invocation reads:
+# object behind one, and the rule for calls below admits only natives no
+# mutation can mislead), so the question is which binding each invocation
+# reads (InvariantBinding) and whether what it computes from them is
+# determined by them:
 #
 #   * a literal;
-#   * a reference to a parameter every self call passes unchanged;
-#   * a reference to a root binding (a native, true, false, unit);
-#   * a reference to a binding declared outside the instance's block -- a
-#     captured or module-static one -- when every self call invokes the
-#     closure that is running (SameClosure): each invocation then reads the
-#     binding through the one closure, so its one value (an ambient binding
-#     is whatever the host holds when the closure runs, so never);
-#   * a reference to a local of the invocation itself, when the value of its
-#     one bind is invariant;
+#   * a reference to an invariant binding (InvariantBinding);
 #   * a projection of an invariant value (a field of a struct, which never
 #     changes);
+#   * a struct built of invariant field values;
+#   * an `if` (a local bound to one) whose condition and every expression of
+#     both branches are invariant: every invocation takes the same branch to
+#     the same value (a branch that leaves -- return, break, fail -- is not);
+#   * a closure the invocation makes, when every binding it captures is
+#     invariant (the same function over the same values in every
+#     invocation; its own binding, which a recursive closure captures, is
+#     the closure itself);
 #   * a call whose result is determined by its argument values -- a native
-#     classified so (hir::repeatable::Native: context-free, no mutation), or
+#     classified so (hir::repeatable::Native: context-free, no mutation; or
+#     registered -mutation-stable, its result fixed by its arguments however
+#     the mutable values behind them are mutated in place: StableNative), or
 #     a function whose body is (hir::repeatable::Block) called through an
 #     invariant callee -- over invariant arguments.
 #
-# Anything else may differ from one invocation to the next.
-proc hir::induction::Invariant {hir e ctx {depth 0}} {
+# Anything else may differ from one invocation to the next. MEMO (upvar)
+# holds InvariantBinding's answers for this query: a binding is asked once
+# however many expressions read it.
+proc hir::induction::Invariant {hir e ctx memoVar {depth 0}} {
+    upvar 1 $memoVar memo
     variable maxInvariantDepth
     if {$depth > $maxInvariantDepth} {
         return 0
@@ -323,31 +331,40 @@ proc hir::induction::Invariant {hir e ctx {depth 0}} {
             return 1
         }
         ref {
-            set b [hir::get $hir $e binding]
-            if {$b eq ""} {
-                return 0
-            }
-            set index [lsearch -exact [dict get $ctx params] $b]
-            if {$index >= 0} {
-                return [expr {[lindex [dict get $ctx classifications] $index] eq "identity"}]
-            }
-            set binding [hir::binding $hir $b]
-            switch -- [dict get $binding kind] {
-                root {
-                    return 1
-                }
-                ambient {
+            return [InvariantBinding $hir [hir::get $hir $e binding] $ctx memo $inner]
+        }
+        struct {
+            foreach field [hir::get $hir $e fields] {
+                if {![Invariant $hir $field $ctx memo $inner]} {
                     return 0
                 }
             }
-            if {![hir::scopeWithin $hir [dict get $binding scope] [dict get $ctx bodyScope]]} {
-                return [dict get $ctx sameClosure]
+            return 1
+        }
+        if {
+            foreach child [hir::children $hir $e] {
+                if {![Invariant $hir $child $ctx memo $inner]} {
+                    return 0
+                }
             }
-            set bind [dict get $binding declaredBy]
-            if {[dict get $binding kind] ne "local" || $bind eq "" || [hir::kind $hir $bind] ne "bind"} {
-                return 0
+            return 1
+        }
+        bind {
+            # A statement of such a branch: its local is one of the
+            # invocation's own (InvariantBinding reads its value the same way).
+            return [Invariant $hir [hir::get $hir $e value] $ctx memo $inner]
+        }
+        block {
+            foreach b [hir::get $hir $e captures] {
+                set by [dict get [hir::binding $hir $b] declaredBy]
+                if {$by ne "" && [hir::kind $hir $by] eq "bind" && [hir::get $hir $by value] eq $e} {
+                    continue
+                }
+                if {![InvariantBinding $hir $b $ctx memo $inner]} {
+                    return 0
+                }
             }
-            return [Invariant $hir [hir::get $hir $bind value] $ctx $inner]
+            return 1
         }
         project {
             # (A field read through a native view reads live memory; by the
@@ -357,18 +374,19 @@ proc hir::induction::Invariant {hir e ctx {depth 0}} {
             if {[hir::types::IsNativeView [hir::typeOf $hir $receiver]]} {
                 return 0
             }
-            return [Invariant $hir $receiver $ctx $inner]
+            return [Invariant $hir $receiver $ctx memo $inner]
         }
         call {
             lassign [hir::get $hir $e target] targetKind target
             switch -- $targetKind {
                 native {
-                    if {![hir::repeatable::Native [dict get [hir::symbol $hir $target] name]]} {
+                    set name [dict get [hir::symbol $hir $target] name]
+                    if {![hir::repeatable::Native $name] && ![StableNative $name]} {
                         return 0
                     }
                 }
                 block {
-                    if {![Invariant $hir [hir::get $hir $e callee] $ctx $inner]
+                    if {![Invariant $hir [hir::get $hir $e callee] $ctx memo $inner]
                             || ![hir::repeatable::Block $hir $target]} {
                         return 0
                     }
@@ -378,7 +396,7 @@ proc hir::induction::Invariant {hir e ctx {depth 0}} {
                 }
             }
             foreach a [hir::get $hir $e args] {
-                if {![Invariant $hir $a $ctx $inner]} {
+                if {![Invariant $hir $a $ctx memo $inner]} {
                     return 0
                 }
             }
@@ -386,6 +404,82 @@ proc hir::induction::Invariant {hir e ctx {depth 0}} {
         }
     }
     return 0
+}
+
+# 1 if binding B (of a reference or a capture in the body of the instance CTX
+# describes) holds the same value in every invocation a chain of its self
+# calls makes:
+#
+#   * a parameter every self call passes unchanged;
+#   * a root binding (a native, true, false, unit);
+#   * a binding declared outside the instance's block -- a captured or
+#     module-static one -- when every self call invokes the closure that is
+#     running (SameClosure): each invocation then reads the binding through
+#     the one closure, so its one value (an ambient binding is whatever the
+#     host holds when the closure runs, so never);
+#   * a local of the invocation itself, when the value of its one bind is
+#     invariant (Invariant) -- or is a context load: a context parameter
+#     holds the one installed value of its context type, which is installed
+#     once, at the entry program's top level, and never replaced
+#     (CONTEXTS.md, "Installation"), so every invocation reads that value.
+#
+# MEMO (upvar, Invariant's): BindingId -> the answer, so a binding many
+# expressions read is asked about once. A binding is entered as 0 while its
+# answer is computed, so one reached again through itself would not be
+# proven (no program reaches one so: a bind reads only earlier bindings, and
+# the closure rule skips a closure's own binding).
+proc hir::induction::InvariantBinding {hir b ctx memoVar depth} {
+    upvar 1 $memoVar memo
+    variable maxInvariantDepth
+    if {$b eq "" || $depth > $maxInvariantDepth} {
+        return 0
+    }
+    if {[dict exists $memo $b]} {
+        return [dict get $memo $b]
+    }
+    dict set memo $b 0
+    set result [BindingInvariant $hir $b $ctx memo $depth]
+    dict set memo $b $result
+    return $result
+}
+
+proc hir::induction::BindingInvariant {hir b ctx memoVar depth} {
+    upvar 1 $memoVar memo
+    set index [lsearch -exact [dict get $ctx params] $b]
+    if {$index >= 0} {
+        return [expr {[lindex [dict get $ctx classifications] $index] eq "identity"}]
+    }
+    set binding [hir::binding $hir $b]
+    switch -- [dict get $binding kind] {
+        root {
+            return 1
+        }
+        ambient {
+            return 0
+        }
+    }
+    if {![hir::scopeWithin $hir [dict get $binding scope] [dict get $ctx bodyScope]]} {
+        return [dict get $ctx sameClosure]
+    }
+    set bind [dict get $binding declaredBy]
+    if {[dict get $binding kind] ne "local" || $bind eq "" || [hir::kind $hir $bind] ne "bind"} {
+        return 0
+    }
+    set value [hir::get $hir $bind value]
+    if {[hir::contexts::isLoad $hir $value]} {
+        return 1
+    }
+    return [Invariant $hir $value $ctx memo $depth]
+}
+
+# 1 if native NAME is registered -mutation-stable (core/native.tcl): its
+# result is fixed by its argument values, and no in-place mutation of a
+# mutable value behind one changes it.
+proc hir::induction::StableNative {name} {
+    if {[catch {core::native::metadata $name} meta]} {
+        return 0
+    }
+    return [dict get $meta mutationStable]
 }
 
 # 1 if every self call in SELFCALLEXPRS invokes the closure of BLOCK that is
