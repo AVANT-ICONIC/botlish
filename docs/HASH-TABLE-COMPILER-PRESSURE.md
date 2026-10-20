@@ -15,6 +15,9 @@ entry records:
 
 The prototypes of every entry marked "prototyped" are merged into this
 branch, except RT-1, which is on its own branch, `exp-probe-primitive`.
+An adversarial review of the merged prototypes found soundness bugs that
+they caused or exposed, and several older ones; all are fixed ("Found by
+the adversarial review of the prototypes", at the end).
 Their commits are cited by ID. HASH-TABLE-EXPERIMENT.md, "Compiler
 experiments" and "Runtime experiments", gives each one's validation and
 measured effect.
@@ -69,7 +72,7 @@ mutable contents, or a whole-program analysis.
 | [CO-6](#co-6-struct-keys-are-hashed-and-compared-through-materialized-objects) | struct keys are hashed and compared through materialized objects | allocation | moderate | partly (RO-1) | |
 | [CO-7](#co-7-native-lowering-of-a-large-list-literal-is-quadratic) | native lowering of a large List literal is quadratic in its length | compile cost | moderate | no | 15,531 elements: 173 s; 62,949: out of 15 GB |
 | [CO-8](#co-8-a-long-equality-chain-exceeds-the-front-ends-nesting-limit) | a long `or` chain exceeds the front end's nesting limit | compile limit | cheap | no | 1,024 terms: "too many nested evaluations" |
-| [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (branch `exp-probe-primitive`) | measurement in progress |
+| [RT-1](#rt-1-a-probe-primitive) | a probe primitive | runtime | -- | yes (branch `exp-probe-primitive`) | 2-41 % on the baseline; 0-10 % against proof-shaped Botlish after the compiler work: not justified |
 | [RT-2](#rt-2-a-runtime-owned-table) | a runtime-owned table | runtime | -- | no (the Rust reference stands in) | |
 | [RT-3](#rt-3-a-keyed-hash) | a keyed hash: no table can defend itself against chosen keys | runtime | -- | no (a semantic decision) | colliding keys: 2.8-6.9 µs per hit at 1,024 keys |
 
@@ -1087,7 +1090,20 @@ Brief section 34 asks for the operations that stay awkward or expensive
   registered in core/mutarray.tcl (Tcl `probeLinear`), lowered as
   `mutarrayprobe` and implemented in Rust as `rt_mutarray_probe`. It
   passes the fuzzer on four backends (144 checks).
-* **Measured improvement.** Measurement in progress (HASH-TABLE-EXPERIMENT.md, "Runtime experiments").
+* **Measured improvement** (HASH-TABLE-EXPERIMENT.md, "Runtime
+  experiments": ladder C2, median of three alternating rounds, and
+  callgrind):
+  * on the baseline compiler, against `lpa`: 2-41 % off lookups and
+    builds (Int hit 65.9 to 57.1 ns, String miss 69.9 to 41.5 ns);
+  * on the merged tree, against the modular `lpa`: 3-28 %;
+  * against the proof-shaped `lpmask`: 0-10 %. That is nothing on Int
+    builds, 4-6 % on Int lookups, and about 10 % on String and Point
+    lookups (Int hit 37.5 against 39.9 ns, 492 against 496
+    instructions).
+
+  The compiler work removed the same per-step costs the primitive
+  removes. What is left is CO-1, CO-2 and CO-3, which would help every
+  table and every other program. Verdict: not justified.
 
 ### RT-2. A runtime-owned table
 
@@ -1142,6 +1158,49 @@ CG-1, CG-2, RO-1 and the proofs.
   hardening policy") and for a Set/Map API. The measurement is what they
   should weigh. A compact dict (`cd`) iterates in insertion order whatever
   the hash, so choosing it would decouple the two decisions.
+
+---------------------------------------------------------------------------
+
+## Found by the adversarial review of the prototypes
+
+After the five prototypes were merged, a review workflow tried to break
+each one with targeted programs (HASH-TABLE-EXPERIMENT.md,
+"Correctness"). An independent verifier reproduced every finding. Each
+fix was made in its own branch, with tests and mutants, and checked by
+two more verifiers, one hunting unsoundness and one hunting regressions.
+
+| ID | what went wrong | cause | fixed in |
+|---|---|---|---|
+| AR-1 | a reduced index (`mod(h, length(zs))`, the mask form too) over one snapshot of a MutableVector proven for another taken after a push: an unchecked read past a List's end | CP-1 reaching an older defect: a vector's length keyed like an immutable value's | merge `a71467d` |
+| AR-2 | the same through a field path `b.v` around `b.v.push`, a context member grown by a callee, and a lockstep loop | CP-3's path keys reaching the same defect | merge `a71467d` |
+| AR-3 | a counted loop over two snapshots around a push | the same defect, on the baseline too | merge `a71467d` |
+| AR-4 | `k = w.d1` moved while `w.d2` shared its header: a write through `k` showed in `w.d2` | VS-1's per-path moves over a share descriptor that skipped `any` slots | `0935cb3` (merge `cd7ba76`) |
+| AR-5 | the `any`-slot descriptor itself: a struct copy left `any` slots sharing with the source | older | `0935cb3` |
+| AR-6 | a move before `break` or `continue` taken as the binding's last use | older | `3a9f010` |
+| AR-7 | a context member passed by reference while a later argument yields | older: a gap in BUG-1's fix | `14a4819` |
+| AR-8 | a mutated handler payload binding (`on E details:`) had no entry copy | older | `e687ef5` |
+| AR-9 | a mask computed `mod` wrongly, and `rimodtotal` divided by zero (SIGFPE), under an induction fact that ignored a non-tail self call | CG-2 trusting an older unsound fact of hir/induction.tcl | merge `1198a1d` |
+| AR-10 | `rimodtotal` SIGFPE under an `==` bound whose native call's argument changed every step | the same | merge `1198a1d` |
+| AR-11 | a mutating operation taken as a function value (`p = mutable_vector::push; p(v, 4)`) mutated a copy's header too, and hid the mutation from the size forms | older; found by the bounds fix's second review round | `147e543`: such a value is now `MUTABLE-PLACE-RECEIVER` |
+| AR-12 | the interpreter's `listloop` drained any vector reaching it through an `any` path, where the other backends raised the loop's TYPE error | older, interp only | `65d48d3` |
+
+The inline-array (CG-1) and hash (RO-1) reviews found nothing.
+
+**Open after the fixes: precision, not soundness.** The bounds fix
+measures a MutableVector's length by its place, and loses proofs the
+merged prototypes had made:
+* two loops over a context's vector are unrelated around any call that
+  may reach the context, even one that only reads it;
+* a resize in a branch that cannot complete normally (`if c: v.push(x);
+  return`) still separates the loops after it;
+* a pop's shorter length is not known to bound the longer earlier one: a
+  size form states equalities, not order.
+
+None of these was proven on the baseline either. The induction fix
+recovers every sound fact the verifiers tried, except bounds over
+`hash(s)` and relational bounds. The `mod` lowering still trusts Ranges
+without a runtime check. That is by design, so an unsound Range anywhere
+else would again be a wrong value or a SIGFPE.
 
 ---------------------------------------------------------------------------
 
