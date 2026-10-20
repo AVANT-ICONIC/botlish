@@ -16,12 +16,28 @@ sm=$(ls -d "$sdk"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
 yes | "$sm" --licenses > /dev/null || true
 for _ in 1 2 3; do "$sm" --install emulator platform-tools "$image" > /dev/null && break || sleep 15; done
 "$sdk/emulator/emulator" -version | head -1
+"$sdk/emulator/emulator" -accel-check || true
+# A shared library the runner lacks stops qemu before adb ever sees it.
+for q in "$sdk"/emulator/qemu/linux-x86_64/qemu-system-x86_64*; do
+  ldd "$q" | grep "not found" && echo "($q)" || true
+done
 echo no | "$(dirname "$sm")/avdmanager" create avd --force -n probe -k "$image"
+echo
+log=${RUNNER_TEMP:-/tmp}/emulator.log
 nohup "$sdk/emulator/emulator" -avd probe -no-window -gpu swiftshader_indirect -no-snapshot \
-  -noaudio -no-boot-anim -accel on > "${RUNNER_TEMP:-/tmp}/emulator.log" 2>&1 &
+  -noaudio -no-boot-anim -accel on > "$log" 2>&1 &
+emulator=$!
 export PATH="$sdk/platform-tools:$PATH"
-timeout 600 adb wait-for-device
+fail() {
+  echo "emulator: $1"
+  ps -o pid,etime,args -p "$emulator" || echo "the emulator process has exited"
+  adb devices -l || true
+  echo "== the emulator's log:"
+  tail -80 "$log"
+  exit 1
+}
 for _ in $(seq 1 120); do
+  kill -0 "$emulator" 2> /dev/null || fail "exited before boot"
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then
     echo "emulator booted"
     adb shell settings put global window_animation_scale 0 || true
@@ -31,5 +47,4 @@ for _ in $(seq 1 120); do
   fi
   sleep 5
 done
-tail -50 "${RUNNER_TEMP:-/tmp}/emulator.log"
-exit 1
+fail "not booted after ten minutes"

@@ -26,7 +26,14 @@ xcrun simctl spawn "$udid" log stream --level info --style compact \
   --predicate 'eventMessage CONTAINS "BOTLISH_PROBE" OR (process == "BotlishProbeApp" AND messageType == fault)' \
   > "$out.stream" 2>&1 &
 streamer=$!
-sleep 3
+# The probe logs within a second of the launch, and a stream that attaches
+# later misses every line: launch only once the stream has printed its
+# header.
+for waited in $(seq 1 60); do
+  grep -q "Filtering the log data" "$out.stream" && break
+  sleep 1
+done
+echo "log stream ready after ${waited}s"
 xcrun simctl launch "$udid" org.botlish.probeapp
 for _ in $(seq 1 90); do
   if grep -q "BOTLISH_PROBE done" "$out.stream"; then
