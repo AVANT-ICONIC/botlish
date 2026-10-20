@@ -523,9 +523,13 @@ names on Linux, the install name the library records on macOS
 
 On macOS, `default-linker-libraries=yes` gives the link Apple clang's own
 default libraries, libSystem and its compiler runtime (`libclang_rt.osx.a`),
-which rustc's `-nodefaultlibs` link leaves out: C compiled by clang calls the
-runtime for helpers such as `__isPlatformVersionAtLeast`
-(`__builtin_available`, `cf-default-libraries`).
+which rustc's `-nodefaultlibs` link leaves out, so C compiled by clang finds
+the runtime helpers it may call, as in a C program's link. No test can see
+the runtime missing today: the one helper the tests' C calls,
+`__isPlatformVersionAtLeast` (`__builtin_available`, `cf-availability-check`),
+is also defined by Rust's standard library, which the link reaches first;
+`ffi_link_plan_apple_has_no_gnu_flags` pins the argument (the
+`apple-default-libraries-dropped` mutant is killed by it alone).
 
 **Library search.** `main.tcl -L DIR` (repeatable) adds DIR to the linker's
 search path for both native backends and `-emit-native-executable`

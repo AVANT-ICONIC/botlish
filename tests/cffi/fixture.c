@@ -418,10 +418,10 @@ __attribute__((noinline)) long bcf_deep(long n) {
 }
 
 #if defined(__APPLE__)
-/* A call clang compiles to its compiler runtime's
- * `__isPlatformVersionAtLeast` (libclang_rt.osx.a, not libSystem): linked
- * only with the C driver's default libraries (codegen/aot.rs's
- * link_plan_args_for). macOS 99 is no version a runner has: 0. */
+/* A run-time OS version check, which clang compiles to a call of
+ * `__isPlatformVersionAtLeast`: defined by clang's compiler runtime
+ * (libclang_rt.osx.a, not libSystem) and by Rust's standard library, which
+ * the link reaches first. macOS 99 is no version a runner has: 0. */
 int bcf_available(void) {
     if (__builtin_available(macOS 99, *)) {
         return 1;

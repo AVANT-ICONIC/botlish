@@ -355,7 +355,10 @@ proc cCalls {} {
     set decls "import ffi::c\n\nextern c library \"botlish_aot_facts\"\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn widen named \"bcfx_widen\"(c: ffi::c::SChar, s: ffi::c::UShort, l: ffi::c::Long) -> ffi::c::Long\n"
     set text "$decls\n\[labs(-42), widen(-1, 65535, 7)\]\n"
     set started [clock microseconds]
-    set outcome [native::withLinkDirs [list $lib] {standalone c-call $text {}}]
+    if {[catch {native::withLinkDirs [list $lib] {standalone c-call $text {}}} outcome options]} {
+        check c-call-run 0 "the link failed: [lrange [dict get $options -errorcode] 0 1]" $outcome
+        return
+    }
     set ms [expr {([clock microseconds] - $started) / 1000}]
     check c-call-run [expr {$outcome eq [list 0 "\[42, -34458\]\n" ""]}] "[shown $outcome] ($ms ms, link included)"
 

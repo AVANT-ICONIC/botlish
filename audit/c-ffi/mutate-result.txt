@@ -144,3 +144,166 @@ KILLED link-failure-removes-earlier -- a link removes the executable already at 
     fuzz:   survived
     rust:   survived
 12 mutants, 10 killed, 0 survived, 2 skipped (another host's)
+
+# tclsh9.0 audit/c-ffi/tools/mutate.tcl (2026-10-20, macOS arm64: GitHub's
+# macos-15 runner, run 39379524425, Tier C job 118485468440 at bad0deb,
+# tests/platform/tier.tcl c-ffi-mutants; 3237 s; Apple clang compiles the C)
+
+KILLED named-ignored -- the parser reads `named "SYMBOL"` and drops it: every link symbol is the Botlish name
+    tests:  killed (69 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED botlish-name-as-symbol -- native lowering's foreign table names the Botlish qualified name as the symbol, not the declaration's link symbol
+    tests:  killed (15 failed: cf-abi-register-extension, cf-abi-stack-layout, cf-bool-transport, cf-borrow-read, cf-direct-contextualized, cf-direct-declared, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED library-dropped -- the link plan loses the last library a program declares
+    tests:  killed (53 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED long-always-64 -- the ABI class of C long (and unsigned long) is 64 bits whatever the target says
+    tests:  killed (1 failed: cf-abi-classes-follow-the-target)
+    fuzz:   survived
+KILLED captures-borrow-allowed -- a parameter whose contract captures the pointer admits a temporary byte exposure (only an unknown escape is refused)
+    tests:  killed (2 failed: cf-borrow-refusals, cf-strict0-replay)
+    fuzz:   survived
+KILLED read-bytes-copied -- a read exposure is made of a private copy of the storage, not of the storage itself
+    tests:  killed (6 failed: cf-borrow-read, cf-borrow-sha256-shape, cf-contract-violation, cf-executable, cf-gc-stress, cf-interchange)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED original-mutablebytes-mutated -- a write exposure hands C the owner's own storage, so the caller's MutableBytes changes
+    tests:  killed (3 failed: cf-borrow-sha256-shape, cf-borrow-write, cf-nir)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED keepalive-dropped -- no keepalive of the exposed storage after the C call
+    tests:  killed (1 failed: cf-nir)
+    fuzz:   survived
+KILLED argument-after-exposure -- a read exposure is made where its argument is evaluated, so later arguments' code runs while it is open
+    tests:  killed (1 failed: cf-nir)
+    fuzz:   survived
+KILLED every-extern-direct -- every call of a C function is an authority source, noescape ones included
+    tests:  killed (61 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED retaining-not-direct -- a call of a C function that may retain a pointer is an ordinary call
+    tests:  killed (7 failed: cf-direct-contextualized, cf-direct-declared, cf-direct-not-predesignated, cf-direct-retaining, cf-direct-summary, cf-direct-two-modules-one-library, ...)
+    fuzz:   survived
+KILLED nearest-library -- each C function is associated with the last library its own unit declares, and only libraries some function is associated with are linked
+    tests:  killed (5 failed: cf-link-directories, cf-link-order, cf-link-plan, cf-missing-library, cf-stub-linker)
+    fuzz:   survived
+KILLED extern-state-shared -- activating a HIR does not re-install its own extern declarations: it reads whichever compilation registered last
+    tests:  killed (2 failed: cf-interchange, cf-isolation)
+    fuzz:   survived
+KILLED interchange-loses-foreign -- HIR interchange text drops the HIR's extern declarations (its foreign side table)
+    tests:  killed (1 failed: cf-interchange)
+    fuzz:   survived
+KILLED tcl-backends-return-zero -- the Tcl backends run a C call as a call that returns 0
+    tests:  killed (2 failed: cf-static-compile, cf-tcl-backends)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED unknown-provenance-exposed -- an exposure is admitted where the pointer result's provenance is unknown (it may point into the exposed storage)
+    tests:  killed (1 failed: cf-result-provenance)
+    fuzz:   survived
+KILLED extern-arity-unchecked -- a C call passing a different number of arguments than its signature is not a compile-time ARITY
+    tests:  killed (2 failed: cf-call-typing, cf-static-compile)
+    fuzz:   survived
+KILLED macos-plain-char-unsigned -- plain C char unsigned on macOS AArch64, as on Linux AArch64
+    tests:  killed (6 failed: cf-abi-pick, cf-abi-register-extension, cf-abi-stack-layout, cf-char-target, cf-scalar-transport, cf-scalar-values)
+    fuzz:   killed (5 disagreements in 6 programs)
+KILLED fixture-wrong-architecture -- the C fixture is compiled for x86-64 on macOS: every link of it fails (the tests' own fixture build)
+    tests:  killed (48 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   survived
+KILLED unsigned-result-sign-extended -- a narrow unsigned C result is sign-extended from its width
+    tests:  killed (4 failed: cf-abi-stack-layout, cf-scalar-extension, cf-scalar-transport, cf-scalar-values)
+    fuzz:   killed (1 disagreements in 6 programs)
+    rust:   survived
+KILLED signed-result-zero-extended -- a narrow signed C result is zero-extended from its width
+    tests:  killed (7 failed: cf-abi-register-boundary, cf-char-target, cf-error-sentinel, cf-scalar-extension, cf-scalar-transport, cf-scalar-values, ...)
+    fuzz:   killed (3 disagreements in 6 programs)
+    rust:   survived
+KILLED pointer-untag-forgotten -- a raw C pointer argument is passed as its tagged C address word, not the address
+    tests:  killed (6 failed: cf-bool-pointers, cf-function-pointers, cf-pointer-mix, cf-pointer-width, cf-pointers, cf-result-provenance)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED pointer-tag-forgotten -- a returned C address is used as a Botlish word without its C pointer tag
+    tests:  killed (2 failed: cf-bool-pointers, cf-pointers)
+    fuzz:   survived
+    rust:   survived
+KILLED alias-check-dropped -- a pointer result declared an alias of its argument is never compared with it
+    tests:  killed (1 failed: cf-contract-violation)
+    fuzz:   survived
+    rust:   survived
+KILLED address-masked -- a returned address the C pointer word cannot hold is masked into one instead of failing
+    tests:  killed (1 failed: cf-wild-address)
+    fuzz:   survived
+    rust:   survived
+KILLED unsigned-64-result-boxed-signed -- a 64-bit unsigned C result beyond the small range is boxed as a signed one
+    tests:  killed (2 failed: cf-scalar-transport, cf-scalar-values)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED unsigned-64-argument-truncated -- a BigInt argument of a 64-bit unsigned C type beyond i64 is passed as 0
+    tests:  killed (3 failed: cf-scalar-transport, cf-scalar-values, cf-stack-arguments)
+    fuzz:   killed (5 disagreements in 6 programs)
+    rust:   survived
+KILLED link-group-dropped -- the declared libraries are passed to the linker without a group, so their order decides a static link
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_is_one_linker_group)
+KILLED stub-links-c -- the stub linker accepts a program that calls C, linking none of its libraries
+    tests:  killed (1 failed: cf-stub-linker)
+    fuzz:   survived
+    rust:   survived
+KILLED macos-link-plan-is-gnus -- macOS links with GNU ld's link plan: the libraries inside --start-group/--end-group, which Apple's ld rejects
+    tests:  killed (53 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_flavor_is_the_hosts)
+KILLED apple-plan-has-group -- Apple's link plan keeps GNU ld's archive group
+    tests:  killed (53 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED apple-default-libraries-dropped -- Apple's link plan keeps rustc's -nodefaultlibs: no compiler runtime after the plan's libraries
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED link-dirs-dropped -- the -L search directories never reach the linker
+    tests:  killed (51 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   killed (2 failed: codegen::aot::tests::ffi_link_plan_is_one_linker_group, codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED apple-linker-diagnostics-dropped -- a failed link's Apple ld lines (undefined symbols, the linker's failure) are filtered out of its message
+    tests:  killed (1 failed: cf-undefined-symbol)
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_linker_diagnostics_keep_the_linkers_words)
+KILLED apple-stack-parameters-extended -- Apple's stack-passed narrow parameters keep their extension attribute: Cranelift stores each at register width, past its slot
+    tests:  killed (1 failed: cf-clif-stack-parameters)
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED apple-register-boundary-off-by-one -- the eighth parameter (x7) is taken for a stack one and loses its extension under Apple's convention
+    tests:  killed (3 failed: cf-abi-pick, cf-abi-register-extension, cf-abi-stack-layout)
+    fuzz:   killed (2 disagreements in 6 programs)
+    rust:   killed (1 failed: codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED apple-convention-is-linuxs -- a foreign call on macOS is compiled with the generic AArch64 convention (SystemV): no caller extension, an 8-byte slot per stack argument
+    tests:  killed (14 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-bool-transport, ...)
+    fuzz:   killed (5 disagreements in 6 programs)
+    rust:   killed (2 failed: codegen::clif::apple_tests::ffi_apple_extended_stack_argument_defect_still_present, codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED signed-argument-zero-extended -- a signed narrow argument is zero-extended by the caller
+    tests:  killed (10 failed: cf-abi-pick, cf-abi-register-extension, cf-abi-stack-layout, cf-bool-lowering, cf-char-target, cf-clif, ...)
+    fuzz:   killed (5 disagreements in 6 programs)
+    rust:   killed (1 failed: codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED unsigned-argument-sign-extended -- an unsigned narrow argument is sign-extended by the caller
+    tests:  killed (9 failed: cf-abi-pick, cf-abi-register-extension, cf-abi-stack-layout, cf-bool-lowering, cf-clif, cf-pointer-mix, ...)
+    fuzz:   killed (5 disagreements in 6 programs)
+    rust:   killed (1 failed: codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED short-class-is-int -- a 16-bit C class is given a 32-bit machine type: a short result read from 32 bits, a short stack argument given an int's slot
+    tests:  killed (9 failed: cf-abi-pick, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-clif, cf-clif-stack-parameters, cf-coroutine-calls, ...)
+    fuzz:   killed (1 disagreements in 6 programs)
+    rust:   killed (2 failed: codegen::clif::apple_tests::ffi_apple_extended_stack_argument_defect_still_present, codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED pointer-argument-truncated -- a pointer argument is passed with its low 32 bits only
+    tests:  killed (12 failed: cf-borrow-read, cf-borrow-sha256-shape, cf-borrow-write, cf-contract-violation, cf-executable, cf-function-pointers, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED pointer-result-truncated -- a pointer result keeps its low 32 bits only
+    tests:  killed (4 failed: cf-function-pointers, cf-pointer-mix, cf-pointer-width, cf-wild-address)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED mach-o-symbol-double-prefixed -- on macOS a C function's link symbol is declared with Mach-O's `_` already on it, so the object crate's prefix makes it `__NAME`
+    tests:  killed (53 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED link-failure-removes-earlier -- a link removes the executable already at its destination before it knows whether it succeeds
+    tests:  killed (1 failed: cf-link-failure-keeps-executable)
+    fuzz:   survived
+    rust:   survived
+44 mutants, 44 killed, 0 survived, 0 skipped (another host's)

@@ -386,10 +386,13 @@ fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
 ///     `__stack_chk_guard`, which BoringSSL's stack protector reads) or a
 ///     libgcc helper would otherwise fail to link.
 ///   * Apple: libSystem and clang's compiler runtime (`libclang_rt.osx.a`),
-///     which rustc's `-nodefaultlibs` link leaves out: C compiled by clang
-///     calls it for helpers such as `__isPlatformVersionAtLeast`
-///     (`__builtin_available`), which neither libSystem nor Rust's
-///     compiler-builtins define (c-ffi.test's cf-default-libraries).
+///     which rustc's `-nodefaultlibs` link leaves out, so C compiled by
+///     clang finds the runtime helpers it may call as in a C program's
+///     link. No test can see the runtime missing today: the one helper the
+///     tests' C calls, `__isPlatformVersionAtLeast` (`__builtin_available`,
+///     c-ffi.test's cf-availability-check), Rust's standard library defines
+///     too, and it comes first. `ffi_link_plan_apple_has_no_gnu_flags`
+///     pins the argument.
 fn link_plan_args_for(flavor: LinkerFlavor, program: &Program, link_dirs: &[String]) -> Vec<String> {
     let mut args = Vec::new();
     if !calls_c(program) {

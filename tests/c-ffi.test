@@ -33,9 +33,9 @@ testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
 set ::hostTarget [core::cabi::hostTarget]
-# Apple clang's compiler runtime (libclang_rt.osx.a) beside libSystem: what
-# the C driver's default libraries add on macOS (cf-default-libraries).
-testConstraint appleCompilerRuntime [expr {$::hostTarget eq "macos-aarch64" && [testConstraint nativeCCalls]}]
+# The host compiles C with Apple clang for macOS, whose __builtin_available
+# a C library may use (cf-availability-check).
+testConstraint appleAvailability [expr {$::hostTarget eq "macos-aarch64" && [testConstraint nativeCCalls]}]
 
 set mainScript [file join $::projectRoot main.tcl]
 set ::appCounter 0
@@ -1217,7 +1217,7 @@ test cf-link-failure-keeps-executable {a failed link of a program that calls C p
     list $failed [lrange [dict get $options -errorcode] 0 1] [string trim [exec $exe]] [glob -nocomplain -tails -directory $out .botlish-aot-*]
 } -cleanup {removeApps; file delete -force [file join [temporaryDirectory] cf-keep-[pid]]} -result {1 {NATIVE LINK} 42 {}}
 
-test cf-default-libraries {macOS: a C library compiled by clang may call clang's compiler runtime (`__builtin_available` calls __isPlatformVersionAtLeast, defined in libclang_rt.osx.a, not in libSystem or Rust's runtime): the C driver's default libraries link it, as in a C program's link} -constraints {cfFixture appleCompilerRuntime} -body {
+test cf-availability-check {macOS: a C library compiled by Apple clang that checks the OS version at run time (`__builtin_available`, a call of __isPlatformVersionAtLeast) links and runs on both backends: the symbol resolves (Rust's standard library defines it, as clang's compiler runtime does)} -constraints {cfFixture appleAvailability} -body {
     appValues [bcfApp "import ffi::c\nimport bcf\n\nbcf::available()\n"] {cranelift cranelift-generic}
 } -cleanup removeApps -result {0 0}
 
