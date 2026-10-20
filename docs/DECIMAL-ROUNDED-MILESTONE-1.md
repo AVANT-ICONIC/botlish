@@ -757,10 +757,14 @@ exception.
   Rust tests, the stub-linked executables, the warning gate) passed;
   `macos-arm64.yml` (smoke and the acceptance tier, which includes
   `decimal-rounded.test` and `decimal-rounded.bot`) passed;
+  `tests-arm64.yml` (the Tcl suite, native coverage, golden suites and Rust
+  tests on Linux AArch64, also under GC stress) passed;
   `static-decisions.yml` (every golden suite under the batched and the
   sequential scheduler, on `099bf70`, the same front end) passed with no
   disagreement. The merge with main (the layout-unions milestone) changed
-  only the DiagnosticCode counts and an inventory in three tests.
+  only the DiagnosticCode counts and an inventory in three tests; the
+  merged tree passes `tests/local.tcl` (201 Tcl test files, 0 failures on
+  interp and compile; 99 golden suites on four backends, 0 failures).
 
 Mutation result: 24 mutants, 24 killed, none survived. The test file kills
 every one; the fuzzer independently kills the ones that change a
