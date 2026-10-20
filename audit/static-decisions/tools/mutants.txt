@@ -291,9 +291,17 @@
 @@ hygiene-field-move AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE spells the destructuring it suggests with the struct's NAME#N
 ## hir/affine.tcl
 <<<<
-                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+                if {$kind eq "ref"} {
+                    set shown [hir::semantic::RefName $hir $e]
+                } else {
+                    set shown "value"
+                }
 ====
-                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+                if {$kind eq "ref"} {
+                    set shown [dict get $hir exprs $e name]
+                } else {
+                    set shown "value"
+                }
 >>>>
 
 @@ hygiene-path-release AFFINE-PATH-RELEASE-UNSUPPORTED names the binding by its NAME#N (hir/affine.tcl's PathPoint)
@@ -317,16 +325,19 @@
 @@ hygiene-resume-arity COROUTINE-RESUME-ARITY spells the resume it asks for with the handle's NAME#N
 ## hir/range.tcl
 <<<<
-[hir::semantic::RefName $hir $callee] : "step"
+                set name [hir::semantic::RefName $hir $callee]
 ====
-[dict get $hir exprs $callee name] : "step"
+                set name [dict get $hir exprs $callee name]
 >>>>
 
 @@ hygiene-function-name hir::signatures::Name names a function by its NAME#N: the inferred-contract reasons of TYPE messages and the trait messages naming a function
 ## hir/signatures.tcl
 <<<<
     set name [hir::semantic::CallableName $hir $e]
-    return [expr {$name eq "" ? "a function" : $name}]
+    if {$name eq ""} {
+        return "a function"
+    }
+    return $name
 ====
     foreach b [dict get $hir scopes [dict get $hir exprs $e scope] bindings] {
         set declaredBy [dict get $hir bindings $b declaredBy]
@@ -651,7 +662,7 @@ proc hir::static::Waits {key status deps} {
             if {$chain ne {}} {
                 lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
                 if {$path ne {}} {
-                    lappend units [list [expr {$carried eq {} ? "*" : $carried}] key [lsort -unique $chain] $path $rank]
+                    lappend units [list [if {$carried eq {}} {string cat "*"} else {set carried}] key [lsort -unique $chain] $path $rank]
 >>>>
 
 @@ erased-every-contributor the erased-callable contract depends on every contribution, not on one witness per error: rejecting any contributor's site makes every consumer unknown, though another contribution still erases the same errors

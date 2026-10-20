@@ -14,9 +14,6 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 set scratch [makeDirectory value-display-scratch]
 
 # The text between the quotes of a display.

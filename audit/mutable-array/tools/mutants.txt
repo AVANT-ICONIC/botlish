@@ -420,7 +420,7 @@ core::native::register mutable_array#set_drop
 <<<<
         lappend items [core::completion::payload $completion]
 ====
-        lappend items [expr {$items eq {} ? [core::completion::payload $completion] : [lindex $items 0]}]
+        lappend items [if {$items eq {}} {core::completion::payload $completion} else {lindex $items 0}]
 >>>>
 
 @@ factory-failure-leaks a failing generate does not release the elements it already made (Tcl runtimes)

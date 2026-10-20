@@ -165,13 +165,6 @@ proc withGcStress {script} {
     }
 }
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 # ---------------------------------------------------------------------------
 # The principal theorem (items 57, 102)
 
@@ -480,7 +473,7 @@ test mv-affine-swap-failure {items 28, 59: a failed swap leaves the vector uncha
         [mvCode "${mvDecls}fn f() -> int:\n    q = mutable_vector::from_list(\[make(1)\])\n    coroutine {step} = worker(3)\n    old = q.swap(999, step):\n        on IndexNotFound:\n            make(4)\n    e = step(Command {value: 1})\n    1\nf()\n"]
 } -cleanup {unset -nocomplain text} -result {{value 52} {{value 52} 4 1 {3 4 1 2}} USE-AFTER-MOVE}
 
-test mv-affine-native-releases {items 28, 30, 60: natively too, a clear releases every element at once and a failed swap the replacement it was given: every coroutine created is released by the static drops, none left to the collector} -constraints nativeLinux -body {
+test mv-affine-native-releases {items 28, 30, 60: natively too, a clear releases every element at once and a failed swap the replacement it was given: every coroutine created is released by the static drops, none left to the collector} -constraints nativeCoroutines -body {
     set clear "${mvDecls}fn f() -> int:\n    q = mutable_vector::from_list(\[make(1), make(2), make(3)\])\n    q.clear()\n    keep = make(4)\n    q.push(keep)\n    q.length()\nf()\n"
     set swap "${mvDecls}fn f() -> int:\n    q = mutable_vector::from_list(\[make(1), make(2)\])\n    coroutine {step} = worker(3)\n    old = q.swap(999, step):\n        on IndexNotFound:\n            make(4)\n    e = old(Command {value: 1})\n    e.value * 10 + q.length()\nf()\n"
     lmap text [list $clear $swap] {
@@ -553,7 +546,7 @@ test mv-loop-error-propagation {item 53: a declared error propagated out of a co
     mvReleases "${mvLoopDecls}fn run() -> int errors Boom:\n    xs = loop step in q4():\n        e = step(Command {value: 0})\n        n = boom(e.value - 2)\n        n\n    list::length(xs)\nfn go() -> int:\n    r = run():\n        on Boom:\n            -1\n    r\ngo()\n"
 } -result {{value -1} 4 1 {1 2 3 4}}
 
-test mv-loop-native {items 52, 55, 89: natively a consuming loop is mvempty/mvtakefront per iteration (O(1), never a take(0) shift); break releases the element and `affinedrop`s the domain; every coroutine is released, also under GC stress} -constraints nativeLinux -body {
+test mv-loop-native {items 52, 55, 89: natively a consuming loop is mvempty/mvtakefront per iteration (O(1), never a take(0) shift); break releases the element and `affinedrop`s the domain; every coroutine is released, also under GC stress} -constraints nativeCoroutines -body {
     set text "${mvLoopDecls}fn drain(q: MutableVector\[Coroutine{args: \[Command\], return: Event}\]) -> int:\n    loop step in q:\n        if step(Command {value: 1}).value > 2:\n            break\n    1\ndrain(q4())\n"
     set ops [mvOps [mvFunc [mvNir $text] drain]]
     list [lsort -unique [lsearch -all -inline -glob $ops mv*]] [expr {"mvtake" in $ops}] [llength [lsearch -all $ops affinedrop]] \
@@ -648,7 +641,7 @@ test mv-hir-type-roundtrip {item 74: the MutableVector type and the elaborated o
 # ---------------------------------------------------------------------------
 # Copy-on-write evidence (items 61, 87, 93)
 
-test mv-cow-evidence {items 61, 87, 93: natively a logical copy shares the backing (no element is copied: O(1)); the first write through a shared header detaches it once (O(N)); later writes through the now-unique header never copy again (amortized O(1) pushes). A vector a function builds in its own place and returns enters the caller's place without a copy (the function's result moves its header out)} -constraints nativeLinux -body {
+test mv-cow-evidence {items 61, 87, 93: natively a logical copy shares the backing (no element is copied: O(1)); the first write through a shared header detaches it once (O(N)); later writes through the now-unique header never copy again (amortized O(1) pushes). A vector a function builds in its own place and returns enters the caller's place without a copy (the function's result moves its header out)} -constraints nativeCoroutines -body {
     set copy "import mutable_vector\nfn ints() -> MutableVector\[int\]:\n    mutable_vector::from_list(\[\])\nfn fill(n: int) -> MutableVector\[int\]:\n    v = ints()\n    loop i from 0 to n:\n        v.push(i)\n    v\nfn f() -> int:\n    a = fill(1000)\n    b = a\n    a.push(1)\n    a.push(2)\n    a.push(3)\n    a.length() + b.length()\nf()\n"
     set unique "import mutable_vector\nfn ints() -> MutableVector\[int\]:\n    mutable_vector::from_list(\[\])\nfn f() -> int:\n    v = ints()\n    loop i from 0 to 1000:\n        v.push(i)\n    v.length()\nf()\n"
     set c [lindex [mvNative $copy] 1]
@@ -657,7 +650,7 @@ test mv-cow-evidence {items 61, 87, 93: natively a logical copy shares the backi
         [dict get $u shares] [dict get $u detaches] [dict get $u detachElements] [expr {[dict get $u growths] < 20}]
 } -cleanup {unset -nocomplain copy unique c u} -result {{value 2003} 1 1 1000 0 0 0 1}
 
-test mv-cow-fresh-results {item 39: a function's result moves its own place's header out (a mutated local or parameter dies with the call), so a call of a function whose every result is fresh enters the caller's place without a copy; a function that may return a vector some other place holds (an unmutated parameter, on one path) is copied, and the caller's vector never changes -- unless the caller passes the vector's last use, which moves it (MUTABLE-ARRAY.md, "Last uses and consumed parameters": the last `pick(true, a)` copies nothing)} -constraints nativeLinux -body {
+test mv-cow-fresh-results {item 39: a function's result moves its own place's header out (a mutated local or parameter dies with the call), so a call of a function whose every result is fresh enters the caller's place without a copy; a function that may return a vector some other place holds (an unmutated parameter, on one path) is copied, and the caller's vector never changes -- unless the caller passes the vector's last use, which moves it (MUTABLE-ARRAY.md, "Last uses and consumed parameters": the last `pick(true, a)` copies nothing)} -constraints nativeCoroutines -body {
     set pre "import mutable_vector\nfn ints() -> MutableVector\[int\]:\n    mutable_vector::from_list(\[\])\nfn build(n: int) -> MutableVector\[int\]:\n    v = ints()\n    loop i from 0 to n:\n        v.push(i)\n    v\nfn id(v: MutableVector\[int\]) -> MutableVector\[int\]:\n    v\nfn keep(v: MutableVector\[int\]) -> MutableVector\[int\]:\n    v.push(1)\n    v\nfn pick(c: bool, v: MutableVector\[int\]) -> MutableVector\[int\]:\n    w = build(2)\n    if c:\n        return w\n    v\n"
     lmap body {
         "w = build(5)\nw.push(9)\nw.length()\n"
@@ -682,7 +675,7 @@ test mv-cow-generic-results {item 39: a generic function's own body is typed imp
 # the callee's own entry copy, the fresh-result rule and the affine check of
 # a share now only matter for a function that is also used as a value and
 # called indirectly -- which this test does for each.
-test mv-cow-indirect-callee {items 39, 41: a function also passed as a value (so its caller cannot copy for it) copies its mutated parameter on entry, a result it may return unmutated is copied by the caller, and an affine vector entering it moves -- the caller's vector never changes, and no affine vector is ever shared or detached} -constraints nativeLinux -body {
+test mv-cow-indirect-callee {items 39, 41: a function also passed as a value (so its caller cannot copy for it) copies its mutated parameter on entry, a result it may return unmutated is copied by the caller, and an affine vector entering it moves -- the caller's vector never changes, and no affine vector is ever shared or detached} -constraints nativeCoroutines -body {
     set pre "${mvDecls}fn v3() -> MutableVector\[int\]:\n    mutable_vector::from_list(\[1, 2, 3\])\n"
     set q "MutableVector\[Coroutine{args: \[Command\], return: Event}\]"
     set grow "${pre}fn grow(xs: MutableVector\[int\]) -> int:\n    xs.push(9)\n    xs.length()\nfn apply(g: Fn{args: \[MutableVector\[int\]\], return: int}, v: MutableVector\[int\]) -> int:\n    g(v)\nfn f() -> List\[int\]:\n    a = v3()\n    n = apply(grow, a)\n    m = grow(a)\n    \[a.length(), n, m\]\nf()\n"
@@ -1096,7 +1089,7 @@ with context Store {keys: mutable_vector::from_list([1, 2])}
     }
 } -cleanup {unset -nocomplain case text} -result {{{value {[1, 2, 2, 3]}} 2} {{value {[1, 2, 3]}} 1} {{value {[1, 2, 0, 4]}} 1} {{value {[2, 2, 0, 4]}} 0} {{value {[1, 2, 1, 4]}} 1} {{value {[[2, 2, 2], [2, 2, 2]]}} 1} {{value {[1]}} 1} {{value {[23, 34]}} 2} {{value {[1, 2, 1, 2]}} 2} {{value {[2, 3, 7, 0]}} 0} {{value {[3, 2]}} 2}}
 
-test mv-path-last-use-copies {the natural ways to update a struct of vectors copy nothing once each read-out is the last use of its own path: a rebuild from the struct's own fields after mutating them, a result struct whose vector field is passed on before its Int field is read, the whole struct handed to a mutating call while only its Int field is read after it, and a sub-struct field rebuilt beside an Int sibling -- natively no share and no detach, and the elaboration wrote no copy} -constraints nativeLinux -body {
+test mv-path-last-use-copies {the natural ways to update a struct of vectors copy nothing once each read-out is the last use of its own path: a rebuild from the struct's own fields after mutating them, a result struct whose vector field is passed on before its Int field is read, the whole struct handed to a mutating call while only its Int field is read after it, and a sub-struct field rebuilt beside an Int sibling -- natively no share and no detach, and the elaboration wrote no copy} -constraints nativeCoroutines -body {
     lmap case {
         {fn put(t: T, x: int) -> T:
     t.keys.push(x)
@@ -1351,7 +1344,7 @@ fn f():
     }
 } -cleanup {unset -nocomplain case text} -result {{value {[1, 2]}} {value {[1, 2, 3]}} {value {[2, 3, 1]}} {value {[1, 4]}} {value {[3, 4]}} {value {[3, 4]}}}
 
-test mv-literal-demand-copies {a memo-shaped recursion -- a step only observes its parameter, recurses on it and returns it in a result struct, or a struct holding the recursive result's field updated; its caller passes the result's field on -- copies nothing; so does a literal of a plain local; one holding its parameter twice copies exactly once (one field copied, the other moved: the function is fresh, and its caller copies nothing more -- one share, and one detach at the first write): HIR share counts and native counters} -constraints nativeLinux -body {
+test mv-literal-demand-copies {a memo-shaped recursion -- a step only observes its parameter, recurses on it and returns it in a result struct, or a struct holding the recursive result's field updated; its caller passes the result's field on -- copies nothing; so does a literal of a plain local; one holding its parameter twice copies exactly once (one field copied, the other moved: the function is fresh, and its caller copies nothing more -- one share, and one detach at the first write): HIR share counts and native counters} -constraints nativeCoroutines -body {
     lmap case {
         {fn f():
     m = run(wrap(ints(), 0), 1, 30, 0)
@@ -1519,12 +1512,12 @@ r = f()
     set results
 } -cleanup {unset -nocomplain case text results} -result {{{value {[2, 1]}} s2.0.h1.d} {{value {[1, 2, 1, 2]}} s3.0.h1.d2.d} {{value {[[1, 2, 1], [1]]}} s3.0.h1.d2.d} {{value {[2, 1]}} d} {{value {[2, 1]}} s1.0.h} {{value {[2, 1, 3]}} s1.0.h} {{value 5} {}} {value {[[1, 1, 2], [1]]}} {value {[[1, 1, 2], [1]]}}}
 
-test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
+test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeCoroutines -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}]
 } -cleanup {unset -nocomplain text} -result {{value {["y2", "z3", "w4", "y2", "x1", "x1"]}} {value {["y2", "z3", "w4", "y2", "x1", "x1"]}}}
 
-test mv-affine-gc-stress {items 66, 94: under a collection at every allocation, suspended coroutines held only as vector elements survive growth, relocation, pop/take/swap and consuming iteration with early exits, and every one is released exactly once} -constraints nativeLinux -body {
+test mv-affine-gc-stress {items 66, 94: under a collection at every allocation, suspended coroutines held only as vector elements survive growth, relocation, pop/take/swap and consuming iteration with early exits, and every one is released exactly once} -constraints nativeCoroutines -body {
     set text "${mvLoopDecls}fn churn(n: int) -> int errors IndexNotFound:\n    q = empty_queue()\n    loop i from 0 to n:\n        q.push(make(i))\n    a = q.take(0)\n    b = q.pop()\n    old = q.swap(1, a)\n    q.push(b)\n    e = old(Command {value: 1})\n    xs = loop step in q:\n        if step(Command {value: 2}).value > 10:\n            break\n        1\n    e.value + list::length(xs)\nr = churn(40):\n    on IndexNotFound:\n        0\nr\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}] \
         [withGcStress {set c [lindex [mvNative $text] 0]; list [dict get $c released] [dict get $c sweptSuspended]}]

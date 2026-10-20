@@ -157,6 +157,21 @@
 #                                   Unrestricted: a non-owning window that
 #                                   confers nothing its copy does not; like
 #                                   a callable it has no equality
+#   {nedit L}                       a native edit NativeEdit[L]
+#                                   (NATIVE-LAYOUT-WRITES.md): live native
+#                                   memory read AND written through layout
+#                                   L, the address word of the pointer it
+#                                   was made from (runtime kind cptr). Its
+#                                   reads are a view's (a nested layout's
+#                                   a NativeEdit[INNER]); binary::store
+#                                   writes through it. Nominal and distinct
+#                                   from NativeView[L] in both directions
+#                                   (write authority is never implied by
+#                                   read authority, nor made from it), never
+#                                   a pointer. Unrestricted like a view: a
+#                                   non-owning capability whose copies prove
+#                                   nothing about other aliases of the
+#                                   memory; no equality
 #   {imprint T}                     an imprint variable (hir/imprint.tcl):
 #                                   in a function's declared signature, the
 #                                   type a call imprints as T. Rigid in the
@@ -249,7 +264,7 @@ namespace eval hir::types {
     # NativeView (NATIVE-LAYOUT-VIEWS.md) likewise: its argument is a layout
     # (hir::layouts::ResolveNativeView).
     variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1 \
-        NativeView 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
+        NativeView 1 NativeEdit 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -284,6 +299,11 @@ proc hir::types::resolveNamed {name {ns ""}} {
         # C _Bool (hir/cabi.tcl, C-BINDGEN.md): Botlish's bool, under its C
         # ABI name.
         return bool
+    }
+    if {$name eq [hir::cabi::DoubleName]} {
+        # C double (hir/cabi.tcl, FLOAT64-MILESTONE-1.md): Botlish's
+        # Float64, under its C ABI name.
+        return Float64
     }
     if {$name eq [hir::cabi::VoidName]} {
         # The C void (C-ABI-TYPES.md): a pointee identity, never the type of
@@ -346,7 +366,10 @@ proc hir::types::CanonicalTypeName {name ns} {
         return ${ns}::$name
     }
     set imported [hir::imports::typeNamed $ns $name]
-    return [expr {$imported ne "" ? $imported : $name}]
+    if {$imported ne ""} {
+        return $imported
+    }
+    return $name
 }
 
 # The canonical resolved type for type constructor CTOR applied to ARGS (a
@@ -399,7 +422,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
             # ResolveFnPtr), never from a resolved argument type.
             error "internal compiler error: $ctor is resolved by hir::cabi"
         }
-        LayoutStruct - NativeView {
+        LayoutStruct - NativeView - NativeEdit {
             # Only from a resolved argument type (never a layout): see
             # hir::layouts::ResolveLayoutStruct and ResolveNativeView.
             return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
@@ -414,7 +437,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview nedit})}]
 }
 
 # C ABI pointer forms (C-ABI-TYPES.md; the header's {cptr ...}/{cfnptr ...}).
@@ -432,6 +455,16 @@ proc hir::types::IsCAddress {type} {
 # {nview L}).
 proc hir::types::IsNativeView {type} {
     return [expr {[llength $type] == 2 && [lindex $type 0] eq "nview"}]
+}
+# A native edit NativeEdit[L] (NATIVE-LAYOUT-WRITES.md; the header's
+# {nedit L}).
+proc hir::types::IsNativeEdit {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "nedit"}]
+}
+# Native memory read through a layout: a NativeView[L] or a NativeEdit[L],
+# whose reads are the same.
+proc hir::types::IsNativeMemory {type} {
+    return [expr {[IsNativeView $type] || [IsNativeEdit $type]}]
 }
 # An imprint variable (hir/imprint.tcl).
 proc hir::types::IsImprint {type} {
@@ -464,14 +497,17 @@ proc hir::types::MakeCoroutineType {argTypes result errors {depth 0}} {
 # diagnosed, whose resumes are not checked again), whose segments end with
 # values of OUTWARD or one of ERRORS.
 proc hir::types::MakeCoroutine {resume outward errors} {
-    return [MakeCoroutineType [expr {$resume eq "unit" ? {} : [list $resume]}] $outward $errors]
+    return [MakeCoroutineType [if {$resume eq "unit"} {string cat {}} else {list $resume}] $outward $errors]
 }
 
 # The resume protocol of coroutine type TYPE: unit, a named struct type, or
 # any (MakeCoroutine).
 proc hir::types::CoroutineResume {type} {
     set args [dict get [lindex $type 1] args]
-    return [expr {[llength $args] == 0 ? "unit" : [lindex $args 0]}]
+    if {[llength $args] == 0} {
+        return "unit"
+    }
+    return [lindex $args 0]
 }
 proc hir::types::CoroutineOutward {type} { return [dict get [lindex $type 1] return] }
 proc hir::types::CoroutineErrors {type}  { return [dict get [lindex $type 1] errors] }
@@ -515,7 +551,10 @@ proc hir::types::Contract {type} {
         return [lindex $type 1]
     }
     set s [structuralOf $type]
-    return [expr {$s eq "" ? "" : [lindex $s 1]}]
+    if {$s eq ""} {
+        return ""
+    }
+    return [lindex $s 1]
 }
 
 # ---------------------------------------------------------------------------
@@ -690,7 +729,10 @@ proc hir::types::MentionsTrait {type} {
 # (CONTEXT-TRAIT-POSITION, ContextTraitPositionMessage).
 proc hir::types::MentionedContextTrait {type} {
     if {[IsTrait $type]} {
-        return [expr {[hir::traits::isContext [lindex $type 1]] ? [lindex $type 1] : ""}]
+        if {[hir::traits::isContext [lindex $type 1]]} {
+            return [lindex $type 1]
+        }
+        return ""
     }
     set inner {}
     if {[IsList $type] || [IsSet $type] || [IsMutArray $type] || [IsMutVec $type]} {
@@ -730,7 +772,10 @@ proc hir::types::JoinWitness {a b} {
         }
     }
     set all [lsort -unique $all]
-    return [expr {[llength $all] == 1 ? [lindex $all 0] : [linsert $all 0 join]}]
+    if {[llength $all] == 1} {
+        return [lindex $all 0]
+    }
+    return [linsert $all 0 join]
 }
 
 # TYPE as an aggregate element/field: a view is erased to any (the concrete
@@ -738,7 +783,10 @@ proc hir::types::JoinWitness {a b} {
 # "any"), so no List/ImmutableSet/MutableArray/struct type ever has a trait
 # element.
 proc hir::types::Unviewed {type} {
-    return [expr {[IsTrait $type] ? "any" : $type}]
+    if {[IsTrait $type]} {
+        return "any"
+    }
+    return $type
 }
 
 # ---------------------------------------------------------------------------
@@ -814,7 +862,7 @@ proc hir::types::StructLayout {type} {
 proc hir::types::StructField {type name} {
     if {[IsStruct $type]} {
         set fields [lindex $type 1]
-        return [expr {[dict exists $fields $name] ? [dict get $fields $name] : ""}]
+        return [dict getdef $fields $name ""]
     }
     if {[IsNamedStruct $type]} {
         return [hir::structs::fieldType [lindex $type 1] $name]
@@ -897,11 +945,11 @@ proc hir::types::BlockContract {hir e} {
     # only requirement, which, like a native's own -param-types, is
     # re-validated at run time rather than assumed.
     set declared [hir::signatures::entryTypes $hir $e]
-    set errors [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+    set errors [dict getdef $node declaredErrors {}]
     if {[lsearch -exact -not $declared {}] < 0 && $errors eq {}} {
         return ""
     }
-    set args [lmap t $declared {expr {$t eq {} ? "any" : [canonical $t]}}]
+    set args [lmap t $declared {if {$t eq {}} {string cat "any"} else {canonical $t}}]
     return [dict create args $args errors [lsort -unique $errors]]
 }
 
@@ -1130,7 +1178,10 @@ proc hir::types::glb {a b} {
     if {$aNarrower && $bNarrower} {
         # Equivalent under admissibility: a deterministic, operand-order-
         # independent choice.
-        return [expr {$core ? [core::type::narrow $a $b] : [lindex [lsort [list $a $b]] 0]}]
+        if {$core} {
+            return [core::type::narrow $a $b]
+        }
+        return [lindex [lsort [list $a $b]] 0]
     }
     if {$aNarrower} {
         return $a
@@ -1414,7 +1465,11 @@ proc hir::types::Bound {type depth} {
         return [MakeStruct [lindex $type 1] $depth]
     }
     if {[IsExactBlock $type]} {
-        set result [expr {$depth >= $aggregateDepth ? "any" : [Bound [lindex $type 3] [expr {$depth + 1}]]}]
+        if {$depth >= $aggregateDepth} {
+            set result "any"
+        } else {
+            set result [Bound [lindex $type 3] [expr {$depth + 1}]]
+        }
         return [lreplace $type 3 3 $result]
     }
     if {[IsFn $type]} {
@@ -1435,7 +1490,10 @@ proc hir::types::Bound {type depth} {
 # TYPE without a positional shape.
 proc hir::types::Unshaped {type} {
     if {[IsList $type] && [llength $type] == 3} {
-        return [expr {[lindex $type 1] eq "any" ? "list" : [lrange $type 0 1]}]
+        if {[lindex $type 1] eq "any"} {
+            return "list"
+        }
+        return [lrange $type 0 1]
     }
     return $type
 }
@@ -1443,7 +1501,10 @@ proc hir::types::Unshaped {type} {
 # The static type of every element of a value of static type TYPE, if TYPE
 # is a list form; otherwise "".
 proc hir::types::elementOf {type} {
-    return [expr {[IsList $type] ? [lindex $type 1] : ""}]
+    if {[IsList $type]} {
+        return [lindex $type 1]
+    }
+    return ""
 }
 
 # The static type of the loop variable of a loop over a value of static type
@@ -1461,14 +1522,20 @@ proc hir::types::IterationElementOf {type} {
         # it is empty only while held at that type, and a value read back
         # from HIR text or Core IR may have lost the declared type it was
         # filled under -- never a reason to call a loop body dead.)
-        return [expr {[lindex $type 1] eq "never" ? "" : [lindex $type 1]}]
+        if {[lindex $type 1] eq "never"} {
+            return ""
+        }
+        return [lindex $type 1]
     }
     return [elementOf $type]
 }
 
 # The positional shape {P0 ...} of static type TYPE, or "" if not known.
 proc hir::types::shapeOf {type} {
-    return [expr {[IsList $type] && [llength $type] == 3 ? [lindex $type 2] : ""}]
+    if {[IsList $type] && [llength $type] == 3} {
+        return [lindex $type 2]
+    }
+    return ""
 }
 
 # 1 if every value of static type A is a value of static type B.
@@ -1479,10 +1546,13 @@ proc hir::types::subtype {a b} {
     if {$b eq "never"} {
         return 0
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
         # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
         # ($a eq $b). A view is never a pointer, though its run-time word is
         # one: no pointer operation (null?, clone, a C argument) takes it.
+        # A NativeEdit[L] and a NativeView[L] are not each other's subtypes
+        # either way (NATIVE-LAYOUT-WRITES.md): write authority is never read
+        # authority's, and an edit is not silently narrowed into a view.
         return 0
     }
     if {[IsList $b]} {
@@ -1624,10 +1694,11 @@ proc hir::types::lub {a b} {
         # do.
         return [MakeMutArray [lub [lindex $a 1] [lindex $b 1]] 0]
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
         # Nominal (NATIVE-LAYOUT-VIEWS.md): views of two layouts, or a view
         # and anything else, have no useful join -- never the bare pointer
-        # kind their words share, which is affine.
+        # kind their words share, which is affine. (A view and an edit of
+        # one layout neither: NATIVE-LAYOUT-WRITES.md.)
         return any
     }
     if {[IsEnum $a] || [IsEnum $b]} {
@@ -1688,7 +1759,10 @@ proc hir::types::lub {a b} {
     }
     if {[IsSpecific $a] || [IsSpecific $b]} {
         set kind [kindOf $a]
-        return [expr {$kind ne "" && $kind eq [kindOf $b] ? $kind : "any"}]
+        if {$kind ne "" && $kind eq [kindOf $b]} {
+            return $kind
+        }
+        return "any"
     }
     return [core::type::lub $a $b]
 }
@@ -1761,11 +1835,14 @@ proc hir::types::narrow {current fact} {
         return $fact
     }
     if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]
-            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeView $fact]} {
+            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeMemory $fact]} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
-        return [expr {[subtype $current $fact] ? $current : $fact}]
+        if {[subtype $current $fact]} {
+            return $current
+        }
+        return $fact
     }
     if {[IsFn $current] && $fact in {block native}} {
         # Both facts hold; the contract is the one static checking uses
@@ -1813,13 +1890,14 @@ proc hir::types::narrow {current fact} {
 # recursive list case would make it so -- sound but incomplete, never
 # unsound, and not needed by this milestone's own motivating call site.
 proc hir::types::IsEqualityTotal {type} {
-    return [expr {[kindOf $type] in {int str bool unit UnicodeChar enum}}]
+    return [expr {[kindOf $type] in [core::type::scalarKinds]}]
 }
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
 proc hir::types::kindOf {type} {
-    if {[IsCFnPtr $type] || [IsNativeView $type]} {
-        # (A native view's value is the address word of its pointer.)
+    if {[IsCFnPtr $type] || [IsNativeMemory $type]} {
+        # (A native view's or edit's value is the address word of its
+        # pointer.)
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1838,7 +1916,7 @@ proc hir::types::kindOf {type} {
 
 # The core type (core/type.tcl) a static type implies.
 proc hir::types::semantic {type} {
-    if {[IsCFnPtr $type] || [IsNativeView $type]} {
+    if {[IsCFnPtr $type] || [IsNativeMemory $type]} {
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1962,8 +2040,14 @@ proc hir::types::show {type} {
             }
             nview {
                 # A native view, by its layout's identity
-                # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown.
-                return "NativeView\[[lindex $type 1]\]"
+                # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown --
+                # or a live array, by its representation
+                # (FIXED-LAYOUT-ARRAYS.md: NativeView[array 16 of ...]).
+                return "NativeView\[[hir::layouts::ShowNative [lindex $type 1]]\]"
+            }
+            nedit {
+                # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
+                return "NativeEdit\[[hir::layouts::ShowNative [lindex $type 1]]\]"
             }
             imprint {
                 # An imprint variable, by its name (hir/imprint.tcl).
@@ -2035,6 +2119,21 @@ proc hir::types::intern {hirVar type} {
 # constants, ambient bindings are unknown.
 
 proc hir::types::infer {hirVar} {
+    upvar 1 $hirVar hir
+    # The operators' meanings (hir/operators.tcl): a walk's types select the
+    # floating-point operation of every operator call with a floating-point
+    # operand, which is rewritten; the program is typed again while a
+    # rewrite changed it.
+    while 1 {
+        Walk hir
+        if {![hir::operators::resolve hir]} {
+            return
+        }
+    }
+}
+
+# One typing walk of the whole of HIR (infer).
+proc hir::types::Walk {hirVar} {
     upvar 1 $hirVar hir
     # Poison is a fact of one walk (a later round of the signature fixpoint
     # may type a receiver differently): every walk starts without any.
@@ -2186,6 +2285,38 @@ proc hir::types::AggregateOfValue {v} {
     return [ofValue $v]
 }
 
+# 1 if the binary::parse call whose arguments are ARGEXPRS (result shape
+# SHAPE, {layout-struct I}) makes no LayoutStruct: its layout is native-only
+# (a pointer field: LAYOUT-NATIVE-ONLY) or holds a union (LAYOUT-UNION,
+# LAYOUT-UNIONS.md), or is a union.
+proc hir::types::LayoutParseRefused {hir argExprs shape} {
+    set arg [lindex $argExprs [lindex $shape 1]]
+    if {$arg eq "" || [hir::kind $hir $arg] ne "const"} {
+        return 0
+    }
+    set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+    if {$id eq "" || ![hir::layouts::declared $id]} {
+        return 0
+    }
+    return [expr {[hir::layouts::NativeOnly $id] || [hir::layouts::HoldsUnion $id]}]
+}
+
+# 1 if the binary::read call whose arguments are ARGEXPRS (result shape
+# SHAPE, {layout-read I}) reads nothing: its designated representation holds
+# a C pointer (LAYOUT-NATIVE-ONLY) or a union (LAYOUT-UNION), or the
+# designator was rejected (its constant holds none).
+proc hir::types::LayoutReadRefused {hir argExprs shape} {
+    set arg [lindex $argExprs [lindex $shape 1]]
+    if {$arg eq "" || [hir::kind $hir $arg] ne "const"} {
+        return 0
+    }
+    set repr [hir::layouts::PathField [lindex [hir::get $hir $arg literal] end]]
+    if {$repr eq ""} {
+        return 1
+    }
+    return [expr {[hir::layouts::ReprPointerPath $repr] ne "none" || [hir::layouts::ReprUnionPath $repr] ne "none"}]
+}
+
 # The result type of a call of a native with -result-shape SHAPE on the
 # arguments ARG-EXPRS of types ARG-TYPES, given its declared result type
 # RESULT.
@@ -2227,7 +2358,9 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             set arg [lindex $argExprs [lindex $shape 1]]
             if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
                 set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
-                if {$id ne "" && [hir::layouts::declared $id]} {
+                if {$id ne "" && [hir::layouts::declared $id] && ![hir::layouts::HoldsUnion $id]} {
+                    # (A union, or a layout holding one, has no LayoutStruct:
+                    # LAYOUT-UNIONS.md.)
                     return [hir::layouts::structType $id]
                 }
             }
@@ -2246,16 +2379,31 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             }
             return $result
         }
+        native-edit {
+            # binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): a
+            # NativeEdit[L], L the layout argument I's descriptor constant
+            # describes.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+                if {$id ne "" && [hir::layouts::declared $id]} {
+                    return [hir::layouts::editType $id]
+                }
+            }
+            return $result
+        }
         view-field {
             # binary#view_field(v, FIELD), the elaborated field read of a
             # native view: the field's view type (hir::layouts::
             # ViewFieldType) when V's static type is a view -- what an
             # instance's re-inference recovers (hir/specialize.tcl).
+            # (Through a NativeEdit[L] a nested layout is an edit too:
+            # NATIVE-LAYOUT-WRITES.md.)
             lassign $shape _ v f
-            set id [hir::layouts::OfViewType [lindex $argTypes $v]]
+            set id [hir::layouts::OfNativeType [lindex $argTypes $v]]
             set arg [lindex $argExprs $f]
             if {$id ne "" && $arg ne "" && [hir::kind $hir $arg] eq "const"} {
-                set t [hir::layouts::ViewFieldType $id [lindex [lindex [hir::get $hir $arg literal] end] 0]]
+                set t [hir::layouts::NativeFieldType [lindex $argTypes $v] [lindex [lindex [hir::get $hir $arg literal] end] 0]]
                 if {$t ne ""} {
                     return $t
                 }
@@ -2264,10 +2412,44 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         view-struct {
             # binary::load(v): the LayoutStruct[L] of argument I's static
-            # NativeView[L] type.
-            set id [hir::layouts::OfViewType [lindex $argTypes [lindex $shape 1]]]
-            if {$id ne ""} {
+            # NativeView[L] (or NativeEdit[L]) type -- or, of a live fixed
+            # array NativeView[array N of E], the List its copy is
+            # (FIXED-LAYOUT-ARRAYS.md).
+            set argType [lindex $argTypes [lindex $shape 1]]
+            set id [hir::layouts::OfNativeType $argType]
+            if {$id ne "" && ![hir::layouts::HoldsUnion $id]} {
                 return [hir::layouts::structType $id]
+            }
+            if {$id ne ""} {
+                # (LAYOUT-UNIONS.md: no copied value.)
+                return $result
+            }
+            set term [hir::layouts::OfArrayType $argType]
+            if {$term ne ""} {
+                return [hir::layouts::TermConsumerType $term]
+            }
+            return $result
+        }
+        layout-read {
+            # binary::read(data, L.path) (LAYOUT-UNIONS.md): the copied type
+            # of the representation the designator constant argument I
+            # names -- a scalar's domain, LayoutStruct[R], a List.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set repr [hir::layouts::PathField [lindex [hir::get $hir $arg literal] end]]
+                if {$repr ne ""} {
+                    return [dict get $repr type]
+                }
+            }
+            return $result
+        }
+        native-element {
+            # binary::element(a, i) (FIXED-LAYOUT-ARRAYS.md): the element of
+            # argument I's static live array type, read in place (a scalar,
+            # a pointer, or a nested layout's or array's live view or edit).
+            set t [hir::layouts::ElementType [lindex $argTypes [lindex $shape 1]]]
+            if {$t ne ""} {
+                return $t
             }
             return $result
         }
@@ -2701,7 +2883,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             if {$poison} {
                 return [SetType hir $e [Poison hir $e]]
             }
-            return [SetType hir $e [MakeList [expr {$elemType eq "never" ? "never" : $bodyType}]]]
+            return [SetType hir $e [MakeList [if {$elemType eq "never"} {string cat "never"} else {set bodyType}]]]
         }
         countloop {
             Expr hir ctx [dict get $node start]
@@ -2749,7 +2931,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
                         Poison hir [dict get $domain binding]
                         continue
                     }
-                    lappend facts [dict get $domain binding] [expr {$elemType eq "" ? "any" : $elemType}]
+                    lappend facts [dict get $domain binding] [if {$elemType eq ""} {string cat "any"} else {set elemType}]
                     # An empty domain (listloop's case): every domain has
                     # the one proven cardinality, so the body never runs.
                     set empty [expr {$empty || $elemType eq "never"}]
@@ -2775,7 +2957,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             if {$poison} {
                 return [SetType hir $e [Poison hir $e]]
             }
-            return [SetType hir $e [MakeList [expr {$empty ? "never" : $bodyType}]]]
+            return [SetType hir $e [MakeList [if {$empty} {string cat "never"} else {set bodyType}]]]
         }
         return {
             set value [Expr hir ctx [dict get $node value]]
@@ -2859,7 +3041,10 @@ proc hir::types::Struct {hirVar ctxVar e} {
         # (A poisoned field value leaves a named construction its declared
         # type: the declaration is the contract.)
         set id [dict get $node structId]
-        return [expr {$id eq "" ? "any" : [list nstruct $id]}]
+        if {$id eq ""} {
+            return "any"
+        }
+        return [list nstruct $id]
     }
     if {[dict exists $node payloadOf] && [hir::errordecls::hasPayload [dict get $node payloadOf]]} {
         # An error's payload (ERROR-PAYLOADS.md) has its declared type,
@@ -2917,12 +3102,13 @@ proc hir::types::Project {hirVar ctxVar e} {
         }
         return [ProjectionFailed hir $ctx $e]
     }
-    set layout [hir::layouts::OfViewType $receiver]
+    set layout [hir::layouts::OfNativeType $receiver]
     if {$layout ne ""} {
         # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
         # field's view type, read at run time from the memory the view
-        # addresses.
-        set t [hir::layouts::ViewFieldType $layout $name]
+        # addresses. (Through a native edit the same read; a nested layout
+        # an edit of it: NATIVE-LAYOUT-WRITES.md.)
+        set t [hir::layouts::NativeFieldType $receiver $name]
         if {$t ne ""} {
             return $t
         }
@@ -2982,7 +3168,7 @@ proc hir::types::Handle {hirVar ctxVar e} {
     set node [dict get $hir exprs $e]
     set entry [dict get $ctx reachable]
     set before [dict get $ctx facts]
-    set outerLog [expr {[dict exists $ctx completionLog] ? [dict get $ctx completionLog] : ""}]
+    set outerLog [dict getdef $ctx completionLog ""]
     set hadLog [dict exists $ctx completionLog]
     dict set ctx completionLog {}
     set callType [Expr hir ctx [dict get $node call]]
@@ -3007,8 +3193,12 @@ proc hir::types::Handle {hirVar ctxVar e} {
     # A poisoned handled call: its handlers are walked as ever (each may
     # still run), and the construct is poison.
     set poison [expr {$callType eq "never" && [Poisoned $hir [dict get $node call]]}]
-    set ends [expr {$callType ne "never" || $poison ? [list $completed] : {}}]
-    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    if {$callType ne "never" || $poison} {
+        set ends [list $completed]
+    } else {
+        set ends {}
+    }
+    set payloads [dict getdef $node handlerPayloads {}]
     set index 0
     foreach body [dict get $node handlerBodies] name [dict get $node handlerNames] {
         set payload [lindex $payloads $index]
@@ -3138,13 +3328,17 @@ proc hir::types::Block {hirVar outerVar e self} {
     # in the creating context yet (a bind establishes it before this block
     # is typed, but its type is this block's): exact, with an unknown result
     # here (the body's own analysis assumes one, below).
-    set selfType [expr {$self eq "" ? "" : [blockType $hir $e $arity any]}]
+    if {$self eq ""} {
+        set selfType ""
+    } else {
+        set selfType [blockType $hir $e $arity any]
+    }
     if {[dict exists $outer spec]} {
         # Region inference: the body is a region of its own. Report what
         # this creation captures; calls of the block ask the handler.
         set seeds [dict create]
         foreach b [dict get $node captures] {
-            dict set seeds $b [expr {$b eq $self ? $selfType : [BindingType $hir $outer $b]}]
+            dict set seeds $b [if {$b eq $self} {set selfType} else {BindingType $hir $outer $b}]
         }
         {*}[dict get $outer spec] create $e $seeds
         # The Block's own intrinsic result contract -- its declared result,
@@ -3168,7 +3362,11 @@ proc hir::types::Block {hirVar outerVar e self} {
     set declared [dict get $node declaredResult]
     # A declared trait result is a view whose witness the body decides
     # (hir::traits::ViewResult), so it is inferred like an undeclared one.
-    set assumed [expr {$declared eq {} || [IsTraitConstraint $declared] ? {never} : $declared}]
+    if {$declared eq {} || [IsTraitConstraint $declared]} {
+        set assumed {never}
+    } else {
+        set assumed $declared
+    }
     set attempts [expr {$self eq "" ? 1 : 3}]
     for {set attempt 1} {$attempt <= $attempts} {incr attempt} {
         if {$attempt == $attempts && $attempts > 1} {
@@ -3301,6 +3499,13 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # (EXACT-VALUE-FACTS.md, hir/exactvalue.tcl).
                 set known [hir::exact::DecideCompare $name $hir [lindex $argExprs 0] [lindex $argExprs 1]]
             }
+            if {!$dead && [dict exists $node resolvedOperator] && [MakesPoison $hir $ctx] && [dict get $ctx reachable]
+                    && [hir::operators::Mismatched $argTypes [lindex [dict get $node resolvedOperator] 1]]} {
+                # An operand of another kind than the floating-point type its
+                # operator selected (hir/operators.tcl's verify reports it):
+                # the operation has no value -- poison.
+                set dead 1
+            }
             if {$spec && !$dead} {
                 foreach argType $argTypes paramType [dict get $meta paramTypes] {
                     set kind [kindOf $argType]
@@ -3326,13 +3531,20 @@ proc hir::types::Call {hirVar ctxVar e} {
                 set result [ShapeResult $hir [dict get $meta resultShape] $argExprs $argTypes $result]
                 set shapeKind [lindex [dict get $meta resultShape] 0]
                 if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]
-                        && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq "")
+                        && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq ""
+                                && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
+                            || ($shapeKind eq "view-struct" && [hir::layouts::NativeUnionRefusal [lindex $argTypes 0]] ne "")
+                            || ($shapeKind eq "native-element" && [hir::layouts::OfArrayType [lindex $argTypes 0]] eq "")
                             || ($shapeKind eq "layout-struct" && [hir::layouts::RoleOf [dict get $meta layout] op] eq "parse"
-                                && [hir::layouts::OfType $result] ne "" && [hir::layouts::NativeOnly [hir::layouts::OfType $result]]))} {
+                                && [LayoutParseRefused $hir $argExprs [dict get $meta resultShape]])
+                            || ($shapeKind eq "layout-read" && [LayoutReadRefused $hir $argExprs [dict get $meta resultShape]]))} {
                     # binary::load of a value not statically a NativeView[L]
                     # (BINARY-OPERAND), or binary::parse of a native-only
                     # layout (LAYOUT-NATIVE-ONLY: hir::layouts::verify): no
                     # LayoutStruct is ever produced (NATIVE-LAYOUT-VIEWS.md).
+                    # Nor of a union, or of anything holding one by value
+                    # (LAYOUT-UNION), and binary::read never makes a pointer
+                    # or a union (LAYOUT-UNIONS.md).
                     set result [Poison hir $e]
                 }
                 if {!$spec} {
@@ -3355,7 +3567,7 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # owner exposed to a foreign pointer parameter establishes
                 # no pointee (hir/borrow.tcl).
                 set result [hir::imprint::Call hir $e $calleeType \
-                    [expr {$foreign eq "" ? $argTypes : [hir::borrow::ImprintArgTypes $foreign $argTypes]}] \
+                    [if {$foreign eq ""} {set argTypes} else {hir::borrow::ImprintArgTypes $foreign $argTypes}] \
                     [dict get $meta imprint result] $result]
             } elseif {[dict exists $node imprint]} {
                 hir::imprint::Call hir $e $calleeType $argTypes $result $result

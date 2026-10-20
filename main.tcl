@@ -42,9 +42,9 @@
 #
 # -target NAME selects the C ABI target of a .bot compilation (C-ABI-TYPES.md;
 # core/cabi.tcl lists linux-x86_64, linux-aarch64, macos-x86_64,
-# macos-aarch64, windows-x86_64, windows-aarch64): the widths and signedness
-# of ffi::c's integer scalars follow its data model, and its architecture
-# picks the file of an architecture-specific module (linux::sys: the Linux
+# macos-aarch64, windows-x86_64, windows-x86_64-gnu, windows-aarch64): the
+# widths and signedness of ffi::c's integer scalars follow its data model, and
+# its architecture picks the file of an architecture-specific module (linux::sys: the Linux
 # syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md), and its
 # operating system which platform namespaces it may import (linux::* only
 # for a Linux target: UNSUPPORTED-PLATFORM otherwise). The default is the
@@ -89,10 +89,12 @@
 # need no -backend cranelift; with -backend cranelift-generic, or
 # BOTLISH_NATIVE_SPECIALIZE=0, they show the unspecialized code).
 # -emit-native-executable compiles closed specialized workloads to standalone
-# Linux x86_64/glibc executables beside the inputs, removing the extension,
-# linked as BOTLISH_NATIVE_LINKER says (rustc by default; stub needs no
-# toolchain, and is what the single-file compiler uses: SINGLE-EXECUTABLE.md).
-# It does not evaluate the program. Running the executable prints its value.
+# executables beside the inputs, removing the extension: ELF on Linux glibc
+# (x86_64, aarch64), Mach-O on macOS (aarch64), for the host's target only,
+# linked as BOTLISH_NATIVE_LINKER says (rustc, the default, everywhere; stub
+# needs no toolchain, is Linux x86_64's only, and is what the single-file
+# compiler uses: SINGLE-EXECUTABLE.md). It does not evaluate the program.
+# Running the executable prints its value.
 # -emit-hir-interchange writes each .bot or .hir input's analyzed HIR in the
 # HIR interchange format (HIR-INTERCHANGE.md) beside it, as FILE.hirx, without
 # evaluating it; a .hirx input is run like any other, on any backend, with no
@@ -320,7 +322,7 @@ proc printing {script {status 0}} {
         puts stderr [dict get $options -errorinfo]
         exit 1
     }
-    exit [expr {$result eq "" ? $status : $result}]
+    exit [if {$result eq ""} {set status} else {set result}]
 }
 
 set commandLine [parseCommandLine $argv]
@@ -468,7 +470,11 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         set run {core::evalProgram $program}
     }
     if {$showHir || $showAot ne "" || $showNative ne "" || $showContexts || $showDirect || $showTraits} {
-        set shownHir [expr {$hir ne "" ? $hir : [hir::build $program -strict 0]}]
+        if {$hir ne ""} {
+            set shownHir $hir
+        } else {
+            set shownHir [hir::build $program -strict 0]
+        }
     }
     if {$showHir} {
         puts [hir::format $shownHir]
@@ -514,7 +520,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         return 1
     }
     if {$showCode} {
-        puts [expr {$compiled ? [dict get $unit code] : [core::compiler::generatedCode $program]}]
+        puts [if {$compiled} {dict get $unit code} else {core::compiler::generatedCode $program}]
     }
     set nativeOptions [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
     if {$showNative ne "" && [catch {
@@ -532,7 +538,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     }
     puts "   value: [core::value::show $value 1]"
     if {$backend eq "compile"} {
-        dict for {name type} [expr {$compiled ? [dict get $unit types] : [core::compiler::programTypes $program]}] {
+        dict for {name type} [if {$compiled} {dict get $unit types} else {core::compiler::programTypes $program}] {
             puts "   type:  $name : [hir::types::show $type]"
         }
     }

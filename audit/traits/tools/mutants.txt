@@ -59,9 +59,9 @@
             foreach u [dict keys $impls] {
                 set c [ImplInfo $u $name]
                 if {$c eq "" || [dict get $c kind] ne "block"} continue
-                set ps [lmap t [dict get $c params] {expr {$t eq {} ? "any" : $t}}]
+                set ps [lmap t [dict get $c params] {if {$t eq {}} {string cat "any"} else {set t}}]
                 set r [dict get $c result]
-                if {[hir::types::FnMismatch [hir::types::MakeFn $ps [expr {$r eq {} ? "any" : $r}] [dict get $c errors]] $required] eq ""} {
+                if {[hir::types::FnMismatch [hir::types::MakeFn $ps [if {$r eq {}} {string cat "any"} else {set r}] [dict get $c errors]] $required] eq ""} {
                     set info $c
                     set owner $u
                     break
@@ -102,7 +102,7 @@
     set key [list $type $id]
     if {[dict exists $cache $key]} {
 ====
-    set key [list [expr {[lindex $type 0] eq "refined" ? [lindex $type 1] : $type}] $id]
+    set key [list [if {[lindex $type 0] eq "refined"} {lindex $type 1} else {set type}] $id]
     if {[dict exists $cache $key]} {
 >>>>
 
@@ -112,7 +112,7 @@
     if {$b eq "never"} {
         return 0
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
 ====
     if {$b eq "never"} {
         return 0
@@ -120,7 +120,7 @@
     if {[IsView $a] && [subtype [ViewWitness $a] $b]} {
         return 1
     }
-    if {[IsNativeView $a] || [IsNativeView $b]} {
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
 >>>>
 
 @@ strengthen-view allow trait -> concrete strengthening (a fact about a view's value narrows it)
@@ -180,7 +180,7 @@
     foreach t $argTypes {
         set contextTrait [MentionedContextTrait $t]
 ====
-    set argTypes [lmap t $argTypes {expr {[MentionsTrait $t] && [MentionedContextTrait $t] eq "" ? "any" : $t}}]
+    set argTypes [lmap t $argTypes {if {[MentionsTrait $t] && [MentionedContextTrait $t] eq ""} {string cat "any"} else {set t}}]
     foreach t $argTypes {
         set contextTrait [MentionedContextTrait $t]
 >>>>
@@ -253,10 +253,10 @@
 ## hir/semantic.tcl
 <<<<
     set key [list $block $entry]
-    set caller [expr {[dict exists $ctx inst] ? [dict get $ctx inst] : "generic"}]
+    set caller [dict getdef $ctx inst "generic"]
 ====
-    set key [list $block [lmap x $entry {expr {[hir::types::IsView $x] ? [list trait [hir::types::ViewTrait $x]] : $x}}]]
-    set caller [expr {[dict exists $ctx inst] ? [dict get $ctx inst] : "generic"}]
+    set key [list $block [lmap x $entry {if {[hir::types::IsView $x]} {list trait [hir::types::ViewTrait $x]} else {set x}}]]
+    set caller [dict getdef $ctx inst "generic"]
 >>>>
 
 @@ one-codegen-instance treat two different trait implementations as one codegen instance (one clone per function: the first witness's)

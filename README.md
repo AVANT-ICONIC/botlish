@@ -1,3 +1,7 @@
+<p align=center>
+    <img src="./robot.transparent.svg" style="width: 10vw;">
+</p>
+
 # Botlish
 
 **A high-level, native-capable, safe and friendly language for building
@@ -87,7 +91,9 @@ built for rich debugging.
 ## Why Botlish
 
 * **High-level.** Values, not references; `Int` is arbitrary precision
-  (nothing overflows), a String is a sequence of Unicode scalar values, and
+  (nothing overflows), `Float64` is finite (an operation that would make NaN
+  or an infinity fails with a declared error instead), a String is a
+  sequence of Unicode scalar values, and
   memory is managed for you. Closures, structs and destructuring, enums,
   traits, coroutines and modules, with a small standard library written in
   Botlish itself.
@@ -484,8 +490,10 @@ the tests, and what to re-run when you change a given part of the compiler.
 
 Botlish is young and changes quickly; most of its features arrived as
 milestones whose reports are in [docs/](docs/INDEX.md). CI runs the native
-backend on x86-64 and arm64 Linux; standalone executables and native
-coroutines are x86-64 Linux only; the Tcl backends run wherever Tcl 9 does.
+backend on x86-64 and arm64 Linux and on Apple Silicon macOS; native
+coroutines, standalone executables and C calls run on Linux x86-64 and
+AArch64 and macOS AArch64; Linux system calls are Linux only; the Tcl
+backends run wherever Tcl 9 does.
 
 ## License
 

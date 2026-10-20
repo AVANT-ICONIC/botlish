@@ -22,6 +22,11 @@
 #   evidence    clang's optimized LLVM IR of the shim: the nocapture,
 #               readonly, writeonly, readnone and returned attributes it
 #               inferred on the thunks' own parameters.
+#   anonymous   clang's record layouts of the anonymous members (a union
+#               or struct member without a name, C11) of the records it
+#               lays out: their sizeof, alignment and member offsets, which
+#               no C expression asks, as -fdump-record-layouts prints them
+#               (LAYOUT-UNIONS.md, "C bindgen").
 #
 # An entry the compiler rejects is dropped with the compiler's message and
 # the rest compiled again, so one bad macro never hides the others.
@@ -113,8 +118,8 @@ proc ::cbind::probe::Blame {stderr lines} {
 # The values of ENTRIES (a list of {KEY {EXPR ...}}): a dict KEY -> {ok
 # {VALUE ...}} (each a 64-bit word as an unsigned decimal) or {error
 # MESSAGE}.
-proc ::cbind::probe::values {config hprofile entries} {
-    set prelude [Prelude $hprofile]
+proc ::cbind::probe::values {config hprofile entries {extra ""}} {
+    set prelude [Prelude $hprofile]$extra
     set make [list ::cbind::probe::ValueSource $prelude $entries]
     set live [lsearch -all [lmap e $entries {expr 1}] 1]
     lassign [Assemble $config $hprofile $make $live] asm rejected command
@@ -265,6 +270,85 @@ proc ::cbind::probe::evidence {config hprofile source symbols} {
         dict set out $sym $facts
     }
     return [list 1 "" $out $producer]
+}
+
+# The record layouts clang computes for the records NAMES (C type
+# expressions: every record holding an anonymous member), after EXTRA (the
+# #undefs of the layout probe): {OK BLOCKS MESSAGE}, BLOCKS the anonymous
+# records' layouts, each a dict
+#
+#   kind    struct or union
+#   file    the tail of the file clang locates it in
+#   line    its line there (the struct or union keyword's), col its column
+#   size    its sizeof, align its alignment (bytes)
+#   members its own members, in order: {NAME OFFSET LOC}, NAME "" for an
+#           unnamed member (an anonymous record, LOC its location
+#           FILE:LINE:COL; an unnamed bitfield, LOC ""), OFFSET relative to
+#           the record (a bitfield's byte)
+#   leaves  every member name reachable through anonymous members (C11's
+#           promoted names) -> its offset relative to the record
+#   nested  every anonymous member's location -> its offset relative to
+#           the record
+#
+# and nothing for a record that is not an anonymous member's (named, or a
+# named member's): those are probed by C expressions. Clang dumps a record
+# when it lays it out, the anonymous ones first.
+proc ::cbind::probe::anonymous {config hprofile names extra} {
+    set source "[Prelude $hprofile]$extra"
+    if {[llength $names]} {
+        append source "const unsigned long long botlish_layouts\[\] = \{ [join [lmap n $names {string cat "sizeof($n)"}] {, }] \};\n"
+    }
+    lassign [::chdr::toolchain::recordLayouts $config $hprofile $source] ok text stderr command
+    if {!$ok} { return [list 0 {} [string range $stderr 0 2000]] }
+    return [list 1 [ParseLayouts $text] ""]
+}
+
+# The anonymous-member blocks of a record layout dump TEXT (anonymous's).
+proc ::cbind::probe::ParseLayouts {text} {
+    set out {}
+    foreach block [lrange [split [string map [list "*** Dumping AST Record Layout" \x01] $text] \x01] 1 end] {
+        set lines [split [string trim $block \n] \n]
+        if {![regexp {^\s*0 \| (struct|union) (.*)$} [lindex $lines 0] -> kind name]} continue
+        if {![regexp {\(anonymous at ([^()]*):([0-9]+):([0-9]+)\)$} $name -> file line col]} continue
+        set b [dict create kind $kind file [file tail $file] line $line col $col size "" align "" \
+            members {} leaves [dict create] nested [dict create]]
+        # The members, by depth: the stack holds whether each enclosing
+        # member is an anonymous record (its members are this record's
+        # promoted ones).
+        set open {}
+        foreach l [lrange $lines 1 end] {
+            if {[regexp {^\s*\| \[sizeof=([0-9]+),.*\malign=([0-9]+)} $l -> size align]} {
+                dict set b size $size
+                dict set b align $align
+                continue
+            }
+            if {![regexp {^\s*([0-9]+)(?::[0-9]+-[0-9]+)? \| (  +)(.*)$} $l -> offset indent rest]} continue
+            set depth [expr {[string length $indent] / 2}]
+            set open [lrange $open 0 [expr {$depth - 2}]]
+            set name ""
+            set loc ""
+            if {[regexp { $} $rest]} {
+                # No name: an anonymous record (its location), or an
+                # unnamed bitfield.
+                regexp {\((?:anonymous|unnamed) at ([^()]*):([0-9]+):([0-9]+)\) $} $rest -> f ln cl
+                if {[info exists f]} { set loc "[file tail $f]:$ln:$cl"; unset f }
+            } else {
+                set name [lindex [split $rest " "] end]
+            }
+            set reachable [expr {$depth == 1 || ([llength $open] == $depth - 1 && "0" ni $open)}]
+            if {$depth == 1} { dict lappend b members [list $name $offset $loc] }
+            if {$reachable} {
+                if {$name ne ""} {
+                    if {![dict exists $b leaves $name]} { dict set b leaves $name $offset }
+                } elseif {$loc ne ""} {
+                    dict set b nested $loc $offset
+                }
+            }
+            lappend open [expr {$reachable && $name eq "" && $loc ne ""}]
+        }
+        if {[dict get $b size] ne ""} { lappend out $b }
+    }
+    return $out
 }
 
 # The parameters of an LLVM define's parameter list, split at top-level

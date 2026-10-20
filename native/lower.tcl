@@ -84,6 +84,32 @@
 # Unsupported constructs raise {NATIVE UNSUPPORTED} with the source location
 # and HIR node (see Unsupported).
 
+namespace eval native::lower {}
+
+# Native name -> NIR operation of every floating-point operation
+# (core/float.tcl's natives) of the float types the native backend
+# represents: the type's prefix (`f64`: runtime::value::FloatType's
+# `prefix`) followed by the operation. A float type with no prefix here has
+# no native representation: its natives are unsupported.
+proc native::lower::FloatNatives {} {
+    set prefixes {Float64 f64}
+    set ops {+ add - sub * mul / div neg neg < lt <= le > gt >= ge}
+    set result [dict create]
+    foreach type [core::type::floatTypes] {
+        if {![dict exists $prefixes $type]} {
+            continue
+        }
+        set prefix [dict get $prefixes $type]
+        foreach {operator op} $ops {
+            dict set result [core::float::operatorNative $type $operator] $prefix$op
+        }
+        set ns [dict get [core::type::floatInfo $type] namespace]
+        dict set result ${ns}::from_int ${prefix}fromint
+        dict set result ${ns}::truncate ${prefix}trunc
+    }
+    return $result
+}
+
 namespace eval native::lower {
     # Native name -> how native code performs it: {op OP} (after the
     # parameter kind checks the registry declares), or a special form. The
@@ -169,6 +195,7 @@ namespace eval native::lower {
         ffi_fixture::function_address {op cptrfixture} \
         ffi_fixture::address_of       {op cptrfixtureaddress} \
         ffi_fixture::memory           {op cptrfixturememory} \
+        ffi_fixture::memory_bytes     {op cptrfixturebytes} \
         affine#drop {op affinedrop} \
         mutable_vector::from_list {op mvfromlist} \
         mutable_vector::length    {op mvlen} \
@@ -184,6 +211,12 @@ namespace eval native::lower {
         mutable_vector#take_front {op mvtakefront} \
         mutable_vector#clear_drop {op mvcleardrop} \
         mutable_vector#swap_drop  {op mvswapdrop}]
+    # The floating-point operations (core/float.tcl; FLOAT64-MILESTONE-1.md):
+    # every type of the float family the native backend represents, its
+    # operation prefix (FloatNatives) followed by the operation.
+    dict for {name op} [FloatNatives] {
+        dict set natives $name [list op $op]
+    }
     # The borrow test fixture's synthetic foreign operations (core/cabi.tcl's
     # installBorrowFixture; runtime/ffifixture.rs), one op per behavior.
     foreach {name behavior} [core::cabi::borrowFixture] {
@@ -208,6 +241,12 @@ namespace eval native::lower {
     variable captureLists {}
     variable pending {}
     variable usedNatives {}
+    # NAME -> 1: the payload-bearing builtin errors (core::native::
+    # declareErrorPayload: NonFiniteFloat) the native runtime itself may raise
+    # in this program (RuntimeRaises). The runtime builds such a payload from
+    # the program's own tables, so the header declares its anonymous shape
+    # and its fields' enums (PayloadTables).
+    variable runtimePayloads [dict create]
     # Struct shapes (STRUCTS.md), per program: {ID LAYOUT} -> dense shape
     # number, assigned on first use in deterministic lowering order, and the
     # ordered list of the {ID LAYOUT} keys, emitted as the NIR `shape`
@@ -316,6 +355,10 @@ namespace eval native::lower {
     # to its check-free sibling opcode (or, for a region, omits `regioncheck`)
     # instead of the checked form.
     variable provenBoundsOpt 1
+    # Fixed layout arrays (FIXED-LAYOUT-ARRAYS.md): the largest extent of an
+    # array of records or rows a copy (ArrayRead) unrolls into one `listnew`
+    # rather than collecting in a loop.
+    variable unrollExtent 8
     # String traversal (see "String traversal" below): the hir::traversal
     # analysis of the program, and whether it is enabled at all.
     variable traversal {}
@@ -1289,6 +1332,8 @@ proc native::lower::Program {hirProgram args} {
     variable foreignList
     set foreignIds [dict create]
     set foreignList {}
+    variable runtimePayloads
+    set runtimePayloads [dict create]
 
     set default [expr {[info exists ::env(BOTLISH_NATIVE_SPECIALIZE)]
         && $::env(BOTLISH_NATIVE_SPECIALIZE) eq "0" ? 0 : 1}]
@@ -1324,12 +1369,10 @@ proc native::lower::Program {hirProgram args} {
         && $::env(BOTLISH_NATIVE_CLOSED_CALLER_FACTS_OPT) eq "0" ? 0 : 1}]
     set exactCallableDefault [expr {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_OPT)]
         && $::env(BOTLISH_NATIVE_EXACT_CALLABLE_OPT) eq "0" ? 0 : 1}]
-    set exactLimitDefault [expr {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)]
-        ? $::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT) : ""}]
+    set exactLimitDefault [if {[info exists ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)]} {set ::env(BOTLISH_NATIVE_EXACT_CALLABLE_LIMIT)} else {string cat ""}]
     set recursiveRangeDefault [expr {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RESULT_RANGE_OPT)]
         && $::env(BOTLISH_NATIVE_RECURSIVE_RESULT_RANGE_OPT) eq "0" ? 0 : 1}]
-    set recursiveLimitDefault [expr {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)]
-        ? $::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT) : ""}]
+    set recursiveLimitDefault [if {[info exists ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)]} {set ::env(BOTLISH_NATIVE_RECURSIVE_RANGE_LIMIT)} else {string cat ""}]
     set callEffectsDefault [expr {[info exists ::env(BOTLISH_NATIVE_CALL_EFFECTS_OPT)]
         && $::env(BOTLISH_NATIVE_CALL_EFFECTS_OPT) eq "0" ? 0 : 1}]
     set traversalDefault [expr {[info exists ::env(BOTLISH_NATIVE_STRING_TRAVERSAL_OPT)]
@@ -1458,10 +1501,8 @@ proc native::lower::Program {hirProgram args} {
     set rawDemandOpt [dict get $options -raw-demand-opt]
     set rawMixedPolicy [dict get $options -raw-mixed-policy]
     set abiPlan [native::rawabi::plan $hirProgram $spec $ranges $rawIntAbiOpt $blockEscapeOpt $rawDemandOpt $rawMixedPolicy]
-    set escape [expr {$escapeOpt ? [hir::escape::analyze $hirProgram $spec $paramAggregateOpt $structWidths]
-        : [dict create arity {} wants {} virtual {} paramVirtual {}]}]
-    set stringregion [expr {$stringRegionOpt ? [hir::stringregion::analyze $hirProgram $spec]
-        : [dict create regionOf {} wants {} virtual {}]}]
+    set escape [if {$escapeOpt} {hir::escape::analyze $hirProgram $spec $paramAggregateOpt $structWidths} else {dict create arity {} wants {} virtual {} paramVirtual {}}]
+    set stringregion [if {$stringRegionOpt} {hir::stringregion::analyze $hirProgram $spec} else {dict create regionOf {} wants {} virtual {}}]
     # hir::blockescape.tcl and hir::stringregion.tcl are now independent
     # analyses (composed only here, at lowering time -- see native/lower
     # .tcl's "Block virtualization" and "String regions" sections): a
@@ -1472,16 +1513,12 @@ proc native::lower::Program {hirProgram args} {
     # *region companion* internal variant is the one actually demanded, so
     # this ordering (stringregion before blockescape) is no longer a
     # dependency -- only kept for determinism/readability.
-    set blockescape [expr {$blockEscapeOpt ? [hir::blockescape::analyze $hirProgram $spec]
-        : [dict create virtual {} wants {} flatCaptures {}]}]
-    set traversal [expr {$traversalOpt ? [hir::traversal::analyze $hirProgram $spec $stringregion $escape]
-        : [dict create plans {}]}]
+    set blockescape [if {$blockEscapeOpt} {hir::blockescape::analyze $hirProgram $spec} else {dict create virtual {} wants {} flatCaptures {}}]
+    set traversal [if {$traversalOpt} {hir::traversal::analyze $hirProgram $spec $stringregion $escape} else {dict create plans {}}]
     # Virtual construction (see "Virtual construction" below) runs last: it
     # leaves every binding/variant the analyses above claim to them, and
     # decides plan results from M7.c's closedness proof over blockescape.
-    set construction [expr {$constructionOpt
-        ? [hir::construction::analyze $hirProgram $spec $escape $stringregion $blockescape]
-        : [dict create params {} bindings {} locals {} results {} closed {} regions {}]}]
+    set construction [if {$constructionOpt} {hir::construction::analyze $hirProgram $spec $escape $stringregion $blockescape} else {dict create params {} bindings {} locals {} results {} closed {} regions {}}]
     # The ShortString1 plan (SHORT-STRING.md) runs strictly after the
     # closedness, Range and virtual-construction analyses it composes with,
     # and before any lowering. It reads facts and decides a representation;
@@ -1559,7 +1596,7 @@ proc native::lower::Program {hirProgram args} {
     set order [lmap key [dict keys $functions] {
         lassign [Unkey $key] id mode
         set block [dict get $spec instances $id block]
-        list [expr {$block eq "program" ? 0 : [dict get $context positions $block]}] \
+        list [if {$block eq "program"} {string cat 0} else {dict get $context positions $block}] \
             [string range $id 1 end] \
             [dict get {canonical 0 companion 1 region 1 internal 1 internalregion 1 internalcompanion 1 fields 1 fieldscompanion 1} $mode] $key
     }]
@@ -1587,10 +1624,11 @@ proc native::lower::Program {hirProgram args} {
     foreach name [lsort $usedNatives] {
         set meta [core::native::metadata $name]
         set kinds [lmap type [dict get $meta paramTypes] {
-            expr {$type eq "any" ? "any" : [core::type::base $type]}
+            if {$type eq "any"} {string cat "any"} else {core::type::base $type}
         }]
         lappend header "native [Quote $name] arity=[dict get $meta arity] params=[Quote $kinds] impl=[NativeImpl $name]"
     }
+    PayloadTables
     foreach key $shapeList {
         lassign $key id layout
         if {$id eq ""} {
@@ -1740,7 +1778,7 @@ proc native::lower::Parent {e} {
             }
         }
     }
-    return [expr {[dict exists $parents $e] ? [dict get $parents $e] : ""}]
+    return [dict getdef $parents $e ""]
 }
 
 # How many of the current analysis's representation blockers (guards) are
@@ -2113,7 +2151,7 @@ proc native::lower::ShortCounters {fnVar} {
     foreach key {shortLocals shortLits shortFromTagged shortToTagged shortConstMaterialized shortLen shortEq
             shortJoins shortSlices asciiLocals asciiLits asciiFromTagged asciiToTagged asciiConstMaterialized
             asciiLen asciiEq asciiShortEq asciiToShort asciiJoins} {
-        dict set out $key [expr {[dict exists $fn $key] ? [dict get $fn $key] : 0}]
+        dict set out $key [dict getdef $fn $key 0]
     }
     return $out
 }
@@ -2137,7 +2175,7 @@ proc native::lower::ShortAbiResult {id} {
 # result.
 proc native::lower::ResultShort {fnVar} {
     upvar 1 $fnVar fn
-    return [expr {[dict exists $fn resultShort] ? [dict get $fn resultShort] : ""}]
+    return [dict getdef $fn resultShort ""]
 }
 
 # The tier of expression E of the instance being lowered: `ascii` when the
@@ -2281,7 +2319,11 @@ proc native::lower::Function {id} {
     # ShortString1 ABI: these positions arrive as a ShortString1 scalar
     # (native/shortstring.tcl); every caller of this canonical function
     # passes them the same way.
-    set shortParams [expr {$region eq "program" ? [lrepeat [llength $params] ""] : [ShortAbiParams $id [llength $params]]}]
+    if {$region eq "program"} {
+        set shortParams [lrepeat [llength $params] ""]
+    } else {
+        set shortParams [ShortAbiParams $id [llength $params]]
+    }
     if {$region ne "program" && [ShortAbiResult $id] ne ""} {
         dict set fn resultShort [ShortAbiResult $id]
     }
@@ -2311,7 +2353,11 @@ proc native::lower::Function {id} {
     if {$region ne "program"} {
         dict set fn planResult [hir::construction::resultFamily $construction $id]
     }
-    set contextProblem [expr {$region eq "program" ? [ContextDiagnostic] : ""}]
+    if {$region eq "program"} {
+        set contextProblem [ContextDiagnostic]
+    } else {
+        set contextProblem ""
+    }
     if {$contextProblem ne ""} {
         # A -strict 0 program that failed context verification (CONTEXTS.md):
         # its first context diagnostic is the run's failure; no code whose
@@ -2335,8 +2381,7 @@ proc native::lower::Function {id} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
     # pnames: the parameter names as block error messages show them.
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id] [Quote $name] params=[expr {[llength $params] + $extraParams}] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2463,8 +2508,7 @@ proc native::lower::CompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id companion] [Quote $name] params=[llength $params] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2560,8 +2604,7 @@ proc native::lower::RegionCompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id region] [Quote $name] params=[llength $params] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=3"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2678,8 +2721,7 @@ proc native::lower::InternalFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internal] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2800,8 +2842,7 @@ proc native::lower::InternalRegionCompanionFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internalregion] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key] results=3"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -2904,8 +2945,7 @@ proc native::lower::InternalCompanionFunction {id} {
     }
     set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
         [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id internalcompanion] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3019,8 +3059,7 @@ proc native::lower::FieldsFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id fields] [Quote $name] params=[llength $pnames] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key]"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3106,8 +3145,7 @@ proc native::lower::FieldsCompanionFunction {id} {
     if {$env} {
         set captures [lmap b [dict get $captureLists $region] {dict get [hir::binding $hir $b] name}]
     }
-    set key [expr {[dict get $instance generic] ? "generic"
-        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set key [if {[dict get $instance generic]} {string cat "generic"} else {join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }}]
     set head "func [Placeholder $id fieldscompanion] [Quote $name] params=[llength $pnames] env=$env regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=[llength $captures] instance=[Quote $key] results=$arity"
     set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
     if {$rawRegs ne ""} {
@@ -3503,7 +3541,11 @@ proc native::lower::ReleaseHandles {fnVar items e {result ""}} {
     foreach item $items {
         set plan [hir::affine::DropPlan $hir $item]
         if {$plan eq ""} continue
-        set descriptor [expr {[lindex $plan 0] eq "coroutine" ? "c" : [lindex $plan 1]}]
+        if {[lindex $plan 0] eq "coroutine"} {
+            set descriptor "c"
+        } else {
+            set descriptor [lindex $plan 1]
+        }
         if {[string match b* $item]} {
             set access [Access fn $item]
         } elseif {$item eq $e && [hir::kind $hir $e] eq "struct"
@@ -3656,7 +3698,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
     # (ShortTier): an `if` then joins its branches directly in one register of
     # that kind (each branch value is itself proven, being below the join in
     # the fact lattice, and converts to the join's kind).
-    set shortJoin [expr {$want in {short ascii} && [dict get $node kind] eq "if" ? $want : ""}]
+    if {$want in {short ascii} && [dict get $node kind] eq "if"} {
+        set shortJoin $want
+    } else {
+        set shortJoin ""
+    }
     switch -- [dict get $node kind] {
         const    { lassign [ConstOrRegion fn $e $node $want] result repr }
         ref      { lassign [Ref fn $e $node $want] result repr }
@@ -3720,7 +3766,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                     Emit fn "ret $value" $e
                 }
             } else {
-                set value [Expr fn [dict get $node value] [expr {[ResultRaw fn] ? "rawjoin" : [ResultShort fn] ne "" ? [ResultShort fn] : "tagged"}]]
+                set value [Expr fn [dict get $node value] [if {[ResultRaw fn]} {string cat "rawjoin"} elseif {[ResultShort fn] ne ""} {ResultShort fn} else {string cat "tagged"}]]
                 if {$value ne "never"} {
                     ReleaseHandles fn $after $e
                     Emit fn "ret $value" $e
@@ -3744,7 +3790,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 # nothing downstream reads is filled with unit instead.
                 # A retained accumulator is materialized here
                 # (CollectFinish): it may be a construction plan.
-                set prefix [expr {$accReg eq "discard" ? [Assign fn unit] : [CollectFinish fn $e $accReg]}]
+                if {$accReg eq "discard"} {
+                    set prefix [Assign fn unit]
+                } else {
+                    set prefix [CollectFinish fn $e $accReg]
+                }
                 Emit fn "$resultReg = move $prefix" $e
                 Emit fn "jump $exit" $e
                 dict set fn broken [dict get $node target] 1
@@ -3913,6 +3963,36 @@ proc native::lower::EnumConst {fnVar v e} {
     return [Assign fn "enum [EnumIndex $id] $case" $e]
 }
 
+# Records that the native runtime may raise the declared errors ERRORS (a
+# native's -errors) in this program: each payload-bearing builtin one among
+# them needs its payload's tables (runtimePayloads).
+proc native::lower::RuntimeRaises {errors} {
+    variable runtimePayloads
+    foreach error $errors {
+        if {[core::native::isBuiltinError $error] && [core::native::builtinPayload $error] ne {}} {
+            dict set runtimePayloads $error 1
+        }
+    }
+}
+
+# Declares, in the program's tables, what the runtime needs to build the
+# payload of each builtin error it may raise (runtimePayloads): the payload's
+# anonymous shape and the enum of each enum-typed field. The runtime finds
+# them by name (runtime::ops's fail_non_finite): the numbers stay the
+# program's own.
+proc native::lower::PayloadTables {} {
+    variable runtimePayloads
+    foreach error [dict keys $runtimePayloads] {
+        set type [hir::errordecls::payloadType $error]
+        ShapeIndex {} [hir::types::StructLayout $type]
+        foreach {field fieldType} [hir::errordecls::fields $error] {
+            if {[lindex $fieldType 0] eq "enum"} {
+                EnumIndex [lindex $fieldType 1]
+            }
+        }
+    }
+}
+
 # The dense shape number of {ID LAYOUT} (see shapeIds), assigned on first use.
 proc native::lower::ShapeIndex {id layout} {
     variable shapeIds
@@ -4024,7 +4104,7 @@ proc native::lower::BuildStruct {fnVar shape cut fields e} {
 
 # The shape key ({ID LAYOUT}, ShapeIndex's key) of struct construction NODE.
 proc native::lower::StructShapeOf {node} {
-    return [list [expr {[dict get $node named] ? [dict get $node structId] : ""}] [dict get $node layout]]
+    return [list [if {[dict get $node named]} {dict get $node structId} else {string cat ""}] [dict get $node layout]]
 }
 
 proc native::lower::Struct {fnVar e node} {
@@ -4374,8 +4454,16 @@ proc native::lower::ContextInstallCall {fnVar e node} {
     set arg [lindex [dict get $node args] 0]
     set slot [dict get $contextSlots $id]
     set leaves {}
-    set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
-    set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+    if {[hir::kind $hir $arg] eq "ref"} {
+        set b [hir::get $hir $arg binding]
+    } else {
+        set b ""
+    }
+    if {$b ne "" && [dict exists $fn locals $b]} {
+        set local [dict get $fn locals $b]
+    } else {
+        set local ""
+    }
     if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
         # The installed value held as fields (the hygienic temporary of
         # `with context`, hir/escape.tcl's ctxUse): its leaves without the
@@ -4794,7 +4882,11 @@ proc native::lower::ConstantBytesOf {e} {
             e { set n [ConstantByteElement [lindex $src 1]] }
             v {
                 set v [lindex $src 1]
-                set n [expr {[core::value::kind $v] eq "int" ? [core::value::intOf $v] : ""}]
+                if {[core::value::kind $v] eq "int"} {
+                    set n [core::value::intOf $v]
+                } else {
+                    set n ""
+                }
             }
         }
         if {$n eq "" || $n < 0 || $n > 255} {
@@ -4830,7 +4922,10 @@ proc native::lower::ConstantByteElement {e} {
         return ""
     }
     set n [hir::exact::IntOf $hir [lindex [dict get $node args] 0]]
-    return [expr {$n ne "" && $n >= 0 && $n <= 255 ? $n : ""}]
+    if {$n ne "" && $n >= 0 && $n <= 255} {
+        return $n
+    }
+    return ""
 }
 
 # abi::x86_64::from_bytes (core/bytestore.tcl, ABI-BYTES.md): the raw address
@@ -4991,6 +5086,8 @@ proc native::lower::BorrowCall {fnVar e node} {
     if {!$extern && ![dict exists $natives $name]} {
         Unsupported $e "native $name" "the foreign operation \"$name\" has no native implementation"
     }
+    # (A C double result that is no finite number is NonFiniteFloat.)
+    RuntimeRaises [dict get [core::native::metadata $name] errors]
     set access [dict create]
     set names [dict create]
     foreach borrow [dict get $node borrows] {
@@ -5062,7 +5159,7 @@ proc native::lower::BorrowCall {fnVar e node} {
             lappend fields $result
             continue
         }
-        set i [expr {[dict exists $names $field] ? [dict get $names $field] : -1}]
+        set i [dict getdef $names $field -1]
         if {$i < 0 || ![dict exists $written $i]} {
             throw {NATIVE BUG} "native lowering: write-back field $field of $name has no written argument ($e)"
         }
@@ -5105,6 +5202,79 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         Emit fn "raise $kind [Quote $message]" $e
         return {never tagged}
     }
+    switch -- [hir::layouts::RoleOf $role op] {
+        element {
+            # One element of a live fixed array (FIXED-LAYOUT-ARRAYS.md):
+            # the array's address word plus I * STRIDE, after one bounds
+            # check -- a load for a scalar or a pointer, an address for a
+            # nested layout or array; never the whole array.
+            lassign [ElementAccess fn $e] view base element
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            return [list [NativeRepr fn $e $view $element $base] tagged]
+        }
+        store_element {
+            # One scalar or pointer element written through a live array's
+            # edit (hir::layouts::Problems refuses a view's): every operand
+            # evaluated, the index checked, then one store.
+            lassign [ElementAccess fn $e [lindex $args [hir::layouts::RoleOf $role value]]] view base element value
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            ReprWrite fn $e native $view $element $base $value
+            return [list [Assign fn unit $e] tagged]
+        }
+        load_array {
+            # A whole live array copied into its List: element by element
+            # (a row of scalars by one helper call).
+            set constant [lindex $args [hir::layouts::RoleOf $role array]]
+            if {[hir::kind $hir $constant] ne "const"} {
+                throw {NATIVE BUG} "native lowering: the array operand of $name ($e) is not its descriptor"
+            }
+            lassign [ViewBase fn [lindex $args 0]] view base
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            dict lappend fn calls [list native $name]
+            return [list [ArrayRead fn $e native $view [lindex [hir::get $hir $constant literal] end] $base] tagged]
+        }
+    }
+    if {[hir::layouts::RoleOf $role op] eq "read"} {
+        # binary::read(data, L.path) (LAYOUT-UNIONS.md): the length check a
+        # parse makes, then the one designated representation imprinted at
+        # its absolute offset (ReprRead from bytes: one `binload` for a
+        # scalar, a record's fields and its object, an array's List).
+        set path [lindex $args [hir::layouts::RoleOf $role path]]
+        if {[hir::kind $hir $path] ne "const"} {
+            throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not its designator constant"
+        }
+        set constant [lindex [hir::get $hir $path literal] end]
+        if {[hir::layouts::PathLayout $constant] eq ""} {
+            throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not a field designator"
+        }
+        if {$wantVirtual ne ""} {
+            throw {NATIVE BUG} "native lowering: binary::read $e asked for virtual fields (hir::escape never classifies one)"
+        }
+        lassign $constant structId size text field
+        set storage [StorageOf fn [lindex $args [hir::layouts::RoleOf $role input]]]
+        if {$storage eq "never"} {
+            return {never tagged}
+        }
+        dict lappend fn calls [list native $name]
+        set length [Assign fn "op byteslen $storage" $e]
+        set expected [Assign fn "int $size" $e]
+        set fits [Assign fn "op ieq $length $expected" $e]
+        set good [NewLabel fn]
+        set bad [NewLabel fn]
+        Emit fn "br $fits $good $bad" $e
+        EmitLabel fn $bad
+        Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
+        EmitLabel fn $good
+        return [list [ReprRead fn $e bytes $storage [lrange $field 2 end] [lindex $field 1]] tagged]
+    }
     if {[hir::layouts::RoleOf $role op] eq "field"} {
         # One field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
         # elaborated projection binary#view_field(VIEW, FIELD), FIELD the
@@ -5119,6 +5289,9 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         }
         dict lappend fn calls [list native $name]
         return [list [NativeField fn $e $view [lindex [hir::get $hir $field literal] end] $base] tagged]
+    }
+    if {[hir::layouts::RoleOf $role op] in {store write write_foreign}} {
+        return [LayoutWrite fn $e $name $role $args $wantVirtual]
     }
     set operand [lindex $args [hir::layouts::RoleOf $role operand]]
     if {[hir::kind $hir $operand] ne "const"} {
@@ -5160,8 +5333,16 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
                 throw {NATIVE BUG} "native lowering: binary::emit $e asked for virtual fields (hir::escape never classifies one as a construction)"
             }
             set arg [lindex $args 0]
-            set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
-            set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+            if {[hir::kind $hir $arg] eq "ref"} {
+                set b [hir::get $hir $arg binding]
+            } else {
+                set b ""
+            }
+            if {$b ne "" && [dict exists $fn locals $b]} {
+                set local [dict get $fn locals $b]
+            } else {
+                set local ""
+            }
             if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
                 # The value held as fields (hir/escape.tcl's leafUse): its
                 # leaves without the object, a closed inner struct read with
@@ -5218,6 +5399,23 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
             EmitLabel fn $good
             return [list $pointer tagged]
         }
+        edit {
+            # binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): exactly a
+            # view's construction -- the pointer's own word once it is known
+            # not to be null; its own declared error.
+            set pointer [Expr fn [lindex $args [hir::layouts::RoleOf $role pointer]]]
+            if {$pointer eq "never"} {
+                return {never tagged}
+            }
+            set null [Assign fn "op cptrisnull $pointer" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $null $bad $good" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeEditNull] [Quote NativeEditNull]" $e
+            EmitLabel fn $good
+            return [list $pointer tagged]
+        }
         load {
             # binary::load(v): every field read through the view, as parse
             # reads every field of its bytes, and the LayoutStruct built.
@@ -5234,92 +5432,343 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
     throw {NATIVE BUG} "native lowering: binary operation $name ($e) has no operation"
 }
 
+# Call E of the layout write NAME (ROLE its -layout role, CALLARGS its
+# arguments; NATIVE-LAYOUT-WRITES.md): {REGISTER tagged} or {never tagged}.
+# The field designator constant holds the leaf's absolute offset and its
+# encoding (a scalar's, or a pointer's width), so every write is one op with
+# constant operands:
+#
+#   binary::store(e, L.f, v)          op nativestore %e %OFFSET %ENCODING %v
+#                                     (a pointer field: op nativestoreptr %e
+#                                     %OFFSET %WIDTH %p); a nested edit's
+#                                     base folded into the offset (ViewBase),
+#                                     so a chain of subrecords is one store
+#   binary::write(d, L.f, v)          the length check parse makes (op
+#                                     mbyteslen / ieq / br / faildeclared
+#                                     LayoutLengthMismatch), then op
+#                                     mbyteswrite %storage %OFFSET %ENCODING %v
+#                                     (a fresh storage) and its MutableBytes
+#   binary::write_foreign(d, L.p, q)  the same with op mbyteswriteptr %storage
+#                                     %OFFSET %WIDTH %q
+#
+# Every argument is evaluated, in written order, before anything is checked
+# or written; nothing reads the record, copies it into bytes or builds a
+# LayoutStruct.
+proc native::lower::LayoutWrite {fnVar e name role callArgs wantVirtual} {
+    upvar 1 $fnVar fn
+    variable hir
+    set path [lindex $callArgs [hir::layouts::RoleOf $role path]]
+    if {[hir::kind $hir $path] ne "const"} {
+        throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not its designator constant"
+    }
+    set constant [lindex [hir::get $hir $path literal] end]
+    if {[hir::layouts::PathLayout $constant] eq ""} {
+        throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not a field designator"
+    }
+    lassign $constant structId size text field
+    lassign $field fieldName offset kind width endian
+    set op [hir::layouts::RoleOf $role op]
+    if {$op eq "store"} {
+        lassign [ViewBase fn [lindex $callArgs [hir::layouts::RoleOf $role edited]]] target base
+    } else {
+        set mutableType [core::bytestore::mutableBytesType]
+        set target [StorageOf fn [lindex $callArgs [hir::layouts::RoleOf $role output]] $mutableType]
+        set base 0
+    }
+    if {$target eq "never"} {
+        return {never tagged}
+    }
+    set value [Expr fn [lindex $callArgs [hir::layouts::RoleOf $role value]]]
+    if {$value eq "never"} {
+        return {never tagged}
+    }
+    dict lappend fn calls [list native $name]
+    if {$op ne "store"} {
+        set length [Assign fn "op mbyteslen $target" $e]
+        set expected [Assign fn "int $size" $e]
+        set fits [Assign fn "op ieq $length $expected" $e]
+        set good [NewLabel fn]
+        set bad [NewLabel fn]
+        Emit fn "br $fits $good $bad" $e
+        EmitLabel fn $bad
+        Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
+        EmitLabel fn $good
+    }
+    if {$kind eq "array"} {
+        # A whole fixed array from a List (FIXED-LAYOUT-ARRAYS.md): every
+        # extent checked first (LayoutExtentMismatch, nothing written), then
+        # the elements -- through the edit in place, or into ONE fresh copy
+        # of the byte storage (`mbytesclone`), never a copy per element.
+        set repr [lrange $field 2 end]
+        ArrayCheck fn $e $repr $value
+        if {$op eq "store"} {
+            ReprWrite fn $e native $target $repr [BasePlus fn $e $base $offset] $value
+            return [list [Assign fn unit $e] tagged]
+        }
+        set storage [Assign fn "op mbytesclone $target" $e]
+        ReprWrite fn $e bytes $storage $repr $offset $value
+        if {$wantVirtual ne ""} {
+            if {$wantVirtual != 1} {
+                throw {NATIVE BUG} "native lowering: expected a one-field MutableBytes at $e"
+            }
+            return [list [list $storage] virtual]
+        }
+        return [list [Assign fn "structnew [ShapeIndex $mutableType [hir::structs::names $mutableType]] $storage" $e] tagged]
+    }
+    set at [At fn $e $base $offset]
+    if {$kind eq "ptr"} {
+        set code [Assign fn "int $width" $e]
+        set suffix ptr
+    } else {
+        set code [Assign fn "int [LayoutEncoding $kind $width $endian]" $e]
+        set suffix ""
+    }
+    if {$op eq "store"} {
+        return [list [Assign fn "op nativestore$suffix $target $at $code $value" $e] tagged]
+    }
+    set storage [Assign fn "op mbyteswrite$suffix $target $at $code $value" $e]
+    if {$wantVirtual ne ""} {
+        # Held as its one field (hir::escape's recognized construction of
+        # the MutableBytes a write returns): the fresh storage itself.
+        if {$wantVirtual != 1} {
+            throw {NATIVE BUG} "native lowering: expected a one-field MutableBytes at $e"
+        }
+        return [list [list $storage] virtual]
+    }
+    return [list [Assign fn "structnew [ShapeIndex $mutableType [hir::structs::names $mutableType]] $storage" $e] tagged]
+}
+
 # {REGISTER BASE} of the native view expression ARG, evaluated here: a
 # nested layout's view read straight off another view (`v.inner.x`, the
 # receiver a binary#view_field call of a layout field) is the outer view's
 # register with the nested field's offset added -- one load at the absolute
 # offset, no intermediate address -- and any other view its own register at
-# 0.
+# 0. So is a live fixed array read off a view (`v.items`, FIXED-LAYOUT-
+# ARRAYS.md), and an element of a live array that is itself a window (a
+# nested layout or array: `binary::element(v.pts, i)`), whose bounds check
+# and I * STRIDE are emitted here (ElementAccess). BASE is a byte count, or
+# a register holding one once an element index is dynamic.
 proc native::lower::ViewBase {fnVar arg} {
     upvar 1 $fnVar fn
     variable hir
-    if {[hir::kind $hir $arg] eq "call" && [lindex [hir::get $hir $arg target] 0] eq "native"
-            && [dict get [hir::symbol $hir [lindex [hir::get $hir $arg target] 1]] name] eq [hir::layouts::ViewReadNative]} {
-        lassign [hir::get $hir $arg args] receiver field
-        if {[hir::kind $hir $field] eq "const"} {
-            set entry [lindex [hir::get $hir $field literal] end]
-            if {[lindex $entry 2] eq "layout"} {
-                lassign [ViewBase fn $receiver] view base
-                return [list $view [expr {$base + [lindex $entry 1]}]]
+    if {[hir::kind $hir $arg] eq "call" && [lindex [hir::get $hir $arg target] 0] eq "native"} {
+        set name [dict get [hir::symbol $hir [lindex [hir::get $hir $arg target] 1]] name]
+        if {$name eq [hir::layouts::ViewReadNative]} {
+            lassign [hir::get $hir $arg args] receiver field
+            if {[hir::kind $hir $field] eq "const"} {
+                set entry [lindex [hir::get $hir $field literal] end]
+                if {[lindex $entry 2] in {layout array union}} {
+                    lassign [ViewBase fn $receiver] view base
+                    if {$view eq "never"} {
+                        return [list never 0]
+                    }
+                    return [list $view [BasePlus fn $arg $base [lindex $entry 1]]]
+                }
+            }
+        }
+        set role [hir::layouts::Role $name]
+        if {[hir::layouts::RoleOf $role op] eq "element" && [hir::layouts::RoleOf $role array] ne ""} {
+            set constant [lindex [hir::get $hir $arg args] [hir::layouts::RoleOf $role array]]
+            if {[hir::kind $hir $constant] eq "const"
+                    && [lindex [lindex [hir::get $hir $constant literal] end] 3 0] in {layout array union}
+                    && [hir::layouts::Problems $hir $arg $name $role] eq ""} {
+                dict lappend fn calls [list native $name]
+                lassign [ElementAccess fn $arg] view base
+                return [list $view $base]
             }
         }
     }
     return [list [Expr fn $arg] 0]
 }
 
-# The value of the descriptor field entry FIELD read through the native view
-# VIEW (a register holding a C address word) at byte BASE: a scalar's Int
-# (one `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
-# layout's view (`cptroffset`: no memory read) -- NATIVE-LAYOUT-VIEWS.md.
-proc native::lower::NativeField {fnVar e view field base} {
+# The base BASE (a byte count or a register holding one, ViewBase) plus
+# OFFSET (a byte count, or a register): a constant when both are, else the
+# register of their sum.
+proc native::lower::BasePlus {fnVar e base offset} {
     upvar 1 $fnVar fn
-    lassign $field name offset kind
-    set at [Assign fn "int [expr {$base + $offset}]" $e]
-    switch -- $kind {
-        layout {
+    set baseReg [expr {[string index $base 0] eq "%"}]
+    set offsetReg [expr {[string index $offset 0] eq "%"}]
+    if {!$baseReg && !$offsetReg} {
+        return [expr {$base + $offset}]
+    }
+    if {!$offsetReg && $offset == 0} {
+        return $base
+    }
+    if {!$baseReg && $base == 0} {
+        return $offset
+    }
+    set a $base
+    if {!$baseReg} {
+        set a [Assign fn "int $base" $e]
+    }
+    set b $offset
+    if {!$offsetReg} {
+        set b [Assign fn "int $offset" $e]
+    }
+    return [Assign fn "op iadd $a $b" $e]
+}
+
+# The register holding the byte offset BASE + OFFSET (BasePlus): the operand
+# of a load or store.
+proc native::lower::At {fnVar e base offset} {
+    upvar 1 $fnVar fn
+    set at [BasePlus fn $e $base $offset]
+    if {[string index $at 0] eq "%"} {
+        return $at
+    }
+    return [Assign fn "int $at" $e]
+}
+
+# {VIEW BASE ELEMENT} of the element access E (an elaborated binary#element
+# or binary#store_element call, FIXED-LAYOUT-ARRAYS.md): VIEW the array's
+# address word, BASE the element's byte offset from it, ELEMENT the
+# element's representation words -- after the array and index operands are
+# evaluated (and VALUEEXPR, a store's value, whose register is the fourth
+# element), the index guarded as an Int, and one bounds check, 0 <= I < N,
+# whose failure is the declared IndexNotFound. The check is left out where
+# the completion analysis proved every index in range (BoundsProven); a
+# constant index then folds into BASE, so `binary::element(v.items, 3)` is
+# one access at an absolute offset. VIEW "never" when an operand never
+# completes.
+proc native::lower::ElementAccess {fnVar e {valueExpr ""}} {
+    upvar 1 $fnVar fn
+    variable hir
+    set name [dict get [hir::symbol $hir [lindex [hir::get $hir $e target] 1]] name]
+    set role [hir::layouts::Role $name]
+    set args [hir::get $hir $e args]
+    set constant [lindex $args [hir::layouts::RoleOf $role array]]
+    if {[hir::kind $hir $constant] ne "const"} {
+        throw {NATIVE BUG} "native lowering: the array operand of $name ($e) is not its descriptor"
+    }
+    lassign [lindex [hir::get $hir $constant literal] end] - extent stride element
+    lassign [ViewBase fn [lindex $args 0]] view base
+    if {$view eq "never"} {
+        return {never 0 {} never}
+    }
+    set indexExpr [lindex $args [hir::layouts::RoleOf $role index]]
+    set proven [BoundsProven $e]
+    set index ""
+    if {$proven} {
+        set index [ConstantIntValue $indexExpr]
+    }
+    if {$index ne "" && [hir::kind $hir $indexExpr] eq "const"} {
+        set at [BasePlus fn $e $base [expr {$index * $stride}]]
+    } else {
+        set index [Expr fn $indexExpr]
+        if {$index eq "never"} {
+            return {never 0 {} never}
+        }
+        EmitArgGuards fn $e [list $indexExpr] [list $index] {int} $name
+        set at ""
+    }
+    set value ""
+    if {$valueExpr ne ""} {
+        set value [Expr fn $valueExpr]
+        if {$value eq "never"} {
+            return {never 0 {} never}
+        }
+    }
+    if {$at eq ""} {
+        if {!$proven} {
+            set good [NewLabel fn]
+            set next [NewLabel fn]
+            set bad [NewLabel fn]
+            set low [Assign fn "op ige $index [Assign fn "int 0" $e]" $e]
+            Emit fn "br $low $next $bad" $e
+            EmitLabel fn $next
+            set high [Assign fn "op ilt $index [Assign fn "int $extent" $e]" $e]
+            Emit fn "br $high $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId IndexNotFound] [Quote IndexNotFound]" $e
+            EmitLabel fn $good
+        }
+        set scaled $index
+        if {$stride != 1} {
+            set scaled [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]
+        }
+        set at [BasePlus fn $e $base $scaled]
+    }
+    return [list $view $at $element $value]
+}
+
+# The value of the representation words REPR (a descriptor field entry's
+# words after its name and offset) read through the native view VIEW (a
+# register holding a C address word) at BASE (ViewBase): a scalar's Int (one
+# `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
+# layout's, a fixed array's or a union's live window (`cptroffset`: no
+# memory read) -- NATIVE-LAYOUT-VIEWS.md, FIXED-LAYOUT-ARRAYS.md,
+# LAYOUT-UNIONS.md. A union's alternative is read exactly as a field at the
+# union's own address: nothing knows it is one.
+proc native::lower::NativeRepr {fnVar e view repr base} {
+    upvar 1 $fnVar fn
+    set at [At fn $e $base 0]
+    switch -- [lindex $repr 0] {
+        layout - array - union {
             return [Assign fn "op cptroffset $view $at" $e]
         }
         ptr {
-            lassign $field name offset kind width endian
-            set w [Assign fn "int $width" $e]
+            set w [Assign fn "int [lindex $repr 1]" $e]
             return [Assign fn "op nativeloadptr $view $at $w" $e]
         }
     }
-    lassign $field name offset sign width endian
+    lassign $repr sign width endian
     set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
     return [Assign fn "op nativeload $view $at $code" $e]
 }
 
-# The LayoutStruct DESCRIPTOR describes, read through the native view VIEW
-# at byte BASE (binary::load): every scalar and pointer field loaded in
-# declared (slot) order, a nested layout's struct recursively, then the
-# object -- LayoutDecode's shape, over live memory instead of bytes.
-proc native::lower::NativeDecode {fnVar e view descriptor base} {
+# The value of the descriptor field entry FIELD read through the native view
+# VIEW at BASE (NativeRepr at the field's offset).
+proc native::lower::NativeField {fnVar e view field base} {
     upvar 1 $fnVar fn
-    lassign $descriptor structId size align fields
-    set names {}
-    set registers {}
-    foreach field $fields {
-        lassign $field name offset kind
-        lappend names $name
-        if {$kind eq "layout"} {
-            lappend registers [NativeDecode fn $e $view [lindex $field 3] [expr {$base + $offset}]]
-            continue
-        }
-        lappend registers [NativeField fn $e $view $field $base]
-    }
-    return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
+    return [NativeRepr fn $e $view [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
 }
 
-# The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE
-# at byte BASE: its fields' loads in declared (slot) order, then its object
-# (or, FIELDS 1, the field registers without the object).
-proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}} {
+# The copied value of the representation words REPR read from SOURCE at
+# BASE: MODE native reads through the native view SOURCE (binary::load), MODE
+# bytes from the byte storage SOURCE (binary::parse). A scalar or a pointer
+# is one load, a nested layout its LayoutStruct (every field, then its
+# object), a fixed array its List (ArrayRead).
+proc native::lower::ReprRead {fnVar e mode source repr base} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $repr 0] {
+        layout {
+            return [DecodeAt fn $e $mode $source [lindex $repr 1] $base]
+        }
+        union {
+            # (A union has no copied value: every copy of one is LAYOUT-UNION
+            # before lowering, LAYOUT-UNIONS.md.)
+            throw {NATIVE BUG} "native lowering: a copy of a union ($e)"
+        }
+        array {
+            return [ArrayRead fn $e $mode $source $repr $base]
+        }
+        ptr {
+            if {$mode ne "native"} {
+                throw {NATIVE BUG} "native lowering: a C pointer read from bytes ($e)"
+            }
+            return [NativeRepr fn $e $source $repr $base]
+        }
+    }
+    if {$mode eq "native"} {
+        return [NativeRepr fn $e $source $repr $base]
+    }
+    lassign $repr sign width endian
+    set at [At fn $e $base 0]
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op binload $source $at $code" $e]
+}
+
+# The LayoutStruct DESCRIPTOR describes read from SOURCE at BASE (MODE as
+# ReprRead's): its fields' values in declared (slot) order, then its object
+# (or, FIELDSONLY 1, the field registers without the object).
+proc native::lower::DecodeAt {fnVar e mode source descriptor base {fieldsOnly 0}} {
     upvar 1 $fnVar fn
     lassign $descriptor structId size align fields
     set names {}
     set registers {}
     foreach field $fields {
-        lassign $field name offset kind
-        lappend names $name
-        if {$kind eq "layout"} {
-            lappend registers [LayoutDecode fn $e $storage [lindex $field 3] [expr {$base + $offset}]]
-            continue
-        }
-        lassign $field name offset sign width endian
-        set at [Assign fn "int [expr {$base + $offset}]" $e]
-        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
-        lappend registers [Assign fn "op binload $storage $at $code" $e]
+        lappend names [lindex $field 0]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
     }
     if {$fieldsOnly} {
         return $registers
@@ -5327,9 +5776,216 @@ proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}
     return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
 }
 
-# {OFFSET SIGN WIDTH ENDIAN} of every scalar field of DESCRIPTOR at byte BASE,
-# depth-first in declared order: the order of a LayoutStruct's leaves
-# (ContextObjectLeaves, ContextLeafRegs).
+# The List the fixed array REPR ({array N STRIDE ELEMENT}) holds at BASE of
+# SOURCE (MODE as ReprRead's), copied: a row of scalars by one helper call
+# (`binloadarray` / `nativeloadarray`: N contiguous scalars, STRIDE their
+# width); any other element read element by element, element I at BASE + I
+# * STRIDE -- unrolled into one `listnew` of the N values up to
+# UnrollExtent elements (so the List is the one allocation), past it in a
+# counted loop appending each -- O(N), straight from the descriptor's
+# constants, no descriptor read at run time (FIXED-LAYOUT-ARRAYS.md).
+proc native::lower::ArrayRead {fnVar e mode source repr base} {
+    upvar 1 $fnVar fn
+    variable unrollExtent
+    lassign $repr - extent stride element
+    if {[lindex $element 0] in {u i}} {
+        lassign $element sign width endian
+        set at [At fn $e $base 0]
+        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+        set count [Assign fn "int $extent" $e]
+        set op [expr {$mode eq "native" ? "nativeloadarray" : "binloadarray"}]
+        return [Assign fn "op $op $source $at $code $count" $e]
+    }
+    if {$extent <= $unrollExtent} {
+        set values {}
+        for {set i 0} {$i < $extent} {incr i} {
+            lappend values [ReprRead fn $e $mode $source $element [BasePlus fn $e $base [expr {$i * $stride}]]]
+        }
+        return [Assign fn "op listnew [join $values { }]" $e]
+    }
+    set acc [CollectStart fn $e]
+    lassign [ArrayLoopStart fn $e $extent] index body exit
+    set elementBase [BasePlus fn $e $base [ArrayScaled fn $e $index $stride]]
+    CollectAppend fn $e $acc [ReprRead fn $e $mode $source $element $elementBase]
+    ArrayLoopEnd fn $e $index $body $exit
+    return [CollectFinish fn $e $acc]
+}
+
+# {INDEX BODY EXIT}: the head of a counted loop over 0..EXTENT-1 (the index
+# register INDEX, the label of the head to jump back to, the label after
+# the loop), its body to follow; closed by ArrayLoopEnd.
+proc native::lower::ArrayLoopStart {fnVar e extent} {
+    upvar 1 $fnVar fn
+    set index [NewReg fn]
+    Emit fn "$index = move [Assign fn "int 0" $e]" $e
+    set head [NewLabel fn]
+    set body [NewLabel fn]
+    set exit [NewLabel fn]
+    Emit fn "jump $head" $e
+    EmitLabel fn $head
+    set more [Assign fn "op ilt $index [Assign fn "int $extent" $e]" $e]
+    Emit fn "br $more $body $exit" $e
+    EmitLabel fn $body
+    return [list $index $head $exit]
+}
+
+proc native::lower::ArrayLoopEnd {fnVar e index head exit} {
+    upvar 1 $fnVar fn
+    set next [Assign fn "op iadd $index [Assign fn "int 1" $e]" $e]
+    Emit fn "$index = move $next" $e
+    Emit fn "jump $head" $e
+    EmitLabel fn $exit
+}
+
+# The register of INDEX * STRIDE.
+proc native::lower::ArrayScaled {fnVar e index stride} {
+    upvar 1 $fnVar fn
+    if {$stride == 1} {
+        return $index
+    }
+    return [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]
+}
+
+# Checks that VALUE, a register holding the copied value of the
+# representation words REPR, fills every fixed array in it exactly: the
+# declared LayoutExtentMismatch otherwise (FIXED-LAYOUT-ARRAYS.md). A List's
+# length against its extent (and, when its elements hold arrays, each
+# element in a loop); a LayoutStruct's array fields (`structget`). Emits
+# nothing for a representation without arrays, nor for a call E whose
+# extents the completion analysis proved (BoundsProven: the call's only
+# bounds check is its `extents` one): everything a write writes is checked
+# before the first byte is, and a proven write has no failure path.
+proc native::lower::ArrayCheck {fnVar e repr value} {
+    upvar 1 $fnVar fn
+    if {[BoundsProven $e]} {
+        return
+    }
+    switch -- [lindex $repr 0] {
+        array {
+            lassign $repr - extent stride element
+            set length [Assign fn "op listlen $value" $e]
+            set fits [Assign fn "op ieq $length [Assign fn "int $extent" $e]" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $fits $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId LayoutExtentMismatch] [Quote LayoutExtentMismatch]" $e
+            EmitLabel fn $good
+            if {[ReprHasArrays $element]} {
+                lassign [ArrayLoopStart fn $e $extent] index body exit
+                ArrayCheck fn $e $element [Assign fn "op listgetproven $value $index" $e]
+                ArrayLoopEnd fn $e $index $body $exit
+            }
+        }
+        layout {
+            lassign [lindex $repr 1] structId size align fields
+            set slot 0
+            foreach field $fields {
+                set words [lrange $field 2 end]
+                if {[ReprHasArrays $words]} {
+                    ArrayCheck fn $e $words [Assign fn "structget $slot $value" $e]
+                }
+                incr slot
+            }
+        }
+    }
+}
+
+# 1 if the representation words REPR hold a fixed array, itself or in a
+# nested layout.
+proc native::lower::ReprHasArrays {repr} {
+    switch -- [lindex $repr 0] {
+        array {
+            return 1
+        }
+        layout {
+            foreach field [lindex $repr 1 3] {
+                if {[ReprHasArrays [lrange $field 2 end]]} {
+                    return 1
+                }
+            }
+        }
+    }
+    return 0
+}
+
+# Writes VALUE (a register holding the copied value of the representation
+# words REPR, its extents already checked: ArrayCheck) to TARGET at BASE:
+# MODE native stores through the native edit TARGET (binary::store), MODE
+# bytes into the private, fresh byte storage TARGET (binary::emit's
+# `byteszeroed`, a byte write's `mbytesclone`). A scalar or a pointer is one
+# store, a LayoutStruct its fields (`structget`), a fixed array its elements
+# -- a row of scalars by one helper call that encodes every element before
+# it writes any (`binstorearray` / `nativestorearray`), any other element
+# in a counted loop. Only the representation's own bytes are written.
+proc native::lower::ReprWrite {fnVar e mode target repr base value} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $repr 0] {
+        union {
+            throw {NATIVE BUG} "native lowering: a whole union written ($e)"
+        }
+        layout {
+            lassign [lindex $repr 1] structId size align fields
+            set slot 0
+            foreach field $fields {
+                ReprWrite fn $e $mode $target [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]] \
+                    [Assign fn "structget $slot $value" $e]
+                incr slot
+            }
+            return
+        }
+        array {
+            lassign $repr - extent stride element
+            if {[lindex $element 0] in {u i}} {
+                lassign $element sign width endian
+                set at [At fn $e $base 0]
+                set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+                set op [expr {$mode eq "native" ? "nativestorearray" : "binstorearray"}]
+                Assign fn "op $op $target $at $code $value" $e
+                return
+            }
+            lassign [ArrayLoopStart fn $e $extent] index body exit
+            ReprWrite fn $e $mode $target $element [BasePlus fn $e $base [ArrayScaled fn $e $index $stride]] \
+                [Assign fn "op listgetproven $value $index" $e]
+            ArrayLoopEnd fn $e $index $body $exit
+            return
+        }
+        ptr {
+            set at [At fn $e $base 0]
+            set w [Assign fn "int [lindex $repr 1]" $e]
+            set op [expr {$mode eq "native" ? "nativestoreptr" : "binstoreptr"}]
+            Assign fn "op $op $target $at $w $value" $e
+            return
+        }
+    }
+    lassign $repr sign width endian
+    set at [At fn $e $base 0]
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    set op [expr {$mode eq "native" ? "nativestore" : "binstore"}]
+    Assign fn "op $op $target $at $code $value" $e
+}
+
+# The value of the descriptor field entry FIELD read through the native view
+# VIEW at byte BASE -- see NativeField. The LayoutStruct DESCRIPTOR
+# describes, read through the native view VIEW at BASE (binary::load):
+# DecodeAt over live memory.
+proc native::lower::NativeDecode {fnVar e view descriptor base} {
+    upvar 1 $fnVar fn
+    return [DecodeAt fn $e native $view $descriptor $base]
+}
+
+# The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE
+# at byte BASE: its fields' loads in declared (slot) order, then its object
+# (or, FIELDS 1, the field registers without the object).
+proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}} {
+    upvar 1 $fnVar fn
+    return [DecodeAt fn $e bytes $storage $descriptor $base $fieldsOnly]
+}
+
+# {OFFSET REPR} of every leaf of DESCRIPTOR at byte BASE -- a scalar field,
+# or a fixed array field (one leaf: its List) -- depth-first in declared
+# order: the order of a LayoutStruct's leaves (ContextObjectLeaves,
+# ContextLeafRegs), REPR the leaf's representation words.
 proc native::lower::LayoutLeaves {descriptor base} {
     set leaves {}
     foreach field [lindex $descriptor 3] {
@@ -5337,26 +5993,29 @@ proc native::lower::LayoutLeaves {descriptor base} {
         if {$kind eq "layout"} {
             lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
         } else {
-            lassign $field name offset sign width endian
-            lappend leaves [list [expr {$base + $offset}] $sign $width $endian]
+            lappend leaves [list [expr {$base + $offset}] [lrange $field 2 end]]
         }
     }
     return $leaves
 }
 
 # Writes the leaf registers LEAVES of a LayoutStruct of DESCRIPTOR (depth-
-# first, declared order) into the fresh storage STORAGE.
+# first, declared order) into the fresh storage STORAGE: a scalar's one
+# `binstore`; a fixed array's List checked against its extent (the declared
+# LayoutExtentMismatch: the storage is private, so nothing is observed when
+# a later array fails) and written element by element.
 proc native::lower::LayoutEncode {fnVar e storage leaves descriptor} {
     upvar 1 $fnVar fn
     set scalars [LayoutLeaves $descriptor 0]
     if {[llength $leaves] != [llength $scalars]} {
-        throw {NATIVE BUG} "native lowering: binary::emit $e has [llength $leaves] leaves for [llength $scalars] scalar fields"
+        throw {NATIVE BUG} "native lowering: binary::emit $e has [llength $leaves] leaves for [llength $scalars] fields"
     }
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian
-        set at [Assign fn "int $offset" $e]
-        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
-        Assign fn "op binstore $storage $at $code $r" $e
+        lassign $leaf offset repr
+        if {[lindex $repr 0] eq "array"} {
+            ArrayCheck fn $e $repr $r
+        }
+        ReprWrite fn $e bytes $storage $repr $offset $r
     }
 }
 
@@ -5468,6 +6127,12 @@ proc native::lower::ProjectChain {fnVar e node} {
     return ""
 }
 
+# The NIR constant instruction text of the floating-point value V
+# (`float Float64 0x3ff8000000000000`: its type and bits).
+proc native::lower::FloatConstText {v} {
+    return [format {float %s 0x%016llx} [core::value::kind $v] [core::float::bits64 $v]]
+}
+
 proc native::lower::Const {fnVar e node} {
     upvar 1 $fnVar fn
     set value [dict get $node value]
@@ -5480,6 +6145,7 @@ proc native::lower::Const {fnVar e node} {
         }
         UnicodeChar { return [Assign fn "char [core::value::charOf $value]" $e] }
         enum { return [EnumConst fn $value $e] }
+        Float64 { return [Assign fn [FloatConstText $value] $e] }
         list {
             # (const list {...}): a list of literal elements.
             set items [lmap item [core::value::items $value] {
@@ -5650,7 +6316,7 @@ proc native::lower::Access {fnVar b} {
         return $local
     }
     set region [dict get $fn region]
-    set access [BindingAccess $b [expr {$region eq "program" ? "" : $region}]]
+    set access [BindingAccess $b [if {$region eq "program"} {string cat ""} else {set region}]]
     switch -- $access {
         fnvalue {
             return [list fnvalue [GenericRef [hir::aot::BoundBlock $hir $b]]]
@@ -5702,6 +6368,7 @@ proc native::lower::RootValue {fnVar e binding} {
             }
             if {$name ni $usedNatives} {
                 lappend usedNatives $name
+                RuntimeRaises [dict get [core::native::metadata $name] errors]
             }
             return [Assign fn "native [Quote $name]" $e]
         }
@@ -5778,7 +6445,7 @@ proc native::lower::Bind {fnVar e node} {
                 # the physical object -- if some use ever needs one -- is
                 # built once for both names.
                 set sb [hir::get $hir $valueExpr binding]
-                set source [expr {[dict exists $fn locals $sb] ? [dict get $fn locals $sb] : ""}]
+                set source [dict getdef $fn locals $sb ""]
                 if {[lindex $source 0] ne "virtual" || [lindex $source 2] eq ""} {
                     throw {NATIVE BUG} "native lowering: alias $b of non-virtual binding $sb ($e)"
                 }
@@ -6067,8 +6734,16 @@ proc native::lower::CanSupplyFields {fnVar argExprs fieldWidths {fieldCuts {}}} 
     variable hir
     set i 0
     foreach arg $argExprs {
-        set width [expr {$i < [llength $fieldWidths] ? [lindex $fieldWidths $i] : ""}]
-        set cut [expr {$i < [llength $fieldCuts] ? [lindex $fieldCuts $i] : ""}]
+        if {$i < [llength $fieldWidths]} {
+            set width [lindex $fieldWidths $i]
+        } else {
+            set width ""
+        }
+        if {$i < [llength $fieldCuts]} {
+            set cut [lindex $fieldCuts $i]
+        } else {
+            set cut ""
+        }
         if {$width ne ""} {
             switch -- [hir::kind $hir $arg] {
                 call {}
@@ -6187,8 +6862,16 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
     set regs {}
     set i 0
     foreach arg $argExprs {
-        set width [expr {$i < [llength $fieldWidths] ? [lindex $fieldWidths $i] : ""}]
-        set family [expr {$i < [llength $planSlots] ? [lindex $planSlots $i] : ""}]
+        if {$i < [llength $fieldWidths]} {
+            set width [lindex $fieldWidths $i]
+        } else {
+            set width ""
+        }
+        if {$i < [llength $planSlots]} {
+            set family [lindex $planSlots $i]
+        } else {
+            set family ""
+        }
         if {$family ne ""} {
             # A plan parameter of the target (virtual construction): the
             # argument's construction is handed over as a plan, not
@@ -6199,7 +6882,7 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
             }
             lappend regs [PiecesToPlan fn $pieces $family $arg]
         } elseif {$width ne ""} {
-            set fields [TryFields fn $arg $width [expr {$i < [llength $fieldCuts] ? [lindex $fieldCuts $i] : ""}]]
+            set fields [TryFields fn $arg $width [if {$i < [llength $fieldCuts]} {lindex $fieldCuts $i} else {string cat ""}]]
             if {$fields eq "never"} {
                 return never
             }
@@ -6210,8 +6893,18 @@ proc native::lower::CallArgs {fnVar argExprs fieldWidths rawSlots {planSlots {}}
         } else {
             # A slot is 0 (tagged), 1 (raw Int), `short` (ShortString1) or
             # `ascii` (packed ASCII).
-            set slot [expr {$i < [llength $rawSlots] ? [lindex $rawSlots $i] : 0}]
-            set argWant [expr {$slot in {short ascii} ? $slot : $slot ? "raw" : "tagged"}]
+            if {$i < [llength $rawSlots]} {
+                set slot [lindex $rawSlots $i]
+            } else {
+                set slot 0
+            }
+            if {$slot in {short ascii}} {
+                set argWant $slot
+            } elseif {$slot} {
+                set argWant "raw"
+            } else {
+                set argWant "tagged"
+            }
             if {$argWant eq "raw" && [RawConstArg $arg]} {
                 # A small Int literal handed to a raw parameter is a raw
                 # constant: no tagged constant built only to be unboxed.
@@ -6604,7 +7297,11 @@ proc native::lower::AddressFlowAcrossCall {fnVar e node result} {
                 lappend source $operand
             }
         }
-        set registers [expr {[lindex $result 1] eq "virtual" ? [lindex $result 0] : [list [lindex $result 0]]}]
+        if {[lindex $result 1] eq "virtual"} {
+            set registers [lindex $result 0]
+        } else {
+            set registers [list [lindex $result 0]]
+        }
         foreach register $registers {
             if {$register ne "" && $source ne ""} {
                 dict set fn keepAddr $register $source
@@ -6713,14 +7410,18 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
 
     if {$targetKind eq "block" && [hir::kind $hir $calleeExpr] eq "ref"} {
         set calleeBinding [hir::get $hir $calleeExpr binding]
-        set flattenedTarget [expr {$calleeBinding ne "" ? [hir::blockescape::virtual $blockescape $currentInstance $calleeBinding] : ""}]
+        if {$calleeBinding ne ""} {
+            set flattenedTarget [hir::blockescape::virtual $blockescape $currentInstance $calleeBinding]
+        } else {
+            set flattenedTarget ""
+        }
         if {$flattenedTarget ne ""} {
             # A de-closure-converted binding may have several used instances
             # (one per exact callable target it is called with, for one):
             # blockescape's proof is that every reference is a call to one
             # of them, so THIS call site's own instance -- the one
             # hir::specialize chose for it -- is the callee.
-            set flattenedTarget [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+            set flattenedTarget [dict getdef $fn targets $e ""]
             if {$flattenedTarget eq "" || ![hir::blockescape::wants $blockescape $flattenedTarget]} {
                 throw {NATIVE BUG} "native lowering: call $e of a de-closure-converted binding has no wanted callee instance"
             }
@@ -6873,7 +7574,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         # (mirrors TryStringRegionOp's own "prefer the left operand"
         # narrowing for `==`: the corpus this milestone targets never
         # exercises more than one).
-        set consumerInstance [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+        set consumerInstance [dict getdef $fn targets $e ""]
         if {$consumerInstance ne ""} {
             foreach k [hir::stringregion::consumingParamsOf $stringregion $consumerInstance] {
                 set argExpr [lindex $argExprs $k]
@@ -6940,7 +7641,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         if {$region ne ""} {
             return $region
         }
-        set rawEligible [expr {[dict exists $natives $name] ? [RawEligibleCall $e $argExprs $op] : 0}]
+        if {[dict exists $natives $name]} {
+            set rawEligible [RawEligibleCall $e $argExprs $op]
+        } else {
+            set rawEligible 0
+        }
         set argRegs {}
         foreach arg $argExprs {
             set r [Expr fn $arg [expr {$rawEligible ? "raw" : "tagged"}]]
@@ -6954,7 +7659,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
 
     if {$targetKind eq "block"} {
         set params [hir::get $hir $target params]
-        set instance [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
+        set instance [dict getdef $fn targets $e ""]
         # The instance hir::specialize chose; a self tail call that stays in
         # this instance is a loop, and each of its raw-declared parameter
         # slots (RawParams) wants its argument raw directly, rather than
@@ -6971,8 +7676,16 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         # eligibility alone is not enough). Never attempted for a
         # region-result call (wantRegion): the two optimizations do not
         # currently combine.
-        set fieldWidths [expr {$wantRegion ? {} : [FieldWidths $instance $params]}]
-        set fieldCuts [expr {$fieldWidths eq "" ? {} : [FieldCuts $instance $params]}]
+        if {$wantRegion} {
+            set fieldWidths {}
+        } else {
+            set fieldWidths [FieldWidths $instance $params]
+        }
+        if {$fieldWidths eq ""} {
+            set fieldCuts {}
+        } else {
+            set fieldCuts [FieldCuts $instance $params]
+        }
         if {$fieldWidths ne "" && ![CanSupplyFields fn $argExprs $fieldWidths $fieldCuts]} {
             set fieldWidths {}
             set fieldCuts {}
@@ -7000,7 +7713,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             # ShortString1 positions (shortstring.tcl): the callee's plan is
             # authoritative for them too; a position is never both.
             set rawSlots [lmap r $rawSlots s [ShortAbiParams $instance [llength $argExprs]] {
-                expr {$s ne "" ? $s : $r}
+                if {$s ne ""} {set s} else {set r}
             }]
         }
         set planSlots {}
@@ -7104,7 +7817,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             # argument registers.
             return [InlineLeafCall fn $e $node $instance $argRegs]
         }
-        set id [expr {$fieldWidths ne "" ? [FieldsRef $instance] : [FunctionRef $instance]}]
+        if {$fieldWidths ne ""} {
+            set id [FieldsRef $instance]
+        } else {
+            set id [FunctionRef $instance]
+        }
         dict lappend fn calls [list direct $id $self]
         set targetPlan [hir::traversal::plan $traversal $instance]
         if {$targetPlan ne ""} {
@@ -7116,7 +7833,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             lappend argRegs [IntConst fn 0 $e]
         }
         set rawResult [expr {$abiCall && [AbiResult $instance]}]
-        set shortResult [expr {$abiCall ? [ShortAbiResult $instance] : ""}]
+        if {$abiCall} {
+            set shortResult [ShortAbiResult $instance]
+        } else {
+            set shortResult ""
+        }
         set text [string trimright [expr {$target in $envless ? "call $id [join $argRegs { }]" : "callenv $id $callee [join $argRegs { }]"}]]
         if {$rawResult} {
             set result [AssignRaw fn $text $e]
@@ -7586,7 +8307,11 @@ proc native::lower::EmitRegionConsumerBody {fnVar calleeView e b region} {
             dict lappend fn calls [list native $name]
             if {$name eq "==" && [llength $args] == 2} {
                 lassign $args pa pb
-                set litExpr [expr {[IsRefToBinding $calleeView $pa $b] ? $pb : $pa}]
+                if {[IsRefToBinding $calleeView $pa $b]} {
+                    set litExpr $pb
+                } else {
+                    set litExpr $pa
+                }
                 set litValue [hir::get $calleeView $litExpr value]
                 set litReg [Assign fn "str [Quote [core::value::strOf $litValue]]" $litExpr]
                 return [Assign fn "op regioneq $base $start $end $litReg" $e]
@@ -7626,7 +8351,7 @@ proc native::lower::EmitRegionConsumerCondition {fnVar calleeView e b region t f
             foreach role {then else} {
                 set constant [hir::condition::constant $calleeView [dict get $node ${role}Body]]
                 if {$constant ne ""} {
-                    lappend targets [expr {$constant ? $t : $f}]
+                    lappend targets [if {$constant} {set t} else {set f}]
                 } else {
                     set label [NewLabel fn]
                     lappend targets $label
@@ -8073,7 +8798,7 @@ proc native::lower::InlineLeafCall {fnVar e node calleeId callerArgRegs} {
     set savedKnownErrors $knownErrors
     set savedLocals {}
     foreach b $params {
-        lappend savedLocals [expr {[dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+        lappend savedLocals [dict getdef $fn locals $b ""]
     }
 
     set hir $calleeView
@@ -8140,6 +8865,7 @@ proc native::lower::NativeCallOp {e node} {
     }
     set impl [dict get $natives $name]
     set argExprs [dict get $node args]
+    RuntimeRaises [dict get [core::native::metadata $name] errors]
     switch -- [lindex $impl 0] {
         equality {
             if {[llength $argExprs] != 2} {
@@ -8163,6 +8889,11 @@ proc native::lower::NativeCallOp {e node} {
                 # same-spelled case of another enum is another word), and it
                 # cannot fail.
                 set op enumeq
+            } elseif {$ka eq $kb && $ka eq "Float64"} {
+                # Two Float64 values (FLOAT64-MILESTONE-1.md): a number has
+                # one representation, so equality is bit equality, and it
+                # cannot fail.
+                set op f64eq
             }
             return [list $name $op]
         }
@@ -8443,7 +9174,10 @@ proc native::lower::ConstantIntValue {e} {
     switch -- [hir::kind $hir $e] {
         const {
             set v [hir::get $hir $e value]
-            return [expr {[core::value::kind $v] eq "int" ? [core::value::intOf $v] : ""}]
+            if {[core::value::kind $v] eq "int"} {
+                return [core::value::intOf $v]
+            }
+            return ""
         }
         call {
             set node [hir::node $hir $e]
@@ -8698,7 +9432,11 @@ proc native::lower::ModMaskCall {fnVar e argExprs argRegs want argRepr} {
     set rx [lindex $argRegs 0]
     set rangeX [hir::range::of $ranges $currentInstance [lindex $argExprs 0]]
     if {$argRepr eq "raw" || ($rangeX ne "never" && [hir::range::fitsSmall $rangeX])} {
-        set xa [expr {$argRepr eq "raw" ? $rx : [RawOf fn $rx]}]
+        if {$argRepr eq "raw"} {
+            set xa $rx
+        } else {
+            set xa [RawOf fn $rx]
+        }
         set m [lindex [WantConvert fn [IntConst fn $mask $e] raw] 0]
         set r [AssignRaw fn "op riand $xa $m" $e]
         dict incr fn rawArith
@@ -9091,8 +9829,7 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
     dict set fn staticOutcomes {}
     set static [StaticOutcome fn $e $condition]
-    set outcome [expr {$static ne "" ? $static
-        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    set outcome [if {$static ne ""} {set static} else {hir::range::ConditionOutcome $hir $ranges $currentInstance $condition}]
     # An undecided condition with a branch form of its own (`and`, `or`,
     # `not`, `!=`, a Boolean-valued `if`; hir/condition.tcl) is lowered as a
     # branch to the two arms below (Condition), not as a Bool to branch on.
@@ -9146,7 +9883,11 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     }
     set join [NewLabel fn]
     # A virtual struct join (branch merging): one result register per field.
-    set result [expr {$virtualN ne "" ? [NewRegs fn $virtualN] : [NewReg fn]}]
+    if {$virtualN ne ""} {
+        set result [NewRegs fn $virtualN]
+    } else {
+        set result [NewReg fn]
+    }
     if {$rawJoin} {
         # Both branches' values are small Ints (they flow into a raw
         # result's proven-small Range), joined in one raw register.
@@ -9303,7 +10044,7 @@ proc native::lower::BranchDemand {fnVar e t f} {
     if {[hir::kind $hir $e] ne "call" || [hir::affine::releasesOnError $hir $e] ne ""} {
         return [list [Expr fn $e] ""]
     }
-    set outer [expr {[dict exists $fn branch] ? [dict get $fn branch] : ""}]
+    set outer [dict getdef $fn branch ""]
     dict set fn branch [list $e $t $f]
     set test [Expr fn $e]
     set taken ""
@@ -9342,8 +10083,7 @@ proc native::lower::ConditionIf {fnVar e node t f} {
     set key [list $e $condition]
     set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
     set static [StaticOutcome fn $e $condition]
-    set outcome [expr {$static ne "" ? $static
-        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    set outcome [if {$static ne ""} {set static} else {hir::range::ConditionOutcome $hir $ranges $currentInstance $condition}]
     if {$outcome ne ""} {
         # Decided (If): only the branch it decides is lowered.
         if {$static ne ""} {
@@ -9428,7 +10168,10 @@ proc native::lower::BodyTarget {fnVar body t f skippedVar} {
         return ""
     }
     lappend skipped [list $e]
-    return [expr {$outcome ? $t : $f}]
+    if {$outcome} {
+        return $t
+    }
+    return $f
 }
 
 # The outcome (1 or 0) condition E has with no code at all, or "": a Boolean
@@ -9540,7 +10283,7 @@ proc native::lower::JoinKeepAddr {fnVar r v} {
     if {![dict exists $fn keepAddr $v]} {
         return
     }
-    set storages [expr {[dict exists $fn keepAddr $r] ? [dict get $fn keepAddr $r] : {}}]
+    set storages [dict getdef $fn keepAddr $r {}]
     foreach storage [dict get $fn keepAddr $v] {
         if {$storage ni $storages} {
             lappend storages $storage
@@ -9700,7 +10443,7 @@ proc native::lower::ListLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     if {$consuming} {
         set elemReg [Assign fn "op ${drain}takefront $iterReg" $e]
     } else {
@@ -9797,7 +10540,7 @@ proc native::lower::CountBounds {fnVar regs wants raw} {
     if {!$raw} {
         return $regs
     }
-    return [lmap r $regs w $wants {expr {$w eq "raw" ? $r : [RawOf fn $r]}}]
+    return [lmap r $regs w $wants {if {$w eq "raw"} {set r} else {RawOf fn $r}}]
 }
 
 # The representation a numeric loop bound EXPR of loop E is first lowered
@@ -9907,7 +10650,7 @@ proc native::lower::CountLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     dict set fn locals [dict get $node countBinding] [list [expr {$raw ? "rawreg" : "reg"}] $idxReg]
     set bodyValue [Sequence fn [dict get $node body]]
     set usedContinue [dict exists $fn continued $e]
@@ -9997,7 +10740,11 @@ proc native::lower::LockLoop {fnVar e node} {
         }
         lappend raws $raw
         foreach operand $operands kind $kindList {
-            set want [expr {$kind eq "int" ? [CountBoundWant $e $operand $raw] : "tagged"}]
+            if {$kind eq "int"} {
+                set want [CountBoundWant $e $operand $raw]
+            } else {
+                set want "tagged"
+            }
             set reg [Expr fn $operand $want]
             if {$reg eq "never"} {
                 return never
@@ -10075,7 +10822,7 @@ proc native::lower::LockLoop {fnVar e node} {
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
-        [expr {$retained ? $accReg : "discard"}]]
+        [if {$retained} {set accReg} else {string cat "discard"}]]
     foreach domain $domains state $states {
         if {[dict get $state kind] eq "list"} {
             set elemReg [Assign fn "op listget [dict get $state list] $posReg" $e]
@@ -10197,7 +10944,7 @@ proc native::lower::PayloadNeeded {b body name} {
     }
     set needed {}
     foreach r $refs {
-        set p [expr {[dict exists $parent $r] ? [dict get $parent $r] : ""}]
+        set p [dict getdef $parent $r ""]
         if {$p eq "" || [hir::kind $hir $p] ne "project" || [hir::get $hir $p receiver] ne $r} {
             return all
         }
@@ -10253,7 +11000,7 @@ proc native::lower::Handle {fnVar e node} {
     }
 
     EmitLabel fn $catchLabel
-    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    set payloads [dict getdef $node handlerPayloads {}]
     set index 0
     foreach name $names scopeId $scopes body $bodies {
         set payload [lindex $payloads $index]

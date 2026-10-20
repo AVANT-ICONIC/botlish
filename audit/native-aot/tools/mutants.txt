@@ -1,0 +1,195 @@
+# Mutants of native executable emission (audit/native-aot/tools/mutate.tcl;
+# MACOS-AARCH64-MILESTONE-5.md, "Mutation results"): the hosts that link
+# executables and C calls (native/src/codegen/aot.rs), the program object's
+# target (codegen/mod.rs), its runtime imports (codegen/clif.rs), the rustc
+# link, the generated startup and the standalone runtime
+# (runtime/aot.rs), the output path and the host check (codegen/target.rs).
+#
+#   @@ NAME DESCRIPTION
+#   %% HOST ...        (optional) the host targets the mutant applies to
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant with no %% line applies on every host that links executables.
+#
+# Not here, because it is equivalent: the ELF context-area relaxation
+# (codegen/mod.rs's context_relocations) without its ELF magic check. On
+# Linux every object is ELF; a Mach-O object read as ELF has zeros where ELF
+# keeps its section headers' offset and count (0x28, 0x3c: inside the first
+# LC_SEGMENT_64's empty segment name and its vmaddr), so no section is found
+# and nothing is rewritten (MACOS-AARCH64-MILESTONE-5.md, "Mutation results").
+# One that changes nothing a host compiles (macOS's gate on Linux) is
+# skipped there, never counted as killed. Lines starting with # outside an
+# edit are comments.
+
+# ---------------------------------------------------------------------------
+# Which hosts link
+
+@@ macos-aot-rejected macOS AArch64 left out of the hosts that link executables
+%% macos-aarch64
+## native/src/codegen/aot.rs
+<<<<
+    all(target_os = "macos", target_arch = "aarch64")
+));
+
+/// Whether this host links a program that calls C
+====
+    all(target_os = "macos", target_arch = "aarch64", target_env = "gnu")
+));
+
+/// Whether this host links a program that calls C
+>>>>
+
+@@ linux-aot-rejected Linux left out of the hosts that link executables
+%% linux-x86_64 linux-aarch64
+## native/src/codegen/aot.rs
+<<<<
+const EXECUTABLES: bool = cfg!(any(
+    all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
+====
+const EXECUTABLES: bool = cfg!(any(
+    all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")),
+>>>>
+
+@@ c-calls-refused-on-macos C calls refused on macOS, where they link since milestone 6 (MACOS-AARCH64-MILESTONE-6.md)
+%% macos-aarch64
+## native/src/codegen/aot.rs
+<<<<
+    all(target_os = "macos", target_arch = "aarch64")
+));
+
+pub fn emit_executable
+====
+    all(target_os = "macos", target_arch = "aarch64", target_env = "gnu")
+));
+
+pub fn emit_executable
+>>>>
+
+@@ c-calls-refused-on-linux C calls refused on Linux, where they link
+%% linux-x86_64 linux-aarch64
+## native/src/codegen/aot.rs
+<<<<
+const C_CALLS: bool = cfg!(any(
+    all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
+====
+const C_CALLS: bool = cfg!(any(
+    all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")),
+>>>>
+
+# ---------------------------------------------------------------------------
+# The program object
+
+@@ object-linux-triple-on-macos the program object built for the Linux AArch64 triple (ELF) on macOS
+%% macos-aarch64
+## native/src/codegen/mod.rs
+<<<<
+    let isa = cranelift_native::builder_with_options(!pic).map_err(|e| BackendError::Codegen(e.to_string()))?;
+====
+    let isa = if pic {
+        cranelift_codegen::isa::lookup_by_name("aarch64-unknown-linux-gnu").map_err(|e| BackendError::Codegen(e.to_string()))?
+    } else {
+        cranelift_native::builder_with_options(!pic).map_err(|e| BackendError::Codegen(e.to_string()))?
+    };
+>>>>
+
+@@ helpers-misnamed the object's runtime helper imports named otherwise than the runtime's symbols
+## native/src/codegen/clif.rs
+<<<<
+        let id = module.declare_function(name, Linkage::Import, &signature(module, params)).map_err(module_error)?;
+====
+        let imported = if export { format!("{name}_unlinked") } else { name.to_string() };
+        let id = module.declare_function(&imported, Linkage::Import, &signature(module, params)).map_err(module_error)?;
+>>>>
+
+# ---------------------------------------------------------------------------
+# The link
+
+@@ runtime-linked-dynamically rustc links its standard library dynamically (the executable needs the toolchain)
+## native/src/codegen/aot.rs
+<<<<
+            "-C",
+            "relocation-model=pic",
+        ])
+====
+            "-C",
+            "relocation-model=pic",
+            "-C",
+            "prefer-dynamic",
+        ])
+>>>>
+
+@@ linker-status-ignored a failed link is not recognized as one
+## native/src/codegen/aot.rs
+<<<<
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+====
+    if false {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+>>>>
+
+@@ output-wrong-path the executable published beside the requested path, not at it
+## native/src/codegen/aot.rs
+<<<<
+    std::fs::rename(&executable, &destination).map_err(|e| format!("{}: {e}", destination.display()))?;
+====
+    std::fs::rename(&executable, destination.with_extension("partial")).map_err(|e| format!("{}: {e}", destination.display()))?;
+>>>>
+
+# ---------------------------------------------------------------------------
+# The generated startup and the standalone runtime
+
+@@ startup-no-stack-maps the startup installs no stack maps (the collector finds no Botlish frame)
+## native/src/codegen/aot.rs
+<<<<
+    s.push_str("map.finish();\nvm.set_framemap(Rc::new(map));\n(vm, entry as aot::ProgramEntry)\n})); }\n");
+====
+    s.push_str("map.finish();\nlet _ = map;\n(vm, entry as aot::ProgramEntry)\n})); }\n");
+>>>>
+
+@@ startup-no-guard a standalone executable runs without the stack-overflow guard
+## native/src/runtime/aot.rs
+<<<<
+        let _guard = {
+            let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
+            super::platform::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
+        };
+        let result = entry(&mut *vm);
+====
+        let result = entry(&mut *vm);
+>>>>
+
+@@ startup-no-argv a standalone executable's process arguments never reach argv()
+## native/src/runtime/aot.rs
+<<<<
+        vm.set_argv(argv);
+====
+        let _ = argv;
+>>>>
+
+@@ result-not-printed a standalone executable prints no value
+## native/src/runtime/aot.rs
+<<<<
+        match writeln!(std::io::stdout().lock(), "{}", show(result)) {
+====
+        match write!(std::io::stdout().lock(), "") {
+>>>>
+
+# ---------------------------------------------------------------------------
+# The host check
+
+@@ any-target-runs a program built for another target's host is run and emitted here
+## native/src/codegen/target.rs
+<<<<
+    let Some(target) = &program.target else { return Ok(()) };
+====
+    let Some(target) = &program.target else { return Ok(()) };
+    if !target.name.is_empty() {
+        return Ok(());
+    }
+>>>>

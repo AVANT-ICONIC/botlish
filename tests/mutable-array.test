@@ -172,17 +172,10 @@ proc withGcStress {script} {
     }
 }
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 # ---------------------------------------------------------------------------
 # The principal theorem (item 68)
 
-test ma-principal-copy {item 68: `b = a; b.swap(0, 9)` leaves a [0, 0, 0] and makes b [9, 0, 0], on every backend; natively the copy is one share (no element copied) and the first write detaches once} -constraints nativeLinux -body {
+test ma-principal-copy {item 68: `b = a; b.swap(0, 9)` leaves a [0, 0, 0] and makes b [9, 0, 0], on every backend; natively the copy is one share (no element copied) and the first write detaches once} -constraints nativeCoroutines -body {
     set text "import mutable_array\nfn f() -> List\[List\[int\]\] errors IndexNotFound:\n    a = mutable_array::create(3, 0)\n    b = a\n    old = b.swap(0, 9)\n    \[a.freeze(3), b.freeze(3), \[old\]\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
     list [maAgree $text] [lindex [maNative $text] 1]
 } -cleanup {unset -nocomplain text} -result {{value {[[0, 0, 0], [9, 0, 0], [0]]}} {shares 1 detaches 1 detachElements 3}}
@@ -207,7 +200,7 @@ test ma-principal-generate {item 68: generate(2, make) is an affine MutableArray
         [hir::types::show [maBindingType $hir workers]] [hir::types::Affinity [maBindingType $hir workers]]
 } -cleanup {unset -nocomplain hir} -result {{value {[11, 2, 100]}} {{value {[11, 2, 100]}} 3 1 {1 3 2}} {{value {[11, 2, 100]}} 3 1 {1 3 2}} {MutableArray[Coroutine{args: [Command], return: Event, errors: []}]} affine}
 
-test ma-principal-generate-native {item 68: natively every coroutine of the principal program is released by the elaborated releases, none swept, also under GC stress} -constraints nativeLinux -body {
+test ma-principal-generate-native {item 68: natively every coroutine of the principal program is released by the elaborated releases, none swept, also under GC stress} -constraints nativeCoroutines -body {
     list [maNativeReleases $maScheduler] [withGcStress {maNativeReleases $maScheduler}]
 } -result {{3 0} {3 0}}
 
@@ -454,7 +447,7 @@ test ma-generate-failure {items 17, 18, 30: a factory failing at slot 2 leaves n
     set text "${maDecls}fn make_until(i: int) -> Coroutine{args: \[Command\], return: Event} errors Boom:\n    if i == 2:\n        fail Boom\n    make(i)\nfn f() -> int errors Boom:\n    a = mutable_array::generate(4, make_until)\n    mutable_array::capacity(a)\nr = f():\n    on Boom:\n        -1\nr\n"
     list [maReleases $text] [maReleases $text compile] [maNativeReleases $text] [withGcStress {maNativeReleases $text}] \
         [maCode "${maDecls}fn make_until(i: int) -> Coroutine{args: \[Command\], return: Event} errors Boom:\n    if i == 2:\n        fail Boom\n    make(i)\nfn f() -> int:\n    a = mutable_array::generate(4, make_until)\n    mutable_array::capacity(a)\nf()\n"]
-} -constraints nativeLinux -cleanup {unset -nocomplain text} -result {{{value -1} 2 1 {1 2}} {{value -1} 2 1 {1 2}} {2 0} {2 0} UNHANDLED-ERROR}
+} -constraints nativeCoroutines -cleanup {unset -nocomplain text} -result {{{value -1} 2 1 {1 2}} {{value -1} 2 1 {1 2}} {2 0} {2 0} UNHANDLED-ERROR}
 
 test ma-generate-contract {item 19: a factory is an ordinary callable of the existing contract model, called with each slot's Int index: a narrower parameter (a refinement), a second parameter or a coroutine handle (whose contract takes its resume message) is TYPE} -body {
     list [maCode "${maDecls}type Small = Int in 0..3\nfn mk(i: Small) -> int:\n    i\na = mutable_array::generate(5, mk)\n0\n"] \
@@ -489,7 +482,7 @@ test ma-equality {item 41: == of two arrays is the EQUALITY error it always was 
 # ---------------------------------------------------------------------------
 # Nested collections (items 25-28, 36-39)
 
-test ma-nested-affine {items 25, 27, 38, 39: MutableArray[MutableVector[Coroutine]] and MutableVector[MutableArray[Coroutine]] are affine by composition; their factories, pops, swaps and consuming loops move whole collections; every coroutine is released once (an array right after its last use, a consumed one per iteration) on every backend and under GC stress} -constraints nativeLinux -body {
+test ma-nested-affine {items 25, 27, 38, 39: MutableArray[MutableVector[Coroutine]] and MutableVector[MutableArray[Coroutine]] are affine by composition; their factories, pops, swaps and consuming loops move whole collections; every coroutine is released once (an array right after its last use, a consumed one per iteration) on every backend and under GC stress} -constraints nativeCoroutines -body {
     set text "${maDecls}fn pair(i: int) -> MutableVector\[Coroutine{args: \[Command\], return: Event}\]:
     mutable_vector::from_list(\[make(i), make(i + 10)\])
 fn f() -> List\[int\] errors IndexNotFound:
@@ -515,7 +508,7 @@ r
 # ---------------------------------------------------------------------------
 # Evidence: copy-on-write counters, HIR, native code (items 43, 50, 51)
 
-test ma-cow-counters {item 50: a copy is O(1) -- one share whatever the length -- the first write after it detaches once, copying the elements, and later writes to the now unique backing never detach again (native counters); the Tcl runtime counts one array and one logical copy} -constraints nativeLinux -body {
+test ma-cow-counters {item 50: a copy is O(1) -- one share whatever the length -- the first write after it detaches once, copying the elements, and later writes to the now unique backing never detach again (native counters); the Tcl runtime counts one array and one logical copy} -constraints nativeCoroutines -body {
     lmap n {10 1000} {
         set text "import mutable_array\nfn f() -> int errors IndexNotFound:\n    a = mutable_array::create($n, 0)\n    b = a\n    b.set(0, 1)\n    b.set(1, 2)\n    b.set(2, 3)\n    a.at(0) + b.at(0)\nr = f():\n    on IndexNotFound:\n        0\nr\n"
         core::mutarray::resetCounters
@@ -530,7 +523,7 @@ test ma-cow-counters {item 50: a copy is O(1) -- one share whatever the length -
 # together with its new count, or returned in a result struct whose table
 # field is passed on before the Int field is read -- copies no array: each
 # read-out is the last use of its own path.
-test ma-path-last-use-copies {a struct of 1000-slot arrays with an Int field, updated 100 times by a rebuild from its own fields, by a mutating helper given the whole struct and its count, and through a result struct read field by field, makes no logical copy (Tcl counters) and no share or detach (native counters); the values agree on every backend} -constraints nativeLinux -body {
+test ma-path-last-use-copies {a struct of 1000-slot arrays with an Int field, updated 100 times by a rebuild from its own fields, by a mutating helper given the whole struct and its count, and through a result struct read field by field, makes no logical copy (Tcl counters) and no share or detach (native counters); the values agree on every backend} -constraints nativeCoroutines -body {
     set decls "import mutable_array\nstruct T:\n    keys: MutableArray\[int\]\n    vals: MutableArray\[int\]\n    count: int\nstruct Put:\n    old: int\n    table: T\nfn table() -> T:\n    T {keys: mutable_array::create(1000, 0), vals: mutable_array::create(1000, 0), count: 0}\n"
     lmap fns {
         {fn put(t: T, i: int) -> T errors IndexNotFound:
@@ -610,7 +603,7 @@ test ma-hir-evidence {item 43: in HIR, an affine generate and swap are the dropp
     lsort -unique $flags
 } -cleanup {unset -nocomplain hir flags line pattern match} -result {{call native(mutable_array#generate_drop)} {call native(mutable_array#swap_drop)} {call native(mutable_array::at)} {call native(mutable_array::capacity)} {call native(mutable_array::create)} {call native(mutable_array::set)} {call native(mutable_vector#share)} {const str c} {const str h} {listloop S (B w) : List[int] consuming} place=B release=B release=IndexNotFound=B}
 
-test ma-native-evidence {item 51: natively an affine generate, swap and consuming loop are single runtime operations on the header register (mutarraygeneratedrop, mutarrayswapdrop, mutarraytakefront), the displaced element a corelease and the array's death one affinedrop by `ac`; an unrestricted copy is one mvshare whose first write detaches inside mutarrayset; a vector element read only for reading is not copied; no ownership object exists} -constraints nativeLinux -body {
+test ma-native-evidence {item 51: natively an affine generate, swap and consuming loop are single runtime operations on the header register (mutarraygeneratedrop, mutarrayswapdrop, mutarraytakefront), the displaced element a corelease and the array's death one affinedrop by `ac`; an unrestricted copy is one mvshare whose first write detaches inside mutarrayset; a vector element read only for reading is not copied; no ownership object exists} -constraints nativeCoroutines -body {
     set nir [maNir $::maEvidence]
     list [maOps [maFunc $nir affine]] [lsearch -all -inline -regexp [maFunc $nir affine] {str "a}] [maOps [maFunc $nir copies]] [maAgree $::maEvidence]
 } -cleanup {unset -nocomplain nir} -result {{mutarraygeneratedrop call mutarrayswapdrop affinedrop corelease mutarraycapacity listnew mutarrayempty mutarraytakefront structnew coresume corelease} {{%13 = str "ac"}} {mutarraycreate mvshare mutarraysetproven mutarraysetproven listnew mvfromlist mvat mutarrayget mutarraygetproven iadd} {value {[2, 9]}}}

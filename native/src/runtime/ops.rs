@@ -89,7 +89,11 @@ use super::ffifixture::{
     rt_ffi_fixture_read_reentrant,
 };
 use super::ffi::{rt_ffi_bad_address, rt_ffi_bad_bool, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
-use super::nview::{rt_cptr_fixture_memory, rt_cptr_offset, rt_native_load, rt_native_load_ptr};
+use super::nview::{
+    rt_cptr_fixture_bytes, rt_cptr_fixture_memory, rt_cptr_offset, rt_mbytes_write, rt_mbytes_write_ptr, rt_native_load,
+    rt_bin_load_array, rt_native_load_array, rt_bin_store_array, rt_native_store_array, rt_bin_store_ptr,
+    rt_native_load_ptr, rt_native_store, rt_native_store_ptr,
+};
 use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
@@ -117,6 +121,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
         op,
+        // A floating-point result is a heap object (KIND_FLOAT); truncation
+        // may make a BigInt. The comparisons allocate nothing.
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64FromInt | F64Trunc |
         IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat | StrAppendChar
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
@@ -132,6 +139,14 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // A native view's 64-bit field read outside the small-Int range
             // is a BigInt (NATIVE-LAYOUT-VIEWS.md).
             | NativeLoad
+            // A layout write into byte storage makes a fresh storage (the
+            // MutableBytes rule), the fixture's byte copy a List
+            // (NATIVE-LAYOUT-WRITES.md); a store through a native edit
+            // allocates nothing.
+            | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+            // A fixed array's row read makes its List (FIXED-LAYOUT-
+            // ARRAYS.md); the row writes allocate nothing.
+            | BinLoadArray | NativeLoadArray
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -173,7 +188,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
 /// Whether OP can report a Botlish semantic error by returning NO_VALUE.
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
-    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr
+        // The declared NonFiniteFloat (FLOAT64-MILESTONE-1.md).
+        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
         // The raw mod's zero divisor (ARITHMETIC, IMod's own error).
         // RIModTotal is not here: native/lower.tcl emits it only where the
         // divisor's Range excludes 0 (see OpCode::RIMod).
@@ -208,6 +225,15 @@ pub fn op_may_error(op: OpCode) -> bool {
         // address no C address word can hold (NATIVE ADDRESS, like a C
         // call's pointer result). The fixture's: a non-storage operand.
         | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory
+        // Native layout writes (runtime/nview.rs): likewise an operand a
+        // checked program never produces -- a value outside its field's
+        // encoding (checked before anything is written), no C address word,
+        // a storage of another kind -- or a pointer no field width holds.
+        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+        // Fixed arrays' rows (runtime/nview.rs), likewise: an operand of the
+        // wrong kind, a row outside its storage, an element outside its
+        // encoding (encoded before anything is written).
+        | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here. (On
@@ -544,6 +570,9 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         // equality is exactly nominal equality -- another enum's
         // same-spelled case is another word.
         Kind::Enum => a == b,
+        // A finite number with one representation (no NaN, no negative
+        // zero: FloatType::admit), so equal numbers have equal bits.
+        Kind::Float64 => float_bits(a) == float_bits(b),
         // Exact byte-sequence equality (core::value::equal's bytestore
         // case): length and every byte, never the storage's identity or
         // address -- a static constant, a heap buffer and a copy of either
@@ -745,6 +774,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::ByteStore => 9,
         Kind::MutByteStore => 10,
         Kind::Enum => 11,
+        Kind::Float64 => 12,
         Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
@@ -789,6 +819,9 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         // Canonical decimal codepoint text, matching how Int's own text is
         // hashed above (core/hashing.tcl's identical choice).
         Kind::UnicodeChar => fnv1a(h, decimal_text(false, char_of(v) as u128, &mut [0u8; 40])),
+        // The bits, 8 bytes little-endian (core/hashing.tcl's Float64 case):
+        // consistent with the bit equality above.
+        Kind::Float64 => fnv1a(h, &float_bits(v).to_le_bytes()),
         // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
         // declaration identity text, a 0xFF separator, the case's declared
         // name -- never the numbers the word carries.
@@ -1002,11 +1035,18 @@ pub(super) fn bin_encoding(code: Value) -> Option<(usize, bool, bool)> {
 /// (offset, width, signed, big-endian).
 fn bin_operands(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &str) -> Result<(usize, usize, bool, bool), Value> {
     bytes_operand(p, storage, context)?;
+    bin_extent(p, storage, offset, code, context)
+}
+
+/// bin_operands' offset and encoding checks, for a storage of either byte
+/// kind (its length is at the same place in both).
+fn bin_extent(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &str) -> Result<(usize, usize, bool, bool), Value> {
     let Some((width, signed, big)) = bin_encoding(code) else {
         let message = format!("{context}: malformed scalar encoding {}", super::show::int_text(code));
         return Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }));
     };
-    let len = bytes_of(storage).len();
+    // (Either byte kind: the payload is at the same place in both.)
+    let len = unsafe { super::bytesobj::BytesObj::payload(storage) }.len();
     match int_small(offset) {
         Some(o) if o >= 0 && (o as usize).checked_add(width).is_some_and(|end| end <= len) => Ok((o as usize, width, signed, big)),
         _ => {
@@ -1062,13 +1102,40 @@ pub(super) fn bin_decode(p: *mut Vm, bytes: &[u8], signed: bool, big: bool) -> V
 /// in encoding C. RANGE (never a truncation) if V is outside the encoding.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: Value, value: Value) -> Value {
-    use num_traits::ToPrimitive;
-    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::emit") {
+    // The fresh storage of an emission (`byteszeroed`, KIND_BYTES) or of a
+    // whole-array layout write into byte storage (`mbytesclone`,
+    // KIND_MUTBYTES: FIXED-LAYOUT-ARRAYS.md), private to that operation.
+    if heap_kind(storage) != KIND_MUTBYTES {
+        if let Err(failed) = bytes_operand(p, storage, "binary::emit") {
+            return failed;
+        }
+    }
+    let (at, width, signed, big) = match bin_extent(p, storage, offset, code, "binary::emit") {
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
+    let bytes = match bin_encode(p, value, width, signed, big, "binary::emit") {
+        Ok(bytes) => bytes,
+        Err(failed) => return failed,
+    };
+    // SAFETY: STORAGE is the fresh, non-empty storage `byteszeroed` made for
+    // this emission (native/lower.tcl's LayoutEmit): no value holds it yet,
+    // and the range was checked above.
+    unsafe { BytesObj::payload_mut(storage)[at..at + width].copy_from_slice(&bytes[..width]) };
+    UNIT
+}
+
+/// The WIDTH-byte encoding of the Int VALUE, SIGNED two's complement or
+/// unsigned, BIG-endian or little, in the first WIDTH bytes of the result:
+/// `binstore`'s encoding, shared with the layout writes of a native edit and
+/// of byte storage (runtime/nview.rs, NATIVE-LAYOUT-WRITES.md). A value
+/// outside the encoding is a RANGE error (CONTEXT names the operation),
+/// raised before the caller writes anything: never a truncation, a wrap or a
+/// reinterpretation.
+pub(super) fn bin_encode(p: *mut Vm, value: Value, width: usize, signed: bool, big: bool, context: &str) -> Result<[u8; 8], Value> {
+    use num_traits::ToPrimitive;
     if !is_small(value) && heap_kind(value) != KIND_BIGINT {
-        return vm(p).fail(RtError::Type { context: "binary::emit".to_string(), expected: Kind::Int, got: value });
+        return Err(vm(p).fail(RtError::Type { context: context.to_string(), expected: Kind::Int, got: value }));
     }
     // Every encoding's range lies inside i128, so the check needs no BigInt
     // for a small Int (the common case: no allocation per store); a BigInt
@@ -1087,21 +1154,16 @@ pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: 
         (0, (1i128 << bits) - 1)
     };
     if n < lo || n > hi {
-        let message = format!("binary::emit: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
-        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+        let message = format!("{context}: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
+        return Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }));
     }
     // The low 64 bits: two's complement for a negative N, N itself otherwise.
     let word = n as u64;
     let mut bytes = word.to_le_bytes();
-    let field = &mut bytes[..width];
     if big {
-        field.reverse();
+        bytes[..width].reverse();
     }
-    // SAFETY: STORAGE is the fresh, non-empty storage `byteszeroed` made for
-    // this emission (native/lower.tcl's LayoutEmit): no value holds it yet,
-    // and the range was checked above.
-    unsafe { BytesObj::payload_mut(storage)[at..at + width].copy_from_slice(field) };
-    UNIT
+    Ok(bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -2471,6 +2533,126 @@ pub extern "C" fn rt_char_codepoint(_p: *mut Vm, v: Value) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// Floating-point values (FLOAT64-MILESTONE-1.md; core/float.tcl states the
+// semantics, which these follow operation for operation). Generated code
+// computes the arithmetic and comparisons itself (codegen::clif's
+// float_op) and calls only rt_float_new and rt_float_nonfinite; the rest
+// serve the operations it leaves to the runtime (from_int, truncate) and a
+// native called as a value (apply_op).
+
+/// The floating-point value of type TY (FloatType: its numbering in
+/// FloatType::code) whose bits BITS FloatType::admit accepted.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_float_new(p: *mut Vm, ty: u64, bits: u64) -> Value {
+    vm(p).new_float(FloatType::from_code(ty), bits)
+}
+
+/// The cases of the builtin enum NonFiniteResult (core/float.tcl), by the
+/// code generated code passes rt_float_nonfinite (codegen::clif's
+/// `non_finite_code`): which non-finite result an operation had.
+pub const NON_FINITE_CASES: [&str; 3] = ["PositiveInfinity", "NegativeInfinity", "NotANumber"];
+
+/// The NonFiniteResult code (NON_FINITE_CASES) of the non-finite number X:
+/// NotANumber for NaN, else the infinity of X's sign.
+pub fn non_finite_code(x: f64) -> u64 {
+    if x.is_nan() {
+        2
+    } else if x > 0.0 {
+        0
+    } else {
+        1
+    }
+}
+
+/// Fails with the declared builtin error NonFiniteFloat: an operation's
+/// result is no finite number, RESULT (NON_FINITE_CASES) the one it would
+/// have been. The payload {result: NonFiniteResult} goes into the payload
+/// slots like any declared error's (rt_fail_declared_payload): the case word
+/// and the anonymous shape are the program's own, found in its tables by
+/// name -- native lowering declares both in every program whose runtime may
+/// raise the error (native/lower.tcl's PayloadTables). Returns NO_VALUE.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_float_nonfinite(p: *mut Vm, result: u64) -> Value {
+    let case = NON_FINITE_CASES[(result as usize).min(2)];
+    let payload = super::vm::try_current_program(|program| {
+        let e = program.enums.iter().position(|info| info.name == "NonFiniteResult")?;
+        let c = program.enums[e].cases.iter().position(|name| name == case)?;
+        let s = program.shapes.iter().position(|shape| shape.name.is_none() && shape.fields == ["result"])?;
+        Some((make_enum(e as u32, c as u32), s as u32))
+    })
+    .flatten();
+    let failed = fail_builtin(p, super::error::ERR_NON_FINITE_FLOAT, "NonFiniteFloat");
+    if let Some((word, shape)) = payload {
+        let vm = vm(p);
+        vm.declared_payload.push(word);
+        vm.declared_payload_shape = shape;
+    }
+    failed
+}
+
+/// The value of number X of type TY, or the NonFiniteFloat failure.
+pub(crate) fn float_value(p: *mut Vm, ty: FloatType, x: f64) -> Value {
+    match ty.admit(x) {
+        Some(bits) => vm(p).new_float(ty, bits),
+        None => rt_float_nonfinite(p, non_finite_code(x)),
+    }
+}
+
+/// The nearest Float64 of the Int N (ties to even), or NonFiniteFloat.
+/// num-bigint's conversion rounds to odd at 64 bits and then to nearest, the
+/// correctly rounded result (core/float.tcl's Tcl `double()`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_f64_from_int(p: *mut Vm, n: Value) -> Value {
+    use num_traits::ToPrimitive;
+    let x = match int_small(n) {
+        Some(i) => i as f64,
+        None => int_to_big(n).to_f64().unwrap_or(f64::INFINITY),
+    };
+    float_value(p, FloatType::Float64, x)
+}
+
+/// The Int of the Float64 V toward zero: exact (every finite float is an
+/// Int and a fraction), never failing.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_f64_trunc(p: *mut Vm, v: Value) -> Value {
+    use num_traits::FromPrimitive;
+    let t = float64_of(v).trunc();
+    if t.abs() < 4611686018427387904.0 {
+        return make_small(t as i64);
+    }
+    vm(p).new_big(BigInt::from_f64(t).expect("a finite float is an integer once truncated"))
+}
+
+/// The floating-point operation OP of type TY on A (and B): what a native
+/// called as a value performs, and the reference every generated sequence
+/// computes the same as (codegen::clif's float_op).
+pub(crate) fn float_apply(p: *mut Vm, ty: FloatType, op: crate::nir::FloatOp, a: Value, b: Value) -> Value {
+    use crate::nir::FloatOp::*;
+    match ty {
+        FloatType::Float64 => match op {
+            FromInt => rt_f64_from_int(p, a),
+            Trunc => rt_f64_trunc(p, a),
+            Neg => float_value(p, ty, 0.0 - float64_of(a)),
+            _ => {
+                let (x, y) = (float64_of(a), float64_of(b));
+                match op {
+                    Add => float_value(p, ty, x + y),
+                    Sub => float_value(p, ty, x - y),
+                    Mul => float_value(p, ty, x * y),
+                    Div => float_value(p, ty, x / y),
+                    Lt => bool_value(x < y),
+                    Le => bool_value(x <= y),
+                    Gt => bool_value(x > y),
+                    Ge => bool_value(x >= y),
+                    Eq => bool_value(float_bits(a) == float_bits(b)),
+                    FromInt | Trunc | Neg => unreachable!(),
+                }
+            }
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Kinds and Results
 
 #[unsafe(no_mangle)]
@@ -2662,6 +2844,10 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         ResultValue => rt_result_payload(p, a[0], 1),
         ResultError => rt_result_payload(p, a[0], 0),
         CharCodepoint => rt_char_codepoint(p, a[0]),
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc => {
+            let (ty, fop) = op.float().expect("a floating-point operation");
+            float_apply(p, ty, fop, a[0], a.get(1).copied().unwrap_or(NO_VALUE))
+        }
         MkOk => rt_result_new(p, 1, a[0]),
         MkError => rt_result_new(p, 0, a[0]),
         Hash => rt_hash(p, a[0]),
@@ -2707,7 +2893,13 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // A native view's loads, likewise (one statically known layout's
         // field reads, NATIVE-LAYOUT-VIEWS.md); the memory fixture is an
         // imprinted native, never a value.
-        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory => {
+        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory
+        // A native edit's stores and the layout writes into byte storage
+        // likewise (NATIVE-LAYOUT-WRITES.md); the byte fixture is an
+        // ordinary-looking native of the test fixture, never a value.
+        | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr | CPtrFixtureBytes
+        // A fixed array's rows likewise (FIXED-LAYOUT-ARRAYS.md).
+        | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -2727,6 +2919,10 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     }
     vec![
         h!(rt_type_error, 4),
+        h!(rt_float_new, 3),
+        h!(rt_float_nonfinite, 2),
+        h!(rt_f64_from_int, 2),
+        h!(rt_f64_trunc, 2),
         h!(rt_cptr_fixture, 2),
         h!(rt_cptr_fixture_address, 2),
         h!(rt_ffi_fixture_read, 3),
@@ -2802,6 +2998,16 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_native_load_ptr, 4),
         h!(rt_cptr_offset, 3),
         h!(rt_cptr_fixture_memory, 2),
+        h!(rt_native_store, 5),
+        h!(rt_native_store_ptr, 5),
+        h!(rt_mbytes_write, 5),
+        h!(rt_mbytes_write_ptr, 5),
+        h!(rt_bin_load_array, 5),
+        h!(rt_native_load_array, 5),
+        h!(rt_bin_store_array, 5),
+        h!(rt_native_store_array, 5),
+        h!(rt_bin_store_ptr, 5),
+        h!(rt_cptr_fixture_bytes, 3),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),
         h!(rt_str_region_is_tcl_alpha, 4),
@@ -4156,13 +4362,48 @@ mod tests {
     fn bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes() {
         let mut vm = vm();
         let p: *mut Vm = &mut *vm;
-        let l = bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
+        // Rooted, as compiled code roots a call's operands for the whole
+        // call (codegen::roots's `call_argument_is_rooted_during_the_call`):
+        // under BOTLISH_NATIVE_GC_STRESS=1 the allocation inside
+        // rt_bytes_from_list collects first, and an unrooted L is swept
+        // there. Its block is then free for the result to take (Apple's
+        // allocator handed it back at once; glibc's did not), and
+        // `assert_ne!(b, l)` compared the result with a dead object.
+        let l = rooted!(vm, bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]));
         let b = rt_bytes_from_list(p, l);
         assert_eq!(heap_kind(b), KIND_BYTES);
         assert_eq!(bytes_of(b), &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
         assert_eq!(rt_bytes_len(p, b), make_small(7));
-        // Eager copy: the storage is its own allocation, not the List.
+        // Eager copy: the storage is its own allocation, not the List. Both
+        // are live, so they cannot share an address whatever the allocator.
         assert_ne!(b, l);
+    }
+
+    /// The same call with the collection made certain and observed, not left
+    /// to the environment or to the allocator: a collection is forced before
+    /// every allocation, so one runs inside the call (the collector's cycle
+    /// count rises); the rooted List survives it (no List is reclaimed); and
+    /// once the caller lets go of the List, the next collection reclaims it
+    /// while the storage, now the rooted one, stays exact.
+    #[test]
+    fn bytes_from_list_survives_its_own_collection_and_the_list_is_reclaimed_after_it() {
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let expected = [0x41u8, 0, 0x42, 0xff, 0x80, 0, 0];
+        let l = rooted!(vm, bytes_list(&mut vm, &expected.map(i64::from)));
+        let cycles = vm.metrics.gc_cycles.len();
+        let lists_swept = vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects;
+        let b = rt_bytes_from_list(p, l);
+        assert!(vm.metrics.gc_cycles.len() > cycles, "no collection ran inside the call");
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept, "a rooted List was swept");
+        assert_eq!(bytes_of(b), &expected);
+        // The caller is done with the List: unroot it, root the storage.
+        vm.temp_roots.pop();
+        vm.temp_roots.push(b);
+        vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        assert_eq!(vm.metrics.by_kind[KIND_LIST as usize].reclaimed_objects, lists_swept + 1, "the dead List was not reclaimed");
+        assert_eq!(bytes_of(b), &expected);
     }
 
     #[test]

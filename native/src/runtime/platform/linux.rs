@@ -1,7 +1,8 @@
-//! Linux pthread stack discovery and the stack-overflow guard, for x86-64 and
-//! AArch64 alike (pthread_getattr_np, sigaltstack and SA_ONSTACK work the same
-//! on both). The worker and Rust/JIT helper frames use the same pthread stack
-//! and the platform's ordinary C calling convention.
+//! Linux pthread stack discovery for the stack-overflow guard (guard.rs), for
+//! x86-64 and AArch64 alike (pthread_getattr_np works the same on both): the
+//! stack glibc reports, with the guard glibc reports directly below it. The
+//! worker and Rust/JIT helper frames use the same pthread stack and the
+//! platform's ordinary C calling convention.
 use crate::runtime::native_stack::{NativeStack, StackState};
 use std::io;
 
@@ -26,120 +27,13 @@ pub fn current_stack() -> io::Result<NativeStack> {
     }
 }
 
-use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
-static ACTIVE_TID: AtomicI32 = AtomicI32::new(0);
-static GUARD_LOW: AtomicUsize = AtomicUsize::new(0);
-static USABLE_LOW: AtomicUsize = AtomicUsize::new(0);
-static EXECUTABLE: AtomicI32 = AtomicI32::new(0);
-/// Where the driver's result lines go (set_result_fd): standard output, or
-/// the file of botlish-native's `--result`.
-static RESULT_FD: AtomicI32 = AtomicI32::new(libc::STDOUT_FILENO);
-const OVERFLOW_LINE: &[u8] = b"error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}\n";
-
-/// Makes FD the descriptor the driver's overflow report is written to, with
-/// its other result lines: the `--result` file, so that a program's own
-/// standard output never carries it.
-pub fn set_result_fd(fd: libc::c_int) {
-    RESULT_FD.store(fd, Ordering::Relaxed);
-}
-
-extern "C" fn fault_handler(signal: libc::c_int, info: *mut libc::siginfo_t, _: *mut libc::c_void) {
-    // Only atomic loads, syscall, write, and _exit on the alternate stack.
-    let tid = unsafe { libc::syscall(libc::SYS_gettid) as i32 };
-    let address = unsafe { (*info).si_addr() as usize };
-    if tid == ACTIVE_TID.load(Ordering::Relaxed)
-        && address >= GUARD_LOW.load(Ordering::Relaxed)
-        && address < USABLE_LOW.load(Ordering::Relaxed)
-    {
-        unsafe {
-            let executable = EXECUTABLE.load(Ordering::Relaxed) != 0;
-            let fd = if executable { libc::STDERR_FILENO } else { RESULT_FD.load(Ordering::Relaxed) };
-            libc::write(fd, OVERFLOW_LINE.as_ptr().cast(), OVERFLOW_LINE.len());
-            libc::_exit(if executable { 1 } else { 0 });
-        }
-    }
-    // Re-execute the fault with its ordinary disposition. Never relabel an
-    // unrelated memory error as stack overflow.
-    unsafe {
-        libc::signal(signal, libc::SIG_DFL);
-        libc::raise(signal);
-    }
-}
-
-/// Makes STACK the stack whose guard region the fault handler reports as an
-/// overflow: called on every coroutine stack switch (COROUTINES.md). A no-op
-/// while no guard is installed. Two relaxed stores: the handler runs on this
-/// same thread, between instructions, and reads whichever pair it finds.
-pub fn set_active_stack(stack: &NativeStack) {
-    if ACTIVE_TID.load(Ordering::Relaxed) == 0 {
-        return;
-    }
-    GUARD_LOW.store(stack.guard_low, Ordering::Relaxed);
-    USABLE_LOW.store(stack.low_bound, Ordering::Relaxed);
-}
-
-pub struct OverflowGuard {
-    _alt_stack: Vec<u8>,
-    old_stack: libc::stack_t,
-    old_segv: libc::sigaction,
-    old_bus: libc::sigaction,
-}
-
-impl OverflowGuard {
-    pub fn install(stack: &NativeStack) -> io::Result<Self> {
-        Self::install_mode(stack, false)
-    }
-
-    pub fn install_executable(stack: &NativeStack) -> io::Result<Self> {
-        Self::install_mode(stack, true)
-    }
-
-    fn install_mode(stack: &NativeStack, executable: bool) -> io::Result<Self> {
-        if stack.guard_low == stack.low_bound {
-            return Err(io::Error::new(io::ErrorKind::Unsupported, "pthread has no guard"));
-        }
-        let mut alt_stack = vec![0u8; 64 * 1024];
-        unsafe {
-            let mut old_stack = std::mem::zeroed();
-            let new_stack = libc::stack_t {
-                ss_sp: alt_stack.as_mut_ptr().cast(),
-                ss_flags: 0,
-                ss_size: alt_stack.len(),
-            };
-            if libc::sigaltstack(&new_stack, &mut old_stack) != 0 { return Err(io::Error::last_os_error()); }
-            let mut action: libc::sigaction = std::mem::zeroed();
-            action.sa_sigaction = fault_handler as *const () as usize;
-            action.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
-            libc::sigemptyset(&mut action.sa_mask);
-            let mut old_segv = std::mem::zeroed();
-            let mut old_bus = std::mem::zeroed();
-            if libc::sigaction(libc::SIGSEGV, &action, &mut old_segv) != 0 {
-                libc::sigaltstack(&old_stack, std::ptr::null_mut());
-                return Err(io::Error::last_os_error());
-            }
-            if libc::sigaction(libc::SIGBUS, &action, &mut old_bus) != 0 {
-                libc::sigaction(libc::SIGSEGV, &old_segv, std::ptr::null_mut());
-                libc::sigaltstack(&old_stack, std::ptr::null_mut());
-                return Err(io::Error::last_os_error());
-            }
-            GUARD_LOW.store(stack.guard_low, Ordering::Relaxed);
-            USABLE_LOW.store(stack.low_bound, Ordering::Relaxed);
-            EXECUTABLE.store(i32::from(executable), Ordering::Relaxed);
-            ACTIVE_TID.store(libc::syscall(libc::SYS_gettid) as i32, Ordering::Release);
-            Ok(Self { _alt_stack: alt_stack, old_stack, old_segv, old_bus })
-        }
-    }
-}
-
-impl Drop for OverflowGuard {
-    fn drop(&mut self) {
-        ACTIVE_TID.store(0, Ordering::Release);
-        unsafe {
-            libc::sigaction(libc::SIGSEGV, &self.old_segv, std::ptr::null_mut());
-            libc::sigaction(libc::SIGBUS, &self.old_bus, std::ptr::null_mut());
-            libc::sigaltstack(&self.old_stack, std::ptr::null_mut());
-        }
-    }
+/// The kernel's id of the calling thread: what the guard (platform/guard.rs)
+/// records for the thread it guards and compares in its handler. gettid is a
+/// raw syscall, async-signal-safe.
+#[inline(always)]
+pub fn thread_token() -> usize {
+    // SAFETY: gettid has no preconditions.
+    unsafe { libc::syscall(libc::SYS_gettid) as usize }
 }
 
 #[cfg(test)]

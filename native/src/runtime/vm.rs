@@ -103,6 +103,12 @@ pub fn current_program<R>(f: impl FnOnce(&ProgramInfo) -> R) -> R {
     PROGRAM.with(|p| f(p.borrow().as_ref().expect("no native program is running")))
 }
 
+/// Runs F with the program currently executing on this thread, if there is
+/// one (a runtime unit test runs none).
+pub fn try_current_program<R>(f: impl FnOnce(&ProgramInfo) -> R) -> Option<R> {
+    PROGRAM.with(|p| p.borrow().as_ref().map(|program| f(program)))
+}
+
 #[repr(C)]
 pub struct Vm {
     pub ss_top: *mut Value,
@@ -276,27 +282,30 @@ impl Vm {
             empty_mutbytes: BytesObj::new_static_mutable_empty(),
             framemap: Rc::new(ProgramMap::new()),
             native_stack: {
-                #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+                #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
                 { Some(NativeStack::current().expect("pthread stack bounds")) }
-                #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+                #[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
                 { None }
             },
             co_current: std::ptr::null_mut(),
         })
     }
 
-    /// Publishes STACK (None: the main stack) as the one native stack running
-    /// now, for the overflow handler: a fault in its guard is a stack
-    /// overflow (runtime/coroutine.rs switches stacks).
+    /// Publishes STACK (None: the thread's own stack) as the one native stack
+    /// running now, for the overflow handler: a fault in its guard is a stack
+    /// overflow. runtime/coroutine.rs calls it on arriving on a stack, never
+    /// before leaving one. Inlined, and only atomic stores: it adds no frame
+    /// to the stack it runs on (runtime::platform's guard).
+    #[inline(always)]
     pub fn publish_active_stack(&mut self, stack: Option<NativeStack>) {
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
         {
             let stack = stack.or(self.native_stack);
             if let Some(stack) = stack {
-                super::platform::linux::set_active_stack(&stack);
+                super::platform::set_active_stack(&stack);
             }
         }
-        #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+        #[cfg(not(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64"))))]
         let _ = stack;
     }
 
@@ -796,6 +805,13 @@ impl Vm {
             "a String/List cannot exceed {MAX_COLLECTION_LENGTH} characters/elements, got {len}"
         );
         Some(self.fail(RtError::Semantic { kind: "RANGE", message }))
+    }
+
+    /// The floating-point value of type TY whose bits (FloatObj::bits) are
+    /// BITS: a number FloatType::admit accepted.
+    pub fn new_float(&mut self, ty: FloatType, bits: u64) -> Value {
+        let _ = ty;
+        self.alloc(FloatObj { hdr: Header::new(KIND_FLOAT, false), bits }, 0)
     }
 
     pub fn new_result(&mut self, ok: bool, payload: Value) -> Value {

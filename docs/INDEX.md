@@ -23,6 +23,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [ENUMS.md](ENUMS.md) -- enums: named, closed, nominal sums of payload-free cases
 - [OPAQUE-STRUCTS.md](OPAQUE-STRUCTS.md) -- `opaque struct`: module-owned representation and construction authority
 - [UNICODE-CHAR-LITERALS.md](UNICODE-CHAR-LITERALS.md) -- `UnicodeChar`: a scalar type distinct from Int and String
+- [FLOAT64-MILESTONE-1.md](FLOAT64-MILESTONE-1.md) -- `Float64`: finite binary64 numbers, decimal literals, `/`, `NonFiniteFloat`, C `double` (completion report)
 - [ELIF.md](ELIF.md) -- `elif`
 - [METHOD-SUGAR.md](METHOD-SUGAR.md) -- method-call sugar
 - [FLAGS.md](FLAGS.md) -- flag parameters
@@ -105,11 +106,15 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [MUTABLE-BYTES.md](MUTABLE-BYTES.md) -- `abi::bytes::MutableBytes` and `linux::read`
 - [BINARY-LAYOUT.md](BINARY-LAYOUT.md) -- fixed binary layouts: `layout`, `LayoutStruct[L]`, `binary::parse` and `binary::emit`
 - [C-HEADER-ARCHAEOLOGY.md](C-HEADER-ARCHAEOLOGY.md) -- empirical C header archaeology: BoringSSL's and Tcl's preprocessed headers, an exploratory FFI IR and what a first C FFI needs (corpus: `audit/c-header/`; its parser and toolchain adapter now in `tools/cheader/`)
+- [NATIVE-LAYOUT-WRITES.md](NATIVE-LAYOUT-WRITES.md) -- the write half of native layouts: `NativeEdit[L]` (`binary::native::edit`, `binary::store`), write authority over live native memory distinct from read authority; layout-directed writes into byte storage (`binary::write`) and the explicit foreign encoding of an existing pointer (`binary::write_foreign`); field designators `L.f`; a C oracle, a caller-constructed native record, fuzzer, mutants, benchmark
+- [FIXED-LAYOUT-ARRAYS.md](FIXED-LAYOUT-ARRAYS.md) -- fixed arrays in binary layouts: `field name: array N of E at OFFSET`, the copied value a List of exactly N elements (LayoutExtentMismatch, extent proofs), live arrays `NativeView[array N of E]` (`binary::element`, `binary::store_element`, whole loads and stores), static element designators `L.items[3]`; the C binding generator's arrays (+3 / +11 / +19 / +249 records, the forecast exactly), a C oracle, fuzzers, mutants, benchmark
+- [LAYOUT-UNIONS.md](LAYOUT-UNIONS.md) -- unions in binary layouts: `union layout U:`, several declared interpretations of the same bytes (no tag, no active member, overlap only where declared), held by value in records, arrays and other unions; live unions `NativeView[U]`/`NativeEdit[U]` (an alternative is an address, never a copy), no copied value (`binary::read` through a designator instead), pointer authority through alternatives; the C binding generator's unions and anonymous members (synthetic layouts placed by clang's record layouts: Tcl 34, SDL3 85, BoringSSL 118, Win32 996 layouts), a C oracle, fuzzers, mutants, benchmark
 - [NATIVE-LAYOUT-VIEWS.md](NATIVE-LAYOUT-VIEWS.md) -- read-only native layout views: an ordinary `layout` read from authorized live native memory (`binary::native::view(L, p)`, `NativeView[L]`, `binary::load`), pointer fields that native memory may hold and bytes never become; the C oracle, fuzzing, mutants and the pressure on native writes
 - [C-ABI-TYPES.md](C-ABI-TYPES.md) -- the C ABI type universe: target-resolved C integer scalars, `ffi::c::Void`, `ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`, the pointer operations, and callable imprinting (`ffi::c::null[T]()`)
 - [C-POINTER-BORROWING.md](C-POINTER-BORROWING.md) -- temporary foreign byte exposure: existing `Bytes` / `MutableBytes` given to a C pointer parameter for one call when its contract says noescape, sharing the syscall path's exposure mechanism; the `extern c fn` and `direct` hooks
 - [C-FFI.md](C-FFI.md) -- `extern c library` and `extern c fn`: real link-time C calls with the platform ABI, linked by the system linker; contracts, byte borrowing and write-back through real C, truthful pointer results, retaining calls as direct authority; the Tcl and BoringSSL SHA-256 acceptance
 - [C-BINDGEN.md](C-BINDGEN.md) -- automatic C binding generation (`tools/c-bindgen.tcl`): ordinary Botlish bindings generated from real C headers by interrogating the C compiler (ABI, symbol and evidence probes), thunks for macros and static inline functions, explicit contracts, a deterministic report and manifest, `ffi::c::Bool`; the Tcl, BoringSSL and SDL3 acceptance
+- [C-BINDGEN-LAYOUTS.md](C-BINDGEN-LAYOUTS.md) -- generated native record layouts: an ordinary `layout` per complete C record whose fields a layout represents, with the target C compiler's sizes, alignments and offsets (verified statically, by a second compiler and by a runtime C oracle), the blocked records and their reasons, layout and API pressure; the windows-x86_64-gnu target and the Win32 binding generated with MinGW-w64
 - [ABI-NUMERIC-DOMAINS.md](ABI-NUMERIC-DOMAINS.md) -- `abi::I8` ... `abi::Usize`
 - [LINUX-X86-64-SYSCALL.md](LINUX-X86-64-SYSCALL.md) -- direct Linux x86-64 syscalls
 - [LINUX-SYSCALL-TRANSPORTS.md](LINUX-SYSCALL-TRANSPORTS.md) -- the AArch64 transport beside the x86-64 one (`linux::abi::ARCH::syscall`, one table), `linux::sys` as an architecture-specific module the compilation target selects, and what the single-file compiler needs on AArch64
@@ -119,6 +124,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 
 - [STATIC-COMPILE.md](STATIC-COMPILE.md) -- `static compile:`: compiler diagnostics as recoverable values
 - [STATIC-DECISION-ECONOMICS.md](STATIC-DECISION-ECONOMICS.md) -- how many builds deciding static blocks takes
+- [METHOD-DECISION-FILTER.md](METHOD-DECISION-FILTER.md) -- deciding method-style calls by receiver kind: fewer trial builds, the same decisions
 - [GOLDEN-TEST-FRAMEWORK.md](GOLDEN-TEST-FRAMEWORK.md) -- `lib/test.bot`: a test framework written in Botlish
 - [LARGE-SCALE-GOLDEN-MIGRATION.md](LARGE-SCALE-GOLDEN-MIGRATION.md) -- porting the Tcl tests to golden suites
 - [GOLDEN-VS-TCL-BENCHMARK.md](GOLDEN-VS-TCL-BENCHMARK.md) -- golden suites against their Tcl originals
@@ -140,6 +146,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 
 - [COMPILERPEDIA.md](COMPILERPEDIA.md) -- Compilerpedia, `-help`: the topic model, indices, search, help lines, generation, validation and maintenance
 - [COMPILERPEDIA-REPORT.md](COMPILERPEDIA-REPORT.md) -- the Compilerpedia milestone: the CLI changes, coverage, the lint audit and the 15-puzzle assessment
+- [IDIOMATIC-BOTLISH.md](IDIOMATIC-BOTLISH.md) -- the newcomer page of Compilerpedia (`principle.idiomatic-botlish`): its principles, search, the black-box audit and the questions that still need a probe
 
 ## Implementation
 
@@ -152,6 +159,10 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [MACOS-AARCH64-PORT-AUDIT.md](MACOS-AARCH64-PORT-AUDIT.md) -- the macOS Apple Silicon port: every Linux assumption by subsystem, what runs on a real macOS arm64 host today, the macOS CI and its test tiers, and the milestone roadmap
 - [MACOS-AARCH64-MILESTONE-1.md](MACOS-AARCH64-MILESTONE-1.md) -- macOS port milestone 1: the platform audit and the Apple Silicon GitHub Actions infrastructure, with the CI evidence
 - [MACOS-AARCH64-MILESTONE-2.md](MACOS-AARCH64-MILESTONE-2.md) -- macOS port milestone 2: the compilation target as an operating system and an architecture -- target identity, macOS C ABI facts, the Apple AArch64 C convention, platform module resolution, HIR interchange and cache target isolation, and native host/target validation
+- [MACOS-AARCH64-MILESTONE-3.md](MACOS-AARCH64-MILESTONE-3.md) -- macOS port milestone 3: native coroutines on Apple Silicon -- the Mach-O stack switch, Apple AArch64 ABI checks, suspended-stack GC roots, and the native golden runner on macOS, with the CI evidence
+- [MACOS-AARCH64-MILESTONE-4.md](MACOS-AARCH64-MILESTONE-4.md) -- macOS port milestone 4: native stack bounds, overflow detection and its recovery on Apple Silicon -- pthread stack discovery and confirmed guards, the shared stack-overflow guard, coroutine-switch publication, the shadow-stack depth token retired, with the CI evidence
+- [MACOS-AARCH64-MILESTONE-5.md](MACOS-AARCH64-MILESTONE-5.md) -- macOS port milestone 5: Mach-O AOT executables on Apple Silicon -- the program object, the rustc and Apple system link, standalone runtime acceptance (GC, coroutines, NATIVE LIMIT STACK, a moved multi-file application), C calls still refused, with the CI evidence
+- [MACOS-AARCH64-MILESTONE-6.md](MACOS-AARCH64-MILESTONE-6.md) -- macOS port milestone 6: C calls on Apple Silicon -- Apple's link plan and linker diagnostics, the Apple arm64 C ABI checked against Apple clang (caller extension of narrow arguments, packed stack arguments, plain char signed, pointers), a Cranelift 0.135.2 defect in extended stack arguments and its workaround, c-ffi.test and c-bindgen.test on macOS, with the CI evidence
 - [STRICT-REFERENCE-DETERMINISM.md](STRICT-REFERENCE-DETERMINISM.md) -- strict reference determinism
 - [CANONICAL-SURFACE-BENCHMARKS.md](CANONICAL-SURFACE-BENCHMARKS.md) -- every benchmark as ordinary `.bot` source
 - [COMPILER-BOTTLENECKS.md](COMPILER-BOTTLENECKS.md) -- compiler performance bugs: what to tackle next

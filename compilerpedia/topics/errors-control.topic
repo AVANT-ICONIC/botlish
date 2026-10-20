@@ -1673,9 +1673,103 @@ layout Node:
 @at 4:17
 @end
 
+@topic error.layout-array-extent
+title: LAYOUT-ARRAY-EXTENT: a fixed array's extent is not a positive size
+summary: A fixed array's extent is a compile-time integer of at least 1 whose width fits a layout; a zero-length or flexible array is not a fixed array.
+index: errors
+alias: a fixed array's extent is a positive integer
+keywords: layout, array, extent, zero-length, flexible array member, length, fixed array
+related: concept.binary-layouts error.layout-field-bounds error.layout-array-index stdlib.module.binary
+docs: FIXED-LAYOUT-ARRAYS.md
+code: CORE SEMANTIC LAYOUT-ARRAY-EXTENT
+
+== MEANING
+    field "items" of layout "Packet" is an array of 0 elements: a fixed
+    array's extent is a positive integer (a C zero-length or flexible
+    array is not a fixed array)
+
+The extent is a literal of any size, multiplied exactly (never wrapped):
+an array wider than the largest layout is rejected here too. An array
+whose elements are arrays says so ("the elements of field ... are arrays
+of 0 elements"). The same rule holds for the live array type
+NativeView[array N of E].
+
+== WHAT TO DO
+Give the array its real extent. A C flexible array member or a
+variable-length tail is not a fixed layout: describe the fixed header as a
+layout and read the tail separately (its length is data, not
+representation).
+
+@example reject
+import binary
+
+layout Packet:
+    size 8
+    align 1
+    field items: array 0 of binary::U8 at 0
+
+0
+@caption An array of no elements
+@error CORE SEMANTIC LAYOUT-ARRAY-EXTENT
+@at 6:18
+@end
+
+@example accept
+import binary
+
+layout Packet:
+    size 8
+    align 1
+    field kind: binary::U8 at 0
+    field items: array 7 of binary::U8 at 1
+
+binary::layout_length(Packet)
+@value 8
+@caption Seven one-byte elements after the kind byte
+@end
+
+@topic error.layout-array-index
+title: LAYOUT-ARRAY-INDEX: a static element index outside its fixed array
+summary: An element designator (L.items[3], L.m[1][2]) names its index statically, so an index outside 0..N-1 is rejected where it is written.
+index: errors
+alias: the element index lies outside the fixed array
+keywords: layout, array, index, designator, out of range, element, subscript
+related: concept.binary-layouts error.layout-array-extent stdlib.binary::store stdlib.binary::write stdlib.binary::element
+docs: FIXED-LAYOUT-ARRAYS.md
+code: CORE SEMANTIC LAYOUT-ARRAY-INDEX
+
+== MEANING
+    Packet.items is a fixed array of 4 elements (indices 0..3): the element
+    index [4] lies outside it
+
+The designator of binary::write, binary::write_foreign and binary::store
+is static: its indices are part of the field it names, resolved to one
+offset at compile time. A dynamic index is binary::element or
+binary::store_element on a live array, checked at run time (IndexNotFound)
+unless the compiler proves it.
+
+@example reject
+import abi
+import abi::bytes
+import binary
+
+layout Packet:
+    size 4
+    align 1
+    field items: array 4 of binary::U8 at 0
+
+fn last(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    binary::write(d, Packet.items[4], 1)
+
+0
+@caption Four elements: the last is items[3]
+@error CORE SEMANTIC LAYOUT-ARRAY-INDEX
+@at 11:35
+@end
+
 @topic error.layout-native-only
-title: LAYOUT-NATIVE-ONLY: parse or emit of a layout with a pointer field
-summary: A layout with a C pointer field is read only from live native memory through a native view: binary::parse would forge a pointer from bytes, and binary::emit would write one into bytes.
+title: LAYOUT-NATIVE-ONLY: bytes and a C pointer field, the ordinary way
+summary: A pointer field is never parsed from bytes (that would forge a pointer) nor emitted or written into them as ordinary data: binary::write_foreign is the explicit encoding.
 index: errors
 alias: cannot imprint layout; is a C pointer
 keywords: layout, pointer, ffi::c::Ptr, FnPtr, parse, emit, native view, forge
@@ -1693,7 +1787,9 @@ code: CORE SEMANTIC LAYOUT-NATIVE-ONLY
 Any bit pattern can arrive in byte storage, so a pointer read from bytes
 would be forged. A pointer field nested inside another layout makes the
 outer layout native-only too; the message names the field's path. Emitting
-such a layout is rejected the same way.
+such a layout is rejected the same way, and so is an ordinary
+binary::write of the pointer field itself (NATIVE-LAYOUT-WRITES.md): an
+existing pointer is encoded into bytes only by binary::write_foreign.
 
 == WHAT TO DO
 Read the record where foreign code put it: binary::native::view(L, p) of
@@ -1720,6 +1816,140 @@ fn first(d: abi::bytes::Bytes) -> bool errors LayoutLengthMismatch:
 @caption Bytes would become a pointer
 @error CORE SEMANTIC LAYOUT-NATIVE-ONLY
 @at 11:23
+@end
+
+@topic error.layout-foreign-write
+title: LAYOUT-FOREIGN-WRITE: a foreign write of a field that is not a C pointer
+summary: binary::write_foreign encodes an existing ffi::c::Ptr or FnPtr into a C pointer field of byte storage; an ordinary field is written by binary::write.
+index: errors
+alias: encodes an existing foreign value; is an ordinary field
+keywords: write_foreign, pointer field, binary::write, encode pointer, foreign write
+related: stdlib.binary::write_foreign stdlib.binary::write error.layout-native-only concept.binary-layouts
+docs: NATIVE-LAYOUT-WRITES.md
+code: CORE SEMANTIC LAYOUT-FOREIGN-WRITE
+
+== MEANING
+    binary::write_foreign encodes an existing foreign value (an ffi::c::Ptr
+    or ffi::c::FnPtr) into a C pointer field; Pair.count is an ordinary
+    field of type int[binary::U32], written by binary::write
+
+The foreign write is deliberately separate from ordinary serialization:
+it is the one operation that puts a pointer's address bits into bytes,
+and it takes only a pointer the program already has. Its field must be
+one of the layout's C pointer fields.
+
+== WHAT TO DO
+Write an ordinary field with binary::write(data, L.field, value). Use
+binary::write_foreign only for a field declared ffi::c::Ptr[T] or
+ffi::c::FnPtr[F], with a pointer of exactly that type.
+
+@example reject
+import abi::bytes
+import binary
+import ffi::c
+
+layout Pair:
+    size 16
+    align 8
+    field count: binary::U32 at 0
+    field next: ffi::c::Ptr[ffi::c::Void] at 8
+
+fn f(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    binary::write_foreign(d, Pair.count, 7)
+
+0
+@caption count is no pointer field
+@error CORE SEMANTIC LAYOUT-FOREIGN-WRITE
+@at 12:30
+@end
+
+@topic error.layout-union
+title: LAYOUT-UNION: a copy of a union, or of anything holding one
+summary: A union is several interpretations of the same bytes, so it has no copied value: no LayoutStruct, parse, emit or load of a union or of a layout holding one; read or write one alternative.
+index: errors
+alias: has no copied value; is a union layout; holds the union layout
+keywords: union, union layout, alternative, overlap, LayoutStruct, binary::parse, binary::load, binary::read, copy, OVERLAPPED
+related: concept.layout-unions stdlib.binary::read stdlib.binary::write concept.binary-layouts error.layout-native-only
+docs: LAYOUT-UNIONS.md
+code: CORE SEMANTIC LAYOUT-UNION
+
+== MEANING
+    binary::parse cannot imprint layout OVL from bytes: layout OVL holds
+    the union layout OVLU by value at OVL.u: a union is several
+    interpretations of the same bytes, never independent values, so it
+    has no copied value; ...
+
+A union's alternatives all start at its first byte: a struct holding one
+value per alternative would pretend they are independent fields, and
+nothing records which one was written last (a union has no tag and no
+active alternative). So a union has no LayoutStruct, and neither has any
+layout holding one by value -- directly, in a nested layout or as an
+array element. The same holds for binary::load of a live union or of an
+array of unions, binary::read of a designator that holds one, and a whole-
+array write of an array of unions.
+
+== WHAT TO DO
+Read and write a union one alternative at a time, through a static
+designator: binary::read(data, OVL.u.offsets.offset) and
+binary::write(data, OVL.u.offsets.offset, v) on bytes; in native memory,
+v.u.offsets.offset through a view and binary::store(e, OVL.u.offsets.
+offset, v) through an edit. A record alternative or an array alternative
+is copied whole (binary::read(data, OVL.u.offsets), binary::load(v.u.
+offsets)): it is an ordinary layout. A higher-level wrapper that knows
+which alternative a protocol means turns it into a domain value.
+
+@example reject
+import abi::bytes
+import binary
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::U16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+
+fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+    binary::parse(WORD, d)
+
+0
+@caption A union has no LayoutStruct to imprint into
+@error CORE SEMANTIC LAYOUT-UNION
+@at 17:19
+@end
+
+@example accept
+import abi
+import abi::bytes
+import binary
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::U16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.whole, 131073))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.halves)]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@caption One alternative at a time
+@value [131073, LayoutStruct[HALVES] {low: 1, high: 2}]
 @end
 
 @topic error.layout-not-a-type

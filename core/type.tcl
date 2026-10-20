@@ -91,7 +91,27 @@ namespace eval core::type {
     # ffi::c::Ptr[T] ({cptr T}) or a function pointer ffi::c::FnPtr[F]
     # ({cfnptr F}), hir/types.tcl. Never source-spellable bare: there is no
     # pointer without a pointee identity.
-    variable primitives {int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum cptr}
+    #
+    # The primitive floating-point types (FLOAT64-MILESTONE-1.md) are one
+    # family, described once in `floats` below: each is a primitive kind of
+    # its own, spelled like its runtime kind tag exactly as UnicodeChar is,
+    # and everything that treats them as a family (the operators' resolution,
+    # hir/operators.tcl; the natives core/float.tcl registers; the runtime
+    # values, core/value.tcl) reads the table instead of naming a width. A
+    # further width is a row of the table.
+    #
+    # NAME -> {width BITS precision P minExponent EMIN maxExponent EMAX
+    # namespace NS}: an IEEE 754 binary format of BITS bits, P significand
+    # bits (the leading one included), normal exponents EMIN..EMAX; NS is the
+    # flat namespace of its standard intrinsics (float64::from_int). This is
+    # the *semantic* description of the type only. Which backends can
+    # represent or compute it, and how, is theirs to say (core/float.tcl's
+    # Tcl arithmetic, native/lower.tcl and native/src/runtime/value.rs's
+    # FloatType): a type in this table is never assumed to have a machine
+    # representation on every target.
+    variable floats [dict create \
+        Float64 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace float64}]
+    variable primitives [list int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum cptr {*}[dict keys $floats]]
     # NAME -> {name NAME base KIND validator CMD parents {NAME...}
     # integerDomain DOMAIN source 0|1 refinement {} | {carrier TYPE owner NS
     # span SPAN} cabi {} | {c SPELLING target TARGET bits N signed 0|1}}
@@ -195,6 +215,43 @@ proc core::type::cabiOf {name} {
         return ""
     }
     return [dict get $registry $name cabi]
+}
+
+# Every floating-point type is a runtime value kind (core/value.tcl).
+foreach type [dict keys $core::type::floats] {
+    if {$type ni $core::value::kinds} {
+        error "core/type.tcl: the floating-point type $type is not a kind of core/value.tcl"
+    }
+}
+unset type
+
+# The primitive floating-point types (`floats`), in table order.
+proc core::type::floatTypes {} {
+    variable floats
+    return [dict keys $floats]
+}
+
+# 1 if NAME is a primitive floating-point type (a kind of the float family).
+proc core::type::isFloat {name} {
+    variable floats
+    return [dict exists $floats $name]
+}
+
+# The `floats` row of the floating-point type NAME.
+proc core::type::floatInfo {name} {
+    variable floats
+    return [dict get $floats $name]
+}
+
+# The scalar kinds: the primitive kinds whose values are immutable, carry no
+# other value and compare (==) and hash by content alone, with no failure --
+# Int, String, Bool, unit, UnicodeChar, an enum case and every floating-point
+# type. Analyses that treat "a plain scalar" alike ask this instead of
+# spelling the list (a new primitive scalar, a further float width, joins
+# them here).
+proc core::type::scalarKinds {} {
+    variable floats
+    return [list int str bool unit UnicodeChar enum {*}[dict keys $floats]]
 }
 
 # The C ABI metadata of TYPE (a canonical type) when it is exactly one C
@@ -421,19 +478,35 @@ proc core::type::integerFacts {type} {
             set values [lindex $domain 1]
             set facts [dict create min [lindex $values 0] max [lindex $values end] exact $values]
         }
-        set result [expr {$result eq {} ? $facts : [IntersectIntegerFacts $result $facts]}]
+        if {$result eq {}} {
+            set result $facts
+        } else {
+            set result [IntersectIntegerFacts $result $facts]
+        }
     }
     return $result
 }
 
 proc core::type::IntersectIntegerFacts {a b} {
-    set lo [expr {[dict get $a min] > [dict get $b min] ? [dict get $a min] : [dict get $b min]}]
-    set hi [expr {[dict get $a max] < [dict get $b max] ? [dict get $a max] : [dict get $b max]}]
+    if {[dict get $a min] > [dict get $b min]} {
+        set lo [dict get $a min]
+    } else {
+        set lo [dict get $b min]
+    }
+    if {[dict get $a max] < [dict get $b max]} {
+        set hi [dict get $a max]
+    } else {
+        set hi [dict get $b max]
+    }
     set exact {}
     foreach source [list $a $b] {
         if {![dict exists $source exact]} { continue }
         set values [lmap v [dict get $source exact] {if {$v >= $lo && $v <= $hi} {set v} else continue}]
-        set exact [expr {$exact eq {} ? $values : [lmap v $exact {if {$v in $values} {set v} else continue}]}]
+        if {$exact eq {}} {
+            set exact $values
+        } else {
+            set exact [lmap v $exact {if {$v in $values} {set v} else continue}]
+        }
     }
     set result [dict create min $lo max $hi]
     if {$exact ne {}} { dict set result exact $exact }

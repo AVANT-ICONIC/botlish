@@ -43,7 +43,11 @@ proc hir::errorsets::verify {hirVar} {
         }
     }
     foreach block $blocks {
-        set errors [expr {$block eq {program} ? {} : [dict get $hir exprs $block declaredErrors]}]
+        if {$block eq {program}} {
+            set errors {}
+        } else {
+            set errors [dict get $hir exprs $block declaredErrors]
+        }
         if {$block ne {program} && [set thunk [hir::coroutines::thunkErrors $hir $block]] ne ""} {
             # A coroutine construction's thunk (COROUTINES.md) is a boundary:
             # what its call lets escape ends the segment and reaches the

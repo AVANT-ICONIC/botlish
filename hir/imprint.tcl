@@ -190,7 +190,7 @@ proc hir::imprint::BlockSignature {hir e} {
         return ""
     }
     set params [dict get $node declaredParamTypes]
-    set result [expr {[dict exists $node declaredResult] ? [dict get $node declaredResult] : {}}]
+    set result [dict getdef $node declaredResult {}]
     if {[string first imprint $params$result] < 0} {
         # (The common case, decided without walking the types.)
         return ""
@@ -429,7 +429,7 @@ proc hir::imprint::FormMismatch {param arg index} {
 proc hir::imprint::Substitute {type binding} {
     if {[hir::types::IsImprint $type]} {
         set name [lindex $type 1]
-        return [expr {[dict exists $binding $name] ? [dict get $binding $name] : $type}]
+        return [dict getdef $binding $name $type]
     }
     if {[llength $type] < 2} {
         return $type
@@ -474,7 +474,7 @@ proc hir::imprint::Substitute {type binding} {
 # the call binds none (no imprint signature, or a problem: callImprint).
 proc hir::imprint::BindingOf {hir e} {
     set node [dict get $hir exprs $e]
-    return [expr {[dict exists $node imprintBinding] ? [dict get $node imprintBinding] : ""}]
+    return [dict getdef $node imprintBinding ""]
 }
 
 # Types call E (hir::types::Call's part): with CALLEETYPE's imprint
@@ -487,7 +487,7 @@ proc hir::imprint::BindingOf {hir e} {
 proc hir::imprint::Call {hirVar e calleeType argTypes result fallback} {
     upvar 1 $hirVar hir
     set node [dict get $hir exprs $e]
-    set explicit [expr {[dict exists $node imprint] ? [dict get $node imprint] : ""}]
+    set explicit [dict getdef $node imprint ""]
     set sig [Signature $hir $calleeType]
     if {$sig eq "" && $explicit eq ""} {
         # (The common case: no imprint anywhere. The node is left alone
@@ -512,7 +512,10 @@ proc hir::imprint::Call {hirVar e calleeType argTypes result fallback} {
     if {![dict get $bound ok]} {
         dict set node imprintProblem [dict get $bound message]
         dict set hir exprs $e $node
-        return [expr {[Mentions $result] ? $fallback : $result}]
+        if {[Mentions $result]} {
+            return $fallback
+        }
+        return $result
     }
     set binding [dict get $bound binding]
     dict set node imprintBinding $binding
@@ -537,7 +540,7 @@ proc hir::imprint::Parameters {hir e types} {
     if {$binding eq ""} {
         return $types
     }
-    return [lmap t $types {expr {$t eq "" ? "" : [Substitute $t $binding]}}]
+    return [lmap t $types {if {$t eq ""} {string cat ""} else {Substitute $t $binding}}]
 }
 
 # 1 if call E's imprints could not be bound (its problem is diagnosed by

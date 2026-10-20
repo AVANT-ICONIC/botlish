@@ -2,13 +2,17 @@ name: tests (macos arm64)
 
 # The macOS Apple Silicon port's CI (MACOS-AARCH64-PORT-AUDIT.md, section
 # 16): real arm64 macOS runners for an agent that develops on Linux. The
-# native backend is not ported yet; these jobs test what runs on macOS today
-# and check that what does not is refused the way the audit records.
+# native backend is being ported milestone by milestone; these jobs test what
+# runs on macOS today (the JIT and, since milestone 3, native coroutines and
+# the native golden runner) and check that what does not is refused the way
+# the audit records.
 #
 #   smoke          Tier A, every push: the host and its C and Rust
 #                  toolchains (not Botlish), Tcl 9.0.1, core::cabi's macOS row,
-#                  the native build and its Rust unit tests, the native
-#                  status, the smoke tier (tests/platform/tier.tcl smoke)
+#                  the native build and its Rust unit tests, the native stack
+#                  bounds and overflow tests, the native status, native
+#                  objects and executables (tests/platform/aot-facts.tcl),
+#                  the smoke tier (tests/platform/tier.tcl smoke)
 #   acceptance     Tier B, every push, two shards: the acceptance tier --
 #                  the test files and golden suites that pass on macOS
 #   linux control  Tier A on ubuntu-latest, every push: the same smoke
@@ -16,7 +20,8 @@ name: tests (macos arm64)
 #                  a Linux one at the same commit
 #   full           Tier C, opt-in: "[ci-full]" in the pushed head commit's
 #                  message, or a manual run with tier "full". By default
-#                  three shards of the acceptance tier on both Tcl backends
+#                  three shards of the acceptance tier (Tcl test files on both Tcl
+#                  backends, golden suites on all four)
 #                  under BOTLISH_NATIVE_GC_STRESS=1; with a "CI-Tests:"
 #                  trailer in that commit message (or the "tests" input)
 #                  exactly the tier.tcl items it names -- "CI-Tests:
@@ -45,7 +50,7 @@ on:
         options: [acceptance, full]
         default: acceptance
       tests:
-        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust)"
+        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust, native-stack-mutants, native-aot-mutants, native-stack-bench, c-ffi-fuzz, c-ffi-mutants[=NAME,...], c-ffi-bench)"
         required: false
         default: ""
       gc_stress:
@@ -105,8 +110,17 @@ jobs:
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
 
+      # The runtime's tests and the driver's own (--bins): its link plans,
+      # targets and the Apple C signature, which Cranelift's AArch64 backend
+      # compiles here.
       - name: Native Rust unit tests
-        run: cargo test --release --manifest-path native/Cargo.toml --lib
+        run: cargo test --release --manifest-path native/Cargo.toml --lib --bins
+
+      # The host's stack bounds and guards and the runtime's overflow guard,
+      # checked in child processes (native/tests/native_stack.rs, milestone 4):
+      # its log records the macOS stack facts it observed.
+      - name: Native stack bounds and overflow (isolated processes)
+        run: cargo test --release --manifest-path native/Cargo.toml --test native_stack
 
       # Each native capability works or is refused exactly as recorded for
       # macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md, section 15).
@@ -115,6 +129,14 @@ jobs:
 
       - name: Smoke tier
         run: tclsh9.0 tests/platform/tier.tcl smoke 2>&1 | tee tier.log
+
+      # A program object and a standalone executable as the host's tools see
+      # them (file, nm, objdump, otool, lipo, codesign), the executable run
+      # outside its build directory, the link command and timings
+      # (milestone 5). Last, so that its lines are the log's last.
+      - name: Native objects and executables
+        if: always()
+        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
 
       - name: Publish summary
         if: always()
@@ -186,6 +208,9 @@ jobs:
 
       - name: Native status
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Native objects and executables
+        run: tclsh9.0 tests/platform/aot-facts.tcl -verbose 1
 
       - name: Smoke tier
         run: tclsh9.0 tests/platform/tier.tcl smoke

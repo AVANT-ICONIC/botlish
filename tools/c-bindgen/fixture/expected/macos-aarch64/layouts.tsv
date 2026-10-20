@@ -1,0 +1,323 @@
+# c-bindgen layout manifest: profile bgf, target macos-aarch64, toolchain clang arm64-apple-macos11 (Ubuntu clang version 18.1.3 (1ubuntu1)) (C-BINDGEN-LAYOUTS.md)
+kind	record	index	name	status	offset	size	align	c	type	detail
+record	struct bgf_point	-	bgf_point	layout-direct	-	8	4	struct bgf_point	-	typedefs=bgf_point; identity=bgf::ctypes::bgf_point; header=include/bgf/bgf.h:51; pointed-by=2
+field	struct bgf_point	0	x	scalar	0	4	-	int x	ffi::c::Int	c=x
+field	struct bgf_point	1	y	scalar	4	4	-	int y	ffi::c::Int	c=y
+record	struct bgf_pair	-	bgf_pair	layout-direct	-	8	4	struct bgf_pair	-	typedefs=bgf_pair; identity=-; header=include/bgf/bgf.h:56
+field	struct bgf_pair	0	a	scalar	0	4	-	int a	ffi::c::Int	c=a
+field	struct bgf_pair	1	b	scalar	4	4	-	int b	ffi::c::Int	c=b
+record	struct bgf_table	-	bgf_table	layout-direct	-	8	8	struct bgf_table	-	typedefs=bgf_table; identity=-; header=include/bgf/bgf.h:121
+field	struct bgf_table	0	get	function-pointer	0	8	-	int (*get)(int)	ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]	c=get
+record	struct bgf_scalars	-	bgf_scalars	layout-direct	-	40	8	struct bgf_scalars	-	typedefs=bgf_scalars; identity=-; header=include/bgf/bgf_records.h:17
+field	struct bgf_scalars	0	c	scalar	0	1	-	char c	ffi::c::Char	c=c
+field	struct bgf_scalars	1	i	scalar	4	4	-	int i	ffi::c::Int	c=i
+field	struct bgf_scalars	2	us	scalar	8	2	-	unsigned short us	ffi::c::UShort	c=us
+field	struct bgf_scalars	3	ll	scalar	16	8	-	long long ll	ffi::c::LongLong	c=ll
+field	struct bgf_scalars	4	sc	scalar	24	1	-	signed char sc	ffi::c::SChar	c=sc
+field	struct bgf_scalars	5	uc	scalar	25	1	-	unsigned char uc	ffi::c::UChar	c=uc
+field	struct bgf_scalars	6	s	scalar	26	2	-	short s	ffi::c::Short	c=s
+field	struct bgf_scalars	7	ui	scalar	28	4	-	unsigned int ui	ffi::c::UInt	c=ui
+field	struct bgf_scalars	8	ull	scalar	32	8	-	unsigned long long ull	ffi::c::ULongLong	c=ull
+record	struct bgf_longs	-	bgf_longs	layout-direct	-	56	8	struct bgf_longs	-	typedefs=bgf_longs; identity=-; header=include/bgf/bgf_records.h:31
+field	struct bgf_longs	0	c	scalar	0	1	-	char c	ffi::c::Char	c=c
+field	struct bgf_longs	1	l	scalar	8	8	-	long l	ffi::c::Long	c=l
+field	struct bgf_longs	2	ul	scalar	16	8	-	unsigned long ul	ffi::c::ULong	c=ul
+field	struct bgf_longs	3	ll	scalar	24	8	-	long long ll	ffi::c::LongLong	c=ll
+field	struct bgf_longs	4	p	pointer	32	8	-	void *p	ffi::c::Ptr[ffi::c::Void]	c=p
+field	struct bgf_longs	5	i	scalar	40	4	-	int i	ffi::c::Int	c=i
+field	struct bgf_longs	6	ull	scalar	48	8	-	unsigned long long ull	ffi::c::ULongLong	c=ull
+record	struct bgf_long_pair	-	bgf_long_pair	layout-direct	-	72	8	struct bgf_long_pair	-	typedefs=bgf_long_pair; identity=-; header=include/bgf/bgf_records.h:41; deps=struct bgf_longs
+field	struct bgf_long_pair	0	a	scalar	0	8	-	long a	ffi::c::Long	c=a
+field	struct bgf_long_pair	1	inner	nested	8	56	-	bgf_longs inner	bgf_longs	c=inner
+field	struct bgf_long_pair	2	b	scalar	64	8	-	unsigned long b	ffi::c::ULong	c=b
+record	struct bgf_typed	-	bgf_typed	layout-direct	-	40	8	struct bgf_typed	-	typedefs=bgf_typed; identity=-; header=include/bgf/bgf_records.h:49
+field	struct bgf_typed	0	a	scalar	0	1	-	bgf_u8 a	ffi::c::UChar	c=a
+field	struct bgf_typed	1	b	scalar	2	2	-	bgf_i16 b	ffi::c::Short	c=b
+field	struct bgf_typed	2	c	scalar	4	4	-	bgf_u32 c	ffi::c::UInt	c=c
+field	struct bgf_typed	3	d	scalar	8	8	-	bgf_u64 d	ffi::c::ULongLong	c=d
+field	struct bgf_typed	4	e	scalar	16	8	-	bgf_size e	ffi::c::Long	c=e
+field	struct bgf_typed	5	color	scalar	24	4	-	bgf_color color	ffi::c::UInt	c=color
+field	struct bgf_typed	6	mode	scalar	28	4	-	bgf_mode mode	ffi::c::UInt	c=mode
+field	struct bgf_typed	7	flags	scalar	32	4	-	bgf_flags flags	ffi::c::UInt	c=flags
+record	struct bgf_node	-	bgf_node	layout-direct	-	72	8	struct bgf_node	-	typedefs=bgf_node; identity=bgf::ctypes::bgf_node; header=include/bgf/bgf_records.h:65; pointed-by=2
+field	struct bgf_node	0	next	pointer	0	8	-	struct bgf_node *next	ffi::c::Ptr[bgf_node]	c=next
+field	struct bgf_node	1	handle	pointer	8	8	-	bgf_handle *handle	ffi::c::Ptr[bgf_handle]	c=handle
+field	struct bgf_node	2	data	pointer	16	8	-	void *data	ffi::c::Ptr[ffi::c::Void]	c=data
+field	struct bgf_node	3	name	pointer	24	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
+field	struct bgf_node	4	slot	pointer	32	8	-	struct bgf_node **slot	ffi::c::Ptr[ffi::c::Ptr[bgf_node]]	c=slot
+field	struct bgf_node	5	visit	function-pointer	40	8	-	bgf_visit visit	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf_handle], ffi::c::Int], return: ffi::c::Int}]	c=visit
+field	struct bgf_node	6	compare	function-pointer	48	8	-	int (*compare)(const struct bgf_node *a, const struct bgf_node *b)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[bgf_node], ffi::c::Ptr[bgf_node]], return: ffi::c::Int}]	c=compare
+field	struct bgf_node	7	label	pointer	56	8	-	struct bgf_chars *label	ffi::c::Ptr[bgf_chars]	c=label
+field	struct bgf_node	8	id	scalar	64	4	-	uint32_t id	ffi::c::UInt	c=id
+record	struct bgf_rect	-	bgf_rect	layout-direct	-	16	4	struct bgf_rect	-	typedefs=bgf_rect; identity=bgf::ctypes::bgf_rect; header=include/bgf/bgf_records.h:78; deps=struct bgf_point; pointed-by=1
+field	struct bgf_rect	0	origin	nested	0	8	-	bgf_point origin	bgf_point	c=origin
+field	struct bgf_rect	1	extent	nested	8	8	-	bgf_point extent	bgf_point	c=extent
+record	struct bgf_frame	-	bgf_frame	layout-direct	-	48	8	struct bgf_frame	-	typedefs=bgf_frame; identity=bgf::ctypes::bgf_frame; header=include/bgf/bgf_records.h:83; deps=struct bgf_rect; pointed-by=1
+field	struct bgf_frame	0	id	scalar	0	4	-	int id	ffi::c::Int	c=id
+field	struct bgf_frame	1	bounds	nested	4	16	-	bgf_rect bounds	bgf_rect	c=bounds
+field	struct bgf_frame	2	clip	nested	20	16	-	bgf_rect clip	bgf_rect	c=clip
+field	struct bgf_frame	3	owner	pointer	40	8	-	bgf_node *owner	ffi::c::Ptr[bgf_node]	c=owner
+record	struct bgf_packed1	-	bgf_packed1	layout-direct	-	7	1	struct bgf_packed1	-	typedefs=bgf_packed1; identity=-; header=include/bgf/bgf_records.h:92
+field	struct bgf_packed1	0	kind	scalar	0	1	-	uint8_t kind	ffi::c::UChar	c=kind
+field	struct bgf_packed1	1	length	scalar	1	4	-	uint32_t length	ffi::c::UInt	c=length
+field	struct bgf_packed1	2	crc	scalar	5	2	-	uint16_t crc	ffi::c::UShort	c=crc
+record	struct bgf_packed2	-	bgf_packed2	layout-direct	-	14	2	struct bgf_packed2	-	typedefs=bgf_packed2; identity=-; header=include/bgf/bgf_records.h:100
+field	struct bgf_packed2	0	kind	scalar	0	1	-	uint8_t kind	ffi::c::UChar	c=kind
+field	struct bgf_packed2	1	length	scalar	2	4	-	uint32_t length	ffi::c::UInt	c=length
+field	struct bgf_packed2	2	stamp	scalar	6	8	-	uint64_t stamp	ffi::c::ULongLong	c=stamp
+record	struct bgf_packed_attr	-	bgf_packed_attr	layout-direct	-	11	1	struct bgf_packed_attr	-	typedefs=bgf_packed_attr; identity=-; header=include/bgf/bgf_records.h:107
+field	struct bgf_packed_attr	0	tag	scalar	0	1	-	char tag	ffi::c::Char	c=tag
+field	struct bgf_packed_attr	1	value	scalar	1	8	-	long long value	ffi::c::LongLong	c=value
+field	struct bgf_packed_attr	2	code	scalar	9	2	-	short code	ffi::c::Short	c=code
+record	struct bgf_aligned	-	bgf_aligned	layout-direct	-	16	16	struct bgf_aligned	-	typedefs=bgf_aligned; identity=-; header=include/bgf/bgf_records.h:113
+field	struct bgf_aligned	0	x	scalar	0	4	-	int x	ffi::c::Int	c=x
+record	struct bgf_aligned_field	-	bgf_aligned_field	layout-direct	-	32	16	struct bgf_aligned_field	-	typedefs=bgf_aligned_field; identity=-; header=include/bgf/bgf_records.h:117; deps=struct bgf_aligned
+field	struct bgf_aligned_field	0	c	scalar	0	1	-	char c	ffi::c::Char	c=c
+field	struct bgf_aligned_field	1	v	scalar	8	4	-	int v	ffi::c::Int	c=v
+field	struct bgf_aligned_field	2	over	nested	16	16	-	bgf_aligned over	bgf_aligned	c=over
+record	struct bgf_nested_packed	-	bgf_nested_packed	layout-direct	-	12	4	struct bgf_nested_packed	-	typedefs=bgf_nested_packed; identity=-; header=include/bgf/bgf_records.h:125; deps=struct bgf_packed1
+field	struct bgf_nested_packed	0	lead	scalar	0	1	-	char lead	ffi::c::Char	c=lead
+field	struct bgf_nested_packed	1	inner	nested	1	7	-	bgf_packed1 inner	bgf_packed1	c=inner
+field	struct bgf_nested_packed	2	tail	scalar	8	4	-	int tail	ffi::c::Int	c=tail
+record	struct bgf_packed_outer	-	bgf_packed_outer	layout-direct	-	11	1	struct bgf_packed_outer	-	typedefs=bgf_packed_outer; identity=-; header=include/bgf/bgf_records.h:132; deps=struct bgf_point
+field	struct bgf_packed_outer	0	lead	scalar	0	1	-	char lead	ffi::c::Char	c=lead
+field	struct bgf_packed_outer	1	inner	nested	1	8	-	bgf_point inner	bgf_point	c=inner
+field	struct bgf_packed_outer	2	tail	scalar	9	2	-	short tail	ffi::c::Short	c=tail
+record	struct bgf_late	-	bgf_late	layout-direct	-	8	4	struct bgf_late	-	typedefs=bgf_late; identity=-; header=include/bgf/bgf_records.h:142
+field	struct bgf_late	0	code	scalar	0	4	-	int code	ffi::c::Int	c=code
+field	struct bgf_late	1	late_value	scalar	4	4	-	int late_value	ffi::c::Int	c=late_value
+record	struct anon@bgf_records.h:148	-	bgf_anon_point	layout-direct	-	8	4	bgf_anon_point	-	typedefs=bgf_anon_point; identity=-; header=include/bgf/bgf_records.h:148
+field	struct anon@bgf_records.h:148	0	x	scalar	0	4	-	int x	ffi::c::Int	c=x
+field	struct anon@bgf_records.h:148	1	y	scalar	4	4	-	int y	ffi::c::Int	c=y
+record	struct anon@bgf_records.h:155	-	bgf_member_anon_range	layout-direct	-	4	2	__typeof__(((struct bgf_member_anon *)0)->range)	-	identity=-; header=include/bgf/bgf_records.h:155
+field	struct anon@bgf_records.h:155	0	lo	scalar	0	2	-	short lo	ffi::c::Short	c=lo
+field	struct anon@bgf_records.h:155	1	hi	scalar	2	2	-	short hi	ffi::c::Short	c=hi
+record	struct bgf_member_anon	-	bgf_member_anon	layout-direct	-	8	4	struct bgf_member_anon	-	typedefs=bgf_member_anon; identity=-; header=include/bgf/bgf_records.h:153; deps=struct anon@bgf_records.h:155
+field	struct bgf_member_anon	0	n	scalar	0	4	-	int n	ffi::c::Int	c=n
+field	struct bgf_member_anon	1	range	nested	4	4	-	struct anon@bgf_records.h:155 range	bgf_member_anon_range	c=range
+record	struct bgf_promoted	-	bgf_promoted	layout-direct	-	16	4	struct bgf_promoted	-	typedefs=bgf_promoted; identity=-; header=include/bgf/bgf_records.h:161
+field	struct bgf_promoted	0	kind	scalar	0	4	-	int kind	ffi::c::Int	c=kind
+field	struct bgf_promoted	1	left	scalar	4	4	-	int left	ffi::c::Int	c=left; promoted-from=struct anon@bgf_records.h:163
+field	struct bgf_promoted	2	right	scalar	8	4	-	int right	ffi::c::Int	c=right; promoted-from=struct anon@bgf_records.h:163
+field	struct bgf_promoted	3	tail	scalar	12	4	-	int tail	ffi::c::Int	c=tail
+record	struct bgf_coll_a	-	bgf_coll	layout-direct	-	4	4	struct bgf_coll_a	-	typedefs=bgf_coll; identity=-; header=include/bgf/bgf_records.h:173
+field	struct bgf_coll_a	0	a	scalar	0	4	-	int a	ffi::c::Int	c=a
+record	struct bgf_coll	-	bgf_coll_struct	layout-direct	-	4	4	struct bgf_coll	-	identity=-; header=include/bgf/bgf_records.h:174
+field	struct bgf_coll	0	b	scalar	0	4	-	int b	ffi::c::Int	c=b
+record	struct bgf_kw	-	loop_	layout-direct	-	12	4	struct bgf_kw	-	typedefs=loop; identity=-; header=include/bgf/bgf_records.h:175
+field	struct bgf_kw	0	fn_	scalar	0	4	-	int fn	ffi::c::Int	c=fn
+field	struct bgf_kw	1	type_	scalar	4	4	-	int type	ffi::c::Int	c=type
+field	struct bgf_kw	2	loop_	scalar	8	4	-	int loop	ffi::c::Int	c=loop
+record	struct List	-	List_	layout-direct	-	8	4	struct List	-	identity=-; header=include/bgf/bgf_records.h:176
+field	struct List	0	size	scalar	0	4	-	int size	ffi::c::Int	c=size
+field	struct List	1	align	scalar	4	4	-	int align	ffi::c::Int	c=align
+record	struct bgf_multi	-	bgf_multi	layout-direct	-	4	4	struct bgf_multi	-	typedefs=bgf_multi,bgf_multi_alias,bgf_multi2; identity=-; header=include/bgf/bgf_records.h:177
+field	struct bgf_multi	0	v	scalar	0	4	-	int v	ffi::c::Int	c=v
+record	struct bgf_chars	-	bgf_chars	layout-direct	-	20	4	struct bgf_chars	-	typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; pointed-by=1
+field	struct bgf_chars	0	len	scalar	0	4	-	int len	ffi::c::Int	c=len
+field	struct bgf_chars	1	name	array	4	16	-	char name[16]	array 16 of ffi::c::Char	c=name; element=char char; bounds=16; extent=16
+record	struct bgf_wide_text	-	bgf_wide_text	layout-direct	-	36	4	struct bgf_wide_text	-	typedefs=bgf_wide_text; identity=-; header=include/bgf/bgf_records.h:182
+field	struct bgf_wide_text	0	len	scalar	0	4	-	int len	ffi::c::Int	c=len
+field	struct bgf_wide_text	1	text	array	4	32	-	wchar_t text[8]	array 8 of ffi::c::Int	c=text; element=wide-char wchar_t; bounds=8; extent=8
+record	struct bgf_points4	-	bgf_points4	layout-direct	-	32	4	struct bgf_points4	-	typedefs=bgf_points4; identity=bgf::ctypes::bgf_points4; header=include/bgf/bgf_records.h:183; deps=struct bgf_point
+field	struct bgf_points4	0	pts	array	0	32	-	bgf_point pts[4]	array 4 of bgf_point	c=pts; element=record bgf_point; bounds=4; extent=4
+record	struct bgf_ptrs3	-	bgf_ptrs3	layout-direct	-	24	8	struct bgf_ptrs3	-	typedefs=bgf_ptrs3; identity=-; header=include/bgf/bgf_records.h:184
+field	struct bgf_ptrs3	0	slots	array	0	24	-	void *slots[3]	array 3 of ffi::c::Ptr[ffi::c::Void]	c=slots; element=pointer void *; bounds=3; extent=3
+record	struct bgf_matrix	-	bgf_matrix	layout-direct	-	24	4	struct bgf_matrix	-	typedefs=bgf_matrix; identity=-; header=include/bgf/bgf_records.h:185
+field	struct bgf_matrix	0	m	array	0	24	-	int m[2][3]	array 2 of array 3 of ffi::c::Int	c=m; element=scalar int; bounds=2,3; extent=2
+record	struct bgf_flex	-	-	layout-blocked	-	8	8	struct bgf_flex	-	typedefs=bgf_flex; identity=-; header=include/bgf/bgf_records.h:186; blockers=flexible-array: field items: scalar elements, int []; roots=flexible-array
+field	struct bgf_flex	0	count	scalar	0	8	-	size_t count	ffi::c::ULong	c=count
+field	struct bgf_flex	1	items	flexible-array	8	-	-	int items[]	-	c=items; element=scalar int; bounds=; blockers=flexible-array: scalar elements, int []
+record	union bgf_value	-	bgf_value	layout-direct	-	8	8	union bgf_value	-	typedefs=bgf_value; identity=-; header=include/bgf/bgf_records.h:187
+field	union bgf_value	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union bgf_value	1	u	scalar	0	4	-	unsigned int u	ffi::c::UInt	c=u
+field	union bgf_value	2	p	pointer	0	8	-	void *p	ffi::c::Ptr[ffi::c::Void]	c=p
+record	struct bgf_tagged	-	bgf_tagged	layout-direct	-	16	8	struct bgf_tagged	-	typedefs=bgf_tagged; identity=-; header=include/bgf/bgf_records.h:188; deps=union bgf_value
+field	struct bgf_tagged	0	kind	scalar	0	4	-	int kind	ffi::c::Int	c=kind
+field	struct bgf_tagged	1	value	nested	8	8	-	bgf_value value	bgf_value	c=value
+record	union anon@bgf_records.h:189	-	bgf_overlay_member2	layout-direct	-	8	8	-	-	identity=-; header=include/bgf/bgf_records.h:189; owner=struct bgf_overlay; place=bgf_overlay.member2; at=bgf_records.h:189:40
+field	union anon@bgf_records.h:189	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union anon@bgf_records.h:189	1	p	pointer	0	8	-	void *p	ffi::c::Ptr[ffi::c::Void]	c=p
+record	struct bgf_overlay	-	bgf_overlay	layout-direct	-	16	8	struct bgf_overlay	-	typedefs=bgf_overlay; identity=-; header=include/bgf/bgf_records.h:189; deps=union anon@bgf_records.h:189
+field	struct bgf_overlay	0	kind	scalar	0	4	-	int kind	ffi::c::Int	c=kind
+field	struct bgf_overlay	1	member2	nested	8	-	-	union anon@bgf_records.h:189	bgf_overlay_member2	c=-
+promoted	struct bgf_overlay	-	member2.i	-	8	4	-	i	ffi::c::Int	via=union anon@bgf_records.h:189
+promoted	struct bgf_overlay	-	member2.p	-	8	8	-	p	ffi::c::Ptr[ffi::c::Void]	via=union anon@bgf_records.h:189
+record	struct bgf_bits	-	-	layout-blocked	-	8	4	struct bgf_bits	-	typedefs=bgf_bits; identity=-; header=include/bgf/bgf_records.h:190; blockers=bitfield: field a: bitfield a: unsigned int : 3 | bitfield: field b: bitfield b: unsigned int : 5; roots=bitfield
+field	struct bgf_bits	0	a	bitfield	-	-	-	unsigned int a	-	c=a; bits=3; blockers=bitfield: bitfield a: unsigned int : 3
+field	struct bgf_bits	1	b	bitfield	-	-	-	unsigned int b	-	c=b; bits=5; blockers=bitfield: bitfield b: unsigned int : 5
+field	struct bgf_bits	2	rest	scalar	4	4	-	int rest	ffi::c::Int	c=rest
+record	struct bgf_real	-	-	layout-blocked	-	16	8	struct bgf_real	-	typedefs=bgf_real; identity=-; header=include/bgf/bgf_records.h:191; blockers=float: field f: float (float) | double: field d: double (double); roots=double,float
+field	struct bgf_real	0	f	float	0	4	-	float f	-	c=f; blockers=float: float (float)
+field	struct bgf_real	1	d	double	8	8	-	double d	-	c=d; blockers=double: double (double)
+record	struct bgf_ld	-	-	layout-blocked	-	16	8	struct bgf_ld	-	typedefs=bgf_ld; identity=-; header=include/bgf/bgf_records.h:192; blockers=long-double: field x: long double (long double); roots=long-double
+field	struct bgf_ld	0	x	long-double	0	8	-	long double x	-	c=x; blockers=long-double: long double (long double)
+field	struct bgf_ld	1	n	scalar	8	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_flag	-	-	layout-blocked	-	8	4	struct bgf_flag	-	typedefs=bgf_flag; identity=-; header=include/bgf/bgf_records.h:193; blockers=c-bool: field ok: C _Bool (_Bool); roots=c-bool
+field	struct bgf_flag	0	ok	c-bool	0	1	-	_Bool ok	-	c=ok; blockers=c-bool: C _Bool (_Bool)
+field	struct bgf_flag	1	code	scalar	4	4	-	int code	ffi::c::Int	c=code
+record	struct bgf_vol	-	-	layout-blocked	-	8	4	struct bgf_vol	-	typedefs=bgf_vol; identity=-; header=include/bgf/bgf_records.h:194; blockers=volatile: field counter: a volatile field: volatile int; roots=volatile
+field	struct bgf_vol	0	counter	volatile	0	4	-	volatile int counter	-	c=counter; blockers=volatile: a volatile field: volatile int
+field	struct bgf_vol	1	n	scalar	4	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_wide_field	-	-	layout-blocked	-	16	16	struct bgf_wide_field	-	typedefs=bgf_wide_field; identity=-; header=include/bgf/bgf_records.h:195; blockers=typedef-abi-mismatch: field w: typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it; roots=typedef-abi-mismatch
+field	struct bgf_wide_field	0	w	typedef-abi-mismatch	0	16	-	bgf_wide w	-	c=w; blockers=typedef-abi-mismatch: typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
+record	struct bgf_float_ptr	-	-	layout-blocked	-	16	8	struct bgf_float_ptr	-	typedefs=bgf_float_ptr; identity=-; header=include/bgf/bgf_records.h:196; blockers=unsupported-pointer: field values: a pointer to float (float); roots=unsupported-pointer
+field	struct bgf_float_ptr	0	values	unsupported-pointer	0	8	-	float *values	-	c=values; blockers=unsupported-pointer: a pointer to float (float)
+field	struct bgf_float_ptr	1	n	scalar	8	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_bad_callback	-	-	layout-blocked	-	16	8	struct bgf_bad_callback	-	typedefs=bgf_bad_callback; identity=-; header=include/bgf/bgf_records.h:197; blockers=unsupported-pointer: field measure: callback argument 1: double (double) (unsupported-callback-signature); callback result: double (double) (unsupported-callback-signature); roots=unsupported-pointer
+field	struct bgf_bad_callback	0	measure	unsupported-pointer	0	8	-	bgf_measure measure	-	c=measure; blockers=unsupported-pointer: callback argument 1: double (double) (unsupported-callback-signature); callback result: double (double) (unsupported-callback-signature)
+field	struct bgf_bad_callback	1	n	scalar	8	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_ms_field	-	-	layout-blocked	-	16	8	struct bgf_ms_field	-	typedefs=bgf_ms_field; identity=-; header=include/bgf/bgf_records.h:198; blockers=unsupported-calling-convention: field cb: an explicit calling convention: ms_abi; roots=unsupported-calling-convention
+field	struct bgf_ms_field	0	cb	unsupported-calling-convention	0	8	-	int (*cb)(int)	-	c=cb; blockers=unsupported-calling-convention: an explicit calling convention: ms_abi
+field	struct bgf_ms_field	1	n	scalar	8	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_outer_blocked	-	bgf_outer_blocked	layout-direct	-	24	4	struct bgf_outer_blocked	-	typedefs=bgf_outer_blocked; identity=-; header=include/bgf/bgf_records.h:202; deps=struct bgf_chars
+field	struct bgf_outer_blocked	0	n	scalar	0	4	-	int n	ffi::c::Int	c=n
+field	struct bgf_outer_blocked	1	chars	nested	4	20	-	bgf_chars chars	bgf_chars	c=chars
+record	struct bgf_chain2	-	bgf_chain2	layout-direct	-	32	8	struct bgf_chain2	-	typedefs=bgf_chain2; identity=-; header=include/bgf/bgf_records.h:203; deps=struct bgf_outer_blocked
+field	struct bgf_chain2	0	inner	nested	0	24	-	bgf_outer_blocked inner	bgf_outer_blocked	c=inner
+field	struct bgf_chain2	1	tail	scalar	24	8	-	long tail	ffi::c::Long	c=tail
+record	struct bgf_points_ref	-	bgf_points_ref	layout-direct	-	16	8	struct bgf_points_ref	-	typedefs=bgf_points_ref; identity=-; header=include/bgf/bgf_records.h:204
+field	struct bgf_points_ref	0	points	pointer	0	8	-	bgf_points4 *points	ffi::c::Ptr[bgf_points4]	c=points
+field	struct bgf_points_ref	1	n	scalar	8	4	-	int n	ffi::c::Int	c=n
+record	struct bgf_mixed	-	bgf_mixed	layout-direct	-	16	8	struct bgf_mixed	-	typedefs=bgf_mixed; identity=-; header=include/bgf/bgf_records.h:205; deps=union bgf_value
+field	struct bgf_mixed	0	u	nested	0	8	-	bgf_value u	bgf_value	c=u
+field	struct bgf_mixed	1	name	array	8	4	-	char name[4]	array 4 of ffi::c::Char	c=name; element=char char; bounds=4; extent=4
+record	struct bgf_flagged_rect	-	-	layout-blocked	-	24	4	struct bgf_flagged_rect	-	typedefs=bgf_flagged_rect; identity=-; header=include/bgf/bgf_records.h:206; nested=field flag (struct bgf_flag, field) -> c-bool; roots=c-bool; deps=struct bgf_flag,struct bgf_rect
+field	struct bgf_flagged_rect	0	flag	nested	0	8	-	bgf_flag flag	bgf_flag	c=flag
+field	struct bgf_flagged_rect	1	rect	nested	8	16	-	bgf_rect rect	bgf_rect	c=rect
+record	union bgf_word	-	bgf_word	layout-direct	-	4	4	union bgf_word	-	typedefs=bgf_word; identity=-; header=include/bgf/bgf_records.h:231
+field	union bgf_word	0	whole	scalar	0	4	-	uint32_t whole	ffi::c::UInt	c=whole
+field	union bgf_word	1	halves	array	0	4	-	uint16_t halves[2]	array 2 of ffi::c::UShort	c=halves; element=scalar uint16_t; bounds=2; extent=2
+field	union bgf_word	2	bytes	array	0	4	-	uint8_t bytes[4]	array 4 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=4; extent=4
+record	union bgf_shape	-	bgf_shape	layout-direct	-	8	8	union bgf_shape	-	typedefs=bgf_shape; identity=-; header=include/bgf/bgf_records.h:232; deps=struct bgf_point
+field	union bgf_shape	0	pt	nested	0	8	-	bgf_point pt	bgf_point	c=pt
+field	union bgf_shape	1	bits	scalar	0	8	-	long long bits	ffi::c::LongLong	c=bits
+field	union bgf_shape	2	raw	array	0	3	-	unsigned char raw[3]	array 3 of ffi::c::UChar	c=raw; element=char unsigned char; bounds=3; extent=3
+record	struct bgf_words3	-	bgf_words3	layout-direct	-	16	4	struct bgf_words3	-	typedefs=bgf_words3; identity=-; header=include/bgf/bgf_records.h:233; deps=union bgf_word
+field	struct bgf_words3	0	n	scalar	0	4	-	int n	ffi::c::Int	c=n
+field	struct bgf_words3	1	words	array	4	12	-	bgf_word words[3]	array 3 of bgf_word	c=words; element=record bgf_word; bounds=3; extent=3
+record	struct bgf_word_grid	-	bgf_word_grid	layout-direct	-	20	4	struct bgf_word_grid	-	typedefs=bgf_word_grid; identity=-; header=include/bgf/bgf_records.h:234; deps=union bgf_word
+field	struct bgf_word_grid	0	grid	array	0	16	-	bgf_word grid[2][2]	array 2 of array 2 of bgf_word	c=grid; element=record bgf_word; bounds=2,2; extent=2
+field	struct bgf_word_grid	1	tail	scalar	16	2	-	short tail	ffi::c::Short	c=tail
+record	union bgf_packed_u	-	bgf_packed_u	layout-direct	-	7	1	union bgf_packed_u	-	typedefs=bgf_packed_u; identity=-; header=include/bgf/bgf_records.h:235; deps=struct bgf_packed1
+field	union bgf_packed_u	0	p	nested	0	7	-	bgf_packed1 p	bgf_packed1	c=p
+field	union bgf_packed_u	1	raw	array	0	7	-	uint8_t raw[7]	array 7 of ffi::c::UChar	c=raw; element=char uint8_t; bounds=7; extent=7
+record	struct anon@bgf_records.h:240	-	bgf_overlapped_member3_member1	layout-direct	-	8	4	-	-	identity=-; header=include/bgf/bgf_records.h:240; owner=struct bgf_overlapped; place=bgf_overlapped.member3.member1; at=bgf_records.h:240:9
+field	struct anon@bgf_records.h:240	0	offset	scalar	0	4	-	uint32_t offset	ffi::c::UInt	c=offset
+field	struct anon@bgf_records.h:240	1	offset_high	scalar	4	4	-	uint32_t offset_high	ffi::c::UInt	c=offset_high
+record	union anon@bgf_records.h:239	-	bgf_overlapped_member3_union	layout-direct	-	8	8	-	-	identity=-; header=include/bgf/bgf_records.h:239; deps=struct anon@bgf_records.h:240; owner=struct bgf_overlapped; place=bgf_overlapped.member3; at=bgf_records.h:239:5
+field	union anon@bgf_records.h:239	0	member1	nested	0	-	-	struct anon@bgf_records.h:240	bgf_overlapped_member3_member1	c=-
+field	union anon@bgf_records.h:239	1	pointer	pointer	0	8	-	void *pointer	ffi::c::Ptr[ffi::c::Void]	c=pointer
+record	struct bgf_overlapped	-	bgf_overlapped	layout-direct	-	32	8	struct bgf_overlapped	-	typedefs=bgf_overlapped; identity=-; header=include/bgf/bgf_records.h:236; deps=union anon@bgf_records.h:239
+field	struct bgf_overlapped	0	internal	scalar	0	8	-	uintptr_t internal	ffi::c::ULong	c=internal
+field	struct bgf_overlapped	1	internal_high	scalar	8	8	-	uintptr_t internal_high	ffi::c::ULong	c=internal_high
+field	struct bgf_overlapped	2	member3	nested	16	-	-	union anon@bgf_records.h:239	bgf_overlapped_member3_union	c=-
+field	struct bgf_overlapped	3	event	pointer	24	8	-	void *event	ffi::c::Ptr[ffi::c::Void]	c=event
+promoted	struct bgf_overlapped	-	member3.pointer	-	16	8	-	pointer	ffi::c::Ptr[ffi::c::Void]	via=union anon@bgf_records.h:239
+promoted	struct bgf_overlapped	-	member3.member1.offset	-	16	4	-	offset	ffi::c::UInt	via=union anon@bgf_records.h:239,struct anon@bgf_records.h:240
+promoted	struct bgf_overlapped	-	member3.member1.offset_high	-	20	4	-	offset_high	ffi::c::UInt	via=union anon@bgf_records.h:239,struct anon@bgf_records.h:240
+record	struct bgf_overlapped_member3	-	bgf_overlapped_member3	layout-direct	-	4	4	struct bgf_overlapped_member3	-	identity=-; header=include/bgf/bgf_records.h:248
+field	struct bgf_overlapped_member3	0	z	scalar	0	4	-	int z	ffi::c::Int	c=z
+record	struct anon@bgf_records.h:250	-	bgf_large_member1	layout-direct	-	8	4	-	-	identity=-; header=include/bgf/bgf_records.h:250; owner=union bgf_large; place=bgf_large.member1; at=bgf_records.h:250:5
+field	struct anon@bgf_records.h:250	0	low	scalar	0	4	-	uint32_t low	ffi::c::UInt	c=low
+field	struct anon@bgf_records.h:250	1	high	scalar	4	4	-	int32_t high	ffi::c::Int	c=high
+record	struct anon@bgf_records.h:251	-	bgf_large_u	layout-direct	-	8	4	__typeof__(((union bgf_large *)0)->u)	-	identity=-; header=include/bgf/bgf_records.h:251
+field	struct anon@bgf_records.h:251	0	low	scalar	0	4	-	uint32_t low	ffi::c::UInt	c=low
+field	struct anon@bgf_records.h:251	1	high	scalar	4	4	-	int32_t high	ffi::c::Int	c=high
+record	union bgf_large	-	bgf_large	layout-direct	-	8	8	union bgf_large	-	typedefs=bgf_large; identity=-; header=include/bgf/bgf_records.h:249; deps=struct anon@bgf_records.h:250,struct anon@bgf_records.h:251
+field	union bgf_large	0	member1	nested	0	-	-	struct anon@bgf_records.h:250	bgf_large_member1	c=-
+field	union bgf_large	1	u	nested	0	8	-	struct anon@bgf_records.h:251 u	bgf_large_u	c=u
+field	union bgf_large	2	quad	scalar	0	8	-	long long quad	ffi::c::LongLong	c=quad
+promoted	union bgf_large	-	member1.low	-	0	4	-	low	ffi::c::UInt	via=struct anon@bgf_records.h:250
+promoted	union bgf_large	-	member1.high	-	4	4	-	high	ffi::c::Int	via=struct anon@bgf_records.h:250
+record	union anon@bgf_records.h:258	-	bgf_deep_member2_member2	layout-direct	-	4	4	-	-	identity=-; header=include/bgf/bgf_records.h:258; owner=struct bgf_deep; place=bgf_deep.member2_member2; at=bgf_records.h:258:9
+field	union anon@bgf_records.h:258	0	b	scalar	0	4	-	int b	ffi::c::Int	c=b
+field	union anon@bgf_records.h:258	1	c	array	0	3	-	char c[3]	array 3 of ffi::c::Char	c=c; element=char char; bounds=3; extent=3
+record	union anon@bgf_records.h:262#2	-	bgf_deep_member3_member1_member3	layout-direct	-	2	2	-	-	identity=-; header=include/bgf/bgf_records.h:262; owner=struct bgf_deep; place=bgf_deep.member3.member1.member3; at=bgf_records.h:262:42
+field	union anon@bgf_records.h:262#2	0	z	scalar	0	1	-	uint8_t z	ffi::c::UChar	c=z
+field	union anon@bgf_records.h:262#2	1	zz	scalar	0	2	-	uint16_t zz	ffi::c::UShort	c=zz
+record	struct anon@bgf_records.h:262	-	bgf_deep_member3_member1	layout-direct	-	6	2	-	-	identity=-; header=include/bgf/bgf_records.h:262; deps=union anon@bgf_records.h:262#2; owner=struct bgf_deep; place=bgf_deep.member3.member1; at=bgf_records.h:262:9
+field	struct anon@bgf_records.h:262	0	x	scalar	0	2	-	uint16_t x	ffi::c::UShort	c=x
+field	struct anon@bgf_records.h:262	1	y	scalar	2	2	-	uint16_t y	ffi::c::UShort	c=y
+field	struct anon@bgf_records.h:262	2	member3	nested	4	-	-	union anon@bgf_records.h:262#2	bgf_deep_member3_member1_member3	c=-
+record	union anon@bgf_records.h:261	-	bgf_deep_member3	layout-direct	-	8	4	-	-	identity=-; header=include/bgf/bgf_records.h:260; deps=struct anon@bgf_records.h:262,union bgf_word; owner=struct bgf_deep; place=bgf_deep.member3; at=bgf_records.h:260:5
+field	union anon@bgf_records.h:261	0	member1	nested	0	-	-	struct anon@bgf_records.h:262	bgf_deep_member3_member1	c=-
+field	union anon@bgf_records.h:261	1	w	nested	0	4	-	bgf_word w	bgf_word	c=w
+record	struct bgf_deep	-	bgf_deep	layout-direct	-	20	4	struct bgf_deep	-	typedefs=bgf_deep; identity=-; header=include/bgf/bgf_records.h:254; deps=union anon@bgf_records.h:258,union anon@bgf_records.h:261
+field	struct bgf_deep	0	tag	scalar	0	1	-	char tag	ffi::c::Char	c=tag
+field	struct bgf_deep	1	a	scalar	4	2	-	short a	ffi::c::Short	c=a; promoted-from=struct anon@bgf_records.h:256
+field	struct bgf_deep	2	member2_member2	nested	8	-	-	union anon@bgf_records.h:258	bgf_deep_member2_member2	c=-; promoted-from=struct anon@bgf_records.h:256
+field	struct bgf_deep	3	member3	nested	12	-	-	union anon@bgf_records.h:261	bgf_deep_member3	c=-
+promoted	struct bgf_deep	-	member2_member2.b	-	8	4	-	b	ffi::c::Int	via=union anon@bgf_records.h:258
+promoted	struct bgf_deep	-	member2_member2.c	-	8	3	-	c	array 3 of ffi::c::Char	via=union anon@bgf_records.h:258
+promoted	struct bgf_deep	-	member3.w	-	12	4	-	w	bgf_word	via=union anon@bgf_records.h:261
+promoted	struct bgf_deep	-	member3.member1.x	-	12	2	-	x	ffi::c::UShort	via=union anon@bgf_records.h:261,struct anon@bgf_records.h:262
+promoted	struct bgf_deep	-	member3.member1.y	-	14	2	-	y	ffi::c::UShort	via=union anon@bgf_records.h:261,struct anon@bgf_records.h:262
+promoted	struct bgf_deep	-	member3.member1.member3.z	-	16	1	-	z	ffi::c::UChar	via=union anon@bgf_records.h:261,struct anon@bgf_records.h:262,union anon@bgf_records.h:262#2
+promoted	struct bgf_deep	-	member3.member1.member3.zz	-	16	2	-	zz	ffi::c::UShort	via=union anon@bgf_records.h:261,struct anon@bgf_records.h:262,union anon@bgf_records.h:262#2
+record	union bgf_kwu	-	bgf_kwu	layout-direct	-	4	4	union bgf_kwu	-	typedefs=bgf_kwu; identity=-; header=include/bgf/bgf_records.h:266
+field	union bgf_kwu	0	fn_	scalar	0	4	-	int fn	ffi::c::Int	c=fn
+field	union bgf_kwu	1	type_	scalar	0	4	-	unsigned int type	ffi::c::UInt	c=type
+record	union bgf_tail_u	-	bgf_tail_u	layout-direct	-	8	4	union bgf_tail_u	-	typedefs=bgf_tail_u; identity=-; header=include/bgf/bgf_records.h:267
+field	union bgf_tail_u	0	c	array	0	5	-	char c[5]	array 5 of ffi::c::Char	c=c; element=char char; bounds=5; extent=5
+field	union bgf_tail_u	1	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+record	union bgf_aligned_u	-	bgf_aligned_u	layout-direct	-	16	16	union bgf_aligned_u	-	typedefs=bgf_aligned_u; identity=-; header=include/bgf/bgf_records.h:268
+field	union bgf_aligned_u	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union bgf_aligned_u	1	c	scalar	0	1	-	char c	ffi::c::Char	c=c
+record	union anon@bgf_records.h:269	-	bgf_anon_tail_member2	layout-direct	-	8	4	-	-	identity=-; header=include/bgf/bgf_records.h:269; owner=struct bgf_anon_tail; place=bgf_anon_tail.member2; at=bgf_records.h:269:40
+field	union anon@bgf_records.h:269	0	c	array	0	5	-	char c[5]	array 5 of ffi::c::Char	c=c; element=char char; bounds=5; extent=5
+field	union anon@bgf_records.h:269	1	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+record	struct bgf_anon_tail	-	bgf_anon_tail	layout-direct	-	16	4	struct bgf_anon_tail	-	typedefs=bgf_anon_tail; identity=-; header=include/bgf/bgf_records.h:269; deps=union anon@bgf_records.h:269
+field	struct bgf_anon_tail	0	k	scalar	0	1	-	char k	ffi::c::Char	c=k
+field	struct bgf_anon_tail	1	member2	nested	4	-	-	union anon@bgf_records.h:269	bgf_anon_tail_member2	c=-
+field	struct bgf_anon_tail	2	after	scalar	12	1	-	char after	ffi::c::Char	c=after
+promoted	struct bgf_anon_tail	-	member2.c	-	4	5	-	c	array 5 of ffi::c::Char	via=union anon@bgf_records.h:269
+promoted	struct bgf_anon_tail	-	member2.i	-	4	4	-	i	ffi::c::Int	via=union anon@bgf_records.h:269
+record	union anon@bgf_records.h:270	-	bgf_two_anon_member1	layout-direct	-	4	4	-	-	identity=-; header=include/bgf/bgf_records.h:270; owner=struct bgf_two_anon; place=bgf_two_anon.member1; at=bgf_records.h:270:31
+field	union anon@bgf_records.h:270	0	a	scalar	0	1	-	char a	ffi::c::Char	c=a
+field	union anon@bgf_records.h:270	1	b	scalar	0	4	-	int b	ffi::c::Int	c=b
+record	union anon@bgf_records.h:270#2	-	bgf_two_anon_member2	layout-direct	-	8	8	-	-	identity=-; header=include/bgf/bgf_records.h:270; owner=struct bgf_two_anon; place=bgf_two_anon.member2; at=bgf_records.h:270:57
+field	union anon@bgf_records.h:270#2	0	c	scalar	0	2	-	short c	ffi::c::Short	c=c
+field	union anon@bgf_records.h:270#2	1	d	scalar	0	8	-	long long d	ffi::c::LongLong	c=d
+record	struct bgf_two_anon	-	bgf_two_anon	layout-direct	-	16	8	struct bgf_two_anon	-	typedefs=bgf_two_anon; identity=-; header=include/bgf/bgf_records.h:270; deps=union anon@bgf_records.h:270,union anon@bgf_records.h:270#2
+field	struct bgf_two_anon	0	member1	nested	0	-	-	union anon@bgf_records.h:270	bgf_two_anon_member1	c=-
+field	struct bgf_two_anon	1	member2	nested	8	-	-	union anon@bgf_records.h:270#2	bgf_two_anon_member2	c=-
+promoted	struct bgf_two_anon	-	member1.a	-	0	1	-	a	ffi::c::Char	via=union anon@bgf_records.h:270
+promoted	struct bgf_two_anon	-	member1.b	-	0	4	-	b	ffi::c::Int	via=union anon@bgf_records.h:270
+promoted	struct bgf_two_anon	-	member2.c	-	8	2	-	c	ffi::c::Short	via=union anon@bgf_records.h:270#2
+promoted	struct bgf_two_anon	-	member2.d	-	8	8	-	d	ffi::c::LongLong	via=union anon@bgf_records.h:270#2
+record	union bgf_num	-	-	layout-blocked	-	4	4	union bgf_num	-	typedefs=bgf_num; identity=-; header=include/bgf/bgf_records.h:276; blockers=float: field f: float (float); roots=float
+field	union bgf_num	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union bgf_num	1	f	float	0	4	-	float f	-	c=f; blockers=float: float (float)
+record	union bgf_flagu	-	-	layout-blocked	-	4	4	union bgf_flagu	-	typedefs=bgf_flagu; identity=-; header=include/bgf/bgf_records.h:277; blockers=c-bool: field b: C _Bool (_Bool); roots=c-bool
+field	union bgf_flagu	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union bgf_flagu	1	b	c-bool	0	1	-	_Bool b	-	c=b; blockers=c-bool: C _Bool (_Bool)
+record	union bgf_bitsu	-	-	layout-blocked	-	8	4	union bgf_bitsu	-	typedefs=bgf_bitsu; identity=-; header=include/bgf/bgf_records.h:278; nested=field bits (struct bgf_bits, union-member) -> bitfield; roots=bitfield; deps=struct bgf_bits
+field	union bgf_bitsu	0	bits	nested	0	8	-	bgf_bits bits	bgf_bits	c=bits
+field	union bgf_bitsu	1	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+record	struct bgf_holds_bitsu	-	-	layout-blocked	-	12	4	struct bgf_holds_bitsu	-	typedefs=bgf_holds_bitsu; identity=-; header=include/bgf/bgf_records.h:279; nested=field u (union bgf_bitsu, field) -> struct bgf_bits -> bitfield; roots=bitfield; deps=union bgf_bitsu
+field	struct bgf_holds_bitsu	0	n	scalar	0	4	-	int n	ffi::c::Int	c=n
+field	struct bgf_holds_bitsu	1	u	nested	4	8	-	bgf_bitsu u	bgf_bitsu	c=u
+record	struct bgf_nums2	-	-	layout-blocked	-	8	4	struct bgf_nums2	-	typedefs=bgf_nums2; identity=-; header=include/bgf/bgf_records.h:280; nested=field nums (union bgf_num, array-element) -> float; roots=float; deps=union bgf_num
+field	struct bgf_nums2	0	nums	array	0	8	-	bgf_num nums[2]	array 2 of bgf_num	c=nums; element=record bgf_num; bounds=2; extent=2
+record	union anon@bgf_records.h:281	-	-	layout-blocked	-	4	4	-	-	identity=-; header=include/bgf/bgf_records.h:281; blockers=float: field f: float (float); roots=float; owner=struct bgf_anon_float; place=bgf_anon_float.member2; at=bgf_records.h:281:40
+field	union anon@bgf_records.h:281	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union anon@bgf_records.h:281	1	f	float	0	4	-	float f	-	c=f; blockers=float: float (float)
+record	struct bgf_anon_float	-	-	layout-blocked	-	8	4	struct bgf_anon_float	-	typedefs=bgf_anon_float; identity=-; header=include/bgf/bgf_records.h:281; nested=member2 (union anon@bgf_records.h:281, anonymous-member) -> float; roots=float; deps=union anon@bgf_records.h:281
+field	struct bgf_anon_float	0	k	scalar	0	4	-	int k	ffi::c::Int	c=k
+field	struct bgf_anon_float	1	member2	nested	4	-	-	union anon@bgf_records.h:281	bgf_anon_float_member2	c=-
+promoted	struct bgf_anon_float	-	member2.i	-	4	4	-	i	ffi::c::Int	via=union anon@bgf_records.h:281
+promoted	struct bgf_anon_float	-	member2.f	-	4	4	-	f	-	via=union anon@bgf_records.h:281
+record	union anon@bgf_records.h:282	-	-	layout-unheld	-	4	4	-	-	identity=-; header=include/bgf/bgf_records.h:282; owner=struct bgf_bits_overlay; place=bgf_bits_overlay.member2; at=bgf_records.h:282:58
+field	union anon@bgf_records.h:282	0	i	scalar	0	4	-	int i	ffi::c::Int	c=i
+field	union anon@bgf_records.h:282	1	c	scalar	0	1	-	char c	ffi::c::Char	c=c
+record	struct bgf_bits_overlay	-	-	layout-blocked	-	8	4	struct bgf_bits_overlay	-	typedefs=bgf_bits_overlay; identity=-; header=include/bgf/bgf_records.h:282; blockers=bitfield: field flag: bitfield flag: unsigned int : 1; roots=bitfield; deps=union anon@bgf_records.h:282
+field	struct bgf_bits_overlay	0	flag	bitfield	-	-	-	unsigned int flag	-	c=flag; bits=1; blockers=bitfield: bitfield flag: unsigned int : 1
+field	struct bgf_bits_overlay	1	member2	nested	4	-	-	union anon@bgf_records.h:282	bgf_bits_overlay_member2	c=-
+promoted	struct bgf_bits_overlay	-	member2.i	-	4	4	-	i	ffi::c::Int	via=union anon@bgf_records.h:282
+promoted	struct bgf_bits_overlay	-	member2.c	-	4	1	-	c	ffi::c::Char	via=union anon@bgf_records.h:282
+record	struct bgf_handle	-	-	opaque-only	-	-	-	-	-	typedefs=bgf_handle; identity=bgf::ctypes::bgf_handle; header=include/bgf/bgf_types.h:26; pointed-by=6
+record	struct bgf_other	-	-	opaque-only	-	-	-	-	-	typedefs=bgf_twin; identity=bgf::ctypes::bgf_twin; header=include/bgf/bgf.h:60; pointed-by=1
+record	struct bgf_secret	-	-	opaque-only	-	-	-	-	-	typedefs=bgf_secret; identity=bgf::ctypes::bgf_secret; header=include/bgf/bgf_records.h:209; pointed-by=1
+record	struct bgf_twin	-	-	opaque-only	-	-	-	-	-	identity=bgf::ctypes::bgf_twin_struct; header=include/bgf/bgf.h:61; pointed-by=1
+record	struct bgf_window_	-	-	opaque-only	-	-	-	-	-	typedefs=bgf_window; identity=bgf::ctypes::bgf_window; header=include/bgf/bgf_types.h:27; pointed-by=1

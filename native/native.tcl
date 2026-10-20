@@ -44,9 +44,11 @@
 #                                       to a whole number
 #   native::object HIR PATH ?OPTIONS?   writes an object file (AOT smoke test)
 #   native::targetFacts TRIPLE          how the driver reads a target triple
-#   native::executable HIR PATH ?OPTIONS?  links a standalone Linux glibc (x86_64,
-#                                         or aarch64 with the rustc linker)
-#                                         executable; rejects non-closed HIR.
+#   native::executable HIR PATH ?OPTIONS?  links a standalone executable: Linux
+#                                         glibc (x86_64; aarch64 with the
+#                                         rustc linker) or macOS aarch64
+#                                         (Mach-O, the rustc linker); rejects
+#                                         non-closed HIR.
 #                                         BOTLISH_NATIVE_LINKER picks the
 #                                         linker: rustc (default) or stub
 #                                         (no toolchain, SINGLE-EXECUTABLE.md)
@@ -86,7 +88,7 @@
 # through the driver (evalHir, measure, ...) gets the snapshot of the enclosing
 # core::process::withArgv -- raw bytes, so invalid UTF-8 is expressible -- or the
 # synthetic default `botlish-runner`; it never sees this Tcl process's own argv.
-# A standalone executable reads the real Linux argument vector of every run.
+# A standalone executable reads the real process argument vector of every run.
 #
 # Errors: Botlish errors keep their {CORE SEMANTIC KIND} codes. The backend's
 # own failures are {NATIVE UNSUPPORTED ...} (a construct native lowering does
@@ -331,8 +333,9 @@ proc native::evalHir {hir args} {
     return [Outcome [RunDriver $output run [nir $hir {*}$args] {}]]
 }
 
-# Compile closed, specialized HIR to a standalone Linux glibc ELF (x86_64, or
-# aarch64 with the rustc linker).
+# Compile closed, specialized HIR to a standalone executable: a Linux glibc
+# ELF (x86_64, or aarch64 with the rustc linker) or a macOS aarch64 Mach-O
+# (the rustc linker), for the host's own target.
 # Readiness is the public -aot-spec contract, checked before expanding native
 # implementations (which are runtime support, like the Rust helpers). Never
 # run the program while compiling it, and never fall back to another backend.
@@ -595,7 +598,7 @@ proc native::NirHops {text} {
     foreach line [split $text \n] {
         if {[regexp {^func (\d+) "[^"]*" params=\d+.* pnames="([^"]*)"} $line -> id pnames]} {
             set current $id
-            dict set dotted $id [llength [lmap p $pnames {expr {[regexp {\.\d+$} $p] ? $p : [continue]}}]]
+            dict set dotted $id [llength [lmap p $pnames {if {[regexp {\.\d+$} $p]} {set p} else {continue}}]]
         }
     }
     foreach line [split $text \n] {
@@ -650,7 +653,11 @@ proc native::TransportMetrics {records text facts} {
         }
         dict incr frontier [dict get $rec frontier]
         incr afterLocal [dict get $rec afterLocalUse]
-        set tag [expr {[dict get $rec class] eq "materialized" ? [dict get $rec reason] : [lindex [dict get $rec mats] 0]}]
+        if {[dict get $rec class] eq "materialized"} {
+            set tag [dict get $rec reason]
+        } else {
+            set tag [lindex [dict get $rec mats] 0]
+        }
         if {$tag ne ""} {
             if {$tag eq "transport-budget"} {
                 dict incr causes budget
@@ -693,7 +700,7 @@ proc native::transportCensusText {hir args} {
             }
             lappend lines [format "%-34s %-6s %s%d-field -> %d  %-9s args=%d rets=%d%s score=%.1f/%.1f frontier=%s%s phys=%d  %s" \
                 $label $expr [expr {$named ? "named " : ""}] $width $transportedWidth $where $argEdges $retEdges \
-                [expr {$cyclic ? " cyclic" : ""}] $score $budget $frontier[expr {$frontierAt ne "" ? "@$frontierAt" : ""}] [expr {$afterLocalUse ? " (after local use)" : ""}] $physical $what]
+                [expr {$cyclic ? " cyclic" : ""}] $score $budget $frontier[if {$frontierAt ne ""} {string cat "@$frontierAt"} else {string cat ""}] [expr {$afterLocalUse ? " (after local use)" : ""}] $physical $what]
         }
     }
     foreach cls [dict get $c nested] {

@@ -16,8 +16,9 @@
 //!   botlish-native calls FILE.nir        print settled exact-call effects
 //!                                        without compiling
 //!   botlish-native object OUT FILE.nir   write a relocatable program object
-//!   botlish-native executable OUT FILE.nir  link a standalone Linux executable
-//!                                        (BOTLISH_NATIVE_LINKER: rustc, the
+//!   botlish-native executable OUT FILE.nir  link a standalone executable
+//!                                        (Linux ELF, macOS AArch64 Mach-O;
+//!                                        BOTLISH_NATIVE_LINKER: rustc, the
 //!                                        default, or stub: codegen/aot.rs)
 //!   botlish-native check FILE.nir        parse and validate only
 //!   botlish-native target TRIPLE         how this driver reads a target
@@ -81,7 +82,8 @@
 //! ```
 //!
 //! Native code runs on a worker pthread with a large native stack. On
-//! x86-64/Linux its guard supplies overflow protection.
+//! Linux (x86-64, AArch64) and macOS AArch64 the stack guard
+//! (runtime/platform/) supplies overflow protection.
 
 mod codegen;
 use botlish_native::{nir, runtime};
@@ -153,8 +155,8 @@ fn extract_result(args: &[String]) -> Result<Vec<String>, String> {
         if args[i] == "--result" {
             let path = args.get(i + 1).ok_or("--result needs a file")?;
             let file = std::fs::File::create(path).map_err(|e| format!("{path}: {e}"))?;
-            #[cfg(target_os = "linux")]
-            runtime::platform::linux::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
+            #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
+            runtime::platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
             RESULT.set(Mutex::new(file)).map_err(|_| "--result given twice".to_string())?;
             i += 2;
             continue;
@@ -604,10 +606,10 @@ fn execute(command: &str, program: &nir::Program, runs: usize, alloc_mode: Alloc
     }
     compiled.install_constants(&mut vm);
     vm.set_framemap(compiled.framemap.clone());
-    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
     let _overflow_guard = {
         let stack = runtime::native_stack::NativeStack::current().expect("pthread stack bounds");
-        runtime::platform::linux::OverflowGuard::install(&stack).expect("pthread stack guard")
+        runtime::platform::OverflowGuard::install(&stack).expect("pthread stack guard")
     };
 
     let mut best = u128::MAX;

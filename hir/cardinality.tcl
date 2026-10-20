@@ -159,7 +159,7 @@ proc hir::cardinality::FormAdd {a b {sign 1}} {
     lassign $b cb tb
     set terms [dict create {*}$ta]
     dict for {atom coeff} $tb {
-        set n [expr {[dict exists $terms $atom] ? [dict get $terms $atom] : 0}]
+        set n [dict getdef $terms $atom 0]
         set n [expr {$n + $sign * $coeff}]
         if {$n == 0} {
             dict unset terms $atom
@@ -304,7 +304,11 @@ proc hir::cardinality::IntForm {hir e stepsVar} {
     }
     set node [dict get $hir exprs $id]
     set name [NativeName $hir $node]
-    set args [expr {$name eq "" ? {} : [dict get $node args]}]
+    if {$name eq ""} {
+        set args {}
+    } else {
+        set args [dict get $node args]
+    }
     if {$name in {+ -} && [llength $args] == 2} {
         set x [IntForm $hir [lindex $args 0] steps]
         set y [IntForm $hir [lindex $args 1] steps]
@@ -352,7 +356,11 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
     }
     set node [dict get $hir exprs $id]
     set name [NativeName $hir $node]
-    set args [expr {$name eq "" ? {} : [dict get $node args]}]
+    if {$name eq ""} {
+        set args {}
+    } else {
+        set args [dict get $node args]
+    }
     switch -- $name/[llength $args] {
         str::concat/2 {
             return [FormAdd [StrLength $hir [lindex $args 0] steps] [StrLength $hir [lindex $args 1] steps]]
@@ -392,10 +400,13 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
     if {$name ne ""} {
         set length [dict get [core::native::metadata $name] resultLength]
         set args [dict get $node args]
-        if {$length ne "" && [lindex $length 1] < [llength $args]} {
+        if {[lindex $length 0] in {int list} && [lindex $length 1] < [llength $args]} {
             lassign $length how index
             set arg [lindex $args $index]
-            return [expr {$how eq "int" ? [IntForm $hir $arg steps] : [ListLength $hir $arg steps]}]
+            if {$how eq "int"} {
+                return [IntForm $hir $arg steps]
+            }
+            return [ListLength $hir $arg steps]
         }
     }
     return [FormAtom [list cap [ValueKey $hir $id steps]]]
@@ -427,8 +438,30 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
             }
         }
     }
-    if {[NativeName $hir $node] eq "list"} {
+    set name [NativeName $hir $node]
+    if {$name eq "list"} {
         return [FormConst [llength [dict get $node args]]]
+    }
+    # A List copied from a live fixed array has the array's extent, which
+    # its static type states (-result-length {extent K}: binary::load of a
+    # NativeView[array N of E], FIXED-LAYOUT-ARRAYS.md).
+    if {$name ne ""} {
+        set length [dict get [core::native::metadata $name] resultLength]
+        set args [dict get $node args]
+        if {[lindex $length 0] eq "extent" && [lindex $length 1] < [llength $args]} {
+            set term [hir::layouts::OfArrayType [hir::typeOf $hir [lindex $args [lindex $length 1]]]]
+            if {$term ne "" && [string is entier -strict [lindex $term 1]]} {
+                return [FormConst [lindex $term 1]]
+            }
+        }
+        # A List read from bytes through a designator of a fixed array has
+        # its extent (-result-length {path K}: binary::read, LAYOUT-UNIONS.md).
+        if {[lindex $length 0] eq "path" && [lindex $length 1] < [llength $args]} {
+            set repr [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $args [lindex $length 1]]]]
+            if {$repr ne "" && [dict get $repr kind] eq "array"} {
+                return [FormConst [dict get $repr extent]]
+            }
+        }
     }
     return [FormAtom [list len [ValueKey $hir $id steps]]]
 }
@@ -507,7 +540,12 @@ proc hir::cardinality::IterationLength {hir e stepsVar} {
     if {!$context && ![dict exists [Mutations $hir] $place]} {
         return [FormAtom [list len [list pl {*}$place]]]
     }
-    set first [Evaluation $hir $e $place [expr {$context ? [list [ContextIdOf $hir $root]] : {}}]]
+    if {$context} {
+        set contextIds [list [ContextIdOf $hir $root]]
+    } else {
+        set contextIds {}
+    }
+    set first [Evaluation $hir $e $place $contextIds]
     if {$first eq ""} {
         set first $e
     }
@@ -522,7 +560,10 @@ proc hir::cardinality::CompleteKey {hir e} {
     variable maxSteps
     set steps 0
     set key [ValueKey $hir $e steps]
-    return [expr {$steps > $maxSteps ? "" : $key}]
+    if {$steps > $maxSteps} {
+        return ""
+    }
+    return $key
 }
 
 # The places E's value was read from on its way from its key's definition
@@ -683,7 +724,7 @@ proc hir::cardinality::Evaluation {hir e place context} {
         dict set cache evaluations $id $classes
     }
     set classes [dict get $cache evaluations $id]
-    return [expr {[dict exists $classes $e] ? [dict get $classes $e] : ""}]
+    return [dict getdef $classes $e ""]
 }
 
 # 1 if call C, in an invocation reading a member of the installed context
@@ -848,7 +889,11 @@ proc hir::cardinality::Epoch {layout sites o} {
             }
         }
         set run [dict size $noisy]
-        set class [expr {$run == 0 && $continued ne "" ? $continued : [list $sequence $run]}]
+        if {$run == 0 && $continued ne ""} {
+            set class $continued
+        } else {
+            set class [list $sequence $run]
+        }
         if {$here eq {}} {
             return $class
         }
@@ -1108,7 +1153,11 @@ proc hir::cardinality::show {hir form} {
     foreach part $parts {
         lassign $part negative text
         if {$out eq ""} {
-            set out [expr {$negative ? "-$text" : $text}]
+            if {$negative} {
+                set out "-$text"
+            } else {
+                set out $text
+            }
         } else {
             append out [expr {$negative ? " - " : " + "}] $text
         }
@@ -1204,11 +1253,18 @@ proc hir::cardinality::ShowExpr {hir e} {
     switch -- [dict get $node kind] {
         ref {
             set b [dict get $node binding]
-            return [expr {$b eq "" ? [dict get $node name] : [hir::semantic::SourceName $hir $b]}]
+            if {$b eq ""} {
+                return [dict get $node name]
+            }
+            return [hir::semantic::SourceName $hir $b]
         }
         call {
             set callee [dict get $node callee]
-            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "<call>"}]
+            if {[dict get $hir exprs $callee kind] eq "ref"} {
+                set name [hir::semantic::RefName $hir $callee]
+            } else {
+                set name "<call>"
+            }
             return "${name}(...)"
         }
         const { return [lindex [dict get $node literal] end] }

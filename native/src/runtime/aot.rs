@@ -3,10 +3,11 @@
 //! already machine code in the linked object.
 //!
 //! Process arguments (ARGV.md): the generated `main` collects the real
-//! Linux argument vector -- the `argc`/`argv` glibc hands the process,
-//! which Rust's runtime keeps and `std::env::args_os` returns as raw
-//! `OsString`s, i.e. the exact bytes, never decoded -- into one owned
-//! `Vec<Vec<u8>>` copy (it does not borrow the C startup array) and passes
+//! argument vector -- the `argc`/`argv` the C runtime hands the process
+//! (glibc's on Linux, libSystem's on macOS), which Rust's runtime keeps and
+//! `std::env::args_os` returns as raw `OsString`s, i.e. the exact bytes,
+//! never decoded -- into one owned `Vec<Vec<u8>>` copy (it does not borrow
+//! the C startup array) and passes
 //! it to `run`, which installs it in the Vm as the run's argument snapshot
 //! before the program's entry function executes. Nothing is validated here:
 //! UTF-8 validation belongs to the `argv()` operation (`ops.rs`'s
@@ -49,10 +50,10 @@ pub fn run(argv: Vec<Vec<u8>>, init: impl FnOnce() -> (Box<Vm>, ProgramEntry) + 
         if let Some(path) = protocol {
             return driver_protocol(std::path::Path::new(&path), &mut vm, entry);
         }
-        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
         let _guard = {
             let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
-            super::platform::linux::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
+            super::platform::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
         };
         let result = entry(&mut *vm);
         if result == NO_VALUE {
@@ -98,11 +99,11 @@ fn driver_protocol(path: &std::path::Path, vm: &mut Vm, entry: ProgramEntry) -> 
             return 2;
         }
     };
-    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
     let _guard = {
-        super::platform::linux::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
+        super::platform::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
         let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
-        super::platform::linux::OverflowGuard::install(&stack).expect("pthread stack guard")
+        super::platform::OverflowGuard::install(&stack).expect("pthread stack guard")
     };
     let runs = std::env::var("BOTLISH_NATIVE_RUNS").ok().and_then(|n| n.parse::<usize>().ok()).filter(|n| *n > 0);
     let mut lines = Vec::new();

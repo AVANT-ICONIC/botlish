@@ -1521,11 +1521,22 @@ least 2 + 2 + 2 + 2 + 2 trials, against the 12 it makes. The lever that
 remains is the cost of a trial (15-19 s there): re-checking only what a
 choice changes, which needs the same theorem.
 
+**Since then: the kind filter.** The floor above is the floor of deciding by
+*trying* candidates. Most calls are settled before: a receiver of a known kind
+rules out every candidate whose first parameter has another kind, which is
+the TYPE problem the trial would find. `hir/methodfilter.tcl` decides a
+decision in waves from those exclusions, one build per link of a chain, and
+accepts the result only with a certificate; whatever it cannot settle is the
+exact decision's, made from the start (METHOD-DECISION-FILTER.md). The exact
+decision above is unchanged and is what `hir::methodFilter 0` runs; the
+filter's waves count as `methodTrials`.
+
 ## Instrumentation
 
 * `hir::BuildStats`: process counters of whole-program builds
-  (`hir::BuildOnce`), method trial builds, method final builds, and builds
-  reused; read as differences.
+  (`hir::BuildOnce`), method trial builds (the kind filter's waves among
+  them), method final builds, and builds reused, and the kind filter's
+  decisions completed, handed over and taken back; read as differences.
 * `staticStats` on every decided HIR: scheduler, rounds, builds, method
   trials/finals/reused, `committedWithoutBuild`, the dependency analysis's
   milliseconds (`depMs`), `mispredicted`, and with `hir::static::trace 1` (or

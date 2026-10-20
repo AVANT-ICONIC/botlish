@@ -1,5 +1,14 @@
 # NATIVE-LAYOUT-VIEWS.md
 
+> Partially superseded by FIXED-LAYOUT-ARRAYS.md: a view reads fixed
+> arrays too -- an array field is a live array, `NativeView[array N of E]`,
+> whose elements `binary::element` reads at a checked index.
+
+> Partially superseded by LAYOUT-UNIONS.md: a view reads unions too -- a
+> field holding a union by value is a live union, `NativeView[U]`, whose
+> alternatives are read at its address (`v.u.whole`), one interpretation
+> at a time; a union has no `binary::load`.
+
 Read-only native layout views: an ordinary `layout` read from authorized
 live native memory, through `binary::native::view(L, p)` and
 `NativeView[L]`; and pointer fields in layouts.
@@ -188,6 +197,14 @@ word from bytes declares the word as what it is there -- an integer
 (`field next: binary::U64 at 8`, the "bits twin" the tests and the fuzzer
 use): an inert Int, with no pointer operation.
 
+> **Since NATIVE-LAYOUT-WRITES.md** native memory can also be written from
+> Botlish, through a `NativeEdit[L]`: a holder of that write authority can
+> store an integer's bits through one layout and read them back through
+> another layout's view as a pointer (type punning, `ne-native-memory-is-raw`).
+> Byte storage still never becomes a pointer; native memory is raw, and
+> making an edit is a direct edge for that reason (NATIVE-LAYOUT-WRITES.md
+> section 10).
+
 `LayoutStruct[L]` of a native-only layout is an ordinary struct holding
 pointers, affine by the ordinary rule (AFFINE-VALUES.md): its pointers move
 out only by destructuring, it has no equality. Making
@@ -221,7 +238,7 @@ the address space:
 
 Not in this milestone because the existing layout system has none of them
 (BINARY-LAYOUT.md, "The fixed-layout limitation"): fixed arrays and
-repetition, unions or overlapping fields, bitfields, dynamic or trailing
+repetition (since added: FIXED-LAYOUT-ARRAYS.md), unions or overlapping fields, bitfields, dynamic or trailing
 extents, explicit byte order, floating point, `ffi::c::Bool` fields. Each is
 still rejected at the declaration exactly as before (`LAYOUT-FIELD-OVERLAP`,
 `LAYOUT-FIELD-TYPE`). The restriction for dynamic extents is therefore
@@ -274,7 +291,9 @@ What Botlish knows, it enforces, statically:
   the outermost layout's extent;
 * a view is never null (its constructor fails with `NativeViewNull` first),
   so no field read checks again;
-* fixed arrays do not exist, so there is no index to check.
+* fixed arrays do not exist, so there is no index to check (since
+  FIXED-LAYOUT-ARRAYS.md they do: `binary::element` checks its index against
+  the array's static extent, IndexNotFound, unless proven).
 
 What only the foreign interface knows -- that the address is a live
 allocation of at least the layout's size, that it stays alive while the view
@@ -650,6 +669,13 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 
 ## 16. Pressure on the write milestone
 
+> **Answered by NATIVE-LAYOUT-WRITES.md** (section 21 there takes each item
+> in turn): writes are `NativeEdit[L]` (a separate, unrestricted, directly
+> constructed capability; no upgrade from a view) and `binary::store`;
+> pointers are encoded into bytes only by `binary::write_foreign`, never
+> decoded; native records, bitfields, unions, `Bool` fields and volatile
+> memory stay out.
+
 What the read-only implementation exposed that native writes, native
 records and `MutableBytes` foreign writes will have to decide:
 
@@ -701,7 +727,8 @@ records and `MutableBytes` foreign writes will have to decide:
 
 ## 17. Not here
 
-No native-memory write, setter, assignment through a field, writable or
+(Native writes are the next milestone's: NATIVE-LAYOUT-WRITES.md. A view
+itself stays read-only.) No native-memory write, setter, assignment through a field, writable or
 mutable view, `NativeEdit`, native allocation or native record
 construction; no `extern c struct`, C layout rule, bitfield, union, array,
 dynamic extent, floating point or `Bool` field; no aggregate C ABI (passing

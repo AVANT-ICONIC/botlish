@@ -254,11 +254,15 @@ namespace eval hir::static {
         FOREIGN-BORROW                           ForeignBorrow
         IMPRINT                                  Imprint
         KNOWN-ERROR                              KnownError
+        LAYOUT-ARRAY-EXTENT                      LayoutArrayExtent
+        LAYOUT-ARRAY-INDEX                       LayoutArrayIndex
+        LAYOUT-FOREIGN-WRITE                     LayoutForeignWrite
         LAYOUT-NATIVE-ONLY                       LayoutNativeOnly
         LAYOUT-NOT-A-TYPE                        LayoutNotAType
         LAYOUT-NOT-A-VALUE                       LayoutNotAValue
         LAYOUT-OPERAND                           LayoutOperand
         LAYOUT-STRUCT-PARAMETER                  LayoutStructParameter
+        LAYOUT-UNION                             LayoutUnion
         LOCKSTEP-UNEQUAL                         LockstepUnequal
         LOCKSTEP-UNPROVEN                        LockstepUnproven
         MISSING-CONTEXT                          MissingContext
@@ -395,7 +399,10 @@ proc hir::static::Children {node} {
         }
         return - break - fail {
             set value [dict get $node value]
-            return [expr {$value eq "" ? {} : [list $value]}]
+            if {$value eq ""} {
+                return {}
+            }
+            return [list $value]
         }
         block - loop - static {
             return [dict get $node body]
@@ -757,7 +764,11 @@ proc hir::static::decide {nodes options given halt} {
             # A prediction of the last simulation that this build contradicts
             # (a message's internal ids are this build's numbering: an
             # earlier rejection renumbers them, whatever the site depends on).
-            set actual [expr {[dict exists $own $key] ? [PredictionOf [lindex [dict get $own $key] 0]] : "ok"}]
+            if {[dict exists $own $key]} {
+                set actual [PredictionOf [lindex [dict get $own $key] 0]]
+            } else {
+                set actual "ok"
+            }
             if {$actual ne $expectation} {
                 dict lappend stats mispredicted [list $rounds $key]
             }
@@ -876,7 +887,7 @@ proc hir::static::decide {nodes options given halt} {
     set summary [dict create]
     foreach site $sites {
         set key [dict get $site key]
-        set decision [expr {[dict exists $decisions $key] ? [dict get $decisions $key] : "undecided"}]
+        set decision [dict getdef $decisions $key "undecided"]
         set entry [dict create key $key origin [dict get $site origin] \
             operation [dict get $site operation] outcome [lindex $decision 0]]
         if {[lindex $decision 0] eq "rejected"} {
@@ -1614,7 +1625,7 @@ proc hir::static::Attribute {hir sites decisions} {
             # stays the program's, and fails the compilation loudly.
             set owner ""
         }
-        set related [expr {[dict exists $diagnostic related] ? [dict get $diagnostic related] : {}}]
+        set related [dict getdef $diagnostic related {}]
         dict lappend owners $owner [dict create kind [dict get $diagnostic kind] \
             message [dict get $diagnostic message] origin $origin related $related]
     }
@@ -1672,5 +1683,5 @@ proc hir::static::Owner {sites origin} {
 # The static sites of the built HIR and their decisions (hir::static::decide's
 # `staticSites`), {} for a program without any.
 proc hir::static::sites {hir} {
-    return [expr {[dict exists $hir staticSites] ? [dict get $hir staticSites] : {}}]
+    return [dict getdef $hir staticSites {}]
 }

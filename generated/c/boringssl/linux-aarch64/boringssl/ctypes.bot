@@ -10,19 +10,19 @@ import ffi::c
 opaque struct timeval:
     tag: unit
 
-# struct evp_aead_ctx_st (include/openssl/aead.h), a complete C type seen through pointers only
+# struct evp_aead_ctx_st (include/openssl/aead.h), a complete C type: its layout is boringssl::layouts::EVP_AEAD_CTX
 opaque struct EVP_AEAD_CTX:
     tag: unit
 
-# struct crypto_ivec_st (include/openssl/aead.h), a complete C type seen through pointers only
+# struct crypto_ivec_st (include/openssl/aead.h), a complete C type: its layout is boringssl::layouts::CRYPTO_IVEC
 opaque struct CRYPTO_IVEC:
     tag: unit
 
-# struct crypto_iovec_st (include/openssl/aead.h), a complete C type seen through pointers only
+# struct crypto_iovec_st (include/openssl/aead.h), a complete C type: its layout is boringssl::layouts::CRYPTO_IOVEC
 opaque struct CRYPTO_IOVEC:
     tag: unit
 
-# struct aes_key_st (include/openssl/aes.h), a complete C type seen through pointers only
+# struct aes_key_st (include/openssl/aes.h), a complete C type: its layout is boringssl::layouts::AES_KEY
 opaque struct AES_KEY:
     tag: unit
 
@@ -34,7 +34,7 @@ opaque struct tm:
 opaque struct __FILE:
     tag: unit
 
-# struct buf_mem_st (include/openssl/buf.h), a complete C type seen through pointers only
+# struct buf_mem_st (include/openssl/buf.h), a complete C type: its layout is boringssl::layouts::BUF_MEM
 opaque struct BUF_MEM:
     tag: unit
 
@@ -50,15 +50,15 @@ opaque struct stack_st_OPENSSL_STRING:
 opaque struct stack_st_BIO:
     tag: unit
 
-# struct bn_gencb_st (include/openssl/bn.h), a complete C type seen through pointers only
+# struct bn_gencb_st (include/openssl/bn.h), a complete C type: its layout is boringssl::layouts::BN_GENCB
 opaque struct BN_GENCB:
     tag: unit
 
-# struct bignum_st (include/openssl/bn.h), a complete C type seen through pointers only
+# struct bignum_st (include/openssl/bn.h), a complete C type: its layout is boringssl::layouts::BIGNUM
 opaque struct BIGNUM:
     tag: unit
 
-# struct asn1_string_st (include/openssl/asn1.h), a complete C type seen through pointers only
+# struct asn1_string_st (include/openssl/asn1.h), a complete C type: its layout is boringssl::layouts::ASN1_BIT_STRING
 opaque struct ASN1_BIT_STRING:
     tag: unit
 
@@ -70,7 +70,7 @@ opaque struct stack_st_ASN1_INTEGER:
 opaque struct EXTENDED_KEY_USAGE:
     tag: unit
 
-# struct asn1_type_st (include/openssl/asn1.h), a complete C type seen through pointers only
+# struct asn1_type_st (include/openssl/asn1.h), a complete C type: its layout is boringssl::layouts::ASN1_TYPE
 opaque struct ASN1_TYPE:
     tag: unit
 
@@ -78,7 +78,15 @@ opaque struct ASN1_TYPE:
 opaque struct ASN1_SEQUENCE_ANY:
     tag: unit
 
-# struct ASN1_ITEM_st (include/openssl/asn1t.h), a complete C type seen through pointers only
+# struct ASN1_TEMPLATE_st (include/openssl/asn1t.h), a complete C type: its layout is boringssl::layouts::ASN1_TEMPLATE
+opaque struct ASN1_TEMPLATE:
+    tag: unit
+
+# struct ASN1_ADB_TABLE_st (include/openssl/asn1t.h), a complete C type: its layout is boringssl::layouts::ASN1_ADB_TABLE
+opaque struct ASN1_ADB_TABLE:
+    tag: unit
+
+# struct ASN1_ITEM_st (include/openssl/asn1t.h), a complete C type: its layout is boringssl::layouts::ASN1_ITEM
 opaque struct ASN1_ITEM:
     tag: unit
 
@@ -86,31 +94,31 @@ opaque struct ASN1_ITEM:
 opaque struct stack_st_ASN1_VALUE:
     tag: unit
 
-# struct evp_encode_ctx_st (include/openssl/base64.h), a complete C type seen through pointers only
+# struct evp_encode_ctx_st (include/openssl/base64.h), a complete C type: its layout is boringssl::layouts::EVP_ENCODE_CTX
 opaque struct EVP_ENCODE_CTX:
     tag: unit
 
-# struct blake2b_state_st (include/openssl/blake2.h), a complete C type seen through pointers only
+# struct blake2b_state_st (include/openssl/blake2.h), a complete C type: its layout is boringssl::layouts::BLAKE2B_CTX
 opaque struct BLAKE2B_CTX:
     tag: unit
 
-# struct bf_key_st (include/openssl/blowfish.h), a complete C type seen through pointers only
+# struct bf_key_st (include/openssl/blowfish.h), a complete C type: its layout is boringssl::layouts::BF_KEY
 opaque struct BF_KEY:
     tag: unit
 
-# struct cbs_st (include/openssl/bytestring.h), a complete C type seen through pointers only
+# struct cbs_st (include/openssl/bytestring.h), a complete C type: its layout is boringssl::layouts::CBS
 opaque struct CBS:
     tag: unit
 
-# struct cbb_st (include/openssl/bytestring.h), a complete C type seen through pointers only
+# struct cbb_st (include/openssl/bytestring.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct CBB:
     tag: unit
 
-# struct cast_key_st (include/openssl/cast.h), a complete C type seen through pointers only
+# struct cast_key_st (include/openssl/cast.h), a complete C type: its layout is boringssl::layouts::CAST_KEY
 opaque struct CAST_KEY:
     tag: unit
 
-# struct evp_cipher_ctx_st (include/openssl/cipher.h), a complete C type seen through pointers only
+# struct evp_cipher_ctx_st (include/openssl/cipher.h), a complete C type: its layout is boringssl::layouts::EVP_CIPHER_CTX
 opaque struct EVP_CIPHER_CTX:
     tag: unit
 
@@ -118,7 +126,7 @@ opaque struct EVP_CIPHER_CTX:
 opaque struct stack_st_X509:
     tag: unit
 
-# struct conf_value_st (include/openssl/conf.h), a complete C type seen through pointers only
+# struct conf_value_st (include/openssl/conf.h), a complete C type: its layout is boringssl::layouts::CONF_VALUE
 opaque struct CONF_VALUE:
     tag: unit
 
@@ -126,131 +134,135 @@ opaque struct CONF_VALUE:
 opaque struct stack_st_CONF_VALUE:
     tag: unit
 
-# struct sha256_state_st (include/openssl/sha2.h), a complete C type seen through pointers only
+# struct sha256_state_st (include/openssl/sha2.h), a complete C type: its layout is boringssl::layouts::SHA256_CTX
 opaque struct SHA256_CTX:
     tag: unit
 
-# struct sha512_state_st (include/openssl/sha2.h), a complete C type seen through pointers only
+# struct sha512_state_st (include/openssl/sha2.h), a complete C type: its layout is boringssl::layouts::SHA512_CTX
 opaque struct SHA512_CTX:
     tag: unit
 
-# struct sha_state_st (include/openssl/sha.h), a complete C type seen through pointers only
+# struct sha_state_st (include/openssl/sha.h), a complete C type: its layout is boringssl::layouts::SHA_CTX
 opaque struct SHA_CTX:
     tag: unit
 
-# struct DES_cblock_st (include/openssl/des.h), a complete C type seen through pointers only
+# struct DES_cblock_st (include/openssl/des.h), a complete C type: its layout is boringssl::layouts::DES_cblock
 opaque struct DES_cblock:
     tag: unit
 
-# struct DES_ks (include/openssl/des.h), a complete C type seen through pointers only
+# struct DES_ks (include/openssl/des.h), a complete C type: its layout is boringssl::layouts::DES_key_schedule
 opaque struct DES_key_schedule:
     tag: unit
 
-# struct env_md_ctx_st (include/openssl/digest.h), a complete C type seen through pointers only
+# struct evp_md_pctx_ops (include/openssl/digest.h)
+opaque struct evp_md_pctx_ops:
+    tag: unit
+
+# struct env_md_ctx_st (include/openssl/digest.h), a complete C type: its layout is boringssl::layouts::EVP_MD_CTX
 opaque struct EVP_MD_CTX:
     tag: unit
 
-# struct DSA_SIG_st (include/openssl/dsa.h), a complete C type seen through pointers only
+# struct DSA_SIG_st (include/openssl/dsa.h), a complete C type: its layout is boringssl::layouts::DSA_SIG
 opaque struct DSA_SIG:
     tag: unit
 
-# struct anon@ec.h:457 (include/openssl/ec.h), a complete C type seen through pointers only
+# struct anon@ec.h:457 (include/openssl/ec.h), a complete C type: its layout is boringssl::layouts::EC_builtin_curve
 opaque struct EC_builtin_curve:
     tag: unit
 
-# struct ecdsa_method_st (include/openssl/ec_key.h), a complete C type seen through pointers only
+# struct ecdsa_method_st (include/openssl/ec_key.h), a complete C type: its layout is boringssl::layouts::ECDSA_METHOD
 opaque struct ECDSA_METHOD:
     tag: unit
 
-# struct ecdsa_sig_st (include/openssl/ecdsa.h), a complete C type seen through pointers only
+# struct ecdsa_sig_st (include/openssl/ecdsa.h), a complete C type: its layout is boringssl::layouts::ECDSA_SIG
 opaque struct ECDSA_SIG:
     tag: unit
 
-# struct hmac_ctx_st (include/openssl/hmac.h), a complete C type seen through pointers only
+# struct hmac_ctx_st (include/openssl/hmac.h), a complete C type: its layout is boringssl::layouts::HMAC_CTX
 opaque struct HMAC_CTX:
     tag: unit
 
-# struct evp_hpke_ctx_st (include/openssl/hpke.h), a complete C type seen through pointers only
+# struct evp_hpke_ctx_st (include/openssl/hpke.h), a complete C type: its layout is boringssl::layouts::EVP_HPKE_CTX
 opaque struct EVP_HPKE_CTX:
     tag: unit
 
-# struct evp_hpke_key_st (include/openssl/hpke.h), a complete C type seen through pointers only
+# struct evp_hpke_key_st (include/openssl/hpke.h), a complete C type: its layout is boringssl::layouts::EVP_HPKE_KEY
 opaque struct EVP_HPKE_KEY:
     tag: unit
 
-# struct HRSS_private_key (include/openssl/hrss.h), a complete C type seen through pointers only
+# struct HRSS_private_key (include/openssl/hrss.h), a complete C type: its layout is boringssl::layouts::HRSS_private_key
 opaque struct HRSS_private_key:
     tag: unit
 
-# struct HRSS_public_key (include/openssl/hrss.h), a complete C type seen through pointers only
+# struct HRSS_public_key (include/openssl/hrss.h), a complete C type: its layout is boringssl::layouts::HRSS_public_key
 opaque struct HRSS_public_key:
     tag: unit
 
-# struct md4_state_st (include/openssl/md4.h), a complete C type seen through pointers only
+# struct md4_state_st (include/openssl/md4.h), a complete C type: its layout is boringssl::layouts::MD4_CTX
 opaque struct MD4_CTX:
     tag: unit
 
-# struct md5_state_st (include/openssl/md5.h), a complete C type seen through pointers only
+# struct md5_state_st (include/openssl/md5.h), a complete C type: its layout is boringssl::layouts::MD5_CTX
 opaque struct MD5_CTX:
     tag: unit
 
-# struct MLDSA65_private_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA65_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_private_key
 opaque struct MLDSA65_private_key:
     tag: unit
 
-# struct MLDSA65_public_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA65_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_public_key
 opaque struct MLDSA65_public_key:
     tag: unit
 
-# struct MLDSA65_prehash (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA65_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_prehash
 opaque struct MLDSA65_prehash:
     tag: unit
 
-# struct MLDSA87_private_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA87_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_private_key
 opaque struct MLDSA87_private_key:
     tag: unit
 
-# struct MLDSA87_public_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA87_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_public_key
 opaque struct MLDSA87_public_key:
     tag: unit
 
-# struct MLDSA87_prehash (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA87_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_prehash
 opaque struct MLDSA87_prehash:
     tag: unit
 
-# struct MLDSA44_private_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA44_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_private_key
 opaque struct MLDSA44_private_key:
     tag: unit
 
-# struct MLDSA44_public_key (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA44_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_public_key
 opaque struct MLDSA44_public_key:
     tag: unit
 
-# struct MLDSA44_prehash (include/openssl/mldsa.h), a complete C type seen through pointers only
+# struct MLDSA44_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_prehash
 opaque struct MLDSA44_prehash:
     tag: unit
 
-# struct MLKEM768_public_key (include/openssl/mlkem.h), a complete C type seen through pointers only
+# struct MLKEM768_public_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM768_public_key
 opaque struct MLKEM768_public_key:
     tag: unit
 
-# struct MLKEM768_private_key (include/openssl/mlkem.h), a complete C type seen through pointers only
+# struct MLKEM768_private_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM768_private_key
 opaque struct MLKEM768_private_key:
     tag: unit
 
-# struct MLKEM1024_public_key (include/openssl/mlkem.h), a complete C type seen through pointers only
+# struct MLKEM1024_public_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM1024_public_key
 opaque struct MLKEM1024_public_key:
     tag: unit
 
-# struct MLKEM1024_private_key (include/openssl/mlkem.h), a complete C type seen through pointers only
+# struct MLKEM1024_private_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM1024_private_key
 opaque struct MLKEM1024_private_key:
     tag: unit
 
-# struct obj_name_st (include/openssl/obj.h), a complete C type seen through pointers only
+# struct obj_name_st (include/openssl/obj.h), a complete C type: its layout is boringssl::layouts::OBJ_NAME
 opaque struct OBJ_NAME:
     tag: unit
 
-# struct ossl_param_st (include/openssl/params.h), a complete C type seen through pointers only
+# struct ossl_param_st (include/openssl/params.h), a complete C type: its layout is boringssl::layouts::OSSL_PARAM
 opaque struct OSSL_PARAM:
     tag: unit
 
@@ -262,11 +274,19 @@ opaque struct stack_st_CRYPTO_BUFFER:
 opaque struct stack_st_X509_CRL:
     tag: unit
 
-# struct anon@pkcs7.h:126 (include/openssl/pkcs7.h), a complete C type seen through pointers only
+# struct anon@pkcs7.h:111 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7_SIGNED
+opaque struct PKCS7_SIGNED:
+    tag: unit
+
+# struct anon@pkcs7.h:116 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7_SIGN_ENVELOPE
+opaque struct PKCS7_SIGN_ENVELOPE:
+    tag: unit
+
+# struct anon@pkcs7.h:126 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7
 opaque struct PKCS7:
     tag: unit
 
-# struct rsa_meth_st (include/openssl/rsa.h), a complete C type seen through pointers only
+# struct rsa_meth_st (include/openssl/rsa.h), a complete C type: its layout is boringssl::layouts::RSA_METHOD
 opaque struct RSA_METHOD:
     tag: unit
 
@@ -290,27 +310,27 @@ opaque struct stack_st_X509_NAME:
 opaque struct X509_EXTENSIONS:
     tag: unit
 
-# struct BASIC_CONSTRAINTS_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct BASIC_CONSTRAINTS_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::BASIC_CONSTRAINTS
 opaque struct BASIC_CONSTRAINTS:
     tag: unit
 
-# struct otherName_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct otherName_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::OTHERNAME
 opaque struct OTHERNAME:
     tag: unit
 
-# struct EDIPartyName_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct EDIPartyName_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::EDIPARTYNAME
 opaque struct EDIPARTYNAME:
     tag: unit
 
-# struct GENERAL_NAME_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct GENERAL_NAME_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::GENERAL_NAME
 opaque struct GENERAL_NAME:
     tag: unit
 
-# struct AUTHORITY_KEYID_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct AUTHORITY_KEYID_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::AUTHORITY_KEYID
 opaque struct AUTHORITY_KEYID:
     tag: unit
 
-# struct GENERAL_SUBTREE_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct GENERAL_SUBTREE_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::GENERAL_SUBTREE
 opaque struct GENERAL_SUBTREE:
     tag: unit
 
@@ -318,11 +338,11 @@ opaque struct GENERAL_SUBTREE:
 opaque struct stack_st_GENERAL_SUBTREE:
     tag: unit
 
-# struct NAME_CONSTRAINTS_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct NAME_CONSTRAINTS_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::NAME_CONSTRAINTS
 opaque struct NAME_CONSTRAINTS:
     tag: unit
 
-# struct ACCESS_DESCRIPTION_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct ACCESS_DESCRIPTION_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::ACCESS_DESCRIPTION
 opaque struct ACCESS_DESCRIPTION:
     tag: unit
 
@@ -330,11 +350,11 @@ opaque struct ACCESS_DESCRIPTION:
 opaque struct AUTHORITY_INFO_ACCESS:
     tag: unit
 
-# struct DIST_POINT_NAME_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct DIST_POINT_NAME_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::DIST_POINT_NAME
 opaque struct DIST_POINT_NAME:
     tag: unit
 
-# struct DIST_POINT_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct DIST_POINT_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::DIST_POINT
 opaque struct DIST_POINT:
     tag: unit
 
@@ -342,19 +362,19 @@ opaque struct DIST_POINT:
 opaque struct CRL_DIST_POINTS:
     tag: unit
 
-# struct ISSUING_DIST_POINT_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct ISSUING_DIST_POINT_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::ISSUING_DIST_POINT
 opaque struct ISSUING_DIST_POINT:
     tag: unit
 
-# struct NOTICEREF_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct NOTICEREF_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::NOTICEREF
 opaque struct NOTICEREF:
     tag: unit
 
-# struct USERNOTICE_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct USERNOTICE_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::USERNOTICE
 opaque struct USERNOTICE:
     tag: unit
 
-# struct POLICYQUALINFO_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct POLICYQUALINFO_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::POLICYQUALINFO
 opaque struct POLICYQUALINFO:
     tag: unit
 
@@ -362,7 +382,7 @@ opaque struct POLICYQUALINFO:
 opaque struct stack_st_POLICYQUALINFO:
     tag: unit
 
-# struct POLICYINFO_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct POLICYINFO_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::POLICYINFO
 opaque struct POLICYINFO:
     tag: unit
 
@@ -370,7 +390,7 @@ opaque struct POLICYINFO:
 opaque struct CERTIFICATEPOLICIES:
     tag: unit
 
-# struct POLICY_MAPPING_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct POLICY_MAPPING_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::POLICY_MAPPING
 opaque struct POLICY_MAPPING:
     tag: unit
 
@@ -378,7 +398,7 @@ opaque struct POLICY_MAPPING:
 opaque struct POLICY_MAPPINGS:
     tag: unit
 
-# struct POLICY_CONSTRAINTS_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct POLICY_CONSTRAINTS_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::POLICY_CONSTRAINTS
 opaque struct POLICY_CONSTRAINTS:
     tag: unit
 
@@ -394,19 +414,23 @@ opaque struct stack_st_X509_ATTRIBUTE:
 opaque struct stack_st_X509_OBJECT:
     tag: unit
 
-# struct Netscape_spki_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct Netscape_spki_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::NETSCAPE_SPKI
 opaque struct NETSCAPE_SPKI:
     tag: unit
 
-# struct Netscape_spkac_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct Netscape_spkac_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::NETSCAPE_SPKAC
 opaque struct NETSCAPE_SPKAC:
     tag: unit
 
-# struct rsa_pss_params_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct rsa_pss_params_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::RSA_PSS_PARAMS
 opaque struct RSA_PSS_PARAMS:
     tag: unit
 
-# struct X509_info_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct private_key_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509_PKEY
+opaque struct X509_PKEY:
+    tag: unit
+
+# struct X509_info_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509_INFO
 opaque struct X509_INFO:
     tag: unit
 
@@ -414,31 +438,31 @@ opaque struct X509_INFO:
 opaque struct stack_st_X509_INFO:
     tag: unit
 
-# struct v3_ext_method (include/openssl/x509.h), a complete C type seen through pointers only
+# struct v3_ext_method (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509V3_EXT_METHOD
 opaque struct X509V3_EXT_METHOD:
     tag: unit
 
-# struct v3_ext_ctx (include/openssl/x509.h), a complete C type seen through pointers only
+# struct v3_ext_ctx (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509V3_CTX
 opaque struct X509V3_CTX:
     tag: unit
 
-# struct X509_algor_st (include/openssl/x509.h), a complete C type seen through pointers only
+# struct X509_algor_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::X509_ALGOR
 opaque struct X509_ALGOR:
     tag: unit
 
-# struct rand_meth_st (include/openssl/rand.h), a complete C type seen through pointers only
+# struct rand_meth_st (include/openssl/rand.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct RAND_METHOD:
     tag: unit
 
-# struct rc4_key_st (include/openssl/rc4.h), a complete C type seen through pointers only
+# struct rc4_key_st (include/openssl/rc4.h), a complete C type: its layout is boringssl::layouts::RC4_KEY
 opaque struct RC4_KEY:
     tag: unit
 
-# struct RIPEMD160state_st (include/openssl/ripemd.h), a complete C type seen through pointers only
+# struct RIPEMD160state_st (include/openssl/ripemd.h), a complete C type: its layout is boringssl::layouts::RIPEMD160_CTX
 opaque struct RIPEMD160_CTX:
     tag: unit
 
-# struct trust_token_st (include/openssl/trust_token.h), a complete C type seen through pointers only
+# struct trust_token_st (include/openssl/trust_token.h), a complete C type: its layout is boringssl::layouts::TRUST_TOKEN
 opaque struct TRUST_TOKEN:
     tag: unit
 
@@ -446,11 +470,11 @@ opaque struct TRUST_TOKEN:
 opaque struct stack_st_TRUST_TOKEN:
     tag: unit
 
-# struct XWING_private_key (include/openssl/xwing.h), a complete C type seen through pointers only
+# struct XWING_private_key (include/openssl/xwing.h), a complete C type: its layout is boringssl::layouts::XWING_private_key
 opaque struct XWING_private_key:
     tag: unit
 
-# struct ssl_private_key_method_st (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct ssl_private_key_method_st (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SSL_PRIVATE_KEY_METHOD
 opaque struct SSL_PRIVATE_KEY_METHOD:
     tag: unit
 
@@ -458,11 +482,11 @@ opaque struct SSL_PRIVATE_KEY_METHOD:
 opaque struct stack_st_SSL_CIPHER:
     tag: unit
 
-# struct ssl_ticket_aead_method_st (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct ssl_ticket_aead_method_st (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SSL_TICKET_AEAD_METHOD
 opaque struct SSL_TICKET_AEAD_METHOD:
     tag: unit
 
-# struct srtp_protection_profile_st (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct srtp_protection_profile_st (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SRTP_PROTECTION_PROFILE
 opaque struct SRTP_PROTECTION_PROFILE:
     tag: unit
 
@@ -470,15 +494,15 @@ opaque struct SRTP_PROTECTION_PROFILE:
 opaque struct stack_st_SRTP_PROTECTION_PROFILE:
     tag: unit
 
-# struct ssl_quic_method_st (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct ssl_quic_method_st (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SSL_QUIC_METHOD
 opaque struct SSL_QUIC_METHOD:
     tag: unit
 
-# struct ssl_early_callback_ctx (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct ssl_early_callback_ctx (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SSL_CLIENT_HELLO
 opaque struct SSL_CLIENT_HELLO:
     tag: unit
 
-# struct ssl_comp_st (include/openssl/ssl.h), a complete C type seen through pointers only
+# struct ssl_comp_st (include/openssl/ssl.h), a complete C type: its layout is boringssl::layouts::SSL_COMP
 opaque struct SSL_COMP:
     tag: unit
 

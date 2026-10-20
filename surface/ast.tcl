@@ -29,6 +29,9 @@
 #              exactly one short type name
 #   suite      body (statements)                 an indented block
 #   int        text (canonical decimal digits)
+#   decimal    text (the decimal number a decimal literal spells, exactly as
+#              written but with a lowercase exponent marker: `1.50`, `2.5e-3`;
+#              its type is decided by lowering, FLOAT64-MILESTONE-1.md)
 #   string     value (the decoded text)
 #   char       text (canonical decimal codepoint of the one Unicode scalar
 #              value the literal decoded to -- UnicodeChar, never String;
@@ -156,6 +159,8 @@
 #              path-neutral): the loader supplies the module's namespace when
 #              it lowers the declaration (surface/lower.tcl's StructDeclOf).
 #   layoutdecl name, nameSpan, size, sizeSpan, align, alignSpan, fields
+#              (and `union 1` for a union layout, LAYOUT-UNIONS.md: its
+#              fields are its alternatives, each at offset 0)
 #              ({name nameSpan type typeSpan offset offsetSpan} dicts in
 #              written order; TYPE as surface::parser::TypeExpr returns it,
 #              SIZE/ALIGN/OFFSET decimal text) -- a top-level fixed binary
@@ -224,7 +229,8 @@
 #              HIR's COROUTINE-RHS-NOT-YIELDING). Only the parser and the
 #              printer know it by this name: lowering turns it into the
 #              construction and the eager start (surface/lower.tcl)
-#   handledcall  call (a `call` or `methodcall` node), handlers (a list of {name nameSpan
+#   handledcall  call (a `call` or `methodcall` node, or a `binary` node of an
+#              arithmetic operator + - * /), handlers (a list of {name nameSpan
 #              body binding bindingSpan pattern} dicts, one per "on NAME:"
 #              clause in written order; body a suite; binding the name the
 #              whole payload is bound to in "on NAME details:", else "";
@@ -327,7 +333,10 @@ proc surface::ast::assignIds {program} {
 }
 
 proc surface::ast::Child {parent role} {
-    return [expr {$parent eq "" ? $role : "$parent/$role"}]
+    if {$parent eq ""} {
+        return $role
+    }
+    return "$parent/$role"
 }
 
 proc surface::ast::Statements {statements parent} {
@@ -538,7 +547,10 @@ proc surface::ast::Children {node} {
         methodcall         { return [concat [list [dict get $node receiver]] [dict get $node args]] }
         binary - logical   { return [list [dict get $node left] [dict get $node right]] }
         bind - return - break - destructure - coroutinebind {
-            return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
+            if {[dict get $node value] eq ""} {
+                return {}
+            }
+            return [list [dict get $node value]]
         }
         with - yield       { return [list [dict get $node value]] }
         function - static  { return [list [dict get $node body]] }
@@ -664,6 +676,7 @@ proc surface::ast::Expr {node show} {
     set at [At $node $show]
     switch -- [dict get $node kind] {
         int     { return "(int [dict get $node text])$at" }
+        decimal { return "(decimal [dict get $node text])$at" }
         char    { return "(char [dict get $node text])$at" }
         string  { return "(str [Quote [dict get $node value]])$at" }
         bool    { return "(bool [dict get $node value])$at" }
@@ -708,6 +721,10 @@ proc surface::ast::Expr {node show} {
             return "([::join [concat struct $name [FieldsText $node $show]] { }])$at"
         }
         project {
+            if {[dict exists $node indices]} {
+                set indices [join [lmap index [dict get $node indices] {string cat \[ [dict get $index value] \]}] {}]
+                return "(project [Expr [dict get $node receiver] $show] [dict get $node name]$indices)$at"
+            }
             return "(project [Expr [dict get $node receiver] $show] [dict get $node name])$at"
         }
         unary {
@@ -808,6 +825,11 @@ proc surface::ast::showType {type} {
     if {[llength $type] == 1} {
         return $type
     }
+    if {[llength $type] == 3 && [lindex $type 0] eq "array"} {
+        # A fixed array representation (surface::parser::ArrayTypeExpr,
+        # FIXED-LAYOUT-ARRAYS.md).
+        return "array [lindex $type 1] of [showType [lindex $type 2]]"
+    }
     lassign $type name arg
     if {$name eq "fn"} {
         # A structural function type (surface::parser::FnType): its
@@ -852,11 +874,16 @@ proc surface::ast::Statement {node indent show linesVar} {
             return
         }
         layoutdecl {
-            lappend lines "${pad}layout [dict get $node name]$at"
+            set union [expr {[dict exists $node union] && [dict get $node union]}]
+            lappend lines "${pad}[expr {$union ? "union layout" : "layout"}] [dict get $node name]$at"
             lappend lines "${pad}    size [dict get $node size]"
             lappend lines "${pad}    align [dict get $node align]"
             foreach field [dict get $node fields] {
-                lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
+                if {$union} {
+                    lappend lines "${pad}    alternative [dict get $field name]: [showType [dict get $field type]]"
+                } else {
+                    lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
+                }
             }
             return
         }
@@ -866,7 +893,7 @@ proc surface::ast::Statement {node indent show linesVar} {
             foreach r [dict get $node requirements] {
                 set params [lmap pair [dict get $r params] {
                     lassign $pair name _ type
-                    expr {$type eq "" ? $name : "$name:[showType $type]"}
+                    if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
                 }]
                 set line "${pad}    fn [dict get $r name] ([join $params { }])"
                 if {[dict get $r resultType] ne ""} {
@@ -930,7 +957,7 @@ proc surface::ast::Statement {node indent show linesVar} {
         function {
             set params [lmap pair [dict get $node params] {
                 lassign $pair name _ type
-                expr {$type eq "" ? $name : "$name:[showType $type]"}
+                if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
             }]
             # Explicit join, not a bare "($params)" interpolation: a typed
             # parameter's label can now contain "[" "]" (an applied type,

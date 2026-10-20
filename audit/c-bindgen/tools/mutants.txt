@@ -155,7 +155,7 @@ $ctype eq "char"
 @@ twin-identities-merged two C tags whose identity names collide get one Botlish name
 ## tools/c-bindgen/model.tcl
 <<<<
-    while {$name in $taken} { append name _[lindex $key 0] }
+    while {[dict exists $identityNames $name]} { append name _[lindex $key 0] }
 ====
 >>>>
 
@@ -203,10 +203,10 @@ $ctype eq "char"
 ## tools/c-bindgen/generate.tcl
 <<<<
     set config [::chdr::toolchain::configFor $target]
-    set tool [ToolProfile $hprofile $sourceRoot]
+    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch] $target]
 ====
     set config [::chdr::toolchain::configFor [core::cabi::hostTarget]]
-    set tool [ToolProfile $hprofile $sourceRoot]
+    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch] $target]
 >>>>
 
 # --- further mutants ----------------------------------------------------------
@@ -303,9 +303,9 @@ $ctype eq "char"
 @@ calling-convention-ignored an explicit calling convention attribute is ignored
 ## tools/c-bindgen/model.tcl
 <<<<
-        if {[lindex $a 0] in {cc gnu std declspec} && $name in $conventions} {
+    if {[llength $ccs] && ![DefaultConvention $ccKey]} {
 ====
-        if {0} {
+    if {0} {
 >>>>
 
 @@ variadic-ignored a variadic function is bound by its fixed parameters
@@ -339,4 +339,434 @@ $ctype eq "char"
 ====
             dict set entry kind direct
             dict set entry via macro-shadow
+>>>>
+
+# --- record layouts (C-BINDGEN-LAYOUTS.md): the brief's mutants -------------
+
+@@ layout-size-ignored a record's layout states the end of its last field as its size, not the compiler's sizeof (tail padding lost)
+## tools/c-bindgen/emit.tcl
+<<<<
+        append body "    size [dict get $rec size]\n"
+====
+        set last [lindex [dict get $rec fields] end]
+        append body "    size [expr {[dict get $last offset] + [dict get $last size]}]\n"
+>>>>
+
+@@ layout-alignment-ignored a record's layout states alignment 1, not the compiler's _Alignof
+## tools/c-bindgen/emit.tcl
+<<<<
+        append body "    align [dict get $rec align]\n"
+====
+        append body "    align 1\n"
+>>>>
+
+@@ layout-offset-sequential a field's offset is assumed to follow the previous field's end (no padding, no packing), not the compiler's offsetof
+## tools/c-bindgen/records.tcl
+<<<<
+                dict set f offset [expr {[lindex $data 0] - $base}]
+====
+                dict set f offset [expr {$i == 0 || ![llength $fields] ? 0 : [dict get [lindex $fields end] offset] + max(0, [dict get [lindex $fields end] size])}]
+>>>>
+
+@@ layout-offset-off-by-one every field after the first is placed one byte past the compiler's offset
+## tools/c-bindgen/records.tcl
+<<<<
+                dict set f offset [expr {[lindex $data 0] - $base}]
+====
+                dict set f offset [expr {[lindex $data 0] - $base + ([lindex $data 0] - $base > 0)}]
+>>>>
+
+@@ layout-packed-rounded-up a field's offset is rounded up to a multiple of its size (natural alignment), whatever packing the compiler applied
+## tools/c-bindgen/records.tcl
+<<<<
+                dict set f offset [expr {[lindex $data 0] - $base}]
+====
+                dict set f offset [expr {[llength $data] > 1 && [lindex $data 1] > 0 ? (([lindex $data 0] - $base + [lindex $data 1] - 1) / [lindex $data 1]) * [lindex $data 1] : [lindex $data 0] - $base}]
+>>>>
+
+@@ layout-long-width-from-host a C scalar field's width is checked against the host's C target, not the generation's (long is 8 bytes for Windows' LLP64 too)
+## tools/c-bindgen/verify.tcl
+<<<<
+            set info [core::cabi::scalarInfo $scalar $target]
+====
+            set info [core::cabi::scalarInfo $scalar [core::cabi::hostTarget]]
+>>>>
+
+@@ layout-nested-offset-ignored a nested layout field is placed at offset 0 of its record, not at the compiler's offset
+## tools/c-bindgen/emit.tcl
+<<<<
+                lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
+====
+                lappend lines [list "    field [dict get $f name]: $type at [expr {[dict get $f kind] eq "nested" ? 0 : [dict get $f offset]}]" $decl]
+>>>>
+
+@@ layout-nested-blocked-emitted a record holding a blocked record by value is emitted anyway (its dependencies are not consulted)
+## tools/c-bindgen/records.tcl
+<<<<
+    dict set recs $key status [expr {[llength $direct] || [llength $transitive] ? "layout-blocked" : "layout-direct"}]
+====
+    dict set recs $key status [expr {[llength $direct] ? "layout-blocked" : "layout-direct"}]
+>>>>
+
+@@ layout-pointer-blocks a pointer to a complete record is taken as a by-value dependency: a record pointing to a blocked record (or to itself) is blocked too
+## tools/c-bindgen/records.tcl
+<<<<
+            if {$blockers ne ""} { return [list no $blockers {}] }
+            return [list ok pointer [lindex $m 1]]
+====
+            if {$blockers ne ""} { return [list no $blockers {}] }
+            set pt [::cir::unq [::cir::final $::cbind::model::ix [lindex $t 1]]]
+            set pk "[lindex $pt 0] [lindex $pt 1]"
+            if {[lindex $pt 0] in {struct union} && [dict exists $::cbind::model::ix tag $pk] && [dict get $::cbind::model::ix tag $pk complete]} {
+                return [list no [list [list nested-layout-blocked "a pointer to $pk"]] [list [list $pk field]]]
+            }
+            return [list ok pointer [lindex $m 1]]
+>>>>
+
+@@ layout-array-flattened an array of a fixed extent is flattened into one field per element (name[0], name[1], ...), never a layout array (FIXED-LAYOUT-ARRAYS.md)
+## tools/c-bindgen/records.tcl
+<<<<
+        lappend out [dict create cname $cname path $cname ctype $ctype bits $bits attrs $attrs via $via slot ${prefix}member$i]
+====
+        if {[lindex $t 0] eq "array" && [lindex $t 2 0] eq "lit" && $bits eq ""} {
+            for {set k 0} {$k < [lindex $t 2 1]} {incr k} {
+                lappend out [dict create cname "$cname\[$k\]" path "$cname\[$k\]" ctype [lindex $t 1] bits "" attrs $attrs via $via slot ${prefix}member$i]
+            }
+            continue
+        }
+        lappend out [dict create cname $cname path $cname ctype $ctype bits $bits attrs $attrs via $via slot ${prefix}member$i]
+>>>>
+
+@@ layout-bitfield-as-integer a bitfield is taken for an ordinary field of its declared type
+## tools/c-bindgen/records.tcl
+<<<<
+        if {[dict get $m bits] ne ""} {
+            set width [::cir::BoundText [dict get $m bits]]
+====
+        if {0} {
+            set width [::cir::BoundText [dict get $m bits]]
+>>>>
+
+@@ layout-float-as-integer a float or double field is mapped to the C integer of its width (its bits as an integer)
+## tools/c-bindgen/records.tcl
+<<<<
+            if {[string match _Float* $sp] || [string match __float* $sp] || $sp in {__bf16 __ibm128}} { set reason float }
+            return [list no [concat $blockers [list [list $reason "$sp ([::cir::spell $type])"]]] {}]
+====
+            if {$sp eq "float"} { return [list ok scalar ffi::c::UInt] }
+            if {$sp eq "double"} { return [list ok scalar ffi::c::ULongLong] }
+            return [list no [concat $blockers [list [list $reason "$sp ([::cir::spell $type])"]]] {}]
+>>>>
+
+@@ layout-bool-as-uchar a C _Bool field is mapped to ffi::c::UChar (one byte), not blocked
+## tools/c-bindgen/records.tcl
+<<<<
+        bool { return [list no [concat $blockers [list [list c-bool "C _Bool ([::cir::spell $type])"]]] {}] }
+====
+        bool { return [list ok scalar ffi::c::UChar] }
+>>>>
+
+@@ layout-pointee-collapsed a pointer field's pointee identity is collapsed to ffi::c::Void (every record pointer one type)
+## tools/c-bindgen/records.tcl
+<<<<
+            if {$blockers ne ""} { return [list no $blockers {}] }
+            return [list ok pointer [lindex $m 1]]
+====
+            if {$blockers ne ""} { return [list no $blockers {}] }
+            return [list ok pointer [regsub -all {\x01[^\x02]+\x02} [lindex $m 1] ffi::c::Void]]
+>>>>
+
+@@ layout-typedef-duplicates every further typedef of a record gets a layout of its own, a duplicate of the first
+## tools/c-bindgen/emit.tcl
+<<<<
+        foreach l $lines {
+            append body "[format %-*s $width [lindex $l 0]]  # [lindex $l 1]\n"
+        }
+====
+        foreach l $lines {
+            append body "[format %-*s $width [lindex $l 0]]  # [lindex $l 1]\n"
+        }
+        foreach alias [lrange [dict get $rec typedefs] 1 end] {
+            append body "\nlayout [::cbind::records::TypeIdent $alias]:\n    size [dict get $rec size]\n    align [dict get $rec align]\n"
+            foreach l $lines { append body "[lindex $l 0]\n" }
+        }
+>>>>
+
+@@ layout-order-unstable the layouts are emitted in an order that changes from run to run (a random walk of the records, nested layouts still first)
+## tools/c-bindgen/records.tcl
+<<<<
+    set emitted [Order recs [lmap {k r} $recs {expr {[dict get $r status] eq "layout-direct" && ![dict get $r unheld] ? $k : [continue]}}]]
+====
+    set emitted [Order recs [lsort -command {apply {{a b} {expr {rand() < 0.5 ? -1 : 1}}}} [lmap {k r} $recs {expr {[dict get $r status] eq "layout-direct" && ![dict get $r unheld] ? $k : [continue]}}]]]
+>>>>
+
+@@ layout-anonymous-member-dropped an anonymous struct member is silently dropped, not promoted into its record
+## tools/c-bindgen/records.tcl
+<<<<
+            lappend out {*}[Members $recs $inner [concat $via [list "struct [lindex $t 1]"]] ${prefix}member${i}_]
+            continue
+====
+            continue
+>>>>
+
+@@ layout-windows-gnu-as-msvc the Windows GNU target is labeled MSVC's (x86_64-pc-windows-msvc), so MinGW-w64 evidence compiles as the MSVC target's
+## core/cabi.tcl
+<<<<
+        windows-x86_64-gnu {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-gnu} \
+====
+        windows-x86_64-gnu {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-msvc} \
+>>>>
+
+# --- record layouts: further mutants ----------------------------------------
+
+@@ layout-probe-undef-dropped the layout probe keeps the macros a member's or a type's name matches (a macro defined after the record rewrites the probe's offsetof)
+## tools/c-bindgen/generate.tcl
+<<<<
+    foreach u $undefs { append extra "#undef $u\n" }
+====
+>>>>
+
+@@ convention-default-always an explicit calling convention is taken as the target's default without asking the compiler
+## tools/c-bindgen/model.tcl
+<<<<
+    return [expr {$status eq "ok" && [lindex $data 0] == 1}]
+====
+    return 1
+>>>>
+
+@@ convention-typedef-ignored a callback typedef's explicit calling convention is ignored
+## tools/c-bindgen/model.tcl
+<<<<
+        if {[llength $ccs] && ![DefaultConvention cctd:$name]} {
+====
+        if {0} {
+>>>>
+
+@@ import-library-last a function several import libraries define takes the last of the profile's list, not the first
+## tools/c-bindgen/generate.tcl
+<<<<
+                dict set e library [lindex $found 0]
+====
+                dict set e library [lindex $found end]
+>>>>
+
+@@ import-library-missing-bound a function no import library defines is bound anyway, with no library
+## tools/c-bindgen/generate.tcl
+<<<<
+                dict set e kind unsupported
+                dict set e blockers [list [list no-import-library "no import library the profile searches ([join $libs {, }]) defines $sym"]]
+====
+                dict set e library ""
+                dict set e libraryAlso {}
+>>>>
+
+@@ pressure-ignores-dependencies the counterfactual pressure recovers a record whose direct blockers a feature lifts, whatever it holds by value
+## tools/c-bindgen/pressure.tcl
+<<<<
+        if {$yes} {
+            foreach d [dict get $rec deps] {
+====
+        if {0} {
+            foreach d [dict get $rec deps] {
+>>>>
+
+@@ layout-array-inner-dimension-dropped the layout probe asks only an array's outermost extent: a two-dimensional array has no inner extent to emit (FIXED-LAYOUT-ARRAYS.md)
+## tools/c-bindgen/records.tcl
+<<<<
+                        foreach b $bounds {
+                            lappend questions "sizeof($at) / sizeof($at\[0\])"
+                            append at "\[0\]"
+                        }
+====
+                        foreach b [lrange $bounds 0 0] {
+                            lappend questions "sizeof($at) / sizeof($at\[0\])"
+                            append at "\[0\]"
+                        }
+>>>>
+
+@@ layout-array-of-blocked-emitted an array of a blocked record is no by-value dependency: its record is emitted although its element has no layout (FIXED-LAYOUT-ARRAYS.md)
+## tools/c-bindgen/records.tcl
+<<<<
+            lappend deps [list $text array-element]
+            if {[dict exists $facts rec:$text] && [lindex [dict get $facts rec:$text] 0] eq "ok"} {
+====
+            if {[dict exists $facts rec:$text] && [lindex [dict get $facts rec:$text] 0] eq "ok"} {
+>>>>
+
+@@ layout-array-last-element-off-by-one layouts-check.c places an array's last element one element past its end (FIXED-LAYOUT-ARRAYS.md): the check rejects every correct array layout
+## tools/c-bindgen/verify.tcl
+<<<<
+            append text "BOTLISH_OFFSET($c, $last, [expr {$offset + ($count - 1) * $width}], \"$name.$fname, its last element\");\n"
+====
+            append text "BOTLISH_OFFSET($c, $last, [expr {$offset + $count * $width}], \"$name.$fname, its last element\");\n"
+>>>>
+
+# --- unions and anonymous members (LAYOUT-UNIONS.md) -------------------------
+
+@@ layout-union-blocker-kept a union is still blocked as a union (its members overlap), though a union layout represents it
+## tools/c-bindgen/records.tcl
+<<<<
+    set synthetic [Synthetic $recs $key]
+    dict set rec synthetic $synthetic
+====
+    if {[dict get $rec kind] eq "union"} { lappend direct [list union "a union: its members overlap"] }
+    set synthetic [Synthetic $recs $key]
+    dict set rec synthetic $synthetic
+>>>>
+
+@@ layout-anonymous-overlay-kept an anonymous union member still blocks its record as an overlay, though it is a synthetic union layout
+## tools/c-bindgen/records.tcl
+<<<<
+            lappend deps [list $anon anonymous-member]
+            dict set f kind nested
+====
+            lappend deps [list $anon anonymous-member]
+            if {[lindex $anon 0] eq "union"} { lappend fb [list anonymous-overlay "an anonymous union member ($anon): its members overlap the record's"] }
+            dict set f kind nested
+>>>>
+
+@@ layout-union-blocked-alternative-dropped a union's blocked alternative (a float, a C _Bool, a bitfield record) is left out and the union emitted without it, its root reason lost
+## tools/c-bindgen/records.tcl
+<<<<
+        if {$fb ne ""} { dict set f kind blocked }
+        lassign [ArrayOf [dict get $m ctype]] bounds elem
+====
+        if {$fb ne "" && [dict get $rec kind] eq "union"} { incr i; continue }
+        if {$fb ne ""} { dict set f kind blocked }
+        lassign [ArrayOf [dict get $m ctype]] bounds elem
+>>>>
+
+@@ layout-union-size-computed a union's size is computed as its widest member's, not the compiler's sizeof (tail padding and an aligned union's size lost; an anonymous union's too)
+## tools/c-bindgen/records.tcl
+<<<<
+    dict set rec fields $fields
+    dict set rec direct $direct
+====
+    if {[dict get $rec kind] eq "union"} {
+        set widest 0
+        foreach g $fields { if {[dict get $g size] ne "" && [dict get $g size] > $widest} { set widest [dict get $g size] } }
+        dict set rec size $widest
+    }
+    dict set rec fields $fields
+    dict set rec direct $direct
+>>>>
+
+@@ layout-union-member-offset-assumed a union member's offset is assumed to be 0: a compiler that places one elsewhere goes unnoticed (no union-member-offset blocker)
+## tools/c-bindgen/records.tcl
+<<<<
+        if {[dict get $rec kind] eq "union" && [dict get $f offset] ne "" && [dict get $f offset] != 0} {
+====
+        if {0} {
+>>>>
+
+@@ layout-union-only-first-alternative a union layout is emitted with its first alternative only
+## tools/c-bindgen/emit.tcl
+<<<<
+                lappend lines [list "    alternative [dict get $f name]: $type" $decl]
+====
+                if {![llength $lines]} { lappend lines [list "    alternative [dict get $f name]: $type" $decl] }
+>>>>
+
+@@ layout-verify-last-alternative-skipped layouts-check.c checks every alternative of a union but its last
+## tools/c-bindgen/verify.tcl
+<<<<
+    foreach f [lindex [dict get $byName $name] 3] {
+        lassign $f fname type offset
+        set offset [expr {$base + $offset}]
+====
+    set all [lindex [dict get $byName $name] 3]
+    foreach f [expr {[lindex [dict get $byName $name] 4] ? [lrange $all 0 end-1] : $all}] {
+        lassign $f fname type offset
+        set offset [expr {$base + $offset}]
+>>>>
+
+@@ layout-verify-anonymous-skipped layouts-check.c does not check a synthetic layout's members through the record holding it (an anonymous member is unverified)
+## tools/c-bindgen/verify.tcl
+<<<<
+            append text "BOTLISH_INSIDE($c, $offset, [dict get $sizes $type], $label);\n"
+            append text [Fields $c $type $offset $byName $records $members $sizes $target $pointerBytes]
+            continue
+====
+            continue
+>>>>
+
+@@ layout-verify-anonymous-size-unchecked a synthetic layout's size and alignment are not compared with clang's record layouts after generation
+## tools/c-bindgen/verify.tcl
+<<<<
+    if {![dict size $at]} { return {} }
+====
+    return {}
+>>>>
+
+@@ layout-anonymous-union-dropped an anonymous union member is silently dropped from its record (its bytes left out of the layout)
+## tools/c-bindgen/records.tcl
+<<<<
+            lappend out {*}[Members $recs $inner [concat $via [list "struct [lindex $t 1]"]] ${prefix}member${i}_]
+            continue
+        }
+====
+            lappend out {*}[Members $recs $inner [concat $via [list "struct [lindex $t 1]"]] ${prefix}member${i}_]
+            continue
+        }
+        if {$cname eq "" && $bits eq "" && [lindex $t 0] eq "union" && [string match anon@* [lindex $t 1]]} continue
+>>>>
+
+@@ layout-anonymous-union-flattened an anonymous union member's members are promoted into the record like an anonymous struct's: overlapping fields of the record, no union layout
+## tools/c-bindgen/records.tcl
+<<<<
+                if {[lindex $key 0] eq "struct" && [lindex [dict get $u container] 0] eq "struct"} {
+====
+                if {[lindex [dict get $u container] 0] eq "struct"} {
+>>>>
+## tools/c-bindgen/records.tcl
+<<<<
+        if {$cname eq "" && $bits eq "" && [lindex $t 0] eq "struct" && [string match anon@* [lindex $t 1]]
+                && [dict exists $recs "struct [lindex $t 1]" promotedInto]} {
+            set inner [dict get $recs "struct [lindex $t 1]"]
+====
+        if {$cname eq "" && $bits eq "" && [lindex $t 0] in {struct union} && [string match anon@* [lindex $t 1]]
+                && [dict exists $recs "[lindex $t 0] [lindex $t 1]" promotedInto]} {
+            set inner [dict get $recs "[lindex $t 0] [lindex $t 1]"]
+>>>>
+
+@@ layout-anonymous-offset-lost the generated field holding an anonymous member is placed at its container's start: the anonymous member's own offset (OVERLAPPED's union at 16, a union after a struct's first fields) is lost
+## tools/c-bindgen/records.tcl
+<<<<
+                dict set f offset [expr {$inner - $base}]
+====
+                dict set f offset 0
+>>>>
+
+@@ layout-anonymous-struct-in-union-promoted an anonymous struct in a union is promoted into the union like one in a struct: its members become alternatives at their own offsets (OffsetHigh at 4), no synthetic struct
+## tools/c-bindgen/records.tcl
+<<<<
+                if {[lindex $key 0] eq "struct" && [lindex [dict get $u container] 0] eq "struct"} {
+====
+                if {[lindex $key 0] eq "struct"} {
+>>>>
+
+@@ layout-anonymous-keyword-line-only clang's record layout of an anonymous member is looked for at the brace's line only (a struct or union keyword on the line above is missed)
+## tools/c-bindgen/records.tcl
+<<<<
+        for {set at [expr {$line - 8}]} {$at <= $line} {incr at} {
+====
+        for {set at $line} {$at <= $line} {incr at} {
+>>>>
+
+@@ layout-anonymous-names-unchecked clang's record layout of an anonymous member is taken by place alone, whatever members it has (two anonymous unions on one line are confused)
+## tools/c-bindgen/records.tcl
+<<<<
+                if {[lmap m [dict get $b members] {lindex $m 0}] ne $names} continue
+                lappend found $b
+====
+                lappend found $b
+>>>>
+
+@@ layout-anonymous-unheld-emitted a representable anonymous member whose record is blocked is emitted anyway: a synthetic layout no program reaches and no C check verifies
+## tools/c-bindgen/records.tcl
+<<<<
+        set unheld [expr {[dict get $rec synthetic] && [dict get $rec status] eq "layout-direct"
+            && [dict get $recs [dict get $rec owner] status] ne "layout-direct"}]
+====
+        set unheld 0
 >>>>

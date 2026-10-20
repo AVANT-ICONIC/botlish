@@ -23,13 +23,6 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 # Three errors: a payload-free one and two payload-bearing twins (the same
 # fields), raised by one function per selector.
 set hocDecls {error E1
@@ -512,7 +505,7 @@ test hoc-affine-error-edge {a coroutine live across a call an erased callable fa
 } -result {value {[10, -1, 0]}}
 
 test hoc-affine-error-edge-native {natively: every coroutine released, none swept} -constraints {
-    nativeLinux
+    nativeCoroutines
 } -body {
     set text [string map {test_hoc_live() 0} $hocCoroutine]
     list [sourceAgree $text] [dict get [native::allocationReport [surface::compile $text -warnings off] summary] coroutines]

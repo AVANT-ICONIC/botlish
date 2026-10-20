@@ -20,9 +20,6 @@
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 set ::allBackends {interp compile cranelift-generic cranelift}
 set ::faCode FIXED-ARITY-LIST-RETURN
 

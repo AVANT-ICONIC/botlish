@@ -81,7 +81,11 @@
 #                  [ "errors" errorName { "," errorName } ] ":" suite
 #                  -- typeExpr (TypeExpr) is a type name, a qualified or
 #                  applied one, a structural Fn type, or the keyword "unit"
-#                  as the unit type's name (`-> unit`)
+#                  as the unit type's name (`-> unit`); or the fixed array
+#                  representation `"array" INT "of" typeExpr`
+#                  (FIXED-LAYOUT-ARRAYS.md), which resolution accepts only
+#                  as a layout field's type or the argument of NativeView /
+#                  NativeEdit
 #   proofClause  = "proves" IDENT ":" typeExpr
 #                  -- REFINEMENT-VALUES.md: when the function returns true
 #                  (a predicate, "-> bool") or completes normally (a
@@ -197,7 +201,23 @@
 #                  the layout body only, so every one of them stays an
 #                  ordinary name everywhere else (a field may be called
 #                  `size`). What the items mean -- widths, bounds, overlap --
-#                  is hir/layouts.tcl's
+#                  is hir/layouts.tcl's. A field's type may be a fixed
+#                  array, `array N of TYPE` (FIXED-LAYOUT-ARRAYS.md), whose
+#                  "array" and "of" are contextual too
+#   unionDecl    = "union" "layout" IDENT ":" NEWLINE INDENT unionItem { unionItem } DEDENT
+#   unionItem    = "size" INT NEWLINE
+#                | "align" INT NEWLINE
+#                | "alternative" IDENT ":" typeExpr NEWLINE
+#                  -- LAYOUT-UNIONS.md: a union layout, several declared
+#                  interpretations of the same bytes (never a tagged sum:
+#                  no case, tag or active alternative). Every alternative
+#                  starts at the union's first byte, so it states no offset.
+#                  "union" is contextual: a declaration only as the first
+#                  word of a top-level statement directly followed by
+#                  "layout" and a name; "alternative" is a word of the union
+#                  body only. The body is a layout's otherwise: a union
+#                  layout is a `layoutdecl` node with `union 1`, whose
+#                  `fields` are its alternatives, each at offset 0
 #   structDecl   = { structModifier } "struct" IDENT ":" NEWLINE INDENT structField { structField } DEDENT
 #   structModifier = "opaque"       -- OPAQUE-STRUCTS.md; contextual (below)
 #                  | "context"      -- CONTEXTS.md; contextual (below). The
@@ -236,7 +256,9 @@
 # be the callee of method syntax), decided by its author; it is not a
 # directive to the compiler about a particular call.
 #
-# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression
+# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression --
+# or an arithmetic operator expression `a OP b` (OP one of + - * /), which is
+# a call of the operation its operands select (FLOAT64-MILESTONE-1.md) --
 # immediately followed by ":" and an indented block of "on NAME:" handlers,
 # in exactly the same "statement value" position an if/loop value is (the
 # right side of "=", or the value of "return"; not "break", which is never
@@ -280,14 +302,18 @@
 #   inversion    = "not" inversion | comparison
 #   comparison   = additive [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) additive ]
 #   additive     = multiplicative { ( "+" | "-" ) multiplicative }
-#   multiplicative = unary { "*" unary }
+#   multiplicative = unary { ( "*" | "/" ) unary }
+#                  -- "/" divides floating-point values only (FLOAT64-
+#                  MILESTONE-1.md): Botlish has no integer division
 #   unary        = "-" unary | postfix
 #   postfix      = primary { "(" [ callArgs ] ")" | "." IDENT [ "(" [ callArgs ] ")" ] }
 #   callArgs     = [ expression { "," expression } ] [ "," flag { "," flag } ] [ "," ]
 #                  -- a flag (":" IDENT, glued) is only valid in this position
 #                  and only after every ordinary argument (FLAGS.md)
 #   arguments    = expression { "," expression } [ "," ]       -- list literals
-#   primary      = INT | STRING | CHAR | "true" | "false" | "unit"
+#   primary      = INT | DECIMAL | STRING | CHAR | "true" | "false" | "unit"
+#                  -- DECIMAL: DIGITS "." DIGITS [ ("e"|"E") ["+"|"-"]
+#                  DIGITS ], a decimal number (FLOAT64-MILESTONE-1.md)
 #                | IDENT { "::" IDENT } [ fieldInits ]
 #                  -- "a::b::c": member c of namespace a::b (every segment
 #                     but the last is the namespace path)
@@ -523,6 +549,7 @@ proc surface::parser::Describe {token} {
         EOF     { return "end of file" }
         IDENT   { return "name \"[dict get $token text]\"" }
         INT     { return "integer [dict get $token text]" }
+        DECIMAL { return "decimal number [dict get $token text]" }
         STRING  { return "string [dict get $token text]" }
         CHAR    { return "character [dict get $token text]" }
         default { return "\"[dict get $token text]\"" }
@@ -584,7 +611,7 @@ proc surface::parser::Program {pVar} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $direct
         }
-        set direct [expr {[dict exists $p directSpan] ? [dict get $p directSpan] : ""}]
+        set direct [dict getdef $p directSpan ""]
         Synchronize p
         Failed p $first [lindex [dict get $options -errorcode] 2]
     }
@@ -885,6 +912,12 @@ proc surface::parser::EnumDecl {pVar} {
 proc surface::parser::AtLayoutDecl {pVar} {
     upvar 1 $pVar p
     set token [Peek p]
+    if {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "union"
+            && [Kind p 1] eq "IDENT" && [dict get [Peek p 1] text] eq "layout" && [Kind p 2] eq "IDENT"} {
+        # `union layout NAME:` (LAYOUT-UNIONS.md): three names in a row are
+        # never an expression either.
+        return 1
+    }
     return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "layout"
         && [Kind p 1] eq "IDENT"}]
 }
@@ -898,23 +931,40 @@ proc surface::parser::AtLayoutDecl {pVar} {
 # with its explicit offset -- so a generator (a C-header plugin) emits it
 # mechanically and two spellings of one layout never differ. What the numbers
 # and types mean (widths, bounds, overlap, alignment) is hir/layouts.tcl's.
+#
+# `union layout NAME:` (LAYOUT-UNIONS.md) is the same node with `union 1`:
+# its body has `alternative NAME: TYPE` lines instead of fields, none with an
+# offset -- every alternative starts at the union's first byte -- and they
+# are its FIELDS, each at offset 0 (offsetSpan its name's). Overlap is the
+# declaration's meaning here, and only here: an ordinary layout's fields
+# never share a byte.
 proc surface::parser::LayoutDecl {pVar} {
     upvar 1 $pVar p
-    set start [dict get [Advance p] span]
+    set union 0
+    set first [Advance p]
+    set start [dict get $first span]
+    if {[dict get $first text] eq "union"} {
+        # (AtLayoutDecl: "layout" follows.)
+        set union 1
+        Advance p
+    }
     set name [Advance p]
     set layoutName [dict get $name value]
+    set what [expr {$union ? "union layout" : "layout"}]
+    set itemWord [expr {$union ? "alternative" : "field"}]
+    set itemForm [expr {$union ? "alternative NAME: TYPE" : "field NAME: TYPE at OFFSET"}]
     set token [Peek p]
     if {[dict get $token kind] ne ":"} {
-        Fail $token "expected \":\" after the layout name \"$layoutName\", found [Describe $token]"
+        Fail $token "expected \":\" after the $what name \"$layoutName\", found [Describe $token]"
     }
     Advance p
     set token [Peek p]
     if {[dict get $token kind] ne "NEWLINE"} {
-        Fail $token "expected a new line and an indented block of \"size\", \"align\" and \"field\" lines after \":\", found [Describe $token]"
+        Fail $token "expected a new line and an indented block of \"size\", \"align\" and \"$itemWord\" lines after \":\", found [Describe $token]"
     }
     Advance p
     if {[Kind p] ne "INDENT"} {
-        Fail [Peek p] "layout \"$layoutName\" needs an indented block: one \"size N\" line, one \"align N\" line and at least one \"field NAME: TYPE at OFFSET\" line"
+        Fail [Peek p] "$what \"$layoutName\" needs an indented block: one \"size N\" line, one \"align N\" line and at least one \"$itemForm\" line"
     }
     Advance p
     set items [dict create]
@@ -926,17 +976,41 @@ proc surface::parser::LayoutDecl {pVar} {
         }
         set word [Peek p]
         set text [dict get $word text]
-        if {[dict get $word kind] ne "IDENT" || $text ni {size align field}} {
-            Fail $word "expected \"size N\", \"align N\" or \"field NAME: TYPE at OFFSET\" in layout \"$layoutName\", found [Describe $word]"
+        if {[dict get $word kind] eq "IDENT" && $text in {field alternative} && $text ne $itemWord} {
+            # The two bodies' items are not interchangeable: overlap is
+            # declared by a union layout, never by one line of a layout.
+            if {$union} {
+                Fail $word "a union layout has alternatives, not fields: \"alternative NAME: TYPE\" (every alternative starts at the union's first byte, so it states no offset)"
+            }
+            Fail $word "a layout has fields, not alternatives: \"field NAME: TYPE at OFFSET\" (alternatives, which share bytes, belong to a union layout, `union layout NAME:`; the fields of a layout never share a byte)"
+        }
+        if {[dict get $word kind] ne "IDENT" || $text ni [list size align $itemWord]} {
+            Fail $word "expected \"size N\", \"align N\" or \"$itemForm\" in $what \"$layoutName\", found [Describe $word]"
         }
         Advance p
         if {$text in {size align}} {
             if {[dict exists $items $text]} {
-                Fail $word "layout \"$layoutName\" already has a \"$text\" line (at [surface::ast::location [dict get $items ${text}Span]]): each is written exactly once"
+                Fail $word "$what \"$layoutName\" already has a \"$text\" line (at [surface::ast::location [dict get $items ${text}Span]]): each is written exactly once"
             }
             set number [Expect p INT "an integer after \"$text\" (a byte count)"]
             dict set items $text [dict get $number value]
             dict set items ${text}Span [dict get $number span]
+        } elseif {$union} {
+            set fieldToken [Expect p IDENT "an alternative name after \"alternative\""]
+            set fieldName [dict get $fieldToken value]
+            if {[Kind p] ne ":"} {
+                Fail [Peek p] "expected \":\" and a type after the union alternative name \"$fieldName\", found [Describe [Peek p]]"
+            }
+            Advance p
+            set typeStart [dict get [Peek p] span]
+            set type [TypeExpr p "an alternative type after \":\""]
+            set typeSpan [SpanFrom p $typeStart]
+            set at [Peek p]
+            if {[dict get $at kind] eq "IDENT" && [dict get $at text] eq "at"} {
+                Fail $at "a union alternative states no offset: every alternative of union layout \"$layoutName\" starts at the union's first byte (alternative $fieldName: TYPE)"
+            }
+            lappend fields [dict create name $fieldName nameSpan [dict get $fieldToken span] \
+                type $type typeSpan $typeSpan offset 0 offsetSpan [dict get $fieldToken span]]
         } else {
             set fieldToken [Expect p IDENT "a field name after \"field\""]
             set fieldName [dict get $fieldToken value]
@@ -958,7 +1032,7 @@ proc surface::parser::LayoutDecl {pVar} {
         }
         set next [Peek p]
         if {[dict get $next kind] ni {NEWLINE DEDENT EOF}} {
-            Fail $next "expected end of line after the \"$text\" line of layout \"$layoutName\", found [Describe $next]"
+            Fail $next "expected end of line after the \"$text\" line of $what \"$layoutName\", found [Describe $next]"
         }
         if {[dict get $next kind] eq "NEWLINE"} {
             Advance p
@@ -969,16 +1043,23 @@ proc surface::parser::LayoutDecl {pVar} {
     }
     foreach required {size align} {
         if {![dict exists $items $required]} {
-            Fail $name "layout \"$layoutName\" has no \"$required N\" line: a layout states its byte size and its alignment explicitly"
+            Fail $name "$what \"$layoutName\" has no \"$required N\" line: a $what states its byte size and its alignment explicitly"
         }
     }
     if {$fields eq ""} {
+        if {$union} {
+            Fail $name "union layout \"$layoutName\" declares no alternative: a union layout needs at least one \"alternative NAME: TYPE\" line"
+        }
         Fail $name "layout \"$layoutName\" declares no field: a layout needs at least one \"field NAME: TYPE at OFFSET\" line"
     }
-    return [surface::ast::node layoutdecl [SpanFrom p $start] \
+    set node [surface::ast::node layoutdecl [SpanFrom p $start] \
         name $layoutName nameSpan [dict get $name span] \
         size [dict get $items size] sizeSpan [dict get $items sizeSpan] \
         align [dict get $items align] alignSpan [dict get $items alignSpan] fields $fields]
+    if {$union} {
+        dict set node union 1
+    }
+    return $node
 }
 
 # 1 if the next tokens start a trait declaration (TRAITS.md): the contextual
@@ -1491,7 +1572,11 @@ proc surface::parser::ExternParam {pVar fn} {
                     "unknown fact \"$text\" of parameter \"$pname\" of extern c fn \"$fn\": a pointer parameter states its access (read, write) and its escape (noescape, proven noescape, captures); an unstated fact is unknown"
             }
         }
-        set factsSpan [expr {$factsSpan eq "" ? $span : [surface::ast::cover $factsSpan $span]}]
+        if {$factsSpan eq ""} {
+            set factsSpan $span
+        } else {
+            set factsSpan [surface::ast::cover $factsSpan $span]
+        }
     }
     if {[Kind p] in {.. .}} {
         FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
@@ -1558,8 +1643,7 @@ proc surface::parser::Statements {pVar stop} {
             Synchronize p
         }
         Failed p $token [lindex [dict get $options -errorcode] 2]
-        set end [expr {[dict get $p last start] >= [dict get $token span start]
-            ? [dict get $p last] : [dict get $token span]}]
+        set end [if {[dict get $p last start] >= [dict get $token span start]} {dict get $p last} else {dict get $token span}]
         lappend body [surface::ast::node error [surface::ast::cover [dict get $token span] $end]]
     }
     return $body
@@ -1659,10 +1743,10 @@ proc surface::parser::Statement {pVar} {
         AnonymousEnumError $token
     }
     if {[AtLayoutDecl p]} {
-        # `layout NAME:` (BINARY-LAYOUT.md): a contextual top-level
-        # declaration.
+        # `layout NAME:` (BINARY-LAYOUT.md), `union layout NAME:`
+        # (LAYOUT-UNIONS.md): a contextual top-level declaration.
         if {![dict get $p topLevel]} {
-            Fail $token "a layout declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+            Fail $token "a [expr {[dict get $token text] eq "union" ? "union layout" : "layout"}] declaration is only allowed at the top level of a module, not nested in a function/if/loop"
         }
         return [LayoutDecl p]
     }
@@ -1865,7 +1949,10 @@ proc surface::parser::ValueOrHandled {pVar} {
         StaticWithoutOperationError p
     }
     set expr [Expression p]
-    if {[Kind p] eq ":" && [dict get $expr kind] in {call methodcall}} {
+    if {[Kind p] eq ":" && ([dict get $expr kind] in {call methodcall}
+            || ([dict get $expr kind] eq "binary" && [dict get $expr op] in {+ - * /}))} {
+        # (An arithmetic operator is a call too: a floating-point one may
+        # complete with NonFiniteFloat, FLOAT64-MILESTONE-1.md.)
         return [HandledCall p $expr]
     }
     return $expr
@@ -2067,6 +2154,17 @@ proc surface::parser::Value {pVar} {
 # errors here, each with its own message.
 proc surface::parser::TypeExpr {pVar what} {
     upvar 1 $pVar p
+    if {[Kind p] eq "IDENT" && [dict get [Peek p] text] eq "array" && [Kind p 1] eq "INT"} {
+        # `array N of TYPE` (FIXED-LAYOUT-ARRAYS.md): a fixed repetition of
+        # a layout representation. "array" is contextual -- a type name
+        # directly followed by an integer is never another type expression
+        # -- so a type or a variable called `array` is unaffected. Parsed
+        # wherever a type is, so that resolution can say where it belongs (a
+        # layout field's type, or the argument of NativeView/NativeEdit);
+        # the result {array N ELEMENT} has three words, which no applied
+        # type {NAME ARG} or function type {fn FIELDS} has.
+        return [ArrayTypeExpr p]
+    }
     if {[Kind p] eq "unit"} {
         # `unit` is a keyword (the unit value, lexer.tcl); in a type
         # position it is the name of the unit type (`fn log(x) -> unit:`,
@@ -2110,6 +2208,25 @@ proc surface::parser::TypeExpr {pVar what} {
     return [list $name $arg]
 }
 
+# "array" INT "of" TypeExpr -- a fixed array representation
+# (FIXED-LAYOUT-ARRAYS.md): exactly INT consecutive elements of the element
+# representation, which may itself be an array (`array 2 of array 3 of
+# binary::U32`: two rows of three, C's dimension order). The extent is the
+# INT token's decimal text; what it may be (positive, within the layout) is
+# hir/layouts.tcl's.
+proc surface::parser::ArrayTypeExpr {pVar} {
+    upvar 1 $pVar p
+    Advance p
+    set extent [Advance p]
+    set of [Peek p]
+    if {[dict get $of kind] ne "IDENT" || [dict get $of text] ne "of"} {
+        Fail $of "expected \"of\" and the element representation after \"array [dict get $extent value]\" (array N of TYPE), found [Describe $of]"
+    }
+    Advance p
+    set element [TypeExpr p "an element type after \"of\""]
+    return [list array [dict get $extent value] $element]
+}
+
 # "Fn" "{" fnField { "," fnField } [ "," ] "}", after the "Fn" token FN:
 #
 #   fnField = "args" ":" "[" [ TypeExpr { "," TypeExpr } [ "," ] ] "]"
@@ -2148,7 +2265,11 @@ proc surface::parser::FnType {pVar fn {kind fn}} {
         set token [Peek p]
         switch -- [dict get $token kind] {
             IDENT - return - errors {
-                set field [expr {[dict get $token kind] eq "IDENT" ? [dict get $token value] : [dict get $token kind]}]
+                if {[dict get $token kind] eq "IDENT"} {
+                    set field [dict get $token value]
+                } else {
+                    set field [dict get $token kind]
+                }
             }
             default {
                 Fail $token "expected a field name (args, return or errors) in the $what, found [Describe $token]"
@@ -2277,7 +2398,7 @@ proc surface::parser::Function {pVar} {
         params $params flags $flags contexts $contexts paramsSpan [SpanFrom p [dict get $open span]] \
         resultType [dict get $body resultType] resultTypeSpan [dict get $body resultTypeSpan] \
         errors [dict get $body errors] proves [dict get $body proves] body $body \
-        nomethod $nomethod nomethodSpan [expr {$nomethod ? [dict get $modifiers nomethod] : ""}] \
+        nomethod $nomethod nomethodSpan [if {$nomethod} {dict get $modifiers nomethod} else {string cat ""}] \
         resume $resume]
 }
 
@@ -2864,7 +2985,11 @@ proc surface::parser::LoopClause {pVar} {
     set name [dict get $nameToken value]
     set nameSpan [dict get $nameToken span]
     set dispatch [Peek p]
-    set dispatchWord [expr {[dict get $dispatch kind] eq "IDENT" ? [dict get $dispatch value] : ""}]
+    if {[dict get $dispatch kind] eq "IDENT"} {
+        set dispatchWord [dict get $dispatch value]
+    } else {
+        set dispatchWord ""
+    }
     switch -- $dispatchWord {
         in {
             Advance p
@@ -2903,7 +3028,11 @@ proc surface::parser::LoopCount {pVar name nameSpan direction} {
     }
     set first [LoopOperand p]
     set keywordToken [Peek p]
-    set word [expr {[dict get $keywordToken kind] eq "IDENT" ? [dict get $keywordToken value] : ""}]
+    if {[dict get $keywordToken kind] eq "IDENT"} {
+        set word [dict get $keywordToken value]
+    } else {
+        set word ""
+    }
     switch -- $word {
         to { set endKind exclusive }
         through { set endKind inclusive }
@@ -3094,7 +3223,7 @@ proc surface::parser::Additive {pVar} {
 proc surface::parser::Multiplicative {pVar} {
     upvar 1 $pVar p
     set left [Unary p]
-    while {[Kind p] eq "*"} {
+    while {[Kind p] in {* /}} {
         set op [Advance p]
         set left [Binary $op $left [Unary p]]
     }
@@ -3166,6 +3295,24 @@ proc surface::parser::Postfix {pVar} {
                     Fail $token "expected a field name after \".\", found [Describe $token]"
                 }
                 Advance p
+                set indices {}
+                while {[Kind p] eq "\[" && [Kind p 1] eq "INT"} {
+                    # receiver.name[3][1]: static element indices -- the
+                    # element designator of a layout's fixed array
+                    # (FIXED-LAYOUT-ARRAYS.md: binary::store(e, L.pts[2].x,
+                    # v)). An integer can never be a type, so this is never
+                    # a method call's imprint list; what it may designate
+                    # (only a layout field designator) is hir/resolve.tcl's.
+                    Advance p
+                    set number [Advance p]
+                    Expect p \] "\"\]\" after the element index [dict get $number value]"
+                    lappend indices [dict create value [dict get $number value] span [dict get $number span]]
+                }
+                if {$indices ne ""} {
+                    set expr [surface::ast::node project [SpanFrom p [dict get $expr span]] \
+                        receiver $expr name [dict get $token value] nameSpan [dict get $token span] indices $indices]
+                    continue
+                }
                 set imprints {}
                 if {[Kind p] eq "\["} {
                     # receiver.name[TYPE, ...](args): a method call with
@@ -3258,6 +3405,17 @@ proc surface::parser::Primary {pVar} {
         INT {
             Advance p
             return [surface::ast::node int $span text [dict get $token value]]
+        }
+        DECIMAL {
+            # A decimal literal (FLOAT64-MILESTONE-1.md): the decimal
+            # number it spells, exactly; its type is decided by lowering
+            # (surface::lower::DecimalConstant), which also says when it
+            # denotes no value -- an error where it is written.
+            if {[catch {surface::lower::DecimalConstant [dict get $token value]} message]} {
+                Fail $token $message
+            }
+            Advance p
+            return [surface::ast::node decimal $span text [dict get $token value]]
         }
         STRING {
             Advance p
@@ -3423,7 +3581,10 @@ proc surface::parser::PatternEnd {pVar {from 0}} {
             \} - ] - ) {
                 incr depth -1
                 if {$depth == 0} {
-                    return [expr {[Kind p [expr {$i + 1}]] eq "=" ? $i : -1}]
+                    if {[Kind p [expr {$i + 1}]] eq "="} {
+                        return $i
+                    }
+                    return -1
                 }
             }
             NEWLINE - INDENT - DEDENT - EOF {
@@ -3576,7 +3737,7 @@ proc surface::parser::Pattern {pVar} {
                     }
                     [ {
                         ListDestructuringError [surface::ast::cover [dict get $target span] \
-                            [expr {[PatternEnd p] >= 0 ? [dict get [Peek p [PatternEnd p]] span] : [dict get $target span]}]]
+                            [if {[PatternEnd p] >= 0} {dict get [Peek p [PatternEnd p]] span} else {dict get $target span}]]
                     }
                     default {
                         Fail $target "expected a binding name or a nested \"\{...\}\" pattern after \"[dict get $token value]:\", found [Describe $target]"
@@ -3732,6 +3893,6 @@ proc surface::parser::StructDecl {pVar} {
     set context [dict exists $modifiers context]
     return [surface::ast::node structdecl [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] fields $fields \
-        opaque $opaque opaqueSpan [expr {$opaque ? [dict get $modifiers opaque] : ""}] \
-        context $context contextSpan [expr {$context ? [dict get $modifiers context] : ""}]]
+        opaque $opaque opaqueSpan [if {$opaque} {dict get $modifiers opaque} else {string cat ""}] \
+        context $context contextSpan [if {$context} {dict get $modifiers context} else {string cat ""}]]
 }

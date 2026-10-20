@@ -1,5 +1,20 @@
 # BINARY-LAYOUT.md
 
+> Partially superseded by FIXED-LAYOUT-ARRAYS.md: a field may be a fixed
+> array (`field name: array N of E at OFFSET`), whose copied value is a List
+> of exactly N elements -- items 32 and 66 and "The fixed-layout limitation"
+> below describe the language before it.
+
+> Partially superseded by LAYOUT-UNIONS.md: overlap is declared by a
+> `union layout` (several interpretations of the same bytes, every
+> alternative at the union's start, an explicit size and alignment) held by
+> value in a field -- items 33 and 67 describe the language before it. A
+> union has no copied value: `LayoutStruct`, `binary::parse`,
+> `binary::emit` and `binary::load` of anything holding one are
+> LAYOUT-UNION, and bytes are read one alternative at a time
+> (`binary::read(data, L.u.alt)`). Overlap stays an error in an ordinary
+> layout, and a union is no sum (item 67's plan is not what landed).
+
 Fixed binary layouts: `layout` declarations, `LayoutStruct[L]`, imprinting
 and emission.
 
@@ -241,7 +256,8 @@ future scalar.
 ### The fixed-layout limitation
 
 Every layout has a size known at compile time, and every field a fixed
-offset and a fixed width. There is no repetition (arrays), no union or
+offset and a fixed width. There is no repetition (arrays: since added,
+FIXED-LAYOUT-ARRAYS.md), no union or
 overlay (overlap is rejected), no bitfield, no conditional or
 length-dependent field, no variable-length tail, no explicit byte order, no
 floating-point scalar and no pointer scalar (pointer fields came later,
@@ -546,7 +562,8 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     must be a `U8` field converted by the wrapper), and anything
     variable-length. Calling C at all (the FFI milestone) is out of scope.
 32. **Arrays.** Not supported: a field is a scalar or a nested layout. A
-    fixed array is the first repetition construct (item 66).
+    fixed array is the first repetition construct (item 66; since added,
+    FIXED-LAYOUT-ARRAYS.md).
 33. **Unions.** Not supported: overlap is rejected, never implied. An
     overlay is a future explicit construct (item 67).
 34. **Bitfields.** Not supported. A plugin can declare the storage unit as a
@@ -841,6 +858,8 @@ From `examples/binary/c-structs.bot`'s `raw_input_device` and `to_raw`.
 66. **Arrays.** The first repetition form (`char name[16]`, `POINT pts[4]`);
     the C plugin emits them directly. The open question is the consumer
     type: a `List[T]` of proven length versus a fixed-length array type.
+    (Answered by FIXED-LAYOUT-ARRAYS.md: a List, whose length a whole-array
+    write checks unless the compiler proves it.)
 67. **Unions/overlays.** An explicit overlay construct whose alternatives
     share bytes; its value is a sum, so it waits for enums with payloads
     (ENUMS.md's planned extension) and a discriminant rule. Overlap stays an
@@ -849,7 +868,8 @@ From `examples/binary/c-structs.bot`'s `raw_input_device` and `to_raw`.
     NATIVE-LAYOUT-VIEWS.md.) A zero-copy `View[L]` over borrowed storage reading fields
     lazily -- a separate abstraction with a lifetime, never what
     `LayoutStruct` silently becomes (it retains nothing by design).
-69. **Mutable views.** Writing fields into foreign or shared storage in
+69. **Mutable views.** (Native memory's came first: `NativeEdit[L]`, and
+    field writes into a `MutableBytes`, NATIVE-LAYOUT-WRITES.md.) Writing fields into foreign or shared storage in
     place: needs the view and an ownership story for the storage
     (MutableBytes-like values, affinity), not a mutable `LayoutStruct`.
 70. **Streaming.** Records imprinted one at a time from a byte stream: a

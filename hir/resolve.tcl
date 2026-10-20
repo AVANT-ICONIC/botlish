@@ -352,7 +352,10 @@ proc hir::resolve::LexicalTarget {hirVar s name} {
                 return ambient
             }
             root {
-                return [expr {$name in [RootNames] ? [list root $name] : ""}]
+                if {$name in [RootNames]} {
+                    return [list root $name]
+                }
+                return ""
             }
         }
     }
@@ -438,10 +441,14 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} 
             set arity ""
         } elseif {[llength $target] == 2} {
             set identity native:$name
-            set arity [expr {[core::native::exists $name] ? [dict get [core::native::metadata $name] arity] : ""}]
+            if {[core::native::exists $name]} {
+                set arity [dict get [core::native::metadata $name] arity]
+            } else {
+                set arity ""
+            }
         } else {
             set identity [CandidateIdentity hir $target]
-            set arity [CandidateArity hir [expr {[string match binding:* $identity] ? [string range $identity 8 end] : $target}]]
+            set arity [CandidateArity hir [if {[string match binding:* $identity]} {string range $identity 8 end} else {set target}]]
         }
         if {![dict exists $found $identity]} {
             dict set found $identity [dict create display $name kind lexical ns "" identity $identity]
@@ -461,7 +468,10 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} 
         if {$arity ne "" && $arity ne "*" && $arity != $argCount} continue
         set c
     }]
-    return [expr {$fitting ne "" ? $fitting : $all}]
+    if {$fitting ne ""} {
+        return $fitting
+    }
+    return $all
 }
 
 # The key naming the method-style call NODE (a call syntax node) across
@@ -496,7 +506,7 @@ proc hir::resolve::MethodChoice {hirVar e node candidates} {
             }
         }
     }
-    dict set hir methodCalls [expr {$key ne "" ? $key : $e}] [dict create expr $e \
+    dict set hir methodCalls [if {$key ne ""} {set key} else {set e}] [dict create expr $e \
         name [dict get [dict get $node callee] name] \
         candidates [lmap c $candidates {dict get $c display}] chosen [dict get $chosen display]]
     return $chosen
@@ -562,6 +572,12 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
             return [list imprint $typeExpr]
         }
         return [hir::types::resolveNamed $typeExpr $ns]
+    }
+    if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
+        # `array N of T` (FIXED-LAYOUT-ARRAYS.md) describes bytes, like a
+        # layout: a layout field's type or NativeView/NativeEdit's argument
+        # (both resolved by hir/layouts.tcl), never a type of values.
+        return -code error -errorcode {BOTLISH LAYOUT-NOT-A-TYPE} [hir::layouts::ArrayNotATypeMessage $typeExpr]
     }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
@@ -635,6 +651,10 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         # NativeView[L] (NATIVE-LAYOUT-VIEWS.md): likewise.
         return [hir::layouts::ResolveNativeView $arg $ns]
     }
+    if {$name eq "NativeEdit"} {
+        # NativeEdit[L] (NATIVE-LAYOUT-WRITES.md): likewise.
+        return [hir::layouts::ResolveNativeEdit $arg $ns]
+    }
     if {$name eq [hir::cabi::PtrName]} {
         # ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
         # (ffi::c::Void among them), never a value type.
@@ -702,14 +722,22 @@ proc hir::resolve::ResolveProofs {hirVar e node params declaredTypes declared ct
         set typeText [ShowTypeExpr [dict get $clause type]]
         set index [lsearch -exact $ordinary $name]
         if {$index < 0} {
-            set flags [expr {[dict exists $node flags] ? [lmap f [dict get $node flags] {lindex $f 0}] : {}}]
-            set contexts [expr {[dict exists $node contextParams] ? [lmap c [dict get $node contextParams] {lindex $c 0}] : {}}]
+            if {[dict exists $node flags]} {
+                set flags [lmap f [dict get $node flags] {lindex $f 0}]
+            } else {
+                set flags {}
+            }
+            if {[dict exists $node contextParams]} {
+                set contexts [lmap c [dict get $node contextParams] {lindex $c 0}]
+            } else {
+                set contexts {}
+            }
             if {$name in $flags} {
                 set why "\"$name\" is a flag, not an ordinary parameter"
             } elseif {$name in $contexts} {
                 set why "\"$name\" is a context parameter, not an ordinary parameter"
             } else {
-                set why "the function has no parameter \"$name\" (its parameters: [expr {$ordinary eq {} ? "none" : [join $ordinary {, }]}])"
+                set why "the function has no parameter \"$name\" (its parameters: [if {$ordinary eq {}} {string cat "none"} else {join $ordinary {, }}])"
             }
             hir::DiagnoseAt hir PROOF-CLAUSE "proof clause \"proves $name: $typeText\" must name one of the function's ordinary parameters: $why" $e $paramOrigin
             continue
@@ -768,6 +796,9 @@ proc hir::resolve::ResolveProofs {hirVar e node params declaredTypes declared ct
 proc hir::resolve::ShowTypeExpr {typeExpr} {
     if {[llength $typeExpr] == 1} {
         return $typeExpr
+    }
+    if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
+        return "array [lindex $typeExpr 1] of [ShowTypeExpr [lindex $typeExpr 2]]"
     }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
@@ -860,13 +891,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 SetField hir $e nomethod 1
             }
             set params {}
-            set paramTypes [expr {[dict exists $node paramTypes] ? [dict get $node paramTypes]
-                : [lrepeat [llength [dict get $node params]] {}]}]
+            set paramTypes [if {[dict exists $node paramTypes]} {dict get $node paramTypes} else {lrepeat [llength [dict get $node params]] {}}]
             set declaredParamTypes {}
             foreach param [dict get $node params] paramType $paramTypes {
                 lassign $param name paramOrigin
-                set first [expr {[dict exists $hir scopes $bodyScope names $name]
-                    ? [dict get $hir scopes $bodyScope names $name] : ""}]
+                set first [dict getdef $hir scopes $bodyScope names $name ""]
                 set b [NewBinding hir $name param $bodyScope $paramOrigin]
                 if {$first ne ""} {
                     # Only reachable from syntax built without core IR's shape
@@ -936,7 +965,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             lassign [hir::flags::Declare hir $e $node $bodyScope [CtxNamespace $ctx]] flagBindings flagTypes
             lappend params {*}$flagBindings
             lappend declaredParamTypes {*}$flagTypes
-            SetField hir $e flags [lmap flag [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] {lindex $flag 0}]
+            SetField hir $e flags [lmap flag [dict getdef $node flags {}] {lindex $flag 0}]
             # The context section (CONTEXTS.md): not parameters. Each entry
             # is an ordinary local of the body, bound first, to the installed
             # context of its type (hir::contexts::DeclareParams).
@@ -949,7 +978,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e declaredParamTypes $declaredParamTypes
             SetField hir $e captures {}
             SetField hir $e staticRefs {}
-            set declared [expr {[dict exists $node declaredResult] ? [dict get $node declaredResult] : {}}]
+            set declared [dict getdef $node declaredResult {}]
             if {$declared ne {}} {
                 if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx] 1} normalized options]} {
                     hir::Diagnose hir [TypeErrorKind $options TYPE] [format {unknown or invalid result type %s: %s} [ShowTypeExpr $declared] $normalized] $e
@@ -966,7 +995,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
             if {$resultWitness ne ""} {
                 # A declared trait result: the witness the plan proved it has.
                 SetField hir $e traitResult $declared
-                set declared [expr {$resultWitness eq "-" ? {} : $resultWitness}]
+                if {$resultWitness eq "-"} {
+                    set declared {}
+                } else {
+                    set declared $resultWitness
+                }
             }
             SetField hir $e declaredResult $declared
             SetField hir $e resultType ""
@@ -978,7 +1011,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             # resolved parameters and result: the generic metadata every
             # consumer reads (hir/refine.tcl), never a predicate's name.
             SetField hir $e proofs [ResolveProofs hir $e $node $params $declaredParamTypes $declared $ctx]
-            set declaredErrorPairs [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+            set declaredErrorPairs [dict getdef $node declaredErrors {}]
             set errorNames {}
             set seenErrors [dict create]
             foreach pair $declaredErrorPairs {
@@ -1032,7 +1065,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 return $e
             }
             set layoutNative [LayoutNative $written]
-            set layoutRole [expr {$layoutNative eq "" || [dict exists $node method] ? "" : [hir::layouts::Role $layoutNative]}]
+            if {$layoutNative eq "" || [dict exists $node method]} {
+                set layoutRole ""
+            } else {
+                set layoutRole [hir::layouts::Role $layoutNative]
+            }
             if {[hir::layouts::RoleOf $layoutRole query] ne ""} {
                 # A compile-time fact of a layout (BINARY-LAYOUT.md):
                 # binary::layout_length(L) is L's size, a constant.
@@ -1049,6 +1086,13 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # consult): diagnostics' provenance, recorded in every
                 # compilation mode and read by no analysis.
                 SetField hir $e written [dict create form [dict get $node written] ns [CtxNamespace $ctx]]
+            }
+            if {[dict exists $node operator]} {
+                # An operator its operands' static types resolve
+                # (hir/operators.tcl), read during typing; operatorCalls
+                # lists every such call, in resolution order.
+                SetField hir $e operator [dict get $node operator]
+                dict lappend hir operatorCalls $e
             }
             if {$candidates ne ""} {
                 # Method-call sugar (METHOD-SUGAR.md): `receiver.name(args)`
@@ -1078,15 +1122,21 @@ proc hir::resolve::Expr {hirVar node ctx} {
             } else {
                 SetField hir $e callee [Expr hir $written $ctx]
                 set operand [hir::layouts::RoleOf $layoutRole operand]
-                if {$operand ne ""} {
+                set path [hir::layouts::RoleOf $layoutRole path]
+                if {$operand ne "" || $path ne ""} {
                     # The static layout operand of a binary operation
                     # (BINARY-LAYOUT.md): a layout name, resolved to the
                     # layout's descriptor constant -- never an expression.
+                    # A write's field designator (NATIVE-LAYOUT-WRITES.md)
+                    # likewise: LAYOUT.FIELD..., resolved to the field's
+                    # designator constant.
                     set args {}
                     set index 0
                     foreach arg [dict get $node args] {
-                        if {$index == $operand} {
+                        if {$index eq $operand} {
                             lappend args [LayoutOperand hir $arg $layoutNative $ctx]
+                        } elseif {$index eq $path} {
+                            lappend args [FieldPathOperand hir $arg $layoutNative $ctx]
                         } else {
                             lappend args [Expr hir $arg $ctx]
                         }
@@ -1313,6 +1363,13 @@ proc hir::resolve::Expr {hirVar node ctx} {
             # representation authority over an opaque receiver is checked
             # against after inference (hir/structs.tcl, OPAQUE-STRUCTS.md).
             SetField hir $e ns [CtxNamespace $ctx]
+            if {[dict exists $node indices]} {
+                # `x.name[3]` outside a layout field designator
+                # (FIXED-LAYOUT-ARRAYS.md): there is no index expression.
+                set index [lindex [dict get $node indices] 0]
+                hir::DiagnoseAt hir LAYOUT-OPERAND [::format {an element index (%s[%s]) is written only in a layout field designator, binary::store(e, L.items[3], v) or binary::write(d, L.items[3], v): Botlish has no index expression (an element of a live array is binary::element(a, i), of a List list::at(xs, i))} \
+                    [dict get $node name] [lindex $index 0]] $e [lindex $index 1]
+            }
         }
         ok - error {
             SetField hir $e value [Expr hir [dict get $node value] $ctx]
@@ -1413,7 +1470,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # ignored payload that owns affine values gets a hidden
                 # binding, so it is released by the ordinary rules
                 # (hir/affine.tcl) -- never left to a collector.
-                set payload [expr {[dict exists $handler payload] ? [dict get $handler payload] : ""}]
+                set payload [dict getdef $handler payload ""]
                 set binding ""
                 if {$payload ne ""} {
                     set binding [NewBinding hir [dict get $payload name] param $branch [dict get $payload origin]]
@@ -1522,7 +1579,7 @@ proc hir::resolve::CoroutineResume {hirVar e ctx} {
 # The module namespace ("" for the entry program) the code of CTX is in:
 # what an unqualified struct name resolves against.
 proc hir::resolve::CtxNamespace {ctx} {
-    return [expr {[dict exists $ctx namespace] ? [dict get $ctx namespace] : ""}]
+    return [dict getdef $ctx namespace ""]
 }
 
 # Resolves struct construction E (STRUCTS.md): the field initializers in
@@ -1579,7 +1636,11 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
         } else {
             set tns [dict get $typeRef namespace]
             set tname [dict get $typeRef name]
-            set spelling [expr {$tns eq "" ? $tname : "${tns}::$tname"}]
+            if {$tns eq ""} {
+                set spelling $tname
+            } else {
+                set spelling "${tns}::$tname"
+            }
             set id [hir::structs::lookup $spelling $ns]
             if {$id eq ""} {
                 set why [expr {[hir::structs::IsOtherType $tname] && $tns eq ""
@@ -1799,7 +1860,11 @@ proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
     upvar 1 $hirVar hir
     set written [dict get $node callee]
     if {[lindex $action 0] in {context unreachable dead}} {
-        set origin [expr {[dict exists $node method] ? [dict get $written nameOrigin] : [dict get $written origin]}]
+        if {[dict exists $node method]} {
+            set origin [dict get $written nameOrigin]
+        } else {
+            set origin [dict get $written origin]
+        }
         set c [hir::NewId hir expr]
         dict set hir exprs $c [dict create id $c kind ref origin $origin scope [dict get $ctx scope] type "" reachable 1]
         if {[lindex $action 0] eq "unreachable"} {
@@ -1951,7 +2016,10 @@ proc hir::resolve::LayoutNative {written} {
         return ""
     }
     set name [dict get $written name]
-    return [expr {[hir::layouts::Role $name] ne "" ? $name : ""}]
+    if {[hir::layouts::Role $name] ne ""} {
+        return $name
+    }
+    return ""
 }
 
 proc hir::resolve::LayoutNotAValueMessage {name} {
@@ -1981,7 +2049,7 @@ proc hir::resolve::LayoutAsValue {hirVar e node ctx} {
 # The layout identity the operand syntax ARG of binary operation NATIVE
 # names in code of namespace NS, or "" after diagnosing (as E, with HIR) why
 # it names none.
-proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
+proc hir::resolve::LayoutOperandId {hirVar e arg native ctx {operand "the layout operand"}} {
     upvar 1 $hirVar hir
     set ns [CtxNamespace $ctx]
     set kind [dict get $arg kind]
@@ -1995,7 +2063,7 @@ proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
     }
     if {$name eq ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "the layout operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
+            "$operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
         return ""
     }
     set id [hir::layouts::lookup $name $ns]
@@ -2004,11 +2072,11 @@ proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
     }
     if {![dict exists $arg qualified] && [Lookup hir [dict get $ctx scope] $name] ne ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "the layout operand of $native must be the name of a layout, but \"$name\" is a value here: the layout is static evidence, never a computed value" $e $origin
+            "$operand of $native must be the name of a layout, but \"$name\" is a value here: the layout is static evidence, never a computed value" $e $origin
         return ""
     }
     hir::DiagnoseAt hir UNKNOWN-LAYOUT \
-        "unknown layout \"$name\" (the layout operand of $native): no \"layout [lindex [split [string map {:: \x01} $name] \x01] end]:\" declaration is visible" $e $origin
+        "unknown layout \"$name\" ($operand of $native): no \"layout [lindex [split [string map {:: \x01} $name] \x01] end]:\" declaration is visible" $e $origin
     return ""
 }
 
@@ -2028,6 +2096,71 @@ proc hir::resolve::LayoutOperand {hirVar arg native ctx} {
         SetField hir $placeholder literal [list str $descriptor]
         SetField hir $placeholder value [core::value::str $descriptor]
     }
+    return $placeholder
+}
+
+# Resolves the field designator syntax ARG of a call of the layout write
+# NATIVE (NATIVE-LAYOUT-WRITES.md): the ExprId of the constant holding the
+# field's designator (hir::layouts::FieldPath). The designator is written
+# LAYOUT.FIELD or LAYOUT.FIELD.FIELD... -- a projection chain whose root is a
+# layout name -- and is static evidence like a layout operand: the layout is
+# never a value, the projections never run. Core IR spells it as the
+# constant already. Diagnoses (the constant then holds nothing):
+#
+#   LAYOUT-OPERAND   not a LAYOUT.FIELD chain; or the path ends at a nested
+#                    layout (a write names a scalar or pointer field; a
+#                    read, binary::read, may name one) or at a union (a
+#                    designator names one of its alternatives:
+#                    LAYOUT-UNIONS.md)
+#   UNKNOWN-LAYOUT   its root names no visible layout (LayoutOperandId)
+#   UNKNOWN-FIELD    a name that is no field of its layout, or a name after
+#                    a scalar or pointer field
+proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
+    upvar 1 $hirVar hir
+    if {[dict get $arg kind] eq "const" && [lindex [dict get $arg origin] 0] eq "ir"} {
+        return [Expr hir $arg $ctx]
+    }
+    set placeholder [Expr hir [hir::syntax::constNode [dict get $arg origin] str ""] $ctx]
+    set names {}
+    set origins {}
+    set indices {}
+    set root $arg
+    while {[dict get $root kind] eq "project"} {
+        set names [linsert $names 0 [dict get $root name]]
+        set origins [linsert $origins 0 [dict get $root nameOrigin]]
+        # A step's static element indices (FIXED-LAYOUT-ARRAYS.md:
+        # L.pts[2].x), {VALUE ORIGIN} each.
+        set indices [linsert $indices 0 [dict getdef $root indices {}]]
+        set root [dict get $root receiver]
+    }
+    if {$names eq ""} {
+        hir::DiagnoseAt hir LAYOUT-OPERAND \
+            "the field operand of $native must name one field of a layout, written LAYOUT.FIELD (binary::write(data, Header.count, 7)): the field is static evidence, never a computed value" \
+            $placeholder [dict get $arg origin]
+        return $placeholder
+    }
+    set id [LayoutOperandId hir $placeholder $root $native $ctx \
+        "the layout of the field operand (LAYOUT.FIELD)"]
+    if {$id eq ""} {
+        return $placeholder
+    }
+    # A read (binary::read, LAYOUT-UNIONS.md) may also name a nested
+    # layout: it copies the whole record.
+    set records [expr {[hir::layouts::RoleOf [hir::layouts::Role $native] op] eq "read"}]
+    set result [hir::layouts::FieldPath $id $names [lmap step $indices {lmap index $step {lindex $index 0}}] $records]
+    if {[lindex $result 0] eq "problem"} {
+        lassign $result - kind message index element
+        set origin [lindex $origins $index]
+        if {$element ne ""} {
+            # (Located at the element index the problem is about.)
+            set origin [lindex [lindex $indices $index] $element 1]
+        }
+        hir::DiagnoseAt hir $kind $message $placeholder $origin
+        return $placeholder
+    }
+    set constant [lindex $result 1]
+    SetField hir $placeholder literal [list str $constant]
+    SetField hir $placeholder value [core::value::str $constant]
     return $placeholder
 }
 

@@ -142,14 +142,18 @@ signedness is the target's: signed on x86-64 (Linux, macOS, Windows) and on
 Apple and Windows AArch64, unsigned on Linux AArch64. It is never Botlish's
 Byte and never `unsigned char` silently.
 
-**No `size_t`, no floating types.** The binding generator knows
+**No `size_t`; one floating type.** The binding generator knows
 from its ABI probe which C type `size_t` (`ptrdiff_t`, `wchar_t`, `int64_t`,
 ...) is on a profile, and emits an alias of it (`size_t` -> `ffi::c::ULong`
 on LP64); the archaeology found numeric typedef identity not worth making
 nominal (C-HEADER-ARCHAEOLOGY.md item 63). `double` appears in 1 + 7
-functions of the subject libraries: floats are their own language milestone.
-The registry has room for them (a floating category would be another `-c-abi`
-shape, beside the integer ones, without touching pointers).
+functions of the subject libraries: floats were their own language milestone
+(FLOAT64-MILESTONE-1.md), which added `ffi::c::Double`, C `double` as
+Botlish's Float64 under its C name, for `extern c fn` parameters and results
+(passed in the target's floating-point registers; a NaN or an infinity
+returned by C fails the call with `NonFiniteFloat`). It is a value type, not
+a pointee: `Ptr[ffi::c::Double]` is not admitted yet. C `float` and `long
+double` have no Botlish type.
 
 **`_Bool` came later.** Neither subject library uses it in its public API,
 so it was left out here; SDL3 uses it in 506 of its 1,405 API names, and the
@@ -171,13 +175,19 @@ a C compiler:
 | macos-x86_64 | LP64 | 64 | 64 | signed | 64 | x86_64-apple-darwin |
 | macos-aarch64 | LP64 | 64 | 64 | signed | 64 | aarch64-apple-darwin |
 | windows-x86_64 | LLP64 | **32** | 64 | signed | 64 | x86_64-pc-windows-msvc |
+| windows-x86_64-gnu | LLP64 | **32** | 64 | signed | 64 | x86_64-pc-windows-gnu |
 | windows-aarch64 | LLP64 | **32** | 64 | signed | 64 | aarch64-pc-windows-msvc |
 
 A target is an operating system and an architecture: linux-aarch64 and
 macos-aarch64 share an instruction set, a data model and a pointer width,
 and are two targets (plain `char`, the C calling convention, the object
 format and every platform interface differ). The triple is the name the
-native backend knows a target by (MACOS-AARCH64-MILESTONE-2.md).
+native backend knows a target by (MACOS-AARCH64-MILESTONE-2.md). On Windows
+the C toolchain's ABI family is part of the target: windows-x86_64 is MSVC's,
+windows-x86_64-gnu MinGW-w64's (C-BINDGEN-LAYOUTS.md added it for the Win32
+bindings, whose record layouts MinGW-w64's compiler decided). Their rows agree;
+they are two targets because C facts probed with one toolchain are that
+toolchain's, never the other's.
 
 `char` is 8 bits, `short` 16 and `int` 32 on all of them. A compilation's
 target is `-target NAME` (main.tcl; `surface::compile`, `surface::
@@ -189,7 +199,10 @@ table can still compile everything but `import ffi::c`, which then needs
 every target's): the Tcl backends run a program compiled for any target,
 and the native backends only one compiled for the host's own target
 (`NATIVE TARGET` otherwise, MACOS-AARCH64-MILESTONE-2.md). Linux x86-64 and
-AArch64 reach machine code with C calls today, macOS AArch64 without them;
+AArch64 and macOS AArch64 reach machine code with C calls -- macOS since
+MACOS-AARCH64-MILESTONE-6.md, where a real callee compiled by Apple clang
+sees plain `char` signed, every scalar at its width and signedness and every
+stack argument at Apple's packed offset (tests/c-ffi.test's `cf-abi-*`);
 the other rows are metadata, tested as such (`ca-lp64-llp64`,
 `ca-char-signedness`, `ca-scalar-matrix-llp64`, tests/target-model.test).
 
@@ -514,7 +527,10 @@ LP64 and 4 on LLP64; `ffi::c::Char` signed or unsigned by target
 > native memory (`binary::native::view`, `NativeView[L]`), where the pointer
 > is the one foreign memory holds -- the first mechanism below -- and
 > `binary::parse` / `binary::emit` of it are `LAYOUT-NATIVE-ONLY`. The
-> paragraphs below are this milestone's account.
+> paragraphs below are this milestone's account. NATIVE-LAYOUT-WRITES.md
+> then wrote them: through a native edit (`binary::store`), and into byte
+> storage only by the explicit foreign encoding of an existing pointer
+> (`binary::write_foreign`) -- still never decoded back from bytes.
 
 **Pointer fields remain deliberately unsupported** (LAYOUT-FIELD-TYPE: "a C
 pointer, not a binary scalar: imprinting arbitrary bytes into it would
@@ -650,7 +666,8 @@ For **`extern c fn`**:
    metadata records (sign/zero extension into registers), pointers as raw
    machine words (unboxing the tagged word, and checking the 60-bit payload
    of a returned address), SysV/AAPCS64 register assignment for integers
-   and pointers only (no aggregates, no floats, no varargs);
+   and pointers only (no aggregates, no varargs; `double` since
+   FLOAT64-MILESTONE-1.md);
 3. the C boundary's restrictions: no Botlish error or `yield` crosses a C
    frame; a stack-walk/GC story for C frames between Botlish frames;
 4. rejecting a HIR whose C target is not the host for native code.

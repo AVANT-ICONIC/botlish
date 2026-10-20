@@ -1,0 +1,259 @@
+# Mutants of fixed arrays in binary layouts (audit/layout-arrays/tools/mutate.tcl;
+# FIXED-LAYOUT-ARRAYS.md): each a deliberate bug in the declaration checks
+# (hir/layouts.tcl), the static designators, the completion analysis's index
+# and extent proofs (hir/completions.tcl, hir/cardinality.tcl), the
+# interpreter's reference implementation (core/binary.tcl), the Tcl compiler
+# (compiler/compiler.tcl), native lowering (native/lower.tcl) or the native
+# runtime (native/src/runtime/nview.rs).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/src/ is a native
+# mutant: mutate.tcl rebuilds the native backend for it. Lines starting with
+# # outside an edit are comments.
+
+@@ zero-extent-accepted a field array of 0 elements is accepted (a zero-length or flexible array taken for a fixed one)
+## hir/layouts.tcl
+<<<<
+        if {![string is entier -strict $extent] || $extent < 1} {
+            Fail $typeSpan "$what $anArray of $extent elements: a fixed array's extent is a positive integer (a C zero-length or flexible array is not a fixed array)" LAYOUT-ARRAY-EXTENT
+====
+        if {![string is entier -strict $extent] || $extent < 0} {
+            Fail $typeSpan "$what $anArray of $extent elements: a fixed array's extent is a positive integer (a C zero-length or flexible array is not a fixed array)" LAYOUT-ARRAY-EXTENT
+>>>>
+
+@@ array-width-unbounded an array wider than the largest layout is accepted (its width never compared, as if extent times stride could wrap)
+## hir/layouts.tcl
+<<<<
+        if {$width > $maxSize} {
+            Fail $typeSpan "$what $anArray of $extent elements of $stride bytes, $width bytes in all: more than the largest layout size, $maxSize bytes" LAYOUT-ARRAY-EXTENT
+====
+        if {0 && $width > $maxSize} {
+            Fail $typeSpan "$what $anArray of $extent elements of $stride bytes, $width bytes in all: more than the largest layout size, $maxSize bytes" LAYOUT-ARRAY-EXTENT
+>>>>
+
+@@ stride-without-tail-padding an array of records strides by the end of the record's last field, not its size (C's tail padding dropped)
+## hir/layouts.tcl
+<<<<
+        set stride [dict get $element width]
+        set width [expr {$extent * $stride}]
+====
+        set stride [dict get $element width]
+        if {[dict get $element kind] eq "layout"} {
+            set stride [tcl::mathfunc::max {*}[lmap f [dict get $registry [dict get $element layout] fields] {
+                expr {[dict get $f offset] + [dict get $f width]}
+            }]]
+        }
+        set width [expr {$extent * $stride}]
+>>>>
+
+@@ array-overlap-first-element the overlap and bounds checks see only an array's first element, not its whole width
+## hir/layouts.tcl
+<<<<
+        return [dict create kind array extent [expr {$extent + 0}] stride $stride width $width \
+            element $element type [ArrayConsumerType [dict get $element type]]]
+====
+        return [dict create kind array extent [expr {$extent + 0}] stride $stride width $stride \
+            element $element type [ArrayConsumerType [dict get $element type]]]
+>>>>
+
+@@ designator-index-inclusive a static element index equal to the extent is accepted (one past the array)
+## hir/layouts.tcl
+<<<<
+            if {$i >= $extent} {
+====
+            if {$i > $extent} {
+>>>>
+
+@@ designator-index-without-stride a static element designator's offset adds the index, not the index times the stride
+## hir/layouts.tcl
+<<<<
+            set offset [expr {$offset + $i * [dict get $repr stride]}]
+====
+            set offset [expr {$offset + $i}]
+>>>>
+
+@@ pointer-array-from-bytes an array of pointers is not native-only: bytes imprint into pointers inside an array
+## hir/layouts.tcl
+<<<<
+            set inner [ReprPointerPath [dict get $repr element]]
+            if {$inner eq "none"} {
+                return none
+            }
+            return "\[\]$inner"
+====
+            return none
+>>>>
+
+@@ view-array-writable binary::store_element through a NativeView's array is accepted (a view upgraded to write authority)
+## hir/layouts.tcl
+<<<<
+        if {$term ne "" && ![hir::types::IsNativeEdit $type]} {
+            lappend problems [list BINARY-OPERAND \
+====
+        if {0 && $term ne "" && ![hir::types::IsNativeEdit $type]} {
+            lappend problems [list BINARY-OPERAND \
+>>>>
+
+@@ index-bound-one-past the completion analysis proves an index of N in range for an array of N (its IndexNotFound path dropped one too late)
+## hir/completions.tcl
+<<<<
+        set size [hir::cardinality::FormConst [lindex $term 1]]
+====
+        set size [hir::cardinality::FormConst [expr {[lindex $term 1] + 1}]]
+>>>>
+
+@@ extent-proof-ignores-length a List proven of another length than the extent is taken as proven to fill it (no failure path, no check)
+## hir/completions.tcl
+<<<<
+            if {$n != [dict get $repr extent]} {
+                return out
+            }
+====
+            if {$n != [dict get $repr extent]} {
+                return in
+            }
+>>>>
+
+@@ exact-copy-any-representation a copy of any fixed array is taken to fill every array exactly, whatever its extent
+## hir/completions.tcl
+<<<<
+    if {$copy ne "" && [hir::layouts::ReprText $copy] eq [hir::layouts::ReprText $repr]} {
+====
+    if {$copy ne ""} {
+>>>>
+
+@@ loaded-length-one-more a List binary::load copied from an array of N is taken to have N + 1 elements
+## hir/cardinality.tcl
+<<<<
+                return [FormConst [lindex $term 1]]
+====
+                return [FormConst [expr {[lindex $term 1] + 1}]]
+>>>>
+
+@@ reference-extent-short-accepted the reference implementation accepts a List shorter than the extent (writing fewer elements)
+## core/binary.tcl
+<<<<
+    if {[llength $items] != $extent} {
+====
+    if {[llength $items] > $extent} {
+>>>>
+
+@@ reference-decode-reversed the reference implementation imprints an array's elements in reverse order
+## core/binary.tcl
+<<<<
+                lappend items [DecodeRepr $element $bytes [expr {$at + $i * $stride}] $name $structId]
+====
+                set items [linsert $items 0 [DecodeRepr $element $bytes [expr {$at + $i * $stride}] $name $structId]]
+>>>>
+
+@@ tcl-compiler-rows-flattened the Tcl compiler builds a two-dimensional array of scalars as one row of all its elements
+## compiler/compiler.tcl
+<<<<
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
+====
+            if {[llength $dims] > 1} {
+                set dims [list [expr [join $dims *]]]
+            }
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
+>>>>
+
+@@ native-index-inclusive native code admits an index equal to the extent (one past the array is read or written)
+## native/lower.tcl
+<<<<
+            set high [Assign fn "op ilt $index [Assign fn "int $extent" $e]" $e]
+====
+            set high [Assign fn "op ile $index [Assign fn "int $extent" $e]" $e]
+>>>>
+
+@@ native-index-negative native code admits the index -1 (the element before the array)
+## native/lower.tcl
+<<<<
+            set low [Assign fn "op ige $index [Assign fn "int 0" $e]" $e]
+====
+            set low [Assign fn "op ige $index [Assign fn "int -1" $e]" $e]
+>>>>
+
+@@ native-index-without-stride native element access scales the index by 1, not by the element's width
+## native/lower.tcl
+<<<<
+        set scaled $index
+        if {$stride != 1} {
+            set scaled [Assign fn "op imul $index [Assign fn "int $stride" $e]" $e]
+        }
+====
+        set scaled $index
+>>>>
+
+@@ native-extent-unchecked native whole-array writes never check a List's extent
+## native/lower.tcl
+<<<<
+    if {[BoundsProven $e]} {
+        return
+    }
+====
+    if {1} {
+        return
+    }
+>>>>
+
+@@ native-extent-long-accepted native whole-array writes accept a List longer than the extent
+## native/lower.tcl
+<<<<
+            set fits [Assign fn "op ieq $length [Assign fn "int $extent" $e]" $e]
+====
+            set fits [Assign fn "op ige $length [Assign fn "int $extent" $e]" $e]
+>>>>
+
+@@ native-copy-unrolled-at-base a native copy of a small array of records or rows reads every element at the array's first
+## native/lower.tcl
+<<<<
+            lappend values [ReprRead fn $e $mode $source $element [BasePlus fn $e $base [expr {$i * $stride}]]]
+====
+            lappend values [ReprRead fn $e $mode $source $element [BasePlus fn $e $base 0]]
+>>>>
+
+@@ native-row-short native code copies a row of scalars one element short
+## native/lower.tcl
+<<<<
+        set count [Assign fn "int $extent" $e]
+====
+        set count [Assign fn "int [expr {$extent > 1 ? $extent - 1 : $extent}]" $e]
+>>>>
+
+@@ native-store-row-written-while-encoding the native runtime writes a row's elements one at a time as it encodes them, so a value outside the encoding leaves the elements before it written
+## native/src/runtime/nview.rs
+<<<<
+    let bytes = match encoded_row(p, l, width, signed, big, "binary::store") {
+        Ok(bytes) => bytes,
+        Err(failed) => return failed,
+    };
+    store_at(address, &bytes);
+    UNIT
+====
+    if heap_kind(l) != KIND_LIST {
+        return vm(p).fail(RtError::Type { context: "binary::store".to_string(), expected: Kind::List, got: l });
+    }
+    let items = list_of(l).items().to_vec();
+    for (i, item) in items.into_iter().enumerate() {
+        match super::ops::bin_encode(p, item, width, signed, big, "binary::store") {
+            Ok(encoded) => store_at(address + i * width, &encoded[..width]),
+            Err(failed) => return failed,
+        }
+    }
+    UNIT
+>>>>
+
+@@ native-row-past-storage the native runtime accepts a row that ends one byte past its storage
+## native/src/runtime/nview.rs
+<<<<
+        Some(end) if end <= size => Ok((at, width, signed, big)),
+====
+        Some(end) if end <= size + 1 => Ok((at, width, signed, big)),
+>>>>

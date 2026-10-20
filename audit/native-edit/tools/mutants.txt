@@ -1,0 +1,463 @@
+# Mutants of native layout writes (audit/native-edit/tools/mutate.tcl;
+# NATIVE-LAYOUT-WRITES.md, "Mutation testing"): each a deliberate bug in the
+# field designators, the checks and the type (hir/layouts.tcl,
+# hir/resolve.tcl, hir/types.tcl, hir/read.tcl), the registrations
+# (core/binary.tcl), the Tcl reference implementation (core/binary.tcl),
+# native lowering (native/lower.tcl) or the native runtime
+# (native/src/runtime/nview.rs, ops.rs) -- the brief's defects first, one per
+# layer where a layer implements the rule separately, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/src/ is a native
+# mutant: mutate.tcl rebuilds the native backend for it. Lines starting with
+# # outside an edit are comments.
+
+# --- store ignores field offset / always writes at offset zero -------------
+
+@@ offset-ignored-lowering native lowering writes every field at its edit's base, ignoring the field's offset
+## native/lower.tcl
+<<<<
+    set at [At fn $e $base $offset]
+    if {$kind eq "ptr"} {
+====
+    set at [At fn $e $base 0]
+    if {$kind eq "ptr"} {
+>>>>
+
+@@ offset-zero-runtime the store helper writes at the edit's address, dropping the field's offset
+## native/src/runtime/nview.rs
+<<<<
+pub extern "C" fn rt_native_store(p: *mut Vm, edit: Value, offset: Value, code: Value, value: Value) -> Value {
+    const CONTEXT: &str = "native edit";
+    let address = match view_address(p, edit, offset, CONTEXT) {
+====
+pub extern "C" fn rt_native_store(p: *mut Vm, edit: Value, offset: Value, code: Value, value: Value) -> Value {
+    const CONTEXT: &str = "native edit";
+    let address = match view_address(p, edit, make_small(0), CONTEXT) {
+>>>>
+
+@@ offset-ignored-interp the reference byte write writes every field at the record's start
+## core/binary.tcl
+<<<<
+    return [MutableBytesValue [string replace $bytes $offset [expr {$offset + $width - 1}] $piece]]
+}
+
+proc core::binary::writeForeign {data path pointer} {
+====
+    return [MutableBytesValue [string replace $bytes 0 [expr {$width - 1}] $piece]]
+}
+
+proc core::binary::writeForeign {data path pointer} {
+>>>>
+
+# --- wrong scalar width -------------------------------------------------------
+
+@@ width-widened-runtime a store writes all eight bytes of its encoding, whatever the field's width
+## native/src/runtime/nview.rs
+<<<<
+    store_at(address, &bytes[..width]);
+====
+    store_at(address, &bytes[..8]);
+>>>>
+
+@@ width-narrowed-lowering native lowering encodes a 2-byte field as one byte
+## native/lower.tcl
+<<<<
+        set code [Assign fn "int [LayoutEncoding $kind $width $endian]" $e]
+        set suffix ""
+====
+        set code [Assign fn "int [LayoutEncoding $kind [if {$width == 2} {string cat 1} else {set width}] $endian]" $e]
+        set suffix ""
+>>>>
+
+@@ width-widened-byte-write the byte write copies one byte past its field
+## native/src/runtime/nview.rs
+<<<<
+    let bytes = match super::ops::bin_encode(p, value, width, signed, big, CONTEXT) {
+        Ok(bytes) => bytes,
+        Err(failed) => return failed,
+    };
+    mbytes_written(p, m, offset, &bytes[..width], CONTEXT)
+====
+    let bytes = match super::ops::bin_encode(p, value, width, signed, big, CONTEXT) {
+        Ok(bytes) => bytes,
+        Err(failed) => return failed,
+    };
+    mbytes_written(p, m, offset, &bytes[..(width + 1).min(8)], CONTEXT)
+>>>>
+
+# --- signed/unsigned encoder confused -----------------------------------------
+
+@@ signed-as-unsigned-lowering native lowering encodes every scalar store as unsigned
+## native/lower.tcl
+<<<<
+        set code [Assign fn "int [LayoutEncoding $kind $width $endian]" $e]
+====
+        set code [Assign fn "int [LayoutEncoding u $width $endian]" $e]
+>>>>
+
+@@ signed-as-unsigned-interp the reference byte write encodes every scalar as unsigned
+## core/binary.tcl
+<<<<
+    set bytes [RecordBytes binary::write $data $path]
+    set n [core::value::intOf $value]
+    set piece [ScalarPiece $n $sign $width $endian]
+====
+    set bytes [RecordBytes binary::write $data $path]
+    set n [core::value::intOf $value]
+    set piece [ScalarPiece $n u $width $endian]
+>>>>
+
+@@ value-unchecked-static a write's value is not held to its field's type: any Int is admitted
+## hir/layouts.tcl
+<<<<
+    if {[hir::range::ProvesValueAcceptedBy $valueType $range $declared]} {
+        return
+    }
+    set hint ""
+====
+    if {1 || [hir::range::ProvesValueAcceptedBy $valueType $range $declared]} {
+        return
+    }
+    set hint ""
+>>>>
+
+@@ range-unchecked-runtime the scalar encoder truncates a value outside its encoding instead of refusing it
+## native/src/runtime/ops.rs
+<<<<
+    if n < lo || n > hi {
+        let message = format!("{context}: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
+====
+    if false && (n < lo || n > hi) {
+        let message = format!("{context}: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
+>>>>
+
+# --- nested edit drops the outer offset ---------------------------------------
+
+@@ nested-base-dropped-store a store through a subrecord of an edit drops the subrecord's offset
+## native/lower.tcl
+<<<<
+    set at [At fn $e $base $offset]
+    if {$kind eq "ptr"} {
+====
+    set at [At fn $e 0 $offset]
+    if {$kind eq "ptr"} {
+>>>>
+
+@@ nested-base-dropped-path a designator path through nested layouts keeps only the leaf's own offset
+## hir/layouts.tcl
+<<<<
+        set offset [expr {$base + [dict get $field offset]}]
+        set repr $field
+====
+        set offset [dict get $field offset]
+        set repr $field
+>>>>
+
+@@ padding-overwritten-runtime a store writes one byte past its field (padding, or the next field)
+## native/src/runtime/nview.rs
+<<<<
+    store_at(address, &bytes[..width]);
+====
+    store_at(address, &bytes[..(width + 1).min(8)]);
+>>>>
+
+@@ unrelated-bytes-lost-byte-write a byte write builds its fresh storage from zeros, not from its operand
+## native/src/runtime/nview.rs
+<<<<
+    let r = vm(p).new_mutbytes_with(len, |init| init.push_slice(mutbytes_of(m)));
+====
+    let r = vm(p).new_mutbytes_with(len, |init| init.push_zeros(len));
+>>>>
+
+@@ unrelated-bytes-lost-interp the reference byte write starts from zeroed bytes, not from its operand
+## core/binary.tcl
+<<<<
+    set bytes [RecordBytes binary::write $data $path]
+    set n [core::value::intOf $value]
+====
+    set bytes [binary format x[string length [RecordBytes binary::write $data $path]]]
+    set n [core::value::intOf $value]
+>>>>
+
+@@ pointer-width-wrong a pointer store writes four bytes, whatever the target's pointer width
+## native/lower.tcl
+<<<<
+        set code [Assign fn "int $width" $e]
+        set suffix ptr
+====
+        set code [Assign fn "int 4" $e]
+        set suffix ptr
+>>>>
+
+@@ pointer-retyped a pointer field admits any C pointer: the pointee identity or signature is not checked
+## hir/layouts.tcl
+<<<<
+    set declared [dict get $field type]
+    set arg [lindex $args $at]
+====
+    set declared [dict get $field type]
+    if {[hir::types::IsCAddress $declared]} {
+        set declared cptr
+    }
+    set arg [lindex $args $at]
+>>>>
+
+@@ null-stored-nonzero a null pointer's store writes the address 1
+## native/src/runtime/nview.rs
+<<<<
+    let bits = cptr_address(pointer) as u64;
+====
+    let bits = if pointer == CPTR_NULL { 1 } else { cptr_address(pointer) as u64 };
+>>>>
+
+@@ null-encoded-nonzero-interp the reference foreign write encodes null as all-ones
+## core/binary.tcl
+<<<<
+    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bits [expr {$address & ((1 << (8 * $width)) - 1)}]
+====
+    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bits [expr {$address == 0 ? (1 << (8 * $width)) - 1 : $address & ((1 << (8 * $width)) - 1)}]
+>>>>
+
+@@ view-writable a store accepts a NativeView: read authority writes
+## hir/layouts.tcl
+<<<<
+        if {$type ne "never" && [OfEditType $type] eq ""} {
+====
+        if {$type ne "never" && [OfNativeType $type] eq ""} {
+>>>>
+
+@@ edit-is-a-view a NativeEdit[L] is a subtype of NativeView[L]: an edit is silently accepted where a view is expected
+## hir/types.tcl
+<<<<
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
+====
+    if {[IsNativeEdit $a] && [IsNativeView $b] && [lindex $a 1] eq [lindex $b 1]} {
+        return 1
+    }
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
+>>>>
+
+@@ view-upgrades-to-edit a NativeView[L] is a subtype of NativeEdit[L]: read authority is upgraded to write authority
+## hir/types.tcl
+<<<<
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
+====
+    if {[IsNativeView $a] && [IsNativeEdit $b] && [lindex $a 1] eq [lindex $b 1]} {
+        return 1
+    }
+    if {[IsNativeMemory $a] || [IsNativeMemory $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
+>>>>
+
+@@ edit-nested-is-a-view a nested layout read through an edit is a NativeView: the subrecord cannot be written
+## hir/layouts.tcl
+<<<<
+        if {[dict get $field kind] in {layout union}} {
+            # A nested layout, or a union held by value (the live union:
+            # LAYOUT-UNIONS.md): its window, nothing read.
+            if {$edit} {
+====
+        if {[dict get $field kind] in {layout union}} {
+            # A nested layout, or a union held by value (the live union:
+            # LAYOUT-UNIONS.md): its window, nothing read.
+            if {0} {
+>>>>
+
+# --- authority ----------------------------------------------------------------
+
+@@ edit-not-direct binary::native is not designated direct: an edit needs no acknowledged authority
+## core/binary.tcl
+<<<<
+core::native::declareDirectNamespace binary::native
+====
+>>>>
+
+# --- foreign writes -----------------------------------------------------------
+
+@@ foreign-write-takes-an-int a foreign write's value is not checked: an Int is encoded into a pointer field
+## hir/layouts.tcl
+<<<<
+    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)
+            || [ReprUnionPath $field] ne "none" || $op eq "read"} {
+====
+    if {$op eq "write_foreign" || ($op eq "write" && [ReprPointerPath $field] ne "none")
+            || [ReprUnionPath $field] ne "none" || $op eq "read"} {
+>>>>
+
+@@ ordinary-write-of-pointer an ordinary binary::write accepts a pointer field: byte serialization encodes pointers
+## hir/layouts.tcl
+<<<<
+                write {
+                    if {$pointer} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+====
+                write {
+                    if {0} {
+                        lappend problems [list LAYOUT-NATIVE-ONLY \
+>>>>
+
+@@ foreign-write-of-scalar binary::write_foreign accepts an ordinary field
+## hir/layouts.tcl
+<<<<
+                write_foreign {
+                    if {!$pointer && ![PointerArray $field]} {
+====
+                write_foreign {
+                    if {0} {
+>>>>
+
+@@ written-pointer-bytes-parse binary::parse of a pointer layout is accepted, so bytes holding a written pointer decode into one
+## hir/layouts.tcl
+<<<<
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
+            set path [PointerField $id]
+            if {$op eq "parse"} {
+====
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id] && $op ne "parse"} {
+            set path [PointerField $id]
+            if {$op eq "parse"} {
+>>>>
+
+@@ foreign-write-moves-pointer binary::write_foreign takes ownership of the pointer it encodes
+## core/binary.tcl
+<<<<
+    -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
+    -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
+====
+    -runtime {bytestore-alloc} -ownership {observe observe move} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
+    -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
+>>>>
+
+@@ store-moves-pointer binary::store takes ownership of the pointer it stores
+## core/binary.tcl
+<<<<
+    -param-types {any str any} -result-type unit -ownership {observe observe observe} \
+====
+    -param-types {any str any} -result-type unit -ownership {observe observe move} \
+>>>>
+
+# --- MutableBytes value semantics ---------------------------------------------
+
+@@ byte-write-in-place a byte write writes into its operand's storage and returns it: other copies change
+## native/src/runtime/nview.rs
+<<<<
+    vm(p).metrics.record_list_copy(len);
+    let r = vm(p).new_mutbytes_with(len, |init| init.push_slice(mutbytes_of(m)));
+    if r != NO_VALUE {
+====
+    let r = m;
+    if r != NO_VALUE {
+>>>>
+
+@@ length-check-missing-native native lowering writes into storage of any length (a prefix write)
+## native/lower.tcl
+<<<<
+    if {$op ne "store"} {
+        set length [Assign fn "op mbyteslen $target" $e]
+====
+    if {0} {
+        set length [Assign fn "op mbyteslen $target" $e]
+>>>>
+
+@@ length-prefix-interp the reference byte write accepts storage longer than its layout
+## core/binary.tcl
+<<<<
+    if {$length != $size} {
+        core::native::failDeclared LayoutLengthMismatch \
+            "$operation: $length bytes given, but the layout [LayoutName $structId] has size $size"
+====
+    if {$length < $size} {
+        core::native::failDeclared LayoutLengthMismatch \
+            "$operation: $length bytes given, but the layout [LayoutName $structId] has size $size"
+>>>>
+
+# --- a store copies the whole record ------------------------------------------
+
+@@ copy-per-store a store first copies the record into fresh byte storage (copy-modify-copy)
+## native/lower.tcl
+<<<<
+    if {$op eq "store"} {
+        return [list [Assign fn "op nativestore$suffix $target $at $code $value" $e] tagged]
+    }
+====
+    if {$op eq "store"} {
+        set copy [Assign fn "int $size" $e]
+        Assign fn "op byteszeroed $copy" $e
+        return [list [Assign fn "op nativestore$suffix $target $at $code $value" $e] tagged]
+    }
+>>>>
+
+# --- specialization, HIR text -------------------------------------------------
+
+@@ edit-field-shape-lost specialization re-infers a nested layout read through an edit as a view
+## hir/types.tcl
+<<<<
+                set t [hir::layouts::NativeFieldType [lindex $argTypes $v] [lindex [lindex [hir::get $hir $arg literal] end] 0]]
+====
+                set t [hir::layouts::ViewFieldType $id [lindex [lindex [hir::get $hir $arg literal] end] 0]]
+>>>>
+
+@@ hir-text-edit-read-as-view HIR text reads NativeEdit[L] back as NativeView[L]
+## hir/read.tcl
+<<<<
+        # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
+        return [hir::layouts::editType $layout]
+====
+        # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
+        return [hir::layouts::viewType $layout]
+>>>>
+
+# --- further ------------------------------------------------------------------
+
+@@ designator-through-scalar a designator may continue past a scalar field: the extra names are ignored
+## hir/layouts.tcl
+<<<<
+        if {!$last} {
+            set hint [expr {[dict get $repr kind] eq "array" ?
+====
+        if {0} {
+            set hint [expr {[dict get $repr kind] eq "array" ?
+>>>>
+
+@@ designator-of-another-layout a store accepts a field of another layout than its edit's
+## hir/layouts.tcl
+<<<<
+                if {$id ne "" && $id ne $root} {
+====
+                if {0} {
+>>>>
+
+@@ edit-null-check-inverted natively an edit fails for a non-null pointer and succeeds for null
+## native/lower.tcl
+<<<<
+            Emit fn "br $null $bad $good" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeEditNull] [Quote NativeEditNull]" $e
+====
+            Emit fn "br $null $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeEditNull] [Quote NativeEditNull]" $e
+>>>>
+
+@@ edit-null-not-declared-tcl the Tcl backends refuse an edit of the null pointer as NATIVE-ONLY instead of NativeEditNull
+## core/binary.tcl
+<<<<
+    if {$address == 0} {
+        core::native::failDeclared NativeEditNull \
+====
+    if {0} {
+        core::native::failDeclared NativeEditNull \
+>>>>

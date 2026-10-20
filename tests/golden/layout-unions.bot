@@ -1,0 +1,616 @@
+# layout-unions.bot -- unions in binary layouts (LAYOUT-UNIONS.md): the
+# source-level specification of
+#
+#   * `union layout U:` -- several declared interpretations of the same
+#     bytes, every alternative at the union's first byte, with an explicit
+#     size and alignment -- held by value in a layout field, an array
+#     element or another union's alternative;
+#   * byte storage read and written one alternative at a time through a
+#     static designator (binary::read, binary::write, binary::write_foreign
+#     through L.u.alt), each alternative by its own encoding, every other
+#     byte of the union and of the record around it untouched;
+#   * no copied value: LayoutStruct, binary::parse, binary::emit,
+#     binary::load and whole-array writes of anything holding a union are
+#     LayoutUnion; a designator names an alternative, never the union;
+#   * bytes never conjure a pointer through any alternative;
+#   * the static facts of live unions (NativeView[U], NativeEdit[U]): their
+#     types, read and write authority;
+#   * a union is no tagged sum: no case, tag or active alternative.
+#
+# Ported from tests/layout-unions.test, which stays authoritative
+# (audit/golden/migration/fragments/layout-unions.tsv maps every test; what
+# only Tcl observes -- declaration-time rejections (a layout declaration is
+# top level only, so never a static compile block's), the registry,
+# descriptors, HIR, NIR, allocations, live native memory (the test
+# fixture's, a test process's own), the C oracle, isolation, interchange,
+# executables and GC stress -- stays there).
+#
+# Imports: compiler and test (the framework); abi, abi::bytes, binary, byte,
+# ffi::c and list (the programs).
+import abi
+import abi::bytes
+import binary
+import byte
+import compiler
+import ffi::c
+import list
+import test
+
+# The representative layouts (the Tcl suite's luLayouts).
+opaque struct Node:
+    tag: unit
+
+layout HALVES:
+    size 4
+    align 2
+    field low: binary::U16 at 0
+    field high: binary::I16 at 2
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative halves: HALVES
+    alternative bytes: array 4 of binary::U8
+
+layout PARTS:
+    size 8
+    align 4
+    field low: binary::U32 at 0
+    field high: binary::I32 at 4
+
+union layout LARGE:
+    size 8
+    align 8
+    alternative parts: PARTS
+    alternative quad: binary::I64
+
+union layout WIDE:
+    size 16
+    align 8
+    alternative b: binary::U8
+    alternative h: binary::I16
+    alternative w: binary::U32
+    alternative q: binary::U64
+    alternative word: WORD
+    alternative large: LARGE
+    alternative bytes: array 16 of binary::U8
+    alternative words: array 4 of binary::U32
+
+layout SANDWICH:
+    size 24
+    align 4
+    field before: binary::U32 at 0
+    field w: WIDE at 4
+    field after: binary::U32 at 20
+
+layout OFFSETS:
+    size 8
+    align 4
+    field offset: binary::U32 at 0
+    field offsetHigh: binary::U32 at 4
+
+union layout OVLU:
+    size 8
+    align 8
+    alternative offsets: OFFSETS
+    alternative pointer: ffi::c::Ptr[ffi::c::Void]
+
+layout OVL:
+    size 32
+    align 8
+    field internal: binary::U64 at 0
+    field internalHigh: binary::U64 at 8
+    field u: OVLU at 16
+    field event: ffi::c::Ptr[Node] at 24
+
+union layout PWORD:
+    size 8
+    align 8
+    alternative p: ffi::c::Ptr[Node]
+    alternative bits: binary::U64
+
+layout PREC:
+    size 16
+    align 8
+    field k: binary::U32 at 0
+    field p: ffi::c::Ptr[Node] at 8
+
+union layout PRECU:
+    size 16
+    align 8
+    alternative rec: PREC
+    alternative raw: array 2 of binary::U64
+
+layout ARRS:
+    size 40
+    align 4
+    field n: binary::U8 at 0
+    field ws: array 3 of WORD at 4
+    field grid: array 2 of array 2 of WORD at 16
+    field tail: binary::U32 at 32
+
+layout PARR:
+    size 24
+    align 8
+    field n: binary::U32 at 0
+    field ps: array 2 of PWORD at 8
+
+union layout TAILU:
+    size 12
+    align 16
+    alternative a: binary::U8
+    alternative pair: array 2 of binary::U32
+
+layout ARRT:
+    size 40
+    align 4
+    field ts: array 3 of TAILU at 0
+    field after: binary::U32 at 36
+
+# The abi::bytes::Bytes of the Ints VALUES (each 0..255).
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+        b
+    abi::bytes::from_list(bs)
+
+fn mutable(values: List[int]) -> abi::bytes::MutableBytes:
+    abi::bytes::from_bytes(bytes_of(values))
+
+fn frozen(data: abi::bytes::MutableBytes) -> abi::bytes::Bytes:
+    abi::bytes::freeze(data)
+
+fn fill(n: int, byte: int) -> List[int]:
+    loop i from 0 to n:
+        byte
+
+fn ramp(n: int) -> List[int]:
+    loop i from 0 to n:
+        255 - i
+
+# u8(v), u8s(xs): an Int (0 outside the domain: the tests pass values inside)
+# and a List of them -- a List[binary::U8] is what an array of binary::U8
+# holds, and a List literal is a List[int] (List element types are
+# invariant).
+fn u8(v: int) -> binary::U8:
+    if v < 0 or v > 255:
+        0
+    else:
+        v
+
+fn u8s(xs: List[int]) -> List[binary::U8]:
+    loop x in xs:
+        u8(x)
+
+fn register_declaration_tests():
+    # lu-syntax: "union" and "alternative" are contextual (the AST and the
+    # syntax errors stay in Tcl).
+    fn contextual() errors compiler::CompilerError:
+        static compile:
+            union = 3
+            alternative = 4
+            fn f(union: int, alternative: int) -> int:
+                union + alternative
+            f(union, alternative)
+    test::value("lu-syntax/contextual", 7, contextual)
+
+    # lu-size-and-alignment-are-explicit: the queries answer a union's own
+    # size and alignment, never computed from its alternatives.
+    fn queries() errors compiler::CompilerError:
+        static compile:
+            [binary::layout_length(WORD), binary::layout_alignment(WORD), binary::layout_length(WIDE), binary::layout_alignment(WIDE), binary::layout_length(SANDWICH)]
+    test::value("lu-size-and-alignment-are-explicit/queries", [4, 4, 16, 8, 24], queries)
+
+    # lu-tail-padding: a union's declared size and alignment, never its
+    # alternatives'; an array of unions strides the declared size.
+    fn tail_queries() errors compiler::CompilerError:
+        static compile:
+            [binary::layout_length(TAILU), binary::layout_alignment(TAILU), binary::layout_length(ARRT)]
+    test::value("lu-tail-padding/queries", [12, 16, 40], tail_queries)
+    fn tail_bytes() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List[any] errors LayoutLengthMismatch:
+                [binary::read(d, ARRT.ts[1].a), binary::read(d, ARRT.ts[2].pair), binary::read(d, ARRT.after), frozen(binary::write(m, ARRT.ts[1].a, 9))]
+            r = go(bytes_of(ramp(40)), mutable(ramp(40))):
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("lu-tail-padding/bytes", [243, [3840272103, 3772900067], 3638155995, bytes_of([255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 9, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224, 223, 222, 221, 220, 219, 218, 217, 216])], tail_bytes)
+
+    # lu-not-a-type-not-a-struct: a union is a layout -- no type, no value
+    # -- and has no copied value: no LayoutStruct of it or of anything
+    # holding one.
+    fn as_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: WORD) -> int:
+                0
+            0
+    test::rejects("lu-not-a-type-not-a-struct/value-type", compiler::DiagnosticCode::LayoutNotAType, as_type)
+    fn as_value() errors compiler::CompilerError:
+        static compile:
+            x = WORD
+            0
+    test::rejects("lu-not-a-type-not-a-struct/value", compiler::DiagnosticCode::LayoutNotAValue, as_value)
+    fn struct_of_union() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[WORD]) -> int:
+                0
+            0
+    test::rejects("lu-not-a-type-not-a-struct/union", compiler::DiagnosticCode::LayoutUnion, struct_of_union)
+    fn struct_of_holder() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[OVL]) -> int:
+                0
+            0
+    test::rejects("lu-not-a-type-not-a-struct/record-holding-one", compiler::DiagnosticCode::LayoutUnion, struct_of_holder)
+    fn struct_of_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[SANDWICH]) -> int:
+                0
+            0
+    test::rejects("lu-not-a-type-not-a-struct/nested", compiler::DiagnosticCode::LayoutUnion, struct_of_nested)
+    fn struct_of_array() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[ARRS]) -> int:
+                0
+            0
+    test::rejects("lu-not-a-type-not-a-struct/array-of-unions", compiler::DiagnosticCode::LayoutUnion, struct_of_array)
+    fn construction() errors compiler::CompilerError:
+        static compile:
+            x = LayoutStruct[WORD] {whole: 1}
+            0
+    test::rejects("lu-not-a-type-not-a-struct/construction", compiler::DiagnosticCode::LayoutUnion, construction)
+    fn named_construction() errors compiler::CompilerError:
+        static compile:
+            x = WORD {whole: 1}
+            0
+    test::rejects("lu-not-a-type-not-a-struct/named-construction", compiler::DiagnosticCode::UnknownStruct, named_construction)
+    fn live() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[WORD], e: NativeEdit[OVLU], a: NativeView[array 3 of WORD], b: NativeEdit[array 2 of array 2 of WORD]) -> int:
+                0
+            0
+    test::value("lu-not-a-type-not-a-struct/live", 0, live)
+
+    # lu-not-a-sum-type: no case, constructor or tag.
+    fn case_spelling() errors compiler::CompilerError:
+        static compile:
+            x = WORD::whole
+            0
+    test::rejects("lu-not-a-sum-type/case-spelling", compiler::DiagnosticCode::UnknownNamespace, case_spelling)
+    fn alternative_value() errors compiler::CompilerError:
+        static compile:
+            x = WORD.whole
+            0
+    test::rejects("lu-not-a-sum-type/alternative-value", compiler::DiagnosticCode::LayoutNotAValue, alternative_value)
+    fn constructor() errors compiler::CompilerError:
+        static compile:
+            x = whole(1)
+            0
+    test::rejects("lu-not-a-sum-type/constructor", compiler::DiagnosticCode::Unbound, constructor)
+
+fn register_designator_tests(past: int):
+    # lu-designators: a designator walks a union like a nested layout and
+    # never ends at one.
+    fn union_end() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write(d, SANDWICH.w, 0)
+            0
+    test::rejects("lu-designators/union-end", compiler::DiagnosticCode::LayoutOperand, union_end)
+    fn unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write(d, SANDWICH.w.nope, 0)
+            0
+    test::rejects("lu-designators/unknown-alternative", compiler::DiagnosticCode::UnknownField, unknown)
+    fn record_alternative() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write(d, WIDE.large.parts, 0)
+            0
+    test::rejects("lu-designators/record-alternative-write", compiler::DiagnosticCode::LayoutOperand, record_alternative)
+    fn index() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write(d, ARRS.ws[3].whole, 0)
+            0
+    test::rejects("lu-designators/index", compiler::DiagnosticCode::LayoutArrayIndex, index)
+
+    # lu-copy-refusals: a union has no copied value, nor has anything
+    # holding one by value.
+    fn parse_record() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::parse(OVL, d)
+            0
+    test::rejects("lu-copy-refusals/parse-record", compiler::DiagnosticCode::LayoutUnion, parse_record)
+    fn parse_union() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                s = binary::parse(WORD, d)
+                s.whole + 1
+            0
+    test::rejects("lu-copy-refusals/parse-union", compiler::DiagnosticCode::LayoutUnion, parse_union)
+    fn load_record() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[OVL]) -> any:
+                binary::load(v)
+            0
+    test::rejects("lu-copy-refusals/load-record", compiler::DiagnosticCode::LayoutUnion, load_record)
+    fn load_union() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeEdit[WORD]) -> any:
+                binary::load(v)
+            0
+    test::rejects("lu-copy-refusals/load-union", compiler::DiagnosticCode::LayoutUnion, load_union)
+    fn load_array() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[ARRS]) -> any:
+                binary::load(v.ws)
+            0
+    test::rejects("lu-copy-refusals/load-array", compiler::DiagnosticCode::LayoutUnion, load_array)
+    fn read_array() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::read(d, ARRS.grid[1])
+            0
+    test::rejects("lu-copy-refusals/read-array", compiler::DiagnosticCode::LayoutUnion, read_array)
+    fn write_array() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch, LayoutExtentMismatch:
+                binary::write(d, ARRS.ws, [])
+            0
+    test::rejects("lu-copy-refusals/write-array", compiler::DiagnosticCode::LayoutUnion, write_array)
+    fn store_array() errors compiler::CompilerError:
+        static compile:
+            fn f(e: NativeEdit[ARRS]) -> any errors LayoutExtentMismatch:
+                binary::store(e, ARRS.grid, [])
+            0
+    test::rejects("lu-copy-refusals/store-array", compiler::DiagnosticCode::LayoutUnion, store_array)
+    fn alternatives_copied() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[OVL], w: NativeView[WORD], d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                [binary::load(v.u.offsets), binary::load(w.halves), binary::load(w.bytes), binary::read(d, ARRS.ws[1].halves)]
+            0
+    test::value("lu-copy-refusals/alternatives-copied", 0, alternatives_copied)
+
+    # lu-read-length-and-proofs: exactly the root layout's size; a List
+    # read from an array alternative has its extent.
+    fn short() errors compiler::CompilerError:
+        static compile:
+            r = binary::read(bytes_of(fill(15, 0)), WIDE.w):
+                on LayoutLengthMismatch:
+                    return ["short"]
+            [r]
+    test::value("lu-read-length-and-proofs/short", ["short"], short)
+    fn long() errors compiler::CompilerError:
+        static compile:
+            r = binary::read(bytes_of(fill(17, 0)), WIDE.w):
+                on LayoutLengthMismatch:
+                    return ["long"]
+            [r]
+    test::value("lu-read-length-and-proofs/long", ["long"], long)
+    fn proven_index() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
+                list::at(binary::read(d, WIDE.bytes), 15)
+            r = go(bytes_of(ramp(16))):
+                on LayoutLengthMismatch:
+                    0
+            r
+    test::value("lu-read-length-and-proofs/proven-index", 240, proven_index)
+    fn index_outside() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
+                list::at(binary::read(d, WIDE.bytes), 16)
+            0
+    test::rejects("lu-read-length-and-proofs/index-outside", compiler::DiagnosticCode::KnownError, index_outside)
+    fn exact_copy() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> abi::bytes::Bytes errors LayoutLengthMismatch:
+                frozen(binary::write(m, SANDWICH.w.words, binary::read(d, WIDE.words)))
+            r = go(bytes_of(ramp(16)), mutable(fill(24, 0))):
+                on LayoutLengthMismatch:
+                    bytes_of([])
+            r
+    test::value("lu-read-length-and-proofs/exact-copy", bytes_of([0, 0, 0, 0, 255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 0, 0, 0, 0]), exact_copy)
+
+    # lu-pointer-authority-from-bytes: bytes never become a pointer through
+    # any alternative.
+    fn read_pointer() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::read(d, PWORD.p)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/read-pointer", compiler::DiagnosticCode::LayoutNativeOnly, read_pointer)
+    fn read_record_pointer() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::read(d, PRECU.rec)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/read-record-holding-one", compiler::DiagnosticCode::LayoutNativeOnly, read_record_pointer)
+    fn read_element_pointer() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::read(d, PARR.ps[1].p)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/read-element-pointer", compiler::DiagnosticCode::LayoutNativeOnly, read_element_pointer)
+    fn parse_pointers() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::parse(PARR, d)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/parse", compiler::DiagnosticCode::LayoutUnion, parse_pointers)
+    fn write_pointer() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write(d, PWORD.p, 0)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/write-pointer", compiler::DiagnosticCode::LayoutNativeOnly, write_pointer)
+    fn foreign_scalar() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:
+                binary::write_foreign(d, PWORD.bits, 0)
+            0
+    test::rejects("lu-pointer-authority-from-bytes/foreign-scalar", compiler::DiagnosticCode::LayoutForeignWrite, foreign_scalar)
+    fn scalar_reads() errors compiler::CompilerError:
+        static compile:
+            fn go(d: abi::bytes::Bytes, d8: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List[any] errors LayoutLengthMismatch:
+                [binary::read(d8, PWORD.bits), binary::read(d, PRECU.raw), binary::read(d, PRECU.rec.k), frozen(binary::write(m, PARR.ps[1].bits, 18446744073709551615))]
+            r = go(bytes_of([1, 0, 0, 0, 0, 0, 0, 128, 2, 0, 0, 0, 0, 0, 0, 0]), bytes_of([1, 0, 0, 0, 0, 0, 0, 128]), mutable(fill(24, 0))):
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("lu-pointer-authority-from-bytes/scalar-reads", [9223372036854775809, [9223372036854775809, 2], 1, bytes_of([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255])], scalar_reads)
+
+    # lu-native-types: a live union's static types.
+    fn types() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[OVL]) -> NativeView[OVLU]:
+                v.u
+            fn g(e: NativeEdit[OVL]) -> NativeEdit[OVLU]:
+                e.u
+            fn h(v: NativeView[OVL]) -> NativeView[OFFSETS]:
+                v.u.offsets
+            fn k(v: NativeView[WIDE]) -> NativeView[array 16 of binary::U8]:
+                v.bytes
+            fn m(v: NativeView[ARRS]) -> NativeView[WORD] errors IndexNotFound:
+                binary::element(v.ws, 2)
+            fn n(e: NativeEdit[ARRS]) -> NativeEdit[array 2 of WORD] errors IndexNotFound:
+                binary::element(e.grid, 1)
+            fn o(v: NativeView[WIDE]) -> binary::I16:
+                v.h
+            0
+    test::value("lu-native-types/accepted", 0, types)
+    fn view_as_edit() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[OVL]) -> NativeEdit[OVLU]:
+                v.u
+            0
+    test::rejects("lu-native-types/view-as-edit", compiler::DiagnosticCode::Type, view_as_edit)
+    fn edit_as_view() errors compiler::CompilerError:
+        static compile:
+            fn f(e: NativeEdit[OVL]) -> NativeView[OVLU]:
+                e.u
+            0
+    test::rejects("lu-native-types/edit-as-view", compiler::DiagnosticCode::Type, edit_as_view)
+    fn other_union() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[WIDE]) -> NativeView[WORD]:
+                v
+            0
+    test::rejects("lu-native-types/other-union", compiler::DiagnosticCode::Type, other_union)
+    fn not_a_pointer() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[PWORD]) -> bool:
+                ffi::c::null?(v)
+            0
+    test::rejects("lu-native-types/not-a-pointer", compiler::DiagnosticCode::Type, not_a_pointer)
+
+    # lu-native-authority: a view's union is read-only; a union is written
+    # one alternative at a time.
+    fn store_through_view() errors compiler::CompilerError:
+        static compile:
+            fn f(v: NativeView[OVL]) -> unit:
+                binary::store(v.u, OVLU.offsets.offset, 1)
+            0
+    test::rejects("lu-native-authority/view-union", compiler::DiagnosticCode::BinaryOperand, store_through_view)
+    fn store_whole() errors compiler::CompilerError:
+        static compile:
+            fn f(e: NativeEdit[OVL]) -> unit:
+                binary::store(e, OVL.u, 1)
+            0
+    test::rejects("lu-native-authority/whole-union", compiler::DiagnosticCode::LayoutOperand, store_whole)
+    fn store_element() errors compiler::CompilerError:
+        static compile:
+            fn f(e: NativeEdit[ARRS]) -> unit errors IndexNotFound:
+                binary::store_element(e.ws, past, 1)
+            0
+    test::rejects("lu-native-authority/union-element", compiler::DiagnosticCode::LayoutOperand, store_element)
+
+    # lu-specialization: an untyped function cannot read an alternative.
+    fn untyped() errors compiler::CompilerError:
+        static compile:
+            fn g(w):
+                w.whole
+            fn f(v: NativeView[ARRS]) -> any errors IndexNotFound:
+                g(binary::element(v.ws, 0))
+            0
+    test::rejects("lu-specialization/untyped", compiler::DiagnosticCode::Type, untyped)
+
+fn register_value_tests():
+    # lu-read-every-alternative: the same sixteen bytes through every
+    # alternative, each by its own encoding.
+    fn every() errors compiler::CompilerError:
+        static compile:
+            fn reads(d: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+                [binary::read(d, WIDE.b), binary::read(d, WIDE.h), binary::read(d, WIDE.w), binary::read(d, WIDE.q),
+                    binary::read(d, WIDE.word.whole), binary::read(d, WIDE.word.halves.low), binary::read(d, WIDE.word.halves.high),
+                    binary::read(d, WIDE.word.halves), binary::read(d, WIDE.large.parts.low), binary::read(d, WIDE.large.parts.high),
+                    binary::read(d, WIDE.large.parts), binary::read(d, WIDE.large.quad), binary::read(d, WIDE.bytes),
+                    binary::read(d, WIDE.words), binary::read(d, WIDE.words[3]), binary::read(d, WIDE.bytes[15])]
+            r = reads(bytes_of([240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15])):
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("lu-read-every-alternative", [240, -7696, 3285377520, 9770178637424943600, 3285377520, 57840, -15406, LayoutStruct[HALVES] {low: 57840, high: -15406}, 3285377520, -2020170316, LayoutStruct[PARTS] {low: 3285377520, high: -2020170316}, -8676565436284608016, [240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15], [3285377520, 2274796980, 1264216440, 253635900], 253635900, 15], every)
+
+    # lu-write-touches-only-the-alternative: each write changes exactly the
+    # alternative's bytes (0xA5 sentinels everywhere else), the operand
+    # unchanged.
+    fn touches() errors compiler::CompilerError:
+        static compile:
+            fn put(d: abi::bytes::MutableBytes) -> List[any] errors LayoutLengthMismatch, LayoutExtentMismatch:
+                a = binary::write(d, SANDWICH.w.b, 7)
+                b = binary::write(d, SANDWICH.w.h, -2)
+                c = binary::write(d, SANDWICH.w.w, 305419896)
+                e = binary::write(d, SANDWICH.w.q, 18446744073709551615)
+                f = binary::write(d, SANDWICH.w.word.halves.high, -32768)
+                g = binary::write(d, SANDWICH.w.words[2], 4294967295)
+                h = binary::write(d, SANDWICH.w.bytes, u8s([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]))
+                [frozen(a), frozen(b), frozen(c), frozen(e), frozen(f), frozen(g), frozen(h), frozen(d)]
+            r = put(mutable(fill(24, 165))):
+                on LayoutLengthMismatch:
+                    []
+                on LayoutExtentMismatch:
+                    []
+            r
+    test::value("lu-write-touches-only-the-alternative", [
+        bytes_of([165, 165, 165, 165, 7, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 254, 255, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 120, 86, 52, 18, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 255, 255, 255, 255, 255, 255, 255, 255, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 165, 165, 0, 128, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 255, 255, 255, 255, 165, 165, 165, 165, 165, 165, 165, 165]),
+        bytes_of([165, 165, 165, 165, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 165, 165, 165, 165]),
+        bytes_of(fill(24, 165)),
+    ], touches)
+
+    # lu-not-a-sum-type: written through one alternative, read through the
+    # others -- nothing records which was written.
+    fn switched() errors compiler::CompilerError:
+        static compile:
+            fn go() -> List[any] errors LayoutLengthMismatch:
+                d = binary::write(mutable(fill(4, 0)), WORD.halves.high, -1)
+                f = frozen(d)
+                [binary::read(f, WORD.whole), binary::read(f, WORD.bytes), binary::read(f, WORD.halves)]
+            r = go():
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("lu-not-a-sum-type/switched", [4294901760, [0, 0, 255, 255], LayoutStruct[HALVES] {low: 0, high: -1}], switched)
+
+fn register_layout_unions_tests():
+    register_declaration_tests()
+    register_designator_tests(0)
+    register_value_tests()
+
+with context test::suite()
+register_layout_unions_tests()
+test::report()

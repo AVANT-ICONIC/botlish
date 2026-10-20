@@ -35,17 +35,17 @@
 @@ offset-ignored-interp the interpreter reads every scalar field at its layout's base, ignoring its offset
 ## core/binary.tcl
 <<<<
-        binary scan $bytes @[expr {$base + $offset}][Letter $width $sign $endian] n
+        lappend values [DecodeRepr [lrange $field 2 end] $bytes [expr {$base + [lindex $field 1]}] $name $structId]
 ====
-        binary scan $bytes @$base[Letter $width $sign $endian] n
+        lappend values [DecodeRepr [lrange $field 2 end] $bytes $base $name $structId]
 >>>>
 
 @@ offset-ignored-native native parse loads every scalar field at its layout's base, ignoring its offset
 ## native/lower.tcl
 <<<<
-        set at [Assign fn "int [expr {$base + $offset}]" $e]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
 ====
-        set at [Assign fn "int $base" $e]
+        lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] $base]
 >>>>
 
 @@ nested-offset-ignored-native native emit writes a nested layout's fields at its parent's base, ignoring the nested field's offset
@@ -61,8 +61,10 @@
 @@ prefix-parse-interp the interpreter's parse accepts an input longer than the layout (a prefix parse)
 ## core/binary.tcl
 <<<<
+    set size [lindex $descriptor 1]
     if {[string length $bytes] != $size} {
 ====
+    set size [lindex $descriptor 1]
     if {[string length $bytes] < $size} {
 >>>>
 
@@ -116,28 +118,23 @@
 @@ sequential-emit-interp the interpreter's emit writes fields one after another from the base, ignoring gaps
 ## core/binary.tcl
 <<<<
-proc core::binary::Encode {descriptor value bytes base} {
-    lassign $descriptor structId size align fields
+    foreach field $fields {
+        set name [lindex $field 0]
+        set bytes [EncodeRepr binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
+            $bytes [expr {$base + [lindex $field 1]}] "field \"$name\" of $structId"]
+    }
 ====
-proc core::binary::Encode {descriptor value bytes base} {
-    lassign $descriptor structId size align fields
     set cursor $base
->>>>
-<<<<
-        set at [expr {$base + $offset}]
-        if {$kind eq "layout"} {
-            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
-====
-        set at $cursor
-        if {$kind eq "layout"} {
-            set cursor [expr {$cursor + [lindex $field 3 1]}]
-            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
->>>>
-<<<<
-        set n [core::value::intOf $fieldValue]
-====
-        set n [core::value::intOf $fieldValue]
-        set cursor [expr {$cursor + $width}]
+    foreach field $fields {
+        set name [lindex $field 0]
+        set bytes [EncodeRepr binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
+            $bytes $cursor "field \"$name\" of $structId"]
+        switch -- [lindex $field 2] {
+            layout { set cursor [expr {$cursor + [lindex $field 3 1]}] }
+            array { set cursor [expr {$cursor + [lindex $field 3] * [lindex $field 4]}] }
+            default { set cursor [expr {$cursor + [lindex $field 3]}] }
+        }
+    }
 >>>>
 
 @@ sequential-emit-compile the Tcl compiler's emit packs the fields one after another (no positioning), padding only at the end
@@ -152,18 +149,16 @@ proc core::binary::Encode {descriptor value bytes base} {
 ## native/lower.tcl
 <<<<
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian
-        set at [Assign fn "int $offset" $e]
+        lassign $leaf offset repr
+        if {[lindex $repr 0] eq "array"} {
 ====
     set next 0
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian
+        lassign $leaf offset repr
         set offset $next
-        incr next $width
-        set at [Assign fn "int $offset" $e]
+        incr next [expr {[lindex $repr 0] eq "array" ? [lindex $repr 1] * [lindex $repr 2] : [lindex $repr 1]}]
+        if {[lindex $repr 0] eq "array"} {
 >>>>
-
-# --- read the wrong scalar width -----------------------------------------
 
 @@ width-tcl the Tcl backends read and write an 8-byte field as 4 bytes (core::binary::Letter, which the Tcl compiler shares)
 ## core/binary.tcl
@@ -220,11 +215,11 @@ proc core::binary::Encode {descriptor value bytes base} {
 ## native/src/runtime/ops.rs
 <<<<
     if big {
-        field.reverse();
+        bytes[..width].reverse();
     }
 ====
     if !big {
-        field.reverse();
+        bytes[..width].reverse();
     }
 >>>>
 
@@ -318,10 +313,17 @@ proc hir::types::subtype {a b} {
 @@ nested-emit-skipped-interp the interpreter's emit writes nothing for a nested layout field
 ## core/binary.tcl
 <<<<
-            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
-            continue
+proc core::binary::EncodeRepr {operation repr value bytes at what} {
+    switch -- [lindex $repr 0] {
+        layout {
+            return [Encode [lindex $repr 1] $value $bytes $at]
+        }
 ====
-            continue
+proc core::binary::EncodeRepr {operation repr value bytes at what} {
+    switch -- [lindex $repr 0] {
+        layout {
+            return $bytes
+        }
 >>>>
 
 @@ nested-emit-skipped-compile the Tcl compiler's emit writes nothing for a nested layout's fields
@@ -337,18 +339,19 @@ proc hir::types::subtype {a b} {
 <<<<
             lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
 ====
-            lappend leaves {*}[lmap leaf [LayoutLeaves [lindex $field 3] [expr {$base + $offset}]] {linsert $leaf end nested}]
+            lappend leaves {*}[lmap l [LayoutLeaves [lindex $field 3] [expr {$base + $offset}]] {linsert $l end nested}]
 >>>>
+## native/lower.tcl
 <<<<
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian
+        lassign $leaf offset repr
+        if {[lindex $repr 0] eq "array"} {
 ====
     foreach leaf $scalars r $leaves {
-        lassign $leaf offset sign width endian nested
+        lassign $leaf offset repr nested
         if {$nested ne ""} continue
+        if {[lindex $repr 0] eq "array"} {
 >>>>
-
-# --- allow arbitrary T in LayoutStruct[T] --------------------------------
 
 @@ arbitrary-layout-struct-argument LayoutStruct[T] of any type T that is not a layout denotes T itself
 ## hir/layouts.tcl
@@ -399,10 +402,10 @@ proc hir::types::subtype {a b} {
 ## native/src/runtime/ops.rs
 <<<<
     if n < lo || n > hi {
-        let message = format!("binary::emit: {} is outside
+        let message = format!("{context}: {} is outside
 ====
     if n < lo && n > hi {
-        let message = format!("binary::emit: {} is outside
+        let message = format!("{context}: {} is outside
 >>>>
 
 @@ elaboration-skipped binary::emit is never elaborated to binary#emit with its value's static layout

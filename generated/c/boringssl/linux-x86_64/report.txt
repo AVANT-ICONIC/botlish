@@ -49,11 +49,78 @@ Capability pressure (API names a missing FFI capability blocks or limits)
   aggregates by value (struct, union)                                          0     0.0%
   varargs (..., va_list)                                                       7     0.2%
   callback signature outside the ABI universe                                  0     0.0%
-  explicit calling convention                                                  0     0.0%
+  explicit calling convention (one the target does not take as its default)       0     0.0%
   macro without a signature                                                  130     3.2%
+  bound, declaring a convention the target takes as its default                0     0.0%
   bound, taking a callback (no Botlish function can be one yet)              452    11.0%
   bound, pointing to a complete C struct (needs memory views)               1317    32.0%
   bound, a pointer parameter that may be retained (direct)                  3542    86.0%
+
+Records and layouts (complete C records of the public headers and every record they hold by value)
+  complete structs                                                           100
+  complete unions                                                             23
+    of them in a system header (held by value by a public record)              0
+    of them anonymous                                                         28
+    of them anonymous members laid out as records of their own                 3
+  incomplete struct and union tags (pointee identities only)                 102
+  anonymous struct members promoted into their record                          0
+  layouts emitted                                                            118    95.9%
+    union layouts                                                             22    17.9%
+    synthetic layouts of anonymous members                                     3     2.4%
+  anonymous members representable but held by a blocked record (not emitted)       0     0.0%
+  records whose layout is blocked                                              5     4.1%
+    structs                                                                    4     3.3%
+    unions                                                                     1     0.8%
+    with a direct blocker of their own                                         3     2.4%
+    only through a record they hold by value                                   2     1.6%
+
+Layout blockers (records blocked; a record may have several)
+  bitfield                                                                     2     1.6%
+  nested-layout-blocked                                                        2     1.6%
+  unsupported-pointer                                                          1     0.8%
+  records blocked only transitively, by the direct reasons below them:
+      bitfield                                                                 2     1.6%
+
+Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
+  ffi::c::Bool fields                                                          0     0.0%  0 + 0
+  float fields                                                                 0     0.0%  0 + 0
+  double fields                                                                0     0.0%  0 + 0
+  float and double fields                                                      0     0.0%  0 + 0
+  long double fields                                                           0     0.0%  0 + 0
+  bitfields                                                                    4     3.3%  2 + 2
+  flexible array members                                                       0     0.0%  0 + 0
+  explicit calling conventions                                                 0     0.0%  0 + 0
+  float, double and Bool                                                       0     0.0%  0 + 0
+  all of the above                                                             4     3.3%  2 + 2
+
+API pressure (bound APIs pointing to C records)
+  bound APIs with a pointer to a C record (parameter or result)             3578    86.9%
+    to a record with an emitted layout                                      1152    32.2%
+    to a complete record whose layout is blocked                              83     2.3%
+    only to incomplete records (or complete ones outside the headers)       2353    65.8%
+  pointers by shape and record (layout / blocked / incomplete / outside):
+    param T *                571 / 81 / 1598 / 97
+    param const T *          559 / 3 / 1250 / 2
+    param T **               82 / 0 / 155 / 1
+    result T *               317 / 3 / 788 / 0
+    result T **              0 / 0 / 0 / 0
+  records bound signatures point to                                          186
+    complete                                                                  89    47.8%
+      with an emitted layout                                                  84    45.2%
+      whose layout is blocked                                                  2     1.1%
+      outside the profile's records (a system header's)                        3     1.6%
+    incomplete (opaque only)                                                  97    52.2%
+  bound APIs a missing feature would give a layout of a record they point to:
+      ffi::c::Bool fields                                                      0     0.0%  0 records
+      float fields                                                             0     0.0%  0 records
+      double fields                                                            0     0.0%  0 records
+      float and double fields                                                  0     0.0%  0 records
+      long double fields                                                       0     0.0%  0 records
+      bitfields                                                               79     2.2%  1 record
+      flexible array members                                                   0     0.0%  0 records
+      explicit calling conventions                                             0     0.0%  0 records
+      float, double and Bool                                                   0     0.0%  0 records
+      all of the above                                                        79     2.2%  1 record
 
 Macro APIs (apparent callables that are macros, and what each became)
   declared functions a function-like macro shadows (thunked: the macro)        0
@@ -95,9 +162,10 @@ Macros
   object: statement or declaration                                             1
 
 Generated source
-  Botlish files                                                               82
-  lines                                                                    29079
+  Botlish files                                                               83
+  lines                                                                    30103
   extern c fn declarations                                                  3977
-  opaque types                                                               189
+  opaque types                                                               195
   constants                                                                 3117
+  layouts                                                                     96
   shim thunks                                                                817

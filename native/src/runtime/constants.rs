@@ -14,6 +14,9 @@ pub enum Const {
     Native(u32),
     /// The closure of an environment-free function.
     FnValue(FuncId),
+    /// A floating-point value (FLOAT64-MILESTONE-1.md): its type and the
+    /// bits FloatObj holds (a number FloatType::admit accepted).
+    Float(FloatType, u64),
 }
 
 pub fn install(vm: &mut Vm, entries: &[Const], generic_entries: &[usize], static_count: u32) {
@@ -26,6 +29,10 @@ pub fn install(vm: &mut Vm, entries: &[Const], generic_entries: &[usize], static
             Const::BigInt(digits) => Box::into_raw(Box::new(BigIntObj {
                 hdr: Header::new(KIND_BIGINT, true),
                 n: digits.parse().expect("validated big Int literal"),
+            })) as *mut Header,
+            Const::Float(_, bits) => Box::into_raw(Box::new(FloatObj {
+                hdr: Header::new(KIND_FLOAT, true),
+                bits: *bits,
             })) as *mut Header,
             Const::Native(index) => Box::into_raw(Box::new(NativeObj {
                 hdr: Header::new(KIND_NATIVE, true),

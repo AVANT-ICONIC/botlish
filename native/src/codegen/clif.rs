@@ -66,7 +66,7 @@ use crate::runtime::vm::{
     VM_ALLOC_SITE_OFFSET, VM_CONSTS_OFFSET, VM_NATIVE_ROOTS_LEN_OFFSET, VM_NATIVE_ROOTS_PTR_OFFSET,
     VM_SS_LIMIT_OFFSET, VM_SS_TOP_OFFSET, VM_STATICS_OFFSET,
 };
-use cranelift_codegen::ir::condcodes::IntCC;
+use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::{
     types, AbiParam, BlockArg, InstBuilder, MemFlagsData, Signature, StackSlotData, StackSlotKind,
     UserFuncName, UserStackMapEntry,
@@ -195,8 +195,12 @@ fn signature_n<M: Module>(module: &M, params: usize, results: usize) -> Signatur
     sig
 }
 
-/// The Cranelift type of C ABI class C (a pointer is a 64-bit word).
+/// The Cranelift type of C ABI class C (a pointer is a 64-bit word, a
+/// double the floating-point class's F64).
 fn c_type(c: nir::CAbi) -> ir::Type {
+    if c == nir::CAbi::F64 {
+        return types::F64;
+    }
     match c.bits() {
         8 => types::I8,
         16 => types::I16,
@@ -210,16 +214,27 @@ fn c_type(c: nir::CAbi) -> ir::Type {
 /// on Apple AArch64, SystemV on Linux -- selected here explicitly, never the
 /// Botlish-internal default by accident): each integer parameter of its
 /// exact width, sign- or zero-extended by its class as the platform ABI
-/// expects of a caller (the narrow ones), a pointer a 64-bit word. The
+/// expects of a caller (the narrow ones, except Apple's stack-passed ones:
+/// `target::c_extended_parameters`), a pointer a 64-bit word. The
 /// result is declared without an extension attribute: the bits beyond a
 /// narrow C result's width are unspecified by the ABI (GCC leaves them), so
 /// the caller extends it itself (`ForeignCall`).
 fn c_signature<M: Module>(module: &M, decl: &nir::ForeignDecl) -> Signature {
     let mut sig = module.make_signature();
     sig.call_conv = super::target::c_call_conv(module.isa().triple());
+    let extended = super::target::c_extended_parameters(sig.call_conv);
+    let mut integers = 0;
     for c in &decl.params {
         let param = AbiParam::new(c_type(*c));
-        sig.params.push(match (c.bits() < 64, c.signed()) {
+        if *c == nir::CAbi::F64 {
+            // A double takes a floating-point register: it has no extension
+            // and leaves the integer registers' count alone.
+            sig.params.push(param);
+            continue;
+        }
+        let in_register = integers < extended;
+        integers += 1;
+        sig.params.push(match (c.bits() < 64 && in_register, c.signed()) {
             (true, true) => param.sext(),
             (true, false) => param.uext(),
             _ => param,
@@ -1044,6 +1059,12 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         for (i, r) in args.iter().enumerate() {
             let v = self.get(*r);
             let class = decl.params[i];
+            if class == nir::CAbi::F64 {
+                // A Float64's number, as it is: every Float64 is a double.
+                words.push(v);
+                values.push(self.float_number(FloatType::Float64, v));
+                continue;
+            }
             let word = if exposed[i] {
                 self.b.ins().sshr_imm_s(v, 1)
             } else if class == nir::CAbi::Ptr {
@@ -1081,6 +1102,26 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         }
         let Some(returned) = returned else { return self.iconst(UNIT) };
         let class = decl.result;
+        if class == nir::CAbi::F64 {
+            // A double is a Float64 only when it is a finite number
+            // (FLOAT64-MILESTONE-1.md): NaN or an infinity is the call's
+            // NonFiniteFloat, negative zero is zero (`r + 0.0`).
+            let zero = self.b.ins().f64const(0.0);
+            let r = self.b.ins().fadd(returned, zero);
+            let magnitude = self.b.ins().fabs(r);
+            let largest = self.b.ins().f64const(f64::MAX);
+            let finite = self.b.ins().fcmp(FloatCC::LessThanOrEqual, magnitude, largest);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(finite, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let result = self.non_finite_code(r);
+            self.fail_with("rt_float_nonfinite", &[self.vm, result]);
+            self.b.switch_to_block(ok);
+            let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
+            let code = self.iconst(FloatType::Float64.code());
+            return self.call_allocating("rt_float_new", &[self.vm, code, bits], "foreigncall", KIND_FLOAT);
+        }
         if class == nir::CAbi::Ptr {
             // (address << 4) | tag when the word holds the address.
             let shifted = self.b.ins().ishl_imm_s(returned, 4);
@@ -1444,6 +1485,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutByteStore => KIND_MUTBYTES,
             Kind::Coroutine => KIND_COROUTINE,
             Kind::MutVec => KIND_MUTVEC,
+            // (Every FloatObj is a Float64 today: FloatType's own header.)
+            Kind::Float64 => KIND_FLOAT,
             Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum | Kind::CPtr => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
@@ -1511,6 +1554,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 // startup): loaded from the constant table like a String
                 // constant, never allocated at run time.
                 let v = self.constant(Const::Bytes(bytes.clone()));
+                self.def(*dst, v);
+            }
+            Inst::Float { dst, ty, bits } => {
+                // A static floating-point object (constants.rs installs it
+                // at startup), loaded from the constant table like a String
+                // constant: never allocated at run time.
+                let v = self.constant(Const::Float(*ty, *bits));
                 self.def(*dst, v);
             }
             Inst::Char { dst, digits } => {
@@ -1923,6 +1973,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let eq = self.b.ins().icmp(IntCC::Equal, a[0], a[1]);
                 self.bool_of(eq)
             }
+            // Floating-point arithmetic and comparisons (FLOAT64-MILESTONE-1.md):
+            // the target's own floating-point instructions on the unboxed
+            // numbers (float_op); the conversions are runtime helpers.
+            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq => {
+                let (ty, fop) = op.float().expect("a floating-point operation");
+                self.float_op(ty, fop, &a)
+            }
+            F64FromInt => {
+                let v = self.call_allocating("rt_f64_from_int", &[self.vm, a[0]], "f64fromint", KIND_FLOAT);
+                self.check(v);
+                v
+            }
+            F64Trunc => self.call_allocating("rt_f64_trunc", &[self.vm, a[0]], "f64trunc", KIND_BIGINT),
             // C addresses (C-ABI-TYPES.md): the null pointer is a constant
             // word, the null test one comparison with it, and clone, erase
             // and retype are the word itself -- no machine operation, no
@@ -2163,6 +2226,25 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         NativeLoadPtr => ("rt_native_load_ptr", None, true, None),
                         CPtrOffset => ("rt_cptr_offset", None, true, None),
                         CPtrFixtureMemory => ("rt_cptr_fixture_memory", None, true, None),
+                        // Native layout writes (NATIVE-LAYOUT-WRITES.md,
+                        // runtime/nview.rs): one helper call per field
+                        // written; a store through a native edit allocates
+                        // nothing (no safepoint), a write into byte storage
+                        // one fresh storage (the MutableBytes rule), the
+                        // fixture's byte copy one List.
+                        NativeStore => ("rt_native_store", None, true, None),
+                        NativeStorePtr => ("rt_native_store_ptr", None, true, None),
+                        MBytesWrite => ("rt_mbytes_write", None, true, Some(("mbyteswrite", KIND_MUTBYTES))),
+                        MBytesWritePtr => ("rt_mbytes_write_ptr", None, true, Some(("mbyteswriteptr", KIND_MUTBYTES))),
+                        CPtrFixtureBytes => ("rt_cptr_fixture_bytes", None, true, Some(("cptrfixturebytes", KIND_LIST))),
+                        // Fixed arrays (FIXED-LAYOUT-ARRAYS.md): one helper
+                        // call per row of scalars; a read makes its List (a
+                        // safepoint), a write allocates nothing.
+                        BinLoadArray => ("rt_bin_load_array", None, true, Some(("binloadarray", KIND_LIST))),
+                        NativeLoadArray => ("rt_native_load_array", None, true, Some(("nativeloadarray", KIND_LIST))),
+                        BinStoreArray => ("rt_bin_store_array", None, true, None),
+                        NativeStoreArray => ("rt_native_store_array", None, true, None),
+                        BinStorePtr => ("rt_bin_store_ptr", None, true, None),
                         // The writable byte storage (MUTABLE-BYTES.md): new /
                         // from / set / clone allocate one object, freeze and
                         // freeze_prefix one immutable one (all fallible, all
@@ -2564,6 +2646,94 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         result
     }
 
+    /// The number of the floating-point value V of type TY, in a register of
+    /// the target's floating-point class.
+    fn float_number(&mut self, ty: FloatType, v: ir::Value) -> ir::Value {
+        match ty {
+            FloatType::Float64 => self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET),
+        }
+    }
+
+    /// The NonFiniteResult code (runtime::ops's NON_FINITE_CASES) of the
+    /// non-finite number R, as runtime::ops's non_finite_code computes it:
+    /// 2 (NotANumber) for NaN, else 0 or 1, the infinity of R's sign.
+    fn non_finite_code(&mut self, r: ir::Value) -> ir::Value {
+        let nan = self.b.ins().fcmp(FloatCC::Unordered, r, r);
+        let zero = self.b.ins().f64const(0.0);
+        let positive = self.b.ins().fcmp(FloatCC::GreaterThan, r, zero);
+        let plus = self.iconst(0);
+        let minus = self.iconst(1);
+        let infinity = self.b.ins().select(positive, plus, minus);
+        let not_a_number = self.iconst(2);
+        self.b.ins().select(nan, not_a_number, infinity)
+    }
+
+    /// The floating-point operation OP of type TY on the values A
+    /// (runtime::ops's float_apply computes the same): a comparison is one
+    /// `fcmp` (ordered: no operand is ever NaN); an arithmetic result has its
+    /// negative zero made zero (`r + 0.0` is `r` for every other number) and,
+    /// unless it is a negation, is checked finite -- |r| <= the largest
+    /// finite number, false for an infinity and for NaN -- before it is
+    /// boxed (rt_float_new); a non-finite one fails with NonFiniteFloat
+    /// (rt_float_nonfinite, given which non-finite result it was). One runtime call on every path, as a safepoint
+    /// needs (codegen::roots).
+    fn float_op(&mut self, ty: FloatType, op: nir::FloatOp, a: &[ir::Value]) -> ir::Value {
+        use nir::FloatOp::*;
+        let FloatType::Float64 = ty;
+        if op == Eq {
+            let x = self.b.ins().load(I64, MemFlagsData::trusted(), a[0], FLOAT_BITS_OFFSET);
+            let y = self.b.ins().load(I64, MemFlagsData::trusted(), a[1], FLOAT_BITS_OFFSET);
+            let flag = self.b.ins().icmp(IntCC::Equal, x, y);
+            return self.bool_of(flag);
+        }
+        let x = self.float_number(ty, a[0]);
+        match op {
+            Lt | Le | Gt | Ge => {
+                let y = self.float_number(ty, a[1]);
+                let cc = match op {
+                    Lt => FloatCC::LessThan,
+                    Le => FloatCC::LessThanOrEqual,
+                    Gt => FloatCC::GreaterThan,
+                    _ => FloatCC::GreaterThanOrEqual,
+                };
+                let flag = self.b.ins().fcmp(cc, x, y);
+                self.bool_of(flag)
+            }
+            Add | Sub | Mul | Div | Neg => {
+                let zero = self.b.ins().f64const(0.0);
+                let r = match op {
+                    Neg => self.b.ins().fsub(zero, x),
+                    _ => {
+                        let y = self.float_number(ty, a[1]);
+                        match op {
+                            Add => self.b.ins().fadd(x, y),
+                            Sub => self.b.ins().fsub(x, y),
+                            Mul => self.b.ins().fmul(x, y),
+                            _ => self.b.ins().fdiv(x, y),
+                        }
+                    }
+                };
+                let r = self.b.ins().fadd(r, zero);
+                if op != Neg {
+                    let magnitude = self.b.ins().fabs(r);
+                    let largest = self.b.ins().f64const(f64::MAX);
+                    let finite = self.b.ins().fcmp(FloatCC::LessThanOrEqual, magnitude, largest);
+                    let ok = self.b.create_block();
+                    let bad = self.b.create_block();
+                    self.b.ins().brif(finite, ok, &[], bad, &[]);
+                    self.b.switch_to_block(bad);
+                    let result = self.non_finite_code(r);
+                    self.fail_with("rt_float_nonfinite", &[self.vm, result]);
+                    self.b.switch_to_block(ok);
+                }
+                let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
+                let code = self.iconst(ty.code());
+                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", KIND_FLOAT)
+            }
+            Eq | FromInt | Trunc => unreachable!("not computed in floating-point registers"),
+        }
+    }
+
     fn int_compare(&mut self, op: OpCode, a: ir::Value, b: ir::Value) -> ir::Value {
         let cc = match op {
             OpCode::ILt => IntCC::SignedLessThan,
@@ -2815,4 +2985,141 @@ pub fn legend(symbols: &Symbols) -> String {
     let mut ids: Vec<_> = symbols.names.iter().collect();
     ids.sort();
     ids.iter().map(|(id, name)| format!("; u0:{id} = {name}\n")).collect()
+}
+
+/// The foreign C signature compiled for Apple AArch64, read from Cranelift's
+/// own disassembly of a call. Runs on an AArch64 host, whose Cranelift has
+/// the AArch64 backend (the macOS smoke job's and Linux arm64 CI's driver
+/// tests); an x86-64 build has no AArch64 backend to ask.
+#[cfg(all(test, target_arch = "aarch64"))]
+mod apple_tests {
+    use super::*;
+    use cranelift_codegen::settings::{self, Configurable};
+    use std::str::FromStr;
+
+    /// The disassembly of a function calling, with literal arguments, the
+    /// foreign function `callee` of ABI classes PARAMS through the signature
+    /// SIGNATURE makes for it, compiled for TRIPLE; a 16-byte explicit stack
+    /// slot written before the call and read after it sits right above the
+    /// outgoing argument area.
+    fn call_disassembly(triple: &str, params: &[nir::CAbi], signature: impl Fn(&cranelift_object::ObjectModule, &nir::ForeignDecl) -> Signature) -> String {
+        let triple = target_lexicon::Triple::from_str(triple).unwrap();
+        let mut flags = settings::builder();
+        flags.set("opt_level", "speed").unwrap();
+        flags.set("is_pic", "true").unwrap();
+        let isa = cranelift_codegen::isa::lookup(triple).unwrap().finish(settings::Flags::new(flags)).unwrap();
+        let mut module = cranelift_object::ObjectModule::new(
+            cranelift_object::ObjectBuilder::new(isa, "probe", cranelift_module::default_libcall_names()).unwrap(),
+        );
+        let decl = nir::ForeignDecl {
+            symbol: "callee".into(),
+            name: "callee".into(),
+            params: params.to_vec(),
+            result: nir::CAbi::I64,
+            alias: None,
+        };
+        let callee = module.declare_function("callee", Linkage::Import, &signature(&module, &decl)).unwrap();
+        let mut sig = module.make_signature();
+        sig.returns.push(AbiParam::new(types::I64));
+        let mut func = ir::Function::with_name_signature(ir::UserFuncName::user(0, 0), sig);
+        let mut context = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut func, &mut context);
+        let block = b.create_block();
+        b.switch_to_block(block);
+        let slot = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let sentinel = b.ins().iconst(types::I64, 0x1111_2222_3333_4444);
+        b.ins().stack_store(types::I64, sentinel, slot, 0);
+        let callee = module.declare_func_in_func(callee, b.func);
+        let args: Vec<ir::Value> = params
+            .iter()
+            .enumerate()
+            .map(|(i, c)| match c {
+                nir::CAbi::F64 => b.ins().f64const(i as f64 + 0.5),
+                _ => b.ins().iconst(c_type(*c), -(i as i64) - 2),
+            })
+            .collect();
+        let call = b.ins().call(callee, &args);
+        let result = b.inst_results(call)[0];
+        let kept = b.ins().stack_load(types::I64, types::I64, slot, 0);
+        let sum = b.ins().iadd(result, kept);
+        b.ins().return_(&[sum]);
+        b.seal_all_blocks();
+        b.finalize(module.isa().frontend_config());
+        let mut ctx = cranelift_codegen::Context::for_function(func);
+        ctx.set_disasm(true);
+        ctx.compile(module.isa(), &mut Default::default()).unwrap().vcode.clone().unwrap()
+    }
+
+    /// Eight 64-bit register arguments, then stack arguments that Apple
+    /// packs at their natural size and alignment -- a 64-bit one at 0, an
+    /// int at 8, a short at 12, a signed char at 14 -- ending two bytes
+    /// short of the 16-byte argument area.
+    const STACK_TAIL: [nir::CAbi; 12] = {
+        use nir::CAbi::*;
+        [I64, I64, I64, I64, I64, I64, I64, I64, I64, I32, I16, I8]
+    };
+
+    /// Botlish's Apple signature stores each stack argument at its natural
+    /// width at its packed offset -- `str w` at 8, `strh` at 12, `strb` at
+    /// 14 -- so nothing is written past the argument area; and the narrow
+    /// register arguments are extended by the caller, as Apple requires.
+    #[test]
+    fn ffi_apple_stack_arguments_stored_at_their_width() {
+        let code = call_disassembly("aarch64-apple-darwin", &STACK_TAIL, c_signature);
+        for store in [", [sp, #8]", ", [sp, #12]", ", [sp, #14]"] {
+            let line = code.lines().find(|l| l.contains(store)).unwrap_or_else(|| panic!("no store {store} in\n{code}"));
+            let expected = match store {
+                ", [sp, #8]" => "str w",
+                ", [sp, #12]" => "strh w",
+                _ => "strb w",
+            };
+            assert!(line.trim_start().starts_with(expected), "{line:?}, not {expected}, in\n{code}");
+        }
+        use nir::CAbi::*;
+        let narrow = call_disassembly("aarch64-apple-darwin", &[I8, U8, I16, U16, I32, U32, Bool, I8], c_signature);
+        for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
+            assert!(narrow.contains(extension), "no {extension:?} in\n{narrow}");
+        }
+    }
+
+    /// Doubles take floating-point registers (v0-v7) and leave the integer
+    /// registers' count alone: after eight doubles, eight narrow integers
+    /// are still x0-x7, each extended by the caller as Apple requires -- the
+    /// count `target::c_extended_parameters` bounds is of integer-register
+    /// parameters, never of positions.
+    #[test]
+    fn ffi_apple_doubles_leave_the_integer_registers() {
+        use nir::CAbi::*;
+        let params = [F64, F64, F64, F64, F64, F64, F64, F64, I8, U8, I16, U16, I32, U32, Bool, I8];
+        let code = call_disassembly("aarch64-apple-darwin", &params, c_signature);
+        for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
+            assert!(code.contains(extension), "no {extension:?} in\n{code}");
+        }
+    }
+
+    /// Why `target::c_extended_parameters` exists: Cranelift 0.135.2 stores
+    /// an extended narrow stack argument with a full 8-byte `str` at its
+    /// packed offset under AppleAarch64, so the last one here writes bytes
+    /// 14 to 21, past the 16-byte argument area into the stack slot above
+    /// it. When this fails after a Cranelift upgrade, the defect is fixed
+    /// (it is in 0.136.0, whose `get_ext_mode` extends only register
+    /// arguments under AppleAarch64): check the stores above and drop the
+    /// exception.
+    #[test]
+    fn ffi_apple_extended_stack_argument_defect_still_present() {
+        let every_parameter_extended = |module: &cranelift_object::ObjectModule, decl: &nir::ForeignDecl| {
+            let mut sig = c_signature(module, decl);
+            for (param, c) in sig.params.iter_mut().zip(&decl.params) {
+                if c.bits() < 64 {
+                    *param = if c.signed() { param.sext() } else { param.uext() };
+                }
+            }
+            sig
+        };
+        let code = call_disassembly("aarch64-apple-darwin", &STACK_TAIL, every_parameter_extended);
+        assert!(
+            code.lines().any(|l| l.trim_start().starts_with("str x") && l.contains(", [sp, #14]")),
+            "Cranelift no longer stores an extended narrow stack argument at full width:\n{code}"
+        );
+    }
 }

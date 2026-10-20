@@ -1,0 +1,658 @@
+# float64.test -- the Float64 primitive floating-point type
+# (FLOAT64-MILESTONE-1.md).
+#
+# A Float64 is a finite real number exactly representable in IEEE 754
+# binary64, with one representation (no NaN, no infinity, no negative zero).
+# Its operators are the source operators, resolved statically by their
+# operands' types (hir/operators.tcl); a result that is not a finite number
+# completes with the declared builtin error NonFiniteFloat. This file pins the
+# literal syntax and typing rule, the values and their canonical text, the
+# operator resolution and its diagnostics, the finite-only rule on every
+# path (run time, decided at compile time, C), the conversions, the HIR text,
+# the native representation, and parity of all four backends.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64 aarch64 arm64}}]
+
+# The HIR of source TEXT (warnings off).
+proc floatHir {text} {
+    return [surface::compile $text t.bot -warnings off]
+}
+
+# The value of source TEXT on every backend, which must all agree
+# (helpers.tcl's sourceAgree): {value SHOWN} or {error CODE MESSAGE}.
+proc agree {text} {
+    return [sourceAgree $text]
+}
+
+# The shown value of source TEXT, agreed by every backend.
+proc value {text} {
+    set outcome [agree $text]
+    if {[lindex $outcome 0] ne "value"} {
+        error "not a value: $outcome"
+    }
+    return [lindex $outcome 1]
+}
+
+# "KIND: MESSAGE" of the first diagnostic of source TEXT's compilation (its
+# location dropped), or accepted.
+proc rejection {text} {
+    if {[catch {surface::compile $text t.bot -warnings off} message options]} {
+        if {[dict exists $options -diagnostics]} {
+            set first [lindex [dict get $options -diagnostics] 0]
+            set message [dict get $first message]
+            set code [dict get $first errorcode]
+        } else {
+            set code [dict get $options -errorcode]
+        }
+        if {[lrange $code 0 1] eq {SURFACE SYNTAX}} {
+            set code SYNTAX
+        }
+        regsub {^t\.bot:[0-9]+:[0-9]+: } [lindex [split $message \n] 0] {} message
+        return "[lindex $code end]: $message"
+    }
+    return accepted
+}
+
+# Every diagnostic kind of source TEXT's compilation, in order.
+proc rejectionKinds {text} {
+    if {[catch {surface::compile $text t.bot -warnings off} message options]} {
+        if {[dict exists $options -diagnostics]} {
+            return [lmap d [dict get $options -diagnostics] {lindex [dict get $d errorcode] end}]
+        }
+        return [list [lindex [dict get $options -errorcode] end]]
+    }
+    return {}
+}
+
+# The native names the calls of HIR call, in expression order (operator
+# resolution's result).
+proc callees {hir} {
+    set names {}
+    foreach e [lsort -dictionary [dict keys [dict get $hir exprs]]] {
+        set node [dict get $hir exprs $e]
+        if {[dict get $node kind] ne "call"} continue
+        lassign [dict get $node target] kind symbol
+        if {$kind eq "native"} {
+            lappend names [dict get [hir::symbol $hir $symbol] name]
+        }
+    }
+    return $names
+}
+
+# ---------------------------------------------------------------------------
+# Lexer and parser
+
+test float-lex-decimal {a decimal literal is one DECIMAL token holding the decimal number as written (lowercase exponent marker)} -body {
+    lmap text {0.0 1.5 10.0 3.25 1.50 2.5e10 2.5E-3 1.0e+5 007.5x} {
+        if {[catch {surface::lex $text} message]} {
+            set message
+        } else {
+            set token [lindex [surface::lex $text] 0]
+            list [dict get $token kind] [dict get $token value]
+        }
+    }
+} -result {{DECIMAL 0.0} {DECIMAL 1.5} {DECIMAL 10.0} {DECIMAL 3.25} {DECIMAL 1.50} {DECIMAL 2.5e10} {DECIMAL 2.5e-3} {DECIMAL 1.0e+5} {<input>:1:1: invalid decimal literal "007.5x"}}
+
+test float-lex-not-decimal {a "." not followed by a digit stays a projection or a range: 1.f(), 0..9, x.y; a leading "." is no number} -body {
+    lmap text {1.f() 0..9 x.y .5} {
+        lmap token [surface::lex $text] {
+            expr {[dict get $token kind] in {NEWLINE EOF} ? [continue] : [dict get $token kind]}
+        }
+    }
+} -result {{INT . IDENT ( )} {INT .. INT} {IDENT . IDENT} {. INT}}
+
+test float-lex-errors {malformed decimal literals are located lexer errors: an exponent without digits, a letter after the literal, leading zeros} -body {
+    lmap text {1.5e 1.5e+ 1.5x 00.5 01.25e3} {
+        catch {surface::lex $text} message
+        set message
+    }
+} -result {{<input>:1:1: invalid decimal literal "1.5e": an exponent needs digits (as in 1.5e10 or 1.5e-3)} {<input>:1:1: invalid decimal literal "1.5e": an exponent needs digits (as in 1.5e10 or 1.5e-3)} {<input>:1:1: invalid decimal literal "1.5x"} {<input>:1:1: invalid decimal literal "00.5": leading zeros are not allowed} {<input>:1:1: invalid decimal literal "01.25e3": leading zeros are not allowed}}
+
+test float-lex-slash {"/" is an operator token} -body {
+    lmap token [surface::lex {a / b}] {dict get $token kind}
+} -result {IDENT / IDENT NEWLINE EOF}
+
+test float-parse-ast {a decimal literal is a `decimal` node of its exact text; "/" binds like "*"; unary minus applies to a decimal literal as to an Int} -body {
+    split [surface::formatAst [surface::parse "a + b / 2.50 * c\n-1.5e3\n" t.bot]] \n
+} -result {{(binary + (name a) (binary * (binary / (name b) (decimal 2.50)) (name c)))} {(unary - (decimal 1.5e3))}}
+
+test float-parse-out-of-range {a decimal literal beyond Float64's largest finite number is a syntax error where it is written; one too small to be distinguished from zero is zero} -body {
+    list [rejection "x = 1.0e309\nx\n"] [rejection "1.7976931348623159e308\n"] \
+        [value "1.7976931348623157e308\n"] [value "1.7976931348623158e308\n"] [value "1.0e-400\n"] [value "2.4e-324\n"] [value "2.5e-324\n"]
+} -result {{SYNTAX: the decimal literal 1.0e309 is outside the range of Float64 (its largest finite number is 1.7976931348623157e308)} {SYNTAX: the decimal literal 1.7976931348623159e308 is outside the range of Float64 (its largest finite number is 1.7976931348623157e308)} 1.7976931348623157e308 1.7976931348623157e308 0.0 0.0 5.0e-324}
+
+# ---------------------------------------------------------------------------
+# Literal typing and values
+
+test float-literal-typing {a decimal literal is the Float64 nearest its decimal number (the temporary literal rule, surface::lower::DecimalConstant): its HIR const is `Float64 TEXT`, TEXT canonical} -body {
+    set hir [floatHir "a = 1.50\nb = 15.0e-1\nc = 0.1\nd = 100.0e-2\n\[a, b, c, d\]\n"]
+    list [lmap e [lsort -dictionary [dict keys [dict get $hir exprs]]] {
+        set node [dict get $hir exprs $e]
+        expr {[dict get $node kind] eq "const" ? [dict get $node literal] : [continue]}
+    }] [hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] a]]]
+} -result {{{Float64 1.5} {Float64 1.5} {Float64 0.1} {Float64 1.0}} Float64}
+
+test float-literal-decimal-rule-one-place {the literal typing rule is one procedure: the AST keeps the exact decimal, and DecimalConstant decides its constant} -body {
+    list [surface::lower::DecimalConstant 0.1000] [surface::lower::DecimalConstant 2.5e-3] \
+        [catch {surface::lower::DecimalConstant 1.0e999} message] [lindex $::errorCode end]
+} -result {{Float64 0.1} {Float64 0.0025} 1 LITERAL}
+
+test float-canonical-text {the canonical text is the shortest decimal that reads back as the number, positional for exponents -4..15, else D.DDDeN, with ".0" for an integral number} -body {
+    lmap text {0.0 1.5 10.0 100.0 0.5 0.0001 0.00001 123456789012345.0 1234567890123456.0 12345678901234567.0
+            1.0e16 1.0e300 5.0e-324 1.7976931348623157e308 0.30000000000000004 2.2250738585072014e-308} {
+        core::float::text [core::float::fromText Float64 [lindex [surface::lower::DecimalConstant $text] 1]]
+    }
+} -result {0.0 1.5 10.0 100.0 0.5 0.0001 1.0e-5 123456789012345.0 1234567890123456.0 1.2345678901234568e16 1.0e16 1.0e300 5.0e-324 1.7976931348623157e308 0.30000000000000004 2.2250738585072014e-308}
+
+test float-ir-literal {core IR's (const Float64 TEXT) takes exactly the canonical text of a finite number} -body {
+    lmap text {1.5 -2.0 1.50 1e5 1.0e400 0.0 -0.0} {
+        if {[catch {core::ir::checkShape [list const Float64 $text]} message]} {
+            set message
+        } else {
+            core::value::show [core::ir::literalValue [list const Float64 $text]]
+        }
+    }
+} -result {1.5 -2.0 {malformed IR: not a canonical Float64 literal: const Float64 1.50} {malformed IR: not a canonical Float64 literal: const Float64 1e5} {malformed IR: not a canonical Float64 literal: const Float64 1.0e400} 0.0 {malformed IR: not a canonical Float64 literal: const Float64 -0.0}}
+
+test float-value-kind {a Float64 is a kind of its own: never an Int, never equal to one, hashed by its bits} -body {
+    set a [core::value::float Float64 1.0]
+    set b [core::value::int 1]
+    list [core::value::kind $a] [core::value::equal $a $b] [core::value::equal $a [core::value::float Float64 1.0]] \
+        [expr {[core::hashing::Mix $core::hashing::FnvOffset $a] == [core::hashing::Mix $core::hashing::FnvOffset $b]}]
+} -result {Float64 0 1 0}
+
+test float-negative-zero {there is one zero: negative zero is made zero by the value constructor, by every operation and by the native runtime} -body {
+    list [core::value::float Float64 -0.0] [value "x = 0.0\n\[-x, x * -1.0, -1.0e-300 * 1.0e-300, 0.0 / -2.0, -x == x\]\n"]
+} -result {{Float64 0.0} {[0.0, 0.0, 0.0, 0.0, true]}}
+
+test float-type-family {the float family is a table (core/type.tcl): Float64 is its one row, a primitive and a scalar kind, with its native operations registered from the table} -body {
+    list [core::type::floatTypes] [core::type::isFloat Float64] [core::type::isFloat int] \
+        [expr {"Float64" in [core::type::scalarKinds]}] [core::type::floatInfo Float64] \
+        [lmap op {+ - * / neg < <= > >=} {core::native::exists [core::float::operatorNative Float64 $op]}]
+} -result {Float64 1 0 1 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace float64} {1 1 1 1 1 1 1 1 1}}
+
+# ---------------------------------------------------------------------------
+# Arithmetic, comparisons, equality
+
+test float-arithmetic {+ - * / and unary minus on Float64 operands, every backend agreeing} -body {
+    value "x = 1.5\ny = -2.0\n\[x + y, x - y, x * y, x / y, -x, -y, 0.1 + 0.2, 1.0 / 3.0, 2.0 * 0.5\]\n"
+} -result {[-0.5, 3.5, -3.0, -0.75, -1.5, 2.0, 0.30000000000000004, 0.3333333333333333, 1.0]}
+
+test float-comparisons {< <= > >= == != on Float64 operands} -body {
+    value "x = 1.5\ny = -2.0\n\[x < y, x <= y, x > y, x >= y, x == y, x != y, x <= x, x >= x, y < x\]\n"
+} -result {[false, false, true, true, false, true, true, true, true]}
+
+test float-equality-not-coercive {== between a Float64 and an Int is false (different kinds), never a conversion} -body {
+    value "\[1.0 == 1, 0.0 == 0, 2.5 == 2.5\]\n"
+} -result {[false, false, true]}
+
+test float-runtime-values {operations on values computed at run time (parameters, recursion, loops), every backend agreeing} -body {
+    value [string cat \
+        "import list\n" \
+        "fn power(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n" \
+        "    if n == 0:\n        1.0\n    else:\n        x * power(x, n - 1)\n" \
+        "fn sum(xs: List\[Float64\], i: int, acc: Float64) -> Float64 errors NonFiniteFloat:\n" \
+        "    if i == list::length(xs):\n        acc\n    else:\n" \
+        "        x = list::at(xs, i):\n            on IndexNotFound:\n                0.0\n" \
+        "        sum(xs, i + 1, acc + x)\n" \
+        "fn mean(xs: List\[Float64\]) -> Float64 errors NonFiniteFloat:\n" \
+        "    total = loop x in xs:\n        x\n" \
+        "    sum(total, 0, 0.0) / 4.0\n" \
+        "r = power(1.1, 10):\n    on NonFiniteFloat:\n        0.0\n" \
+        "m = mean(\[1.0, 2.5, 3.5, 9.0\]):\n    on NonFiniteFloat:\n        0.0\n" \
+        "\[r, m\]\n"]
+} -result {[2.5937424601000023, 4.0]}
+
+test float-control-flow-joins {an if of two Float64 branches is a Float64; locals, parameters, results and closures carry Float64 values} -body {
+    set text [string cat \
+        "fn pick(c: bool, a: Float64, b: Float64) -> Float64:\n" \
+        "    if c:\n        a\n    else:\n        -b\n" \
+        "fn scale(k: Float64) -> Fn{args: \[Float64\], return: Float64, errors: \[NonFiniteFloat\]}:\n" \
+        "    fn s(x: Float64) -> Float64 errors NonFiniteFloat:\n        x * k\n" \
+        "    s\n" \
+        "f = scale(2.5)\n" \
+        "y = f(4.0):\n    on NonFiniteFloat:\n        0.0\n" \
+        "z = if y > 5.0:\n    y\nelse:\n    0.5\n" \
+        "\[pick(true, 1.25, 2.0), pick(false, 1.25, 2.0), y, z\]\n"]
+    set hir [floatHir $text]
+    list [value $text] [hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] z]]]
+} -result {{[1.25, -2.0, 10.0, 10.0]} Float64}
+
+test float-aggregates {Float64 values in Lists, structs, enums' neighbours and MutableVectors: stored, compared and hashed by content on every backend} -body {
+    value [string cat \
+        "import list\nimport mutable_vector\n" \
+        "struct Point:\n    x: Float64\n    y: Float64\n" \
+        "p = Point {x: 1.5, y: -0.25}\n" \
+        "q = Point {x: 1.5, y: -0.25}\n" \
+        "v = mutable_vector::from_list(\[0.5, 1.5\])\n" \
+        "v.push(2.5)\n" \
+        "xs = \[1.0, 2.0, 3.0\]\n" \
+        "\[p == q, p.x, list::length(xs), hash(p) == hash(q), hash(1.5) == hash(1.5), hash(1.5) == hash(2.5), v.length(), xs == \[1.0, 2.0, 3.0\]\]\n"]
+} -result {[true, 1.5, 3, true, true, false, 3, true]}
+
+test float-list-inference {a List literal of Float64 values is a List[Float64], and an element read recovers Float64} -body {
+    set hir [floatHir "import list\nxs = \[1.0, 2.5\]\nx = list::at(xs, 0):\n    on IndexNotFound:\n        0.0\nx\n"]
+    join [lmap name {xs x} {hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] $name]]}]
+} -result {List[Float64] Float64}
+
+# ---------------------------------------------------------------------------
+# Operator resolution (hir/operators.tcl)
+
+test float-resolution-targets {an operator a Float64 operand selects is a call of the Float64 operation; with Int operands it stays the Int native} -body {
+    list [callees [floatHir "x = 1.5\ny = 2\n\[x + 1.0, x - x, x * 2.0, x / 4.0, -x, x < 2.0, y + 1, y - 1, y * 2, -y, y < 3\]\n"]]
+} -result {{list Float64#+ Float64#- Float64#* Float64#/ Float64#neg Float64#< + - * - <}}
+
+test float-resolution-negation-drops-zero {unary minus of a Float64 is Float64#neg of its one operand: the `0` of `0 - x` is gone; of an Int it is still 0 - x} -body {
+    set hir [floatHir "a = 1.5\nb = 2\n\[-a, -b\]\n"]
+    set calls {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [dict exists $node written]} {
+            lassign [dict get $node target] _ y
+            lappend calls [list [dict get [hir::symbol $hir $y] name] [llength [dict get $node args]]]
+        }
+    }
+    lsort $calls
+} -result {{- 2} {Float64#neg 1} {list 2}}
+
+test float-resolution-through-inference {an untyped parameter used with a Float64 operand is inferred Float64 (the native's checked contract), and an Int argument is rejected at the call} -body {
+    list [value "fn half(x) errors NonFiniteFloat:\n    x / 2.0\nr = half(3.0):\n    on NonFiniteFloat:\n        0.0\nr\n"] \
+        [rejection "fn half(x) errors NonFiniteFloat:\n    x / 2.0\nhalf(3)\n"]
+} -result {1.5 {TYPE: argument for parameter "x" is statically incompatible with Float64, the parameter type inferred from the function body (argument type: int); inferred from the function body: argument 1 of native Float64#/ requires Float64 (at 2:5)}}
+
+test float-resolution-default-int {with no floating-point operand an operator is the Int operation: an untyped `x + y` is Int arithmetic, so Float64 arguments are rejected (declare the parameters Float64)} -body {
+    list [rejection "fn add(x, y):\n    x + y\nadd(1.5, 2.5)\n"] \
+        [value "fn add(x: Float64, y: Float64) -> Float64 errors NonFiniteFloat:\n    x + y\nr = add(1.5, 2.5):\n    on NonFiniteFloat:\n        0.0\nr\n"]
+} -result {{TYPE: argument for parameter "x" is statically incompatible with int, the parameter type inferred from the function body (argument type: Float64); inferred from the function body: argument 1 of native + requires int (at 2:5)} 4.0}
+
+test float-resolution-mixed-operands {a Float64 operator with an operand of another kind is a TYPE error where it is written: no implicit conversion, and no cascade} -body {
+    list [rejection "x = 1.5\nx + 1\n"] [rejection "x = 2\n1.5 * x\n"] [rejection "1 < 2.0\n"] \
+        [rejectionKinds "x = 1.5\nx + 1\n"]
+} -result {{TYPE: the operands of "+" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} {TYPE: the operands of "*" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} {TYPE: the operands of "<" are int and Float64: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} TYPE}
+
+test float-no-integer-division {"/" has no Int meaning: a division no floating-point operand selects is a TYPE error; mod and shifts remain the Int tools} -body {
+    list [rejection "7 / 2\n"] [rejection "fn d(a, b):\n    a / b\nd(1, 2)\n"] [value "\[mod(7, 2), shift_right(7, 1)\]\n"]
+} -result {{TYPE: "/" divides floating-point numbers, and neither operand here is one (the operands are int and int): Botlish has no integer division} {TYPE: "/" divides floating-point numbers, and neither operand here is one (the operands are any and any): Botlish has no integer division} {[1, 3]}}
+
+test float-resolution-core-ir {a `+` written in core IR is the Int native it names, whatever its operands: resolution applies to source operators only} -body {
+    set hir [hir::build [list [list call {ref +} {const Float64 1.5} {const Float64 2.0}]] -strict 0]
+    list [callees $hir] [catch {core::evalProgram [list [list call {ref +} {const Float64 1.5} {const Float64 2.0}]]} message] $message
+} -result {+ 1 {+: expected int, got 1.5}}
+
+test float-no-overloading {resolution is a closed rule of the language, not overloading: no declaration adds a meaning to an operator, the operations cannot be spelled (`#` starts a comment, and no type is a value), and an operand of another kind is a type error} -body {
+    list [rejection "Float64#+(1.5, 2.5)\n"] [lindex [rejectionKinds "x = \"a\"\nx + 1.5\n"] 0]
+} -result {{UNBOUND: unbound name "Float64"} TYPE}
+
+# ---------------------------------------------------------------------------
+# Finite-only: NonFiniteFloat
+
+test float-nonfinite-unhandled {an operation that may not be finite is an obligation like any declared error: unhandled and undeclared, it is a compile-time error} -body {
+    rejection "fn f(x: Float64) -> Float64:\n    x * x\nf(2.0)\n"
+} -result {UNHANDLED-ERROR: this Float64 "*" may produce the declared error "NonFiniteFloat", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}
+
+test float-nonfinite-runtime {overflow to infinity, division by zero (of a positive, a negative and a zero dividend: 0.0 / 0.0 is NaN) and every non-finite result computed at run time complete with NonFiniteFloat, handled, on every backend} -body {
+    value [string cat \
+        "fn div(a: Float64, b: Float64) -> Float64:\n" \
+        "    a / b:\n        on NonFiniteFloat:\n            -99.0\n" \
+        "fn mul(a: Float64, b: Float64) -> Float64:\n" \
+        "    a * b:\n        on NonFiniteFloat:\n            -99.0\n" \
+        "fn add(a: Float64, b: Float64) -> Float64:\n" \
+        "    a + b:\n        on NonFiniteFloat:\n            -99.0\n" \
+        "fn sub(a: Float64, b: Float64) -> Float64:\n" \
+        "    a - b:\n        on NonFiniteFloat:\n            -99.0\n" \
+        "big = 1.0e308\n" \
+        "\[div(1.0, 0.0), div(-1.0, 0.0), div(0.0, 0.0), div(1.0, -0.0), mul(big, 10.0), mul(-big, 10.0),\n" \
+        " add(big, big), sub(-big, big), div(big, 1.0e-10), div(1.0, 4.0), mul(big, 1.0), add(big, -big)\]\n"]
+} -result {[-99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, 0.25, 1.0e308, 0.0]}
+
+test float-nonfinite-propagates {a NonFiniteFloat propagates through the functions that declare it, recursion included, to the handler that catches it, on every backend; a program cannot leave it unhandled} -body {
+    set functions "fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n    if n == 0:\n        x\n    else:\n        grow(x * 1.0e100, n - 1)\nfn top(n: int) -> Float64 errors NonFiniteFloat:\n    grow(1.0, n)\n"
+    list [value "${functions}fn safe(n: int) -> Float64:\n    top(n):\n        on NonFiniteFloat:\n            -1.0\n\[safe(2), safe(4)\]\n"] \
+        [rejection "${functions}top(4)\n"]
+} -result {{[1.0e200, -1.0]} {UNHANDLED-ERROR: this call may produce the declared error "NonFiniteFloat", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}}
+
+test float-nonfinite-decided-at-compile-time {a computation of exactly known operands is decided: a finite result needs no handler, a non-finite one is a compile-time KNOWN-ERROR (handled or not), through locals and exact calls alike -- the decision is the run's own computation} -body {
+    list [value "import float64\nx = 1.5\ny = -2.0\n\[x / y, x * 1.0e300, float64::from_int(3)\]\n"] \
+        [lmap text [list "1.0 / 0.0\n" "x = 0.0\n0.0 / x\n" "big = 1.0e308\nbig * 10.0\n" \
+                "r = 1.0 / 0.0:\n    on NonFiniteFloat:\n        0.0\nr\n" \
+                "import float64\nfloat64::from_int(shift_left(1, 1024))\n" \
+                "fn inv(x: Float64) -> Float64 errors NonFiniteFloat:\n    1.0 / x\nr = inv(0.0):\n    on NonFiniteFloat:\n        0.0\nr\n"] {
+            regsub { under the facts.*} [rejection $text] {}
+        }]
+} -result {{[-0.75, 1.5e300, 3.0]} {{KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "*" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this call of "float64::from_int" can never complete normally} {KNOWN-ERROR: this call can never complete normally}}}
+
+# ---------------------------------------------------------------------------
+# NonFiniteFloat's payload: which non-finite result it was
+
+test float-nonfinite-payload {NonFiniteFloat carries {result: NonFiniteResult}: the infinity of the result's sign, or NotANumber for 0.0 / 0.0 -- for overflow, division by zero, from_int and a native called as a value, on every backend} -body {
+    value [string cat "import float64\n" \
+        "fn mul(a: Float64, b: Float64) -> NonFiniteResult:\n    a * b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn div(a: Float64, b: Float64) -> NonFiniteResult:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn add(a: Float64, b: Float64) -> NonFiniteResult:\n    a + b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn sub(a: Float64, b: Float64) -> NonFiniteResult:\n    a - b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "fn converted(n: int) -> NonFiniteResult:\n" \
+        "    float64::from_int(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "conv = float64::from_int\n" \
+        "fn by_value(n: int) -> NonFiniteResult:\n" \
+        "    conv(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "big = 1.0e308\n" \
+        "\[mul(big, 10.0), mul(-big, 10.0), div(1.0, 0.0), div(-1.0, 0.0), div(0.0, 0.0), div(1.0, -0.0),\n" \
+        " add(big, big), sub(-big, big), converted(shift_left(1, 1100)), converted(0 - shift_left(1, 1100)), by_value(shift_left(1, 1100))\]\n"]
+} -result {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber, NonFiniteResult::PositiveInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity]}
+
+test float-nonfinite-payload-binding {the payload is an ordinary payload: bound whole (an anonymous struct), destructured, renamed, or ignored by a handler without a binding; and it propagates through the functions that declare the error} -body {
+    value [string cat \
+        "fn deep(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n" \
+        "    if n == 0:\n        x * x\n    else:\n        deep(x, n - 1)\n" \
+        "fn whole(x: Float64) -> list:\n" \
+        "    deep(x, 3):\n        on NonFiniteFloat details:\n            return \[details, details.result, details == {result: NonFiniteResult::PositiveInfinity}\]\n" \
+        "    \[\]\n" \
+        "fn renamed(x: Float64) -> bool:\n" \
+        "    deep(x, 2):\n        on NonFiniteFloat {result: what}:\n            return what == NonFiniteResult::PositiveInfinity\n" \
+        "    false\n" \
+        "fn ignored(x: Float64) -> Float64:\n" \
+        "    deep(x, 1):\n        on NonFiniteFloat:\n            -1.0\n" \
+        "big = 1.0e200\n" \
+        "\[whole(big), renamed(big), ignored(big), ignored(2.0)\]\n"]
+} -result {[[{result: NonFiniteResult::PositiveInfinity}, NonFiniteResult::PositiveInfinity, true], true, -1.0, 4.0]}
+
+test float-nonfinite-payload-enum {NonFiniteResult is a builtin enum, visible in every program like NonFiniteFloat: its cases are values, an unknown case is UNKNOWN-ENUM-CASE, no program declares the name, and a program that fails with NonFiniteFloat itself constructs its payload} -body {
+    list [value "x = NonFiniteResult::NotANumber\n\[x, x == NonFiniteResult::NotANumber, x == NonFiniteResult::PositiveInfinity\]\n"] \
+        [rejection "NonFiniteResult::Infinity\n"] \
+        [rejection "enum NonFiniteResult:\n    A\n0\n"] [rejection "struct NonFiniteResult:\n    a: int\n0\n"] \
+        [rejection "fn f(n: int) -> int errors NonFiniteFloat:\n    fail NonFiniteFloat\n0\n"] \
+        [value "fn f(n: int) -> int errors NonFiniteFloat:\n    if n < 0:\n        fail NonFiniteFloat {result: NonFiniteResult::NegativeInfinity}\n    n\nfn g(n: int) -> NonFiniteResult:\n    f(n):\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n\[g(-1), g(1)\]\n"]
+} -result {{[NonFiniteResult::NotANumber, true, false]} {UNKNOWN-ENUM-CASE: enum NonFiniteResult has no case "Infinity" (its cases: PositiveInfinity, NegativeInfinity, NotANumber)} {TYPE: "NonFiniteResult" cannot be declared as an enum: the name is already a built-in or declared type} {TYPE: "NonFiniteResult" cannot be declared as a struct: the name is already a built-in or declared type} {MISSING-ERROR-PAYLOAD: error "NonFiniteFloat" carries a payload, which "fail NonFiniteFloat" must construct: write "fail NonFiniteFloat {result: ...}" (the error's name alone is not its payload)} {[NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}
+
+test float-nonfinite-payload-module {a module names the builtin enum like the entry program: no import, the bare name} -setup {
+    set dir [makeDirectory float-module-[pid]]
+    makeFile "fn classify(a: Float64, b: Float64) -> NonFiniteResult:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" m.bot $dir
+    set main [makeFile "import m\nx = 1.0\ny = 0.0\n\[m::classify(x, y), m::classify(-x, y), m::classify(y, y)\]\n" main.bot $dir]
+} -body {
+    set hir [surface::readProgramFile $main -warnings off -cache ""]
+    lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lrange [outcomeUnderHir $backend $hir] 0 1}]
+} -cleanup {
+    file delete -force $dir
+    unset -nocomplain dir main hir
+} -result {{value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}}
+
+test float-nonfinite-payload-uncaught {an uncaught NonFiniteFloat (only under -strict 0) renders its payload identically on every backend} -body {
+    set hir [surface::compile "fn grow(x: Float64) -> Float64 errors NonFiniteFloat:\n    x * 1.0e300\ny = 0.0 - 1.0e300\ngrow(y)\n" t.bot -strict 0 -warnings off]
+    lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lrange [outcomeUnderHir $backend $hir] 0 2}]
+} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error NonFiniteFloat {result: NonFiniteResult::NegativeInfinity}>}}}
+
+test float-nonfinite-payload-hir {a handler of NonFiniteFloat's payload and NonFiniteResult's cases print as HIR text and read back exactly, and HIR interchange carries them: the builtin enum and payload are every compilation's, never a program's own declarations} -body {
+    set text "fn f(a: Float64, b: Float64) -> bool:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result == NonFiniteResult::NotANumber\n    false\nx = 0.0\nx.f(x)\n"
+    set hir [floatHir $text]
+    set printed [hir::format $hir]
+    set back [hir::interchange::decode [hir::interchange::encode $hir]]
+    list [expr {$printed eq [hir::format [hir::parse $printed]]}] [regexp {const enum \{NonFiniteResult NotANumber\}} $printed] \
+        [regexp {on NonFiniteFloat \S+ payload} $printed] [regexp {error NonFiniteFloat|enum NonFiniteResult} [lindex [split $printed \n] 0]] \
+        [lindex [outcomeUnderHir interp $back] 1] [lindex [outcomeUnderHir cranelift $back] 1]
+} -result {1 1 1 0 true true}
+
+test float-decided-equals-run {a decided operation and the same operation at run time are one computation: the constant result and the run-time result agree bit for bit} -body {
+    set pairs {{0.1 0.2} {1.0e-300 1.0e-10} {123456.789 0.001} {3.0 7.0} {1.0e300 0.5}}
+    set decided {}
+    set run {}
+    foreach pair $pairs {
+        lassign $pair a b
+        lappend decided "$a * $b" "$a / $b" "$a + $b" "$a - $b"
+        lappend run "mul($a, $b)" "div($a, $b)" "add($a, $b)" "sub($a, $b)"
+    }
+    set functions [string cat \
+        "fn mul(a: Float64, b: Float64) -> Float64:\n    a * b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "fn div(a: Float64, b: Float64) -> Float64:\n    a / b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "fn add(a: Float64, b: Float64) -> Float64:\n    a + b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "fn sub(a: Float64, b: Float64) -> Float64:\n    a - b:\n        on NonFiniteFloat:\n            0.0\n"]
+    set constant [value "import float64\n\[[join $decided {, }]\]\n"]
+    set computed [value "$functions\[[join $run {, }]\]\n"]
+    list [expr {$constant eq $computed}] [llength [split $constant ,]]
+} -result {1 20}
+
+# ---------------------------------------------------------------------------
+# Conversions (float64::from_int, float64::truncate)
+
+test float-conversions {float64::from_int is the nearest Float64 (ties to even), NonFiniteFloat beyond the range; float64::truncate drops the fraction toward zero, exactly} -body {
+    value [string cat "import float64\n" \
+        "fn f(n: int) -> Float64:\n    float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n" \
+        "fn t(x: Float64) -> int:\n    float64::truncate(x)\n" \
+        "\[f(0), f(-7), f(9007199254740993), f(9007199254740995), f(123456789012345678901234567890), f(shift_left(1, 1024)), f(shift_left(1, 1023)),\n" \
+        " t(2.7), t(-2.7), t(0.5), t(1.0e20), t(-1.0e300) == 0 - shift_left(1, 0) * 0 - t(1.0e300)\]\n"]
+} -result {[0.0, -7.0, 9007199254740992.0, 9007199254740996.0, 1.2345678901234568e29, -1.0, 8.98846567431158e307, 2, -2, 0, 100000000000000000000, true]}
+
+test float-from-int-parity {from_int of large Ints rounds identically on the Tcl and the native runtimes (num-bigint's round-to-odd, Tcl's bignum conversion)} -constraints nativeBuilt -body {
+    expr {srand(20261019)}
+    set ints {}
+    for {set i 0} {$i < 40} {incr i} {
+        set bits [expr {54 + int(rand() * 900)}]
+        set n 1
+        for {set k 0} {$k < $bits} {incr k} {
+            set n [expr {2 * $n + int(rand() * 2)}]
+        }
+        lappend ints $n [expr {-$n}]
+    }
+    # Values at a tie: 2^53 + 1 and 2^60 + 2^7 round to even.
+    lappend ints [expr {2**53 + 1}] [expr {2**60 + 2**7}] [expr {2**60 + 3 * 2**7}]
+    set text "import float64\nfn f(n: int) -> Float64:\n    float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n\[[join [lmap n $ints {string cat "f($n)"}] {, }]\]\n"
+    set outcome [agree $text]
+    list [lindex $outcome 0] [llength [split [lindex $outcome 1] ,]]
+} -result {value 83}
+
+# ---------------------------------------------------------------------------
+# Canonical text and arithmetic: Tcl and native agree
+
+test float-text-parity {the canonical text of many numbers is the same from the Tcl and the native runtime: the shortest round-trip digits, laid out alike} -constraints nativeBuilt -body {
+    expr {srand(4242)}
+    set literals {}
+    for {set i 0} {$i < 200} {incr i} {
+        # A random binary64 bit pattern of a finite, nonzero number.
+        set hi [expr {int(rand() * 0x7FEFFFFF) + 1}]
+        set lo [expr {int(rand() * 0xFFFFFFFF)}]
+        binary scan [binary format Wu [expr {($hi << 32) | $lo}]] Q x
+        lappend literals [core::float::Text $x]
+    }
+    foreach x {1.0e16 9.999999999999999e15 0.0001 9.999999999999999e-5 1.0e-5 123.456} {
+        lappend literals [core::float::Text $x]
+    }
+    set text "\[[join $literals {, }]\]\n"
+    set outcome [agree $text]
+    list [lindex $outcome 0] [expr {[lindex $outcome 1] eq "\[[join $literals {, }]\]"}]
+} -result {value 1}
+
+test float-arithmetic-parity {random operations computed at run time agree on every backend, bit for bit (IEEE 754 round-to-nearest-even everywhere)} -constraints nativeBuilt -body {
+    expr {srand(777)}
+    set calls {}
+    for {set i 0} {$i < 60} {incr i} {
+        set a [core::float::Text [expr {(rand() - 0.5) * 10.0 ** int(rand() * 40 - 20)}]]
+        set b [core::float::Text [expr {(rand() - 0.5) * 10.0 ** int(rand() * 40 - 20)}]]
+        lappend calls "ops($a, $b)"
+    }
+    set text [string cat \
+        "fn ops(a: Float64, b: Float64) -> List\[Float64\]:\n" \
+        "    s = a + b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "    d = a - b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "    p = a * b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "    q = a / b:\n        on NonFiniteFloat:\n            0.0\n" \
+        "    \[s, d, p, q, -a\]\n" \
+        "\[[join $calls {, }]\]\n"]
+    lindex [agree $text] 0
+} -result value
+
+# ---------------------------------------------------------------------------
+# HIR text and interchange
+
+test float-hir-roundtrip {a Float64 constant prints as `const Float64 TEXT` and reads back exactly; the resolved operators are ordinary native calls in HIR text} -body {
+    set hir [floatHir "x = 0.1\ny = x * 3.0\n-y\n"]
+    set text [hir::format $hir]
+    set again [hir::format [hir::parse $text]]
+    list [expr {$text eq $again}] [regexp {const Float64 0\.1 : Float64} $text] [regexp {native\(Float64#\*\)} $text] \
+        [regexp {native\(Float64#neg\)} $text]
+} -result {1 1 1 1}
+
+test float-hir-interchange {HIR interchange carries Float64 constants and resolved operators exactly} -body {
+    set hir [floatHir "x = 2.5\n\[x * 4.0, x / 8.0\]\n"]
+    set text [hir::interchange::encode $hir]
+    set back [hir::interchange::decode $text]
+    list [expr {[dict get $back exprs] eq [dict get $hir exprs]}] [lindex [outcomeUnderHir interp $back] 1]
+} -result {1 {[10.0, 0.3125]}}
+
+# ---------------------------------------------------------------------------
+# The native backend
+
+test float-native-nir {native lowering: a Float64 constant is a `float Float64 BITS` constant-table load, the operations are f64 ops} -constraints nativeBuilt -body {
+    set nir [native::nir [floatHir "fn f(x: Float64, y: Float64) -> List\[Float64\] errors NonFiniteFloat:\n    \[x + y, x * y, x / y, -x\]\nr = f(1.5, 0.25)\nr\n"]]
+    list [regexp {float Float64 0x3ff8000000000000} $nir] \
+        [llength [regexp -all -inline {op f64(add|mul|div|neg)} $nir]]
+} -result {1 8}
+
+test float-native-clif {codegen: the operations are the target's floating-point instructions on the unboxed numbers, a finiteness check, and one boxing helper call} -constraints nativeBuilt -body {
+    set clif [native::clif [floatHir "fn f(x: Float64, y: Float64) -> Float64 errors NonFiniteFloat:\n    x / y\nfn g(x: Float64, y: Float64) -> bool:\n    x < y\nr = f(1.5, 0.25)\n\[r, g(1.0, 2.0)\]\n"]]
+    list [regexp {fdiv} $clif] [regexp {fcmp le} $clif] [regexp {fcmp lt} $clif] [regexp {load\.f64} $clif]
+} -result {1 1 1 1}
+
+test float-native-gc-stress {Float64 values survive collections at every allocation (GC stress), as heap objects with no references} -constraints {nativeBuilt nativeLinux} -setup {
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+} -body {
+    set hir [floatHir [string cat \
+        "fn walk(x: Float64, n: int, acc: List\[Float64\]) -> List\[Float64\] errors NonFiniteFloat:\n" \
+        "    if n == 0:\n        acc\n    else:\n        walk(x * 1.5 + 0.25, n - 1, \[x\])\n" \
+        "r = walk(1.0, 60, \[\]):\n    on NonFiniteFloat:\n        \[\]\n" \
+        "r\n"]]
+    set native [lindex [outcomeUnderHir cranelift $hir] 1]
+    list [expr {$native eq [lindex [outcomeUnderHir compile $hir] 1]}] $native
+} -cleanup {
+    if {$saved eq ""} { unset ::env(BOTLISH_NATIVE_GC_STRESS) } else { set ::env(BOTLISH_NATIVE_GC_STRESS) $saved }
+} -result {1 {[36768468716.43302]}}
+
+test float-native-executable {a standalone executable computes, decides and prints Float64 values like the JIT: constants in the emitted image, NonFiniteFloat at run time} -constraints {nativeBuilt executableAot} -body {
+    set dir [makeDirectory float-exe-[pid]]
+    set path [file join $dir prog.bot]
+    set channel [open $path w]
+    puts -nonewline $channel [string cat "import float64\n" \
+        "fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n    if n == 0:\n        x\n    else:\n        grow(x * 10.0, n - 1)\n" \
+        "a = grow(1.5, 300):\n    on NonFiniteFloat:\n        -1.0\n" \
+        "b = grow(1.5, 400):\n    on NonFiniteFloat:\n        -1.0\n" \
+        "fn kind(x: Float64) -> NonFiniteResult:\n    x * 1.0e300:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
+        "\[a, b, 0.1 + 0.2, float64::truncate(a) > 0, kind(-1.0e300)\]\n"]
+    close $channel
+    set hir [surface::readProgramFile $path -warnings off -cache ""]
+    set exe [native::executable $hir [file join $dir prog]]
+    set output [exec $exe]
+    file delete -force $dir
+    list [expr {$output eq [lindex [outcomeUnderHir compile $hir] 1]}] $output
+} -result {1 {[1.500000000000003e300, -1.0, 0.30000000000000004, true, NonFiniteResult::NegativeInfinity]}}
+
+# ---------------------------------------------------------------------------
+# C double (ffi::c::Double)
+
+# The fixture builds wherever C calls run (nativeCCalls: Linux x86-64 and
+# AArch64, macOS AArch64, MACOS-AARCH64-MILESTONE-6.md), so the double tests
+# run under each target's C ABI.
+set ::floatFixtureDir ""
+if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstraint nativeBuilt]} {
+    set ::floatFixtureDir [makeDirectory float-cffi-[pid]]
+    if {[catch {
+        exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi float-fixture.c] -o [file join $::floatFixtureDir fixture.o]
+        exec ar rcs [file join $::floatFixtureDir libbotlish_float_fixture.a] [file join $::floatFixtureDir fixture.o]
+    } message]} {
+        puts stderr "float64.test: the C fixture did not build: $message"
+        set ::floatFixtureDir ""
+    }
+}
+testConstraint floatFixture [expr {$::floatFixtureDir ne "" && [testConstraint rustcLinker]}]
+
+set ::floatBindings [string cat \
+    "import ffi::c\n" \
+    "extern c library \"botlish_float_fixture\"\n" \
+    "extern c fn twice named \"bff_twice\"(x: ffi::c::Double) -> ffi::c::Double\n" \
+    "extern c fn add3 named \"bff_add3\"(a: ffi::c::Double, b: ffi::c::Double, c: ffi::c::Double) -> ffi::c::Double\n" \
+    "extern c fn mix named \"bff_mix\"(n: ffi::c::Int, x: ffi::c::Double, k: ffi::c::Long, y: ffi::c::Double) -> ffi::c::Double\n" \
+    "extern c fn sum10 named \"bff_sum10\"(a: ffi::c::Double, b: ffi::c::Double, c: ffi::c::Double, d: ffi::c::Double, e: ffi::c::Double, f: ffi::c::Double, g: ffi::c::Double, h: ffi::c::Double, i: ffi::c::Double, j: ffi::c::Double) -> ffi::c::Double\n" \
+    "extern c fn positive_infinity named \"bff_positive_infinity\"() -> ffi::c::Double\n" \
+    "extern c fn negative_infinity named \"bff_negative_infinity\"() -> ffi::c::Double\n" \
+    "extern c fn not_a_number named \"bff_not_a_number\"() -> ffi::c::Double\n" \
+    "extern c fn negative_zero named \"bff_negative_zero\"() -> ffi::c::Double\n" \
+    "extern c fn largest named \"bff_largest\"() -> ffi::c::Double\n" \
+    "extern c fn smallest named \"bff_smallest\"() -> ffi::c::Double\n" \
+    "extern c fn signbit named \"bff_signbit\"(x: ffi::c::Double) -> ffi::c::Int\n" \
+    "extern c fn bits_high named \"bff_bits_high\"(x: ffi::c::Double) -> ffi::c::LongLong\n"]
+
+# The value of the C double program MAIN (after the bindings) on BACKEND.
+proc floatCValue {main backend} {
+    set hir [surface::compile "$::floatBindings$main" t.bot -warnings off]
+    native::withLinkDirs [list $::floatFixtureDir] {
+        set outcome [outcomeUnderHir $backend $hir]
+    }
+    return [lrange $outcome 0 1]
+}
+
+test float-c-double-type {ffi::c::Double is Float64 under its C ABI name: its values are Float64s, its ABI class f64, and a C function returning one declares NonFiniteFloat} -body {
+    set hir [surface::compile "$::floatBindings\nx = twice(1.5):\n    on NonFiniteFloat:\n        0.0\nx\n" t.bot -warnings off]
+    set record [dict get [hir::foreign::declarations $hir] twice]
+    list [hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] x]]] [dict get $record abi] \
+        [dict get [core::native::metadata [dict get $record native]] errors] \
+        [rejection "$::floatBindings\ntwice(1.5)\n"]
+} -result {Float64 {params f64 result f64} NonFiniteFloat {UNHANDLED-ERROR: this call of "twice" may produce the declared error "NonFiniteFloat", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}}
+
+test float-c-double-round-trip {doubles cross the C boundary in the platform ABI's floating-point registers (and the stack beyond them), mixed with integer parameters, on both native backends} -constraints floatFixture -body {
+    set main [string cat \
+        "fn calls() -> List\[Float64\] errors NonFiniteFloat:\n" \
+        "    \[twice(1.25), add3(0.1, 0.2, 0.3), mix(3, 0.5, 4, 0.25), sum10(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0), largest(), smallest()\]\n" \
+        "r = calls():\n    on NonFiniteFloat:\n        \[\]\n" \
+        "\[r, bits_high(1.5), bits_high(-2.0)\]\n"]
+    list [floatCValue $main cranelift] [floatCValue $main cranelift-generic]
+} -result {{value {[[2.5, 0.6000000000000001, 2.5, 385.0, 1.7976931348623157e308, 5.0e-324], 1073217536, 3221225472]}} {value {[[2.5, 0.6000000000000001, 2.5, 385.0, 1.7976931348623157e308, 5.0e-324], 1073217536, 3221225472]}}}
+
+test float-c-double-nonfinite-rejected {a NaN or an infinity C returns never becomes a Float64: the call completes with NonFiniteFloat; negative zero becomes zero; a Float64 passed out is never negative zero} -constraints floatFixture -body {
+    set main [string cat \
+        "fn special(n: int) -> Float64 errors NonFiniteFloat:\n" \
+        "    if n == 0:\n        positive_infinity()\n    elif n == 1:\n        negative_infinity()\n    else:\n        not_a_number()\n" \
+        "fn probe(n: int) -> Float64:\n" \
+        "    special(n):\n        on NonFiniteFloat:\n            -1.0\n" \
+        "z = negative_zero():\n    on NonFiniteFloat:\n        1.0\n" \
+        "\[probe(0), probe(1), probe(2), z, signbit(z), signbit(0.0 * -1.0), signbit(-1.0)\]\n"]
+    floatCValue $main cranelift
+} -result {value {[-1.0, -1.0, -1.0, 0.0, 0, 0, 1]}}
+
+test float-c-double-nonfinite-payload {NonFiniteFloat from a C result says which non-finite double C returned} -constraints floatFixture -body {
+    set main [string cat \
+        "fn special(n: int) -> NonFiniteResult errors NonFiniteFloat:\n" \
+        "    x = if n == 0:\n        positive_infinity()\n    elif n == 1:\n        negative_infinity()\n    else:\n        not_a_number()\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "fn probe(n: int) -> NonFiniteResult:\n" \
+        "    special(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    NonFiniteResult::NotANumber\n" \
+        "\[probe(0), probe(1), probe(2)\]\n"]
+    list [floatCValue $main cranelift] [floatCValue $main cranelift-generic]
+} -result {{value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}} {value {[NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber]}}}
+
+test float-c-double-tcl-backends {the Tcl backends refuse a C call at run time, a double one as any other (NATIVE-ONLY)} -body {
+    set hir [surface::compile "$::floatBindings\nx = twice(1.5):\n    on NonFiniteFloat:\n        0.0\nx\n" t.bot -warnings off]
+    lmap backend {interp compile} {lindex [outcomeUnderHir $backend $hir] 1 end}
+} -result {NATIVE-ONLY NATIVE-ONLY}
+
+# ---------------------------------------------------------------------------
+# Every target: the semantics name no platform
+
+test float-target-independent {the float family and its operations are the same on every compilation target: compiling for each target of the C ABI table gives the same HIR types and the same decided values} -body {
+    set results {}
+    foreach target [core::cabi::targetNames] {
+        set hir [surface::compile "import ffi::c\nfn f(x: ffi::c::Double) -> Float64 errors NonFiniteFloat:\n    x * 2.0\nr = f(1.5):\n    on NonFiniteFloat:\n        0.0\n\[r, 1.0 / 3.0\]\n" t.bot -warnings off -target $target]
+        lappend results [lindex [outcomeUnderHir interp $hir] 1]
+    }
+    lsort -unique $results
+} -result {{[3.0, 0.3333333333333333]}}
+
+cleanupTests

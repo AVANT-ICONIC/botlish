@@ -774,9 +774,11 @@ evaluator.
   generic entry, records the terminal state and switches back for good;
   `rt_co_yield` stores the outward value in the transport slot and switches
   to the resumer; `rt_co_resume` stores the message and switches in.
-  `segment` links the chain for the GC and publishes the running stack's
-  bounds to the stack-overflow guard on every switch, so an overflow on a
-  coroutine stack is the ordinary `NATIVE LIMIT STACK`.
+  `segment` links the chain for the GC, and every switch publishes the
+  running stack's bounds to the stack-overflow guard -- the side that
+  arrives publishes its own stack, so a switch's pushes are attributed to
+  the stack they land on (MACOS-AARCH64-MILESTONE-4.md) -- so an overflow on
+  a coroutine stack is the ordinary `NATIVE LIMIT STACK`.
 * AOT executables link the same runtime; the principal program and a program
   printing through `io::print_line` from inside a coroutine run as
   executables, also under `BOTLISH_NATIVE_GC_STRESS=1`.

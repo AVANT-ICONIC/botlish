@@ -829,7 +829,7 @@ proc core::compiler::CompileSequence {ctxVar exprs} {
         # included. The statement's value is already computed: it stays the
         # sequence's value.
         foreach item [hir::affine::releasesAfter $hir $e] {
-            CompileRelease ctx $item [expr {$item eq $e ? $result : ""}]
+            CompileRelease ctx $item [if {$item eq $e} {set result} else {string cat ""}]
         }
     }
     return $result
@@ -1205,7 +1205,10 @@ proc core::compiler::CompileBind {ctxVar e} {
     if {[dict get $scope materialized]} {
         # A duplicate raises here, at run time.
         Emit ctx "core::env::define \$[dict get $scope frame] [Word $name] [BoxWord $value]"
-        return [expr {[N $e duplicate] ? [Never] : $value}]
+        if {[N $e duplicate]} {
+            return [Never]
+        }
+        return $value
     }
     if {[N $e duplicate]} {
         Emit ctx "core::env::duplicateBinding [Word $name]"
@@ -1334,14 +1337,17 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
             return $result
         }
     }
-    if {[dict get $meta errors] ne "" && ![hir::completions::BoundsProven $hir $e]} {
+    if {[dict get $meta errors] ne "" && (![hir::completions::BoundsProven $hir $e]
+            || [core::native::unboundedErrors $meta] ne {})} {
         # A native with declared errors (`argv`, `list::at`) completes with
         # propagate-error: only the generic call turns its completion into
         # compiled code's Tcl completion code 5 (core::runtime::callValue).
         # Not when every one of this call's bounds checks was proven never to
         # fail (hir/completions.tcl, PROOF-FACT-CENSUS.md G1): the error
-        # cannot occur here, so it is an ordinary direct call. Only a proof
-        # counts, never a handler or an `errors` clause.
+        # cannot occur here, so it is an ordinary direct call -- unless the
+        # native declares an error no bounds check produces (a layout
+        # write's LayoutLengthMismatch beside its `extents` check). Only a
+        # proof counts, never a handler or an `errors` clause.
         return [GenericCall ctx $callee $argOps]
     }
     # Demanded as a branch (CompileCondition): a Boolean intrinsic answers
@@ -1379,8 +1385,13 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
 # straight-line shape native lowering gives it, never core/binary.tcl's
 # run-time walk of the descriptor (which the interpreter runs).
 
-# {PATH OFFSET SIGN WIDTH ENDIAN} for every scalar field of DESCRIPTOR at
-# byte BASE, depth-first in declared order; PATH the slots leading to it.
+# {PATH OFFSET SIGN WIDTH ENDIAN DIMS} for every scalar field of DESCRIPTOR
+# at byte BASE, depth-first in declared order; PATH the slots leading to it.
+# DIMS is {} for a scalar, the extents of a fixed array of scalars (FIXED-
+# LAYOUT-ARRAYS.md: {16}, or {2 3} for two rows of three), whose elements
+# are contiguous -- a scalar's stride is its width -- so it is one `binary`
+# field with a count. An array of nested layouts or pointers has no such
+# leaf (ArrayOfRecords): the reference implementation runs that layout.
 proc core::compiler::LayoutLeaves {descriptor base path} {
     set leaves {}
     set slot 0
@@ -1388,13 +1399,51 @@ proc core::compiler::LayoutLeaves {descriptor base path} {
         lassign $field name offset kind
         if {$kind eq "layout"} {
             lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}] [linsert $path end $slot]]
+        } elseif {$kind eq "array"} {
+            set dims {}
+            set repr [lrange $field 2 end]
+            while {[lindex $repr 0] eq "array"} {
+                lappend dims [lindex $repr 1]
+                set repr [lindex $repr 3]
+            }
+            lassign $repr sign width endian
+            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian $dims]
         } else {
             lassign $field name offset sign width endian
-            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian]
+            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian {}]
         }
         incr slot
     }
     return $leaves
+}
+
+# 1 if DESCRIPTOR has a fixed array (directly or in a nested layout) whose
+# elements are not scalars -- nested layouts or pointers -- which no one
+# `binary scan` field reads.
+proc core::compiler::ArrayOfRecords {descriptor} {
+    foreach field [lindex $descriptor 3] {
+        set repr [lrange $field 2 end]
+        if {[lindex $repr 0] eq "layout" && [ArrayOfRecords [lindex $repr 1]]} {
+            return 1
+        }
+        while {[lindex $repr 0] eq "array"} {
+            set repr [lindex $repr 3]
+            if {[lindex $repr 0] ni {array u i}} {
+                return 1
+            }
+        }
+    }
+    return 0
+}
+
+# The `binary` format count of a fixed array of scalars of extents DIMS
+# (LayoutLeaves): every element, row after row.
+proc core::compiler::LeafCount {dims} {
+    set count 1
+    foreach d $dims {
+        set count [expr {$count * $d}]
+    }
+    return $count
 }
 
 # The Tcl expression building the LayoutStruct DESCRIPTOR describes from the
@@ -1408,6 +1457,18 @@ proc core::compiler::LayoutValueText {descriptor varsVar} {
         lappend names $name
         if {$kind eq "layout"} {
             lappend values [LayoutValueText [lindex $field 3] vars]
+        } elseif {$kind eq "array"} {
+            # A fixed array of scalars, scanned as one counted field: its
+            # List (core::binary::Rows for several dimensions).
+            set var [lindex $vars 0]
+            set vars [lrange $vars 1 end]
+            set dims {}
+            set repr [lrange $field 2 end]
+            while {[lindex $repr 0] eq "array"} {
+                lappend dims [lindex $repr 1]
+                set repr [lindex $repr 3]
+            }
+            lappend values "\[core::binary::Rows \$$var [Word $dims]\]"
         } else {
             set var [lindex $vars 0]
             set vars [lrange $vars 1 end]
@@ -1433,11 +1494,23 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
         return ""
     }
     set descriptor [lindex [hir::get $hir $operand literal] end]
-    if {[hir::layouts::DescriptorLayout $descriptor] eq "" || [core::binary::PointerPath $descriptor] ne ""} {
-        # (A native-only layout: the reference implementation's refusal.)
+    if {[hir::layouts::DescriptorLayout $descriptor] eq "" || [core::binary::PointerPath $descriptor] ne ""
+            || [core::binary::UnionPath $descriptor] ne "none"} {
+        # (A native-only layout, or one holding a union, LAYOUT-UNIONS.md:
+        # the reference implementation's refusal.)
         return ""
     }
     set size [lindex $descriptor 1]
+    if {[hir::layouts::RoleOf $role op] eq "emit" && [core::binary::HasArrays $descriptor]} {
+        # An emission of a layout with fixed arrays (FIXED-LAYOUT-ARRAYS.md)
+        # checks every List's extent before it can encode it (the declared
+        # LayoutExtentMismatch): the reference implementation's.
+        return ""
+    }
+    if {[ArrayOfRecords $descriptor]} {
+        # (FIXED-LAYOUT-ARRAYS.md: the reference implementation's loop.)
+        return ""
+    }
     set leaves [LayoutLeaves $descriptor 0 {}]
     switch -- [hir::layouts::RoleOf $role op] {
         parse {
@@ -1450,8 +1523,11 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
             set format ""
             set vars {}
             foreach leaf $leaves {
-                lassign $leaf path offset sign width endian
+                lassign $leaf path offset sign width endian dims
                 append format @$offset[core::binary::Letter $width $sign $endian]
+                if {$dims ne ""} {
+                    append format [LeafCount $dims]
+                }
                 lappend vars [NewTemp]
             }
             Emit ctx "binary scan \$$raw [Word $format] [join $vars { }]"
@@ -1697,7 +1773,11 @@ proc core::compiler::CompileIf {ctxVar e} {
             return [Never]
         }
         set decided [expr {[lindex $status 0] eq "literal"}]
-        set outcome [expr {$decided ? [lindex $status 1] : [join $out {}]}]
+        if {$decided} {
+            set outcome [lindex $status 1]
+        } else {
+            set outcome [join $out {}]
+        }
     }
 
     set outcomes {1 0}
@@ -1752,7 +1832,11 @@ proc core::compiler::CompileIf {ctxVar e} {
         set never 1
     }
     set reprs [lsort -unique $reprs]
-    set repr [expr {[llength $reprs] == 1 ? [lindex $reprs 0] : "box"}]
+    if {[llength $reprs] == 1} {
+        set repr [lindex $reprs 0]
+    } else {
+        set repr "box"
+    }
 
     set result [NewTemp]
     Emit ctx "if {$outcome} \{"
@@ -1831,7 +1915,7 @@ proc core::compiler::CompileCondition {ctxVar e outVar} {
     # its test (CompileNativeCall, BoolResult), except where the call's code
     # runs inside a catch releasing on its error (ReleasingOnError keeps a
     # value).
-    set demanded [expr {[dict exists $ctx condition] ? [dict get $ctx condition] : ""}]
+    set demanded [dict getdef $ctx condition ""]
     if {[Kind $e] eq "call" && [hir::affine::releasesOnError $hir $e] eq ""} {
         dict set ctx condition $e
     }
@@ -1950,7 +2034,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
             break
         }
         foreach item [hir::affine::releasesAfter $hir $statement] {
-            CompileRelease ctx $item [expr {$item eq $statement ? $op : ""}]
+            CompileRelease ctx $item [if {$item eq $statement} {set op} else {string cat ""}]
         }
     }
     if {![info exists op] || [OpType $op] ne "never"} {
@@ -1961,7 +2045,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
             set op [CompileExpr ctx $last]
             if {[OpType $op] ne "never"} {
                 foreach item [hir::affine::releasesAfter $hir $last] {
-                    CompileRelease ctx $item [expr {$item eq $last ? $op : ""}]
+                    CompileRelease ctx $item [if {$item eq $last} {set op} else {string cat ""}]
                 }
                 set status [ConditionOperand $op out]
             }
@@ -1980,7 +2064,7 @@ proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
         # The branch does not complete: its code alone (whatever its
         # unfinished test appended is dropped).
         set out [lreplace $out[set out {}] $first end]
-        lappend out [expr {$lines eq {} ? 0 : "\[[join $lines \n]\]"}]
+        lappend out [if {$lines eq {}} {string cat 0} else {string cat "\[[join $lines \n]\]"}]
         return never
     }
     if {[lindex $status 0] eq "literal"} {
@@ -2308,7 +2392,11 @@ proc core::compiler::CompileHandle {ctxVar e} {
     set names [N $e handlerNames]
     set scopes [N $e handlerScopes]
     set bodies [N $e handlerBodies]
-    set payloads [expr {[dict exists [dict get $hir exprs $e] handlerPayloads] ? [N $e handlerPayloads] : {}}]
+    if {[dict exists [dict get $hir exprs $e] handlerPayloads]} {
+        set payloads [N $e handlerPayloads]
+    } else {
+        set payloads {}
+    }
     set parentFrame [CurrentFrameExpr $ctx]
 
     set stVar [NewTemp]

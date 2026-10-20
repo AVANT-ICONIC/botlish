@@ -68,6 +68,18 @@
 #                   name:
 #                     int K           the Int argument K (allocate's capacity)
 #                     list K          the length of List argument K
+#                     extent K        the extent N of argument K's static
+#                                     type when it is a live fixed array,
+#                                     NativeView[array N of E] or
+#                                     NativeEdit[array N of E] (binary::load
+#                                     copies exactly N elements:
+#                                     FIXED-LAYOUT-ARRAYS.md); nothing for
+#                                     any other argument
+#                     path K          the extent N of the fixed array the
+#                                     field designator constant argument K
+#                                     names (binary::read of an array:
+#                                     LAYOUT-UNIONS.md); nothing for any
+#                                     other designator
 #   keepsLength     0 | 1 (default 0): the operation mutates its receiver
 #                   (ownership role `place`) without changing its length --
 #                   it replaces elements in place (a swap, a set, a copy into
@@ -84,6 +96,16 @@
 #                   element type is affine). AT is the argument whose static
 #                   type holds the element type (a collection), or `result`
 #                   (the call's own type, a constructor's).
+#   fold            "" or a command prefix deciding a call whose every
+#                   argument is exactly known: `{*}FOLD ARG...` returns
+#                   {value V} (the call returns V), {error NAME} (it completes
+#                   with the declared error NAME, one of its -errors), or ""
+#                   (nothing is decided: the arguments are not the
+#                   operation's). It must be the very computation the
+#                   implementation performs (core/float.tcl's apply), so a
+#                   decided call and a run of it never differ. Static
+#                   analyses (hir/completions.tcl, hir/exactvalue.tcl) read
+#                   it by registration, never by name.
 #   bounds          "" or the bounds checks behind a native's argument-
 #                   dependent errors (STDLIB-NAMESPACES.md), stated once here
 #                   so static analyses (hir/completions.tcl) read them by
@@ -91,12 +113,21 @@
 #                     index FAMILY C I  IndexNotFound unless the Int
 #                                     argument I designates an element of
 #                                     sequence argument C (0 <= I < N)
+#                     extents V       LayoutExtentMismatch unless every
+#                                     fixed array of a layout the value
+#                                     argument V is written into gets a List
+#                                     of exactly its extent (FIXED-LAYOUT-
+#                                     ARRAYS.md); the arrays are the layout
+#                                     role's (the emitted LayoutStruct's
+#                                     layout, a write's designated field)
 #                     slices SLICE...  each SLICE {FAMILY C START END},
 #                                     checked in order by checkSlice:
 #                                     LowerUnderrun/UpperOverrun unless 0 <=
 #                                     START <= END <= N
 #                   FAMILY is the kind of sequence argument C (list,
-#                   mutarray or str; N its length or capacity); START and
+#                   mutarray or str; N its length or capacity; narray a live
+#                   fixed array, N the extent its static type states,
+#                   FIXED-LAYOUT-ARRAYS.md); START and
 #                   END are each an argument index, {const K} or {sum A B}
 #                   (the sum of arguments A and B). A native with bounds
 #                   declares exactly the errors they produce.
@@ -316,13 +347,16 @@ namespace eval core::native {
     #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
     #   mutvec-mutate        mutates a MutableVector header in place (push,
     #                        pop, take, swap, clear)
+    #   float-alloc          makes a floating-point value, which the native
+    #                        runtime keeps in a heap object of its own
+    #                        (core/float.tcl; FLOAT64-MILESTONE-1.md)
     #   raw-syscall          executes a raw Linux kernel transition (x86-64's
     #                        `syscall`, AArch64's `svc #0`) with unknown
     #                        effects (core/linuxabi.tcl;
     #                        LINUX-X86-64-SYSCALL.md)
     variable runtimeTags {bigint string-alloc list-alloc result-alloc char-index
         range-check structural-equality mutarray-alloc mutarray-mutate hash set-alloc
-        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate}
+        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate float-alloc}
     # The -ownership roles (OWNERSHIP ROLES above).
     variable ownershipRoles {observe place move element repeat factory copy-out equality resume message release erase}
     # NAME -> 1: the errors the runtime itself declares, visible in every
@@ -330,6 +364,16 @@ namespace eval core::native {
     # declarations (hir/errordecls.tcl). Only a native's -errors may name one;
     # native/lower.tcl's ErrorId gives each a fixed NIR id from its index.
     variable builtinErrors [dict create]
+    # NAME -> {FIELD TYPE ...}: the payload a builtin error carries
+    # (ERROR-PAYLOADS.md; declareErrorPayload), its fields in declaration
+    # order, each TYPE a HIR type. A builtin error without an entry is
+    # payload-free, as every builtin error but NonFiniteFloat is.
+    variable builtinPayloads [dict create]
+    # NAME -> {CASE ...}: the enums the runtime itself declares (ENUMS.md;
+    # declareEnum), visible in every program under their bare names like the
+    # builtin errors, and never declarable by a program. The types of
+    # builtin error payloads' fields (NonFiniteFloat's NonFiniteResult).
+    variable builtinEnums [dict create]
     # NS -> 1: the intrinsic namespaces the compiler provides as direct
     # modules (DIRECT-MODULES.md): their members expose raw, ambient
     # authority, so a call into one is a direct edge of the calling module.
@@ -402,7 +446,7 @@ proc core::native::register {name args} {
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
         -result-length {} -keeps-length 0 -drop-form {} -layout {} -imprint {} -foreign {} -extern {} \
-        -mutation-stable 0]
+        -mutation-stable 0 -fold {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -491,7 +535,11 @@ proc core::native::register {name args} {
         }
     }
     set shape [dict get $options -result-shape]
-    set count [expr {$arity eq "*" ? "" : $arity}]
+    if {$arity eq "*"} {
+        set count ""
+    } else {
+        set count $arity
+    }
     if {![ValidShape $shape $count]} {
         error "core::native::register: bad -result-shape \"$shape\" for \"$name\""
     }
@@ -514,7 +562,7 @@ proc core::native::register {name args} {
         }
     }
     if {$ownership ne "" && ($arity eq "*" ? [llength $ownership] == 0 : [llength $ownership] != $arity)} {
-        error "core::native::register: -ownership of \"$name\" must list [expr {$arity eq "*" ? "its leading" : $arity}] role(s)"
+        error "core::native::register: -ownership of \"$name\" must list [if {$arity eq "*"} {string cat "its leading"} else {set arity}] role(s)"
     }
     if {[dict get $options -keeps-length] && [lindex $ownership 0] ne "place"} {
         error "core::native::register: -keeps-length of \"$name\" needs a receiver it mutates (-ownership role place for argument 0)"
@@ -525,7 +573,7 @@ proc core::native::register {name args} {
         error "core::native::register: -errors-from of \"$name\" must be the index of an argument of a -completion native"
     }
     set length [dict get $options -result-length]
-    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list}
+    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list extent path}
             || ![string is digit -strict [lindex $length 1]] || $arity eq "*" || [lindex $length 1] >= $arity)} {
         error "core::native::register: bad -result-length \"$length\" for \"$name\""
     }
@@ -580,7 +628,7 @@ proc core::native::register {name args} {
         ownership $ownership errorsFrom $errorsFrom resultLength $length \
         keepsLength [dict get $options -keeps-length] dropForm $dropForm \
         layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern] \
-        mutationStable [dict get $options -mutation-stable]]
+        mutationStable [dict get $options -mutation-stable] fold [dict get $options -fold]]
     return [core::value::native $name]
 }
 
@@ -608,13 +656,37 @@ proc core::native::register {name args} {
 #                    appended (binary::load)
 #   field K          argument K is one field's descriptor entry (the
 #                    internal binary#view_field a view's projection becomes)
+#   edited K         argument K is the native edit a store writes through
+#                    (a NativeEdit[L]; NATIVE-LAYOUT-WRITES.md)
+#   output K         argument K is the abi::bytes::MutableBytes a layout
+#                    write writes into
+#   path K           argument K is the static field designator
+#                    (LAYOUT.FIELD..., resolved to its designator constant)
+#   value K          argument K is the value written into that field
+#   arrayed {AT FORM} argument AT's static type is a live fixed array
+#                    (NativeView[array N of E] or NativeEdit[array N of
+#                    E]); the call is elaborated to a call of FORM with the
+#                    array's descriptor words appended (FIXED-LAYOUT-
+#                    ARRAYS.md)
+#   array K          argument K is a live array's descriptor words {array N
+#                    STRIDE ELEMENT} (the elaborated forms)
+#   index K          argument K is the Int index of the element accessed
+#
+# OP edit (a native edit of the pointer argument), store (one field
+# written through an edit), write (one ordinary field written into byte
+# storage) and write_foreign (an existing C pointer encoded into a pointer
+# field of byte storage) are NATIVE-LAYOUT-WRITES.md's; element (one
+# element of a live array read), store_element (one written) and
+# load_array (a live array copied into its List) FIXED-LAYOUT-ARRAYS.md's;
+# read (the one representation a designator names, imprinted from the
+# bytes of `input K`) LAYOUT-UNIONS.md's.
 proc core::native::ValidLayoutRole {role arity} {
     if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
         return 0
     }
     foreach {key value} $role {
         switch -- $key {
-            operand - input - pointer - field {
+            operand - input - pointer - field - edited - output - path - value - array - index {
                 if {![string is digit -strict $value] || $value >= $arity} {
                     return 0
                 }
@@ -624,14 +696,14 @@ proc core::native::ValidLayoutRole {role arity} {
                     return 0
                 }
             }
-            typed - viewed {
+            typed - viewed - arrayed {
                 if {[llength $value] != 2 || ![string is digit -strict [lindex $value 0]]
                         || [lindex $value 0] >= $arity} {
                     return 0
                 }
             }
             op {
-                if {$value ni {parse emit view load field}} {
+                if {$value ni {parse emit view load field edit store write write_foreign element store_element load_array read}} {
                     return 0
                 }
             }
@@ -659,6 +731,22 @@ proc core::native::ValidResultRange {range} {
     return [list interval [expr {$lo + 0}] [expr {$hi + 0}]]
 }
 
+# The declared errors of a native (METADATA its registry entry) that no
+# registered bounds check of it produces: a proof that every check holds
+# (hir::completions::BoundsProven) rules out only the others.
+proc core::native::unboundedErrors {metadata} {
+    set produced [switch -- [lindex [dict get $metadata bounds] 0] {
+        index   { list IndexNotFound }
+        slices  { list LowerUnderrun UpperOverrun }
+        extents { list LayoutExtentMismatch }
+        default { list }
+    }]
+    return [lmap error [dict get $metadata errors] {
+        if {$error in $produced} continue
+        set error
+    }]
+}
+
 # 1 if BOUNDS is a valid -bounds for a native of ARITY declaring exactly
 # ERRORS (sorted).
 proc core::native::ValidBounds {bounds arity errors} {
@@ -672,7 +760,16 @@ proc core::native::ValidBounds {bounds arity errors} {
                 return 0
             }
             lassign $bounds _ family c i
-            return [expr {$family in {list mutarray str} && [apply $arg $c] && [apply $arg $i]}]
+            return [expr {$family in {list mutarray str narray} && [apply $arg $c] && [apply $arg $i]}]
+        }
+        extents {
+            # {extents V}: LayoutExtentMismatch unless every fixed array the
+            # value argument V writes has its layout's extent (FIXED-LAYOUT-
+            # ARRAYS.md; hir::layouts::ExtentVerdict reads which arrays from
+            # the layout role). The native may declare others too (a byte
+            # write's LayoutLengthMismatch): this check produces only its own.
+            return [expr {[llength $bounds] == 2 && [apply $arg [lindex $bounds 1]]
+                && "LayoutExtentMismatch" in $errors}]
         }
         slices {
             if {[llength $bounds] < 2 || $errors ne {LowerUnderrun UpperOverrun}} {
@@ -750,12 +847,24 @@ proc core::native::ValidShape {shape count} {
             && [string is digit -strict [lindex $shape 2]]
             && ($count eq "" || ([lindex $shape 1] < $count && [lindex $shape 2] < $count))}]
     }
-    if {[lindex $shape 0] in {native-view view-struct}} {
+    if {[lindex $shape 0] eq {layout-read}} {
+        # {layout-read I}: the copied type of the representation the field
+        # designator constant argument I names (binary::read,
+        # LAYOUT-UNIONS.md), resolved by hir::types::ShapeResult.
+        return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
+            && ($count eq "" || [lindex $shape 1] < $count)}]
+    }
+    if {[lindex $shape 0] in {native-view native-edit view-struct native-element}} {
         # {native-view I}: the result is a NativeView[L] whose layout L is
         # described by argument I's descriptor constant
         # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the
-        # layout of argument I's static NativeView[L] type (binary::load).
-        # Both resolved by hir::types::ShapeResult (NATIVE-LAYOUT-VIEWS.md).
+        # layout of argument I's static NativeView[L] type (binary::load),
+        # or of a live fixed array's the List its copy is;
+        # {native-edit I}: a NativeEdit[L] likewise (binary::native::edit,
+        # NATIVE-LAYOUT-WRITES.md); {native-element I}: the element of
+        # argument I's static live fixed array type (binary::element,
+        # FIXED-LAYOUT-ARRAYS.md). All resolved by hir::types::ShapeResult
+        # (NATIVE-LAYOUT-VIEWS.md).
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
             && ($count eq "" || [lindex $shape 1] < $count)}]
     }
@@ -861,10 +970,56 @@ proc core::native::builtinErrorIndex {name} {
     return [dict get $builtinErrors $name]
 }
 
+# Gives the builtin error NAME the payload FIELDS, {FIELD TYPE ...} in
+# declaration order (ERROR-PAYLOADS.md): every failure with it must carry a
+# value of that anonymous struct type (failDeclared's PAYLOAD), which a
+# handler binds like a source-declared error's (hir/errordecls.tcl answers
+# for builtin errors from here).
+proc core::native::declareErrorPayload {name fields} {
+    variable builtinPayloads
+    if {![isBuiltinError $name]} {
+        error "core::native::declareErrorPayload: \"$name\" is not a builtin error"
+    }
+    dict set builtinPayloads $name $fields
+}
+
+# The payload fields of the builtin error NAME ({FIELD TYPE ...}), or {} for
+# a payload-free one.
+proc core::native::builtinPayload {name} {
+    variable builtinPayloads
+    return [dict getdef $builtinPayloads $name {}]
+}
+
+# Declares the builtin enum NAME with the payload-free cases CASES, in
+# declaration order (ENUMS.md: a closed nominal sum; its identity is NAME,
+# like an entry program's enum). hir/enums.tcl registers it in every
+# compilation.
+proc core::native::declareEnum {name cases} {
+    variable builtinEnums
+    if {![regexp {^[A-Z][A-Za-z0-9]*$} $name] || [dict exists $builtinEnums $name]} {
+        error "core::native::declareEnum: bad or repeated enum name \"$name\""
+    }
+    dict set builtinEnums $name $cases
+}
+
+# 1 if NAME is a builtin enum (declareEnum).
+proc core::native::isBuiltinEnum {name} {
+    variable builtinEnums
+    return [dict exists $builtinEnums $name]
+}
+
+# The builtin enums: NAME -> {CASE ...}, in declaration order.
+proc core::native::builtinEnums {} {
+    variable builtinEnums
+    return $builtinEnums
+}
+
 # Called by a native's impl to complete with the declared builtin error NAME
-# (one of its own -errors). Never returns.
-proc core::native::failDeclared {name message} {
-    throw [list CORE DECLARED-ERROR $name] $message
+# (one of its own -errors) -- with PAYLOAD, the value of its payload's
+# anonymous struct type, when NAME declares one (declareErrorPayload).
+# Never returns.
+proc core::native::failDeclared {name message {payload ""}} {
+    throw [list CORE DECLARED-ERROR $name {*}[if {$payload eq ""} {string cat {}} else {list $payload}]] $message
 }
 
 # The one slice rule (STDLIB-NAMESPACES.md), shared by every slicing native
@@ -978,7 +1133,10 @@ proc core::native::ownershipRole {name index} {
         return [lindex $roles end]
     }
     set role [lindex $roles $index]
-    return [expr {$role eq "" ? "erase" : $role}]
+    if {$role eq ""} {
+        return "erase"
+    }
+    return $role
 }
 
 # OUTCOME is host 1 (predicate returned true) or 0 (returned false).
@@ -1023,12 +1181,17 @@ proc core::native::invoke {nativeValue argValues} {
         try {
             set result [{*}[dict get $meta impl] {*}$argValues]
         } trap {CORE DECLARED-ERROR} {message options} {
-            set error [lindex [dict get $options -errorcode] 2]
+            set code [dict get $options -errorcode]
+            set error [lindex $code 2]
             if {$error ni $errors} {
                 throw [list CORE CONTRACT TYPE] \
                     "$name: contract violation: it signalled the undeclared error \"$error\" (declared: $errors)"
             }
-            return [core::completion::propagatingError [core::value::errorId $error]]
+            if {([llength $code] == 4) != ([builtinPayload $error] ne {})} {
+                throw [list CORE CONTRACT TYPE] \
+                    "$name: contract violation: it signalled \"$error\" [expr {[llength $code] == 4 ? "with a payload the error does not declare" : "without the payload the error declares"}]"
+            }
+            return [core::completion::propagatingError [core::value::errorId $error {*}[lrange $code 3 end]]]
         }
     } else {
         set result [{*}[dict get $meta impl] {*}$argValues]
@@ -1066,7 +1229,12 @@ proc core::native::invoke {nativeValue argValues} {
 #                            STDLIB-NAMESPACES.md)
 #   LowerUnderrun            a slice bound below its interval (checkSlice)
 #   UpperOverrun             a slice bound above its interval (checkSlice)
+#   NonFiniteFloat           a floating-point operation whose result is not a
+#                            finite number: an overflow, a division by zero
+#                            (core/float.tcl; FLOAT64-MILESTONE-1.md), or a
+#                            non-finite C double entering Botlish (C-FFI.md)
 core::native::declareError InvalidArgumentEncoding
 core::native::declareError IndexNotFound
 core::native::declareError LowerUnderrun
 core::native::declareError UpperOverrun
+core::native::declareError NonFiniteFloat

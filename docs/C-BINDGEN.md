@@ -353,10 +353,12 @@ opaque struct bgf_handle:
     tag: unit
 ```
 
-The type is opaque even when the C struct is complete (`bgf_point`,
-"a complete C type seen through pointers only"): no field is generated, no
-layout is claimed, and the report counts such signatures as needing memory
-views (section 37). Two tags whose names collide stay two types: the
+The type is opaque even when the C struct is complete (`bgf_point`): no
+field is generated on it. Its layout, when every field is one a layout
+represents, is a separate declaration of the `layouts` module, with the
+compiler's sizes and offsets (`bgf::layouts::bgf_point`;
+C-BINDGEN-LAYOUTS.md, "Nominal identity vs layout"), and the identity's
+comment names it. Two tags whose names collide stay two types: the
 fixture's `typedef struct bgf_other bgf_twin;` beside a tag `struct
 bgf_twin` gives `bgf_twin` and `bgf_twin_struct` (`cb-fixture-mapping`).
 Identity is keyed by the C tag (`struct NAME`), never by a spelling.
@@ -1068,8 +1070,13 @@ relocation change), and anything on macOS (section 34).
 * **Calling an `FnPtr`, callbacks into Botlish**: 50 Tcl, 452 BoringSSL and
   36 SDL3 bound functions take a callback, which can be passed along (a C
   function pointer from C) but not made from a Botlish function.
-* **Memory views**: 454 Tcl, 1,317 BoringSSL and 225 SDL3 bound functions
-  point to a complete C struct the binding only knows as an opaque identity.
+* **Memory views**: record layouts are generated now (C-BINDGEN-LAYOUTS.md):
+  of the bound functions pointing to C records, 82 Tcl, 183 SDL3 and 791
+  BoringSSL point to one with a layout; the rest wait for arrays, unions and
+  the other representations that report measures, or point to incomplete
+  records. (Since FIXED-LAYOUT-ARRAYS.md and LAYOUT-UNIONS.md: 121 Tcl, 189
+  SDL3 and 1,152 BoringSSL; what remains waits for floats, Bool fields,
+  bitfields and double.)
 * **Floats** (SDL3: 114 API names), aggregates by value (8), varargs (23):
   their own milestones.
 * **Macro signatures**: 63 Tcl, 66 BoringSSL and 113 SDL3 function-like
@@ -1077,7 +1084,9 @@ relocation change), and anything on macOS (section 34).
   profile signature to be thunked.
 * **C strings**: every `const char *` result is an opaque `Ptr[Char]`.
 * **Contracts at scale**: 98% of pointer parameters are unknown (section 29).
-* A Windows target, a GCC evidence producer.
+* A GCC evidence producer. (Windows x86-64 with the GNU ABI is a target
+  now, windows-x86_64-gnu, with a Win32 binding; MSVC is not:
+  C-BINDGEN-LAYOUTS.md.)
 
 ## 35. What to run when changing this
 
@@ -1085,7 +1094,9 @@ If you change the generator (`tools/c-bindgen/`), the C header library
 (`tools/cheader/`), a profile or the fixture, run `tclsh9.0
 tests/c-bindgen.test`, `tools/c-bindgen.tcl check PROFILE -target committed`
 for every profile (regenerate and review the diff when it is intended),
-`audit/c-bindgen/tools/fuzz.tcl` (several seeds) and
+`audit/c-bindgen/tools/fuzz.tcl` (several seeds),
+`audit/c-bindgen/tools/layout-fuzz.tcl` (several seeds and targets;
+C-BINDGEN-LAYOUTS.md section 22) and
 `audit/c-bindgen/tools/mutate.tcl` (every mutant in its `mutants.txt` must
 still apply and be killed, by a test of behavior or the fuzzer: update a
 mutant's text when you change the code it mutates, keeping it a mutant of
@@ -1101,11 +1112,15 @@ tools/c-bindgen.tcl                 the command line
 tools/c-bindgen/lib.tcl             loads the generator and the C header library
 tools/c-bindgen/profile.tcl         profiles: validation, header profiles per target, libraries, outputs
 tools/c-bindgen/model.tcl           classification, mapping, identities, contracts, constants
+tools/c-bindgen/records.tcl         C records and their layouts (C-BINDGEN-LAYOUTS.md)
+tools/c-bindgen/pressure.tcl        the layout and API pressure counterfactuals
+tools/c-bindgen/verify.tcl          layouts-check.c, the compiler's check of the layouts
+tools/c-bindgen/oracle.tcl          the runtime layout oracle (tests and fuzzer only)
 tools/c-bindgen/probe.tcl           the ABI, symbol and evidence probes
 tools/c-bindgen/emit.tcl            modules, ctypes, thunk modules, the shim
 tools/c-bindgen/report.tcl          report.tsv, report.txt, manifest.txt
 tools/c-bindgen/generate.tcl        the pipeline, thunk checking, write, compare, build, stage
-tools/c-bindgen/profiles/           fixture, tcl, tclstubs, boringssl, sdl3
+tools/c-bindgen/profiles/           fixture, tcl, tclstubs, boringssl, sdl3, win32
 tools/c-bindgen/fixture/            the synthetic fixture: headers, bgf.c, demo/, expected/TARGET/
 tools/cheader/                      the C header library (moved from audit/c-header/tools):
                                     common, toolchain, cdecl, ir, macros, macrocat, pipeline
@@ -1114,6 +1129,8 @@ examples/ffi/bindgen/               the Tcl, SHA-256 and SDL3 acceptance program
 tests/c-bindgen.test                the generator's tests
 tests/cffi/sdl3.tcl                 the package-owned SDL3 build
 audit/c-bindgen/tools/fuzz.tcl      the fuzzer
+audit/c-bindgen/tools/layout-fuzz.tcl  the layout fuzzer
+audit/c-bindgen/tools/layout-scale.tcl the layout pass's scaling fixture
 audit/c-bindgen/tools/mutate.tcl    the mutation harness and mutants.txt
 .github/workflows/c-bindgen.yml     the CI gate
 ```

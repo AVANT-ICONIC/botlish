@@ -41,7 +41,10 @@
 //!                 and the fixed constants 2/6/10. The static pointee type is
 //!                 not in the word: Ptr[A] and Ptr[B] values are the same
 //!                 bits.
-//!   pppp...p000   pointer to a heap object (non-null, 8-byte aligned)
+//!   pppp...p000   pointer to a heap object (non-null, 8-byte aligned); a
+//!                 floating-point value (FLOAT64-MILESTONE-1.md) is one
+//!                 (KIND_FLOAT: no word has room for 64 bits of number and
+//!                 a tag)
 //!   0             no value: an error is pending (never a program value)
 //! ```
 //!
@@ -143,6 +146,10 @@ pub const KIND_COROUTINE: u8 = 15;
 /// A MutableVector header (MUTABLE-VECTOR.md, runtime/mutvec.rs's MutVecObj):
 /// one logical vector value over a copy-on-write backing of elements.
 pub const KIND_MUTVEC: u8 = 16;
+/// A floating-point value (FLOAT64-MILESTONE-1.md, FloatObj): a finite
+/// number of one primitive float type, never NaN, an infinity or negative
+/// zero, so equality and hashing compare its bits.
+pub const KIND_FLOAT: u8 = 17;
 
 #[repr(C)]
 pub struct Header {
@@ -428,6 +435,114 @@ impl MutArrayObj {
     }
 }
 
+/// A floating-point value: its type's IEEE 754 bit pattern (FloatType; a
+/// Float64's binary64 bits). Immutable, no references. The number is finite
+/// and never negative zero (`FloatType::admit` is the one gate every number
+/// entering a value passes), so two values are equal exactly when their bits
+/// are.
+#[repr(C)]
+pub struct FloatObj {
+    pub hdr: Header,
+    pub bits: u64,
+}
+
+pub const FLOAT_BITS_OFFSET: i32 = offset_of!(FloatObj, bits) as i32;
+
+/// A primitive floating-point type (core/type.tcl's float family). Each is a
+/// semantic Kind of its own; what the native backend knows of one -- its
+/// machine type, its object, its arithmetic -- hangs off this enum, so a
+/// further width is a variant every `match` on it then asks about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FloatType {
+    Float64,
+}
+
+impl FloatType {
+    /// The type named NAME (its core/type.tcl spelling).
+    pub fn parse(name: &str) -> Option<FloatType> {
+        match name {
+            "Float64" => Some(FloatType::Float64),
+            _ => None,
+        }
+    }
+
+    /// The type's number (rt_float_new's operand).
+    pub fn code(self) -> u64 {
+        match self {
+            FloatType::Float64 => 0,
+        }
+    }
+
+    pub fn from_code(code: u64) -> FloatType {
+        match code {
+            0 => FloatType::Float64,
+            _ => panic!("bad floating-point type number {code}"),
+        }
+    }
+
+    /// The type's NIR operation prefix (`f64add`, `f64lt`, ...: native/lower.tcl's
+    /// FloatNatives).
+    pub fn prefix(self) -> &'static str {
+        match self {
+            FloatType::Float64 => "f64",
+        }
+    }
+
+    pub fn of_prefix(prefix: &str) -> Option<FloatType> {
+        match prefix {
+            "f64" => Some(FloatType::Float64),
+            _ => None,
+        }
+    }
+
+    pub fn kind(self) -> Kind {
+        match self {
+            FloatType::Float64 => Kind::Float64,
+        }
+    }
+
+    pub fn of_kind(kind: Kind) -> Option<FloatType> {
+        match kind {
+            Kind::Float64 => Some(FloatType::Float64),
+            _ => None,
+        }
+    }
+
+    /// The value of number X of this type, as `FloatObj::bits` holds it, or
+    /// None when X is not finite: no such value exists. Negative zero is
+    /// zero (a value has one representation).
+    pub fn admit(self, x: f64) -> Option<u64> {
+        match self {
+            FloatType::Float64 => {
+                if !x.is_finite() {
+                    return None;
+                }
+                Some(if x == 0.0 { 0 } else { x.to_bits() })
+            }
+        }
+    }
+}
+
+/// The float type of the floating-point value V.
+pub fn float_type_of(v: Value) -> FloatType {
+    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    // Every FloatObj is a Float64 today; a further width records its type
+    // in the object.
+    FloatType::Float64
+}
+
+/// The number of the Float64 value V.
+pub fn float64_of(v: Value) -> f64 {
+    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    f64::from_bits(unsafe { as_ref::<FloatObj>(v) }.bits)
+}
+
+/// The bits of the floating-point value V (FloatObj::bits).
+pub fn float_bits(v: Value) -> u64 {
+    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    unsafe { as_ref::<FloatObj>(v) }.bits
+}
+
 #[repr(C)]
 pub struct ResultObj {
     pub hdr: Header,
@@ -618,6 +733,9 @@ pub enum Kind {
     /// function pointer. No equality, no hash. Named as core/value.tcl's
     /// `cptr` kind.
     CPtr,
+    /// A Float64 (FLOAT64-MILESTONE-1.md, FloatType): a FloatObj. Named as
+    /// its core/type.tcl spelling, like UnicodeChar.
+    Float64,
 }
 
 impl Kind {
@@ -641,6 +759,7 @@ impl Kind {
             "mutvec" => Kind::MutVec,
             "enum" => Kind::Enum,
             "cptr" => Kind::CPtr,
+            "Float64" => Kind::Float64,
             _ => return None,
         })
     }
@@ -665,6 +784,7 @@ impl Kind {
             Kind::MutVec => "mutvec",
             Kind::Enum => "enum",
             Kind::CPtr => "cptr",
+            Kind::Float64 => "Float64",
         }
     }
 
@@ -676,7 +796,7 @@ impl Kind {
         [
             Kind::Int, Kind::Str, Kind::Bool, Kind::Unit, Kind::List, Kind::Result, Kind::Block, Kind::Native,
             Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct, Kind::ByteStore, Kind::MutByteStore,
-            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr,
+            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr, Kind::Float64,
         ][code as usize]
     }
 }
@@ -714,6 +834,7 @@ pub fn kind_of(v: Value) -> Kind {
         KIND_MUTBYTES => Kind::MutByteStore,
         KIND_COROUTINE => Kind::Coroutine,
         KIND_MUTVEC => Kind::MutVec,
+        KIND_FLOAT => float_type_of(v).kind(),
         _ => panic!("not a program value: {v:#x}"),
     }
 }

@@ -111,10 +111,22 @@ proc hir::construction::RegionInfo {hir spec id} {
     set instance [dict get $spec instances $id]
     set block [dict get $instance block]
     set view [hir::specialize::view $hir $spec $id]
-    set region [expr {$block eq "program" ? "program" : $block}]
+    if {$block eq "program"} {
+        set region "program"
+    } else {
+        set region $block
+    }
     set exprs [dict get $context exprs $region]
-    set topBody [expr {$block eq "program" ? [hir::roots $view] : [hir::get $view $block body]}]
-    set params [expr {$block eq "program" ? {} : [hir::get $view $block params]}]
+    if {$block eq "program"} {
+        set topBody [hir::roots $view]
+    } else {
+        set topBody [hir::get $view $block body]
+    }
+    if {$block eq "program"} {
+        set params {}
+    } else {
+        set params [hir::get $view $block params]
+    }
     set captured [dict create]
     set refs [dict create]
     set parent [dict create]
@@ -221,7 +233,11 @@ proc hir::construction::Uses {view b loops e} {
             lassign [SeqUses $view $b $loops [hir::get $view $e thenBody]] tn ta
             lassign [SeqUses $view $b $loops [hir::get $view $e elseBody]] en ea
             set branch [Max $tn $en]
-            set n [expr {$cn < 0 || $branch < 0 ? -1 : [Add $cn $branch]}]
+            if {$cn < 0 || $branch < 0} {
+                set n -1
+            } else {
+                set n [Add $cn $branch]
+            }
             set a $ca
             if {$cn >= 0} {
                 if {$ta >= 0} { set a [Max $a [Add $cn $ta]] }
@@ -280,8 +296,8 @@ proc hir::construction::Uses {view b loops e} {
                 set hn [Max $hn $n]
                 set ha [Max $ha $a]
             }
-            set n [Max $cn [expr {$hn >= 0 ? [Add $worst $hn] : -1}]]
-            set a [Max $ca [expr {$ha >= 0 ? [Add $worst $ha] : -1}]]
+            set n [Max $cn [if {$hn >= 0} {Add $worst $hn} else {string cat -1}]]
+            set a [Max $ca [if {$ha >= 0} {Add $worst $ha} else {string cat -1}]]
             return [list $n $a]
         }
     }
@@ -815,7 +831,15 @@ proc hir::construction::audit {hir spec analysis} {
             }
             set kind [hir::kind $view $e]
             set name [NativeName $view $e]
-            set operation [expr {$name ne "" ? $name : ($kind eq "call" ? "call (plan result)" : $kind)}]
+            if {$name ne ""} {
+                set operation $name
+            } else {
+                if {$kind eq "call"} {
+                    set operation "call (plan result)"
+                } else {
+                    set operation $kind
+                }
+            }
             lassign [Context $analysis $id $e] virtual reason
             set origin [hir::get $view $e origin]
             lappend records [dict create instance [hir::specialize::label $spec $id] expr $e \

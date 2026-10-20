@@ -23,8 +23,9 @@
 # or host name is written.
 
 namespace eval ::cbind::emit {
-    # The generator's version: bumped when what it emits changes meaning.
-    variable version 1
+    # The generator's version: bumped when what it emits changes meaning
+    # (2: record layouts, C-BINDGEN-LAYOUTS.md).
+    variable version 2
     variable model {}
     variable ns ""
 }
@@ -193,6 +194,18 @@ proc ::cbind::emit::files {theModel} {
         if {[llength [dict get $g externs]]} {
             append text \n
             set libs [::cbind::profile::librariesOf $p [dict get $headerOf $key] $target]
+            # Libraries found by symbol: the module's functions' (a thunk
+            # module's: those the shim references), in the profile's order.
+            if {[dict exists $model symbolLibraries] && [llength [dict get $model symbolLibraries]]} {
+                if {[string match thunks::* $key]} {
+                    set mine [expr {[dict exists $model shimLibraries] ? [dict get $model shimLibraries] : {}}]
+                } else {
+                    set mine [lmap e [dict get $g externs] {dict get $e library}]
+                }
+                foreach l [dict get $model symbolLibraries] {
+                    if {$l in $mine && $l ni $libs} { lappend libs $l }
+                }
+            }
             if {[string match thunks::* $key]} { set libs [concat [list $shim] $libs] }
             foreach l $libs { append text "extern c library [Quote $l]\n" }
         }
@@ -216,9 +229,18 @@ proc ::cbind::emit::files {theModel} {
         dict set used $key $keys
     }
 
-    # The ctypes module: every identity some module uses, in the order the
-    # translation unit declares their tags, and the converters.
-    set allKeys {}
+    # The layouts module: every record whose layout is emitted, nested
+    # layouts before their users.
+    set layoutKeys {}
+    if {[dict exists $model layoutOrder] && [llength [dict get $model layoutOrder]]} {
+        lassign [Layouts] text layoutKeys
+        dict set out "$ns/layouts.bot" $text
+    }
+
+    # The ctypes module: every identity some module uses (a signature's or a
+    # layout's pointer field's pointee), in the order the translation unit
+    # declares their tags, and the converters.
+    set allKeys $layoutKeys
     dict for {k keys} $used { lappend allKeys {*}$keys }
     set allKeys [lsort -unique $allKeys]
     set ids [dict get $model identities]
@@ -234,7 +256,7 @@ proc ::cbind::emit::files {theModel} {
             # A system header is named by its origin only: its path is the
             # host's, never generated source.
             set where [expr {[dict get $id loc] eq "" ? "" : ([dict get $id origin] in {public bundled internal} ? " ([lindex [dict get $id loc] 0])" : " (a system header)")}]
-            set note [expr {[dict get $id complete] ? ", a complete C type seen through pointers only" : ""}]
+            set note [IdentityNote $k [dict get $id complete]]
             append text "\n# $k$where$note\nopaque struct [dict get $id name]:\n    tag: unit\n"
         }
         foreach scalar [lsort $converters] {
@@ -245,6 +267,118 @@ proc ::cbind::emit::files {theModel} {
     set thunks [lsearch -all -inline -index 1 [lmap e [dict get $model apis] {list $e [dict get $e kind]}] thunk]
     if {[llength $thunks]} {
         dict set out shim.c [Shim [lmap t $thunks {lindex $t 0}]]
+    }
+    return $out
+}
+
+# The layouts module of MODEL: {TEXT KEYS}, KEYS the pointee identities its
+# pointer fields name. One ordinary `layout` per emitted struct and one
+# `union layout` per emitted union (LAYOUT-UNIONS.md: its members are its
+# alternatives), in emission order (records.tcl): the compiler's sizeof,
+# _Alignof and offsets, each field's type the binding model's mapping of its
+# C type (a fixed array's extents the compiler's too:
+# FIXED-LAYOUT-ARRAYS.md), each field with its C declaration beside it. A
+# synthetic record (an anonymous member, records.tcl) is a layout like any
+# other, held by its container's generated field; its comment names where
+# it is.
+proc ::cbind::emit::Layouts {} {
+    variable model
+    variable ns
+    set recs [dict get $model layouts]
+    set p [dict get $model profile]
+    set target [dict get $model target]
+    set keys {}
+    set body ""
+    set anonNames [AnonNames $recs]
+    foreach key [dict get $model layoutOrder] {
+        set rec [dict get $recs $key]
+        set where [expr {[dict get $rec origin] in {public bundled internal} ? "[dict get $rec header]:[dict get $rec line]" : "a system header"}]
+        set spell [CRecord $recs $rec]
+        set union [expr {[dict get $rec kind] eq "union"}]
+        append body "\n# $spell ($where): sizeof [dict get $rec size], _Alignof [dict get $rec align]\n"
+        append body "[expr {$union ? "union layout" : "layout"}] [dict get $rec layoutName]:\n"
+        append body "    size [dict get $rec size]\n"
+        append body "    align [dict get $rec align]\n"
+        set lines {}
+        foreach f [dict get $rec fields] {
+            if {[dict get $f kind] ni {scalar pointer nested array}} {
+                error "c-bindgen: a blocked field in the emitted layout $key"
+            }
+            set text [::cbind::records::FieldText $recs $f]
+            set type [Type $text]
+            lappend keys {*}[Keys $text]
+            set decl [regsub -all {\s+} [::cir::render [dict get $f ctype] [dict get $f cname] $anonNames] " "]
+            if {$union} {
+                # (Every alternative begins at the union's start: records.tcl
+                # blocks a union whose member the compiler places elsewhere.)
+                lappend lines [list "    alternative [dict get $f name]: $type" $decl]
+            } else {
+                lappend lines [list "    field [dict get $f name]: $type at [dict get $f offset]" $decl]
+            }
+        }
+        set width 0
+        foreach l $lines { set width [expr {max($width, [string length [lindex $l 0]])}] }
+        set width [expr {min($width, 72)}]
+        foreach l $lines {
+            append body "[format %-*s $width [lindex $l 0]]  # [lindex $l 1]\n"
+        }
+    }
+    set text [Banner "${ns}::layouts" [list \
+        "The byte layouts of the complete C records of the ${ns} binding whose every" \
+        "field a layout represents, on $target: sizeof, _Alignof and every offset" \
+        "as this target's C compiler gives them (C-BINDGEN-LAYOUTS.md). A layout" \
+        "describes where a record's bytes are; the record's pointee identity is" \
+        "${ns}::ctypes'."]]
+    append text "import ffi::c\n"
+    set keys [lsort -unique $keys]
+    if {[llength $keys]} { append text "import ${ns}::ctypes\n" }
+    append text $body
+    return [list $text $keys]
+}
+
+# What the ctypes comment of identity KEY says of its record: complete
+# with its layout's name, complete with a blocked layout, or nothing
+# (incomplete).
+proc ::cbind::emit::IdentityNote {key complete} {
+    variable model
+    variable ns
+    if {!$complete} { return "" }
+    if {[dict exists $model layouts $key]} {
+        set rec [dict get $model layouts $key]
+        if {[dict get $rec status] eq "layout-direct"} {
+            return ", a complete C type: its layout is ${ns}::layouts::[dict get $rec layoutName]"
+        }
+        if {[dict get $rec status] eq "layout-blocked"} {
+            return ", a complete C type whose layout is blocked (layouts.tsv)"
+        }
+    }
+    return ", a complete C type seen through pointers only"
+}
+
+# The C spelling of record REC of RECS in a comment: its tag and the
+# typedefs naming it ("struct _POINT, typedef POINT"); for a synthetic
+# record, the member it is ("the anonymous union member3 of struct
+# _OVERLAPPED").
+proc ::cbind::emit::CRecord {recs rec} {
+    if {[dict get $rec synthetic]} {
+        return "the anonymous [dict get $rec kind] member [::cbind::records::Path $recs [dict get $rec key]] ([dict get $rec owner])"
+    }
+    set out [expr {[dict get $rec anonymous] ? "an anonymous [dict get $rec kind]" : [dict get $rec key]}]
+    if {[llength [dict get $rec typedefs]]} {
+        append out ", typedef [join [dict get $rec typedefs] {, }]"
+    }
+    return $out
+}
+
+# The C names of anonymous records for rendering a member's declaration:
+# "struct anon@..." -> its layout's name (an anonymous record has no C one).
+proc ::cbind::emit::AnonNames {recs} {
+    set out [dict create]
+    dict for {key rec} $recs {
+        if {[dict get $rec anonymous]} {
+            set c [dict get $rec cname]
+            dict set out $key [expr {$c ne "" && ![string match __typeof__* $c] ? $c : "[dict get $rec kind] {...}"}]
+        }
     }
     return $out
 }

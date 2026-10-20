@@ -361,9 +361,9 @@
 @@ vector-once-body-later-runs a branch or handler body's every run continues the run before its statement, not only its first, so a loop in a branch after the branch's own push is the length of a List collected before the if
 ## hir/cardinality.tcl
 <<<<
-        set class [expr {$run == 0 && $continued ne "" ? $continued : [list $sequence $run]}]
+        if {$run == 0 && $continued ne ""} {
 ====
-        set class [expr {$continued ne "" ? $continued : [list $sequence $run]}]
+        if {$continued ne ""} {
 >>>>
 
 @@ vector-alternatives-ignored a site in the other branch (or another handler) runs before the body (precision: a loop in a branch whose other branch pushes is unrelated to the loops before the if)
@@ -405,7 +405,7 @@
 @@ vector-always-per-occurrence a loop over a MutableVector the program mutates has the length of its own evaluation (precision: two loops over a vector built by pushes, then walked, or a lockstep over it and a List collected over it after the pushes, are unrelated)
 ## hir/cardinality.tcl
 <<<<
-    set first [Evaluation $hir $e $place [expr {$context ? [list [ContextIdOf $hir $root]] : {}}]]
+    set first [Evaluation $hir $e $place $contextIds]
 ====
     set first ""
 >>>>

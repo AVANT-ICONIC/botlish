@@ -6,12 +6,32 @@
 # "Constants").
 import ffi::c
 
-# struct bgf_point (include/bgf/bgf.h), a complete C type seen through pointers only
+# struct bgf_point (include/bgf/bgf.h), a complete C type: its layout is bgf::layouts::bgf_point
 opaque struct bgf_point:
     tag: unit
 
 # struct bgf_twin (include/bgf/bgf.h)
 opaque struct bgf_twin_struct:
+    tag: unit
+
+# struct bgf_chars (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_chars
+opaque struct bgf_chars:
+    tag: unit
+
+# struct bgf_node (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_node
+opaque struct bgf_node:
+    tag: unit
+
+# struct bgf_rect (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_rect
+opaque struct bgf_rect:
+    tag: unit
+
+# struct bgf_frame (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_frame
+opaque struct bgf_frame:
+    tag: unit
+
+# struct bgf_points4 (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_points4
+opaque struct bgf_points4:
     tag: unit
 
 # struct bgf_handle
@@ -20,6 +40,10 @@ opaque struct bgf_handle:
 
 # struct bgf_other
 opaque struct bgf_twin:
+    tag: unit
+
+# struct bgf_secret
+opaque struct bgf_secret:
     tag: unit
 
 # struct bgf_window_

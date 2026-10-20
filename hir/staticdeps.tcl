@@ -493,7 +493,7 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
     # numbered below it is numbered the same whatever the site's form (ids
     # are allocated in one walk of the program, hir::NewId).
     set firstIds [dict create]
-    dict for {site exprs} [expr {[dict exists $state siteExprs] ? [dict get $state siteExprs] : {}}] {
+    dict for {site exprs} [dict getdef $state siteExprs {}] {
         set min ""
         foreach e $exprs {
             set n [string range $e 1 end]
@@ -721,7 +721,11 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             while {$open ne {} && [lindex $open end 1] < $start} {
                 set open [lrange $open 0 end-1]
             }
-            set outer [expr {$open eq {} ? "" : [lindex $open end 2]}]
+            if {$open eq {}} {
+                set outer ""
+            } else {
+                set outer [lindex $open end 2]
+            }
             dict set spanParent $key $outer
             if {$outer ne ""} {
                 dict lappend spanChildren $outer $key
@@ -901,7 +905,11 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             foreach arg [dict get $exprs $e args] {
                 set type [hir::typeOf $hir $arg]
                 if {[hir::types::IsCoroutine $type]} {
-                    set thunk [expr {$operation ? [hir::coroutines::thunkOfHandle $hir $arg] : ""}]
+                    if {$operation} {
+                        set thunk [hir::coroutines::thunkOfHandle $hir $arg]
+                    } else {
+                        set thunk ""
+                    }
                     if {$thunk ne ""} {
                         dict set methodTrial $q C:erased 1
                         foreach c [dict get $exprs $thunk captures] {
@@ -933,8 +941,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         set i 0
         foreach d [dict get $hir diagnostics] {
             # Its owner as hir::static::Attribute names it.
-            set owner [expr {[hir::static::Internal $d] ? ""
-                : [hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]]}]
+            set owner [if {[hir::static::Internal $d]} {string cat ""} else {hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]}]
             if {$owner ne "" && ![dict exists $judged $owner]} {
                 dict set judged $owner 1
                 if {$i >= $from && $i < $to} {
@@ -994,7 +1001,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     # them those whose root has a struct protocol, which alone decide the
     # type of an unconstrained function's yields (yieldStruct: `any` once
     # one reaches it, else `unit`; hir/coroutines.tcl's analyze).
-    set table [expr {[dict exists $hir coroutines blocks] ? [dict get $hir coroutines blocks] : {}}]
+    set table [dict getdef $hir coroutines blocks {}]
     set yieldAll [dict create]
     set yieldStruct [dict create]
     foreach c $creates {
@@ -1278,7 +1285,11 @@ proc hir::staticdeps::RequestPath {requests regionOf siteOf position id pathsVar
         foreach callKey [dict get $requests $id] {
             lassign $callKey caller call
             if {![dict exists $regionOf $call]} continue
-            set rank [expr {[dict exists $siteOf $call] ? [dict get $position [dict get $siteOf $call]] : $never}]
+            if {[dict exists $siteOf $call]} {
+                set rank [dict get $position [dict get $siteOf $call]]
+            } else {
+                set rank $never
+            }
             set path [list $call]
             if {$caller ne "generic"} {
                 if {$caller in $visiting || $caller eq $id} continue
@@ -1456,11 +1467,10 @@ proc hir::staticdeps::PlanGate {hir state} {
         if {[dict exists $exprs $e] && [dict get $exprs $e kind] eq "block" && [dict exists $regionOf $e]} {
             set region $e
         } else {
-            set region [expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
+            set region [dict getdef $regionOf $e "program"]
         }
         # Its site as hir/static.tcl attributes it (Attribute).
-        set site [expr {[hir::static::Internal $d] ? ""
-            : [hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]]}]
+        set site [if {[hir::static::Internal $d]} {string cat ""} else {hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]}]
         lappend diagnosed [list $site $region]
     }
     set plan [dict create]
@@ -1581,8 +1591,8 @@ proc hir::staticdeps::Ownership {hir state} {
         set e [dict get $d expr]
         if {[string match "call to *" [dict get $d message]]
                 && [dict exists $hir semantic calls [list generic $e]]} continue
-        set region [expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
-        set site [expr {[dict exists $siteOf $e] ? [dict get $siteOf $e] : ""}]
+        set region [dict getdef $regionOf $e "program"]
+        set site [dict getdef $siteOf $e ""]
         lappend diagnosed [list $e $region $site]
         if {[dict get $d kind] eq "AFFINE-ERASURE-UNSUPPORTED"} {
             set erasure 1
@@ -1675,8 +1685,7 @@ proc hir::staticdeps::Ownership {hir state} {
             if {[dict get $node kind] ne "call" || ![dict get $node reachable]} continue
             lassign [dict get $node target] tk tb
             if {$tk eq "native"} continue
-            set declared [expr {$tk eq "block" && [dict exists $exprs $tb]
-                ? [dict get $exprs $tb declaredParamTypes] : {}}]
+            set declared [if {$tk eq "block" && [dict exists $exprs $tb]} {dict get $exprs $tb declaredParamTypes} else {string cat {}}]
             set index 0
             foreach arg [dict get $node args] {
                 if {[lindex $declared $index] eq "" && [hir::types::IsAffine [hir::typeOf $hir $arg]]} {
@@ -1813,7 +1822,10 @@ proc hir::staticdeps::CandidateBinding {hir e display} {
             set scope [dict get $hir modules $ns]
             if {[dict exists $hir scopes $scope names $name]} {
                 set b [dict get $hir scopes $scope names $name]
-                return [expr {[dict get $hir bindings $b kind] eq "root" ? "" : $b}]
+                if {[dict get $hir bindings $b kind] eq "root"} {
+                    return ""
+                }
+                return $b
             }
         }
         return ""
@@ -1822,7 +1834,10 @@ proc hir::staticdeps::CandidateBinding {hir e display} {
     while {$s ne "" && [dict exists $hir scopes $s]} {
         if {[dict exists $hir scopes $s names $display]} {
             set b [dict get $hir scopes $s names $display]
-            return [expr {[dict get $hir bindings $b kind] eq "root" ? "" : $b}]
+            if {[dict get $hir bindings $b kind] eq "root"} {
+                return ""
+            }
+            return $b
         }
         set s [dict get $hir scopes $s parent]
     }
@@ -2043,7 +2058,7 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
         }
     }
     if {![dict exists $state finals]} {
-        dict set state finals [expr {[hir::completions::HasFnTypes $hir] ? [hir::completions::YieldFinalsOf $hir] : {}}]
+        dict set state finals [if {[hir::completions::HasFnTypes $hir]} {hir::completions::YieldFinalsOf $hir} else {string cat {}}]
     }
     set finals [dict get $state finals]
     foreach e $exprs {
@@ -2254,10 +2269,10 @@ proc hir::staticdeps::PossibleValues {hir stateVar b} {
     }
     set binding [dict get $hir bindings $b]
     set by [dict get $binding declaredBy]
-    set owner [expr {[dict exists $state paramOwner $b] ? [dict get $state paramOwner $b] : ""}]
+    set owner [dict getdef $state paramOwner $b ""]
     if {[lindex $owner 0] eq "block"} {
         lassign $owner _ block i
-        set definer [expr {[dict exists $state definedBy $block] ? [dict get $state definedBy $block] : ""}]
+        set definer [dict getdef $state definedBy $block ""]
         if {$definer eq "" || [dict exists $state escaping $definer]} {
             return {top {}}
         }
@@ -2453,7 +2468,7 @@ proc hir::staticdeps::RegionSuccessors {hir stateVar q succVar} {
                     }
                 }
             }
-            set region [expr {[dict exists $state litRegion $region] ? [dict get $state litRegion $region] : ""}]
+            set region [dict getdef $state litRegion $region ""]
         }
     }
     if {[dict exists $state yieldStruct $q]} {
@@ -2469,7 +2484,7 @@ proc hir::staticdeps::BindingSuccessors {hir stateVar b succVar} {
     dict set state names B:$b "binding [dict get $binding name]"
     set region [BindingRegion $hir state $b]
     set by [dict get $binding declaredBy]
-    set owner [expr {[dict exists $state paramOwner $b] ? [dict get $state paramOwner $b] : ""}]
+    set owner [dict getdef $state paramOwner $b ""]
     if {$by ne "" && [dict exists $hir exprs $by]} {
         set node [dict get $hir exprs $by]
         if {[dict get $node kind] eq "bind" && [dict get $node value] ne ""} {
@@ -2581,11 +2596,17 @@ proc hir::staticdeps::ControlOperands {hir parent child} {
     switch -- [dict get $node kind] {
         if {
             set condition [dict get $node condition]
-            return [expr {$child eq $condition ? {} : [list $condition]}]
+            if {$child eq $condition} {
+                return {}
+            }
+            return [list $condition]
         }
         listloop {
             set iterable [dict get $node iterable]
-            return [expr {$child eq $iterable ? {} : [list $iterable]}]
+            if {$child eq $iterable} {
+                return {}
+            }
+            return [list $iterable]
         }
         countloop {
             if {$child in [list [dict get $node start] [dict get $node end]]} {
@@ -2595,11 +2616,17 @@ proc hir::staticdeps::ControlOperands {hir parent child} {
         }
         lockloop {
             set operands [hir::loopOperands $node]
-            return [expr {$child in $operands ? {} : $operands}]
+            if {$child in $operands} {
+                return {}
+            }
+            return $operands
         }
         handle {
             set call [dict get $node call]
-            return [expr {$child eq $call ? {} : [list $call]}]
+            if {$child eq $call} {
+                return {}
+            }
+            return [list $call]
         }
     }
     return {}

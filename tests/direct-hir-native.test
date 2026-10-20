@@ -18,9 +18,6 @@ source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 20000
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-
 # HIR of Botlish source TEXT; the common leading indentation is removed so
 # a program can be written indented inside a test.
 proc srcHir {text} {

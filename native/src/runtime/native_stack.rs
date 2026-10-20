@@ -23,15 +23,20 @@ impl NativeStack {
         self.state == StackState::Active && address >= self.guard_low && address < self.low_bound
     }
 
-    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
-    pub fn current() -> std::io::Result<Self> { super::platform::linux::current_stack() }
+    /// The calling thread's own stack, as its host reports it, with the guard
+    /// confirmed below it (runtime::platform).
+    #[cfg(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))]
+    pub fn current() -> std::io::Result<Self> { super::platform::current_stack() }
 }
 
-/// Linux x86-64 and AArch64: a pthread guard, an alternate signal stack and
-/// the native-frame GC walk (runtime::framewalk) together replace the shadow
-/// stack's depth check (codegen::roots's `depth_reservation` needs both).
+/// Linux x86-64 and AArch64, macOS AArch64 (MACOS-AARCH64-MILESTONE-4.md):
+/// the thread's stack bounds and guard, the stack-overflow guard's handler
+/// on an alternate signal stack (runtime::platform), stack probes in
+/// generated code (codegen::isa) and the native-frame GC walk
+/// (runtime::framewalk) together replace the shadow stack's depth check
+/// (codegen::roots's `depth_reservation` needs both).
 pub const fn native_stack_overflow_supported() -> bool {
-    cfg!(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))
+    cfg!(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))
 }
 
 #[cfg(test)]

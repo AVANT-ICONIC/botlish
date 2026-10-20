@@ -501,7 +501,7 @@ proc compilerpedia::members {name} {
 # The topics index NAME lists: its members, minus its own introduction
 # (index.NAME), which is the index page itself.
 proc compilerpedia::Listed {name} {
-    return [lmap id [members $name] {expr {$id eq "index.$name" ? [continue] : $id}}]
+    return [lmap id [members $name] {if {$id eq "index.$name"} {continue} else {set id}}]
 }
 
 proc compilerpedia::indexNames {} {
@@ -513,7 +513,7 @@ proc compilerpedia::indexNames {} {
 # TYPE, or a warning code).
 proc compilerpedia::codeTopics {code} {
     set codes [dict get [Load] codes]
-    return [expr {[dict exists $codes $code] ? [dict get $codes $code] : {}}]
+    return [dict getdef $codes $code {}]
 }
 
 # The topic a printed diagnostic of error code CODE with MESSAGE (its text,
@@ -534,9 +534,12 @@ proc compilerpedia::topicForDiagnostic {code message} {
     # A code whose last words vary (NATIVE UNSUPPORTED value, CORE
     # DECLARED-ERROR NAME) falls back to its documented prefix.
     while 1 {
-        set ids [expr {[dict exists $tables codes $code] ? [dict get $tables codes $code] : {}}]
+        set ids [dict getdef $tables codes $code {}]
         if {[llength $ids] > 0} {
-            return [expr {[llength $ids] == 1 ? [lindex $ids 0] : ""}]
+            if {[llength $ids] == 1} {
+                return [lindex $ids 0]
+            }
+            return ""
         }
         if {[llength $code] <= 2} {
             return ""
@@ -581,7 +584,7 @@ proc compilerpedia::lookup {query} {
         if {[dict exists $catalogue $table $key]} {
             set entries [lsort -integer -index 0 [lsort -index 1 [dict get $catalogue $table $key]]]
             set best [lindex $entries 0 0]
-            set ids [lsort -unique [lmap e $entries {expr {[lindex $e 0] == $best ? [lindex $e 1] : [continue]}}]]
+            set ids [lsort -unique [lmap e $entries {if {[lindex $e 0] == $best} {lindex $e 1} else {continue}}]]
             if {[llength $ids] == 1} {
                 return [PageOrIndex [lindex $ids 0]]
             }
@@ -912,7 +915,11 @@ proc compilerpedia::ReverseRelated {id} {
 proc compilerpedia::EntryLines {ids} {
     set lines {}
     foreach id $ids {
-        set summary [expr {[exists $id] ? [dict get [topic $id] summary] : "(no such topic)"}]
+        if {[exists $id]} {
+            set summary [dict get [topic $id] summary]
+        } else {
+            set summary "(no such topic)"
+        }
         if {[string length $id] <= 26} {
             set wrapped [split [Wrap $summary [string repeat " " 32]] \n]
             lappend lines [format "    %-26s  %s" $id [string trimleft [lindex $wrapped 0]]] {*}[lrange $wrapped 1 end]
@@ -946,7 +953,7 @@ proc compilerpedia::RenderExample {example} {
         set where [expr {[dict get $example at] ne "" ? " at [dict get $example at]" : ""}]
         lappend notes "[dict get $example error]$where"
     }
-    set head "$label[expr {$notes ne "" ? " ([join $notes {; }])" : ""}]"
+    set head "$label[if {$notes ne ""} {string cat " ([join $notes {; }])"} else {string cat ""}]"
     if {[dict get $example caption] ne ""} {
         append head " -- [dict get $example caption]"
     }
@@ -992,7 +999,7 @@ proc compilerpedia::renderIndex {name} {
     if {$name eq "stdlib"} {
         # The symbols are listed on their module's page.
         set all [llength $ids]
-        set ids [lmap id $ids {expr {[string match stdlib.module.* $id] || ![string match stdlib.* $id] ? $id : [continue]}}]
+        set ids [lmap id $ids {if {[string match stdlib.module.* $id] || ![string match stdlib.* $id]} {set id} else {continue}}]
         set heading "TOPICS ($all: these [llength $ids], and the [expr {$all - [llength $ids]}] symbols listed on their modules' pages)"
     }
     lappend out $heading
@@ -1006,6 +1013,7 @@ proc compilerpedia::renderOverview {} {
     set me [Invocation]
     set out [list "Compilerpedia -- the Botlish compiler's built-in reference (offline)" ""]
     lappend out [Wrap "What Botlish means, what it guarantees, what this compiler can prove, and why its rules and warnings exist: every diagnostic code, warning, language rule, proof capability, standard-library symbol and backend fact is a topic with a stable ID, reachable from several indices and by search." ""] ""
+    lappend out "New to Botlish?  $me -help \"best practices\"" ""
     lappend out INDICES
     foreach {name description} $indices {
         set wrapped [split [Wrap "$description ([llength [Listed $name]])" [string repeat " " 16]] \n]
@@ -1095,7 +1103,7 @@ proc compilerpedia::validate {} {
         lappend problems "duplicate topic ID $id ($first, $second)"
     }
     dict for {id topic} [dict get $catalogue topics] {
-        if {![regexp {^[a-z][a-z0-9]*(\.[a-zA-Z0-9_:?+*<>=!-]+)+$} $id]} {
+        if {![regexp {^[a-z][a-z0-9]*(\.[a-zA-Z0-9_:?+*/<>=!-]+)+$} $id]} {
             lappend problems "$id: a topic ID is a lowercase category, a dot and a name (e.g. concept.method-sugar)"
         }
         foreach name [dict get $topic index] {

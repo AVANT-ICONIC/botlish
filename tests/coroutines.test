@@ -24,10 +24,10 @@ source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 100000
 
-# Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md).
+# Linux on x86-64 or AArch64: syscalls through the portable wrappers
+# (linux::write, linux::read, linux::io: each architecture's own transport,
+# LINUX-SYSCALL-TRANSPORTS.md). Native coroutines and the stack guard are the
+# capabilities nativeCoroutines and nativeStackGuard (helpers.tcl).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -360,7 +360,7 @@ b = s()
 }
 } -result {value {[1, false, 11, 20, 30, 31, true]}}
 
-test co-binding-no-aggregate {the binding form builds no two-field value: the construction allocates the handle and nothing else (the literal-argument thunk is a static closure)} -constraints nativeLinux -body {
+test co-binding-no-aggregate {the binding form builds no two-field value: the construction allocates the handle and nothing else (the literal-argument thunk is a static closure)} -constraints nativeCoroutines -body {
     set hir [surface::compile "struct T:\n    n: int\nfn t(k: int) -> T:\n    yield T {n: k}\n    return T {n: k + 1}\ncoroutine {step, first} = t(1)\n1\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report byKind Coroutine allocations] [dict get $report byKind Struct allocations] \
@@ -573,7 +573,7 @@ test co-errors-internal {a failure handled inside the coroutine never reaches th
     coAgree "${errorDecls}fn handled(n: int, resume Msg) -> Ev:\n    v = deep(n):\n        on Broken:\n            42\n    m = yield Ev {v: v}\n    return Ev {v: m.v + 1}\ncoroutine {step, first} = handled(0 - 5)\nsecond = step(Msg {v: 10})\n\[first.v, second.v\]\n"
 } -result {value {[42, 11]}}
 
-test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints nativeLinux -body {
+test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints nativeStackGuard -body {
     set hir [surface::compile "struct V:\n    n: int\nfn down(n: int) -> int:\n    if n == 0:\n        yield V {n: 0}\n        return 0\n    1 + down(n - 1)\nfn worker(n: int) -> V:\n    return V {n: down(n)}\ncoroutine {step, first} = worker(100000000)\nfirst.n\n" -warnings off]
     catch {native::evalHir $hir} message options
     dict get $options -errorcode
@@ -966,12 +966,90 @@ test co-gc-suspended-stacks {values held only by suspended frames at several dep
     coAgree $gcProgram
 } -result $gcExpected
 
-test co-gc-stress {the same program with a collection before every native allocation} -constraints nativeLinux -body {
+test co-gc-stress {the same program with a collection before every native allocation} -constraints nativeCoroutines -body {
     withGcStress {
         set hir [surface::compile $gcProgram -warnings off]
         list [outcomeUnderHir cranelift $hir] [outcomeUnderHir cranelift-generic $hir]
     }
 } -cleanup {unset -nocomplain hir} -result [list [concat $gcExpected {{}}] [concat $gcExpected {{}}]]
+
+# Nested coroutines, an error crossing a resume and heap values (a list, a
+# struct holding one, strings) held only by suspended frames of both
+# coroutines while the main program, the outer and the inner all allocate: the
+# macOS port's acceptance program for suspended roots
+# (MACOS-AARCH64-MILESTONE-3.md), a semantic test for every backend.
+set gcNestedProgram {import coroutine
+import str
+import list
+
+error Boom
+
+struct Ev:
+    text: str
+
+struct Box:
+    head: str
+    items: list
+
+fn churn(n: int) -> int:
+    xs = loop i from 0 to n:
+        str::concat("x", str::concat("y", "z"))
+    list::length(xs)
+
+fn inner(label: str) -> Ev errors Boom:
+    local = [label, str::concat(label, "?"), [1, 2, 3]]
+    held = Box {head: str::concat(label, "!"), items: local}
+    yield Ev {text: str::concat("in1:", list::at(local, 0))}
+    churn(40)
+    yield Ev {text: str::concat("in2:", list::at(local, 1))}
+    churn(40)
+    if list::length(held.items) == 3:
+        fail Boom
+    return Ev {text: held.head}
+
+fn outer(label: str) -> Ev:
+    box = Box {head: str::concat(label, "#"), items: [label]}
+    coroutine {step: next, first: f} = inner(str::concat(label, "i")):
+        on Boom:
+            Ev {text: "early"}
+    yield Ev {text: str::concat("out1:", f.text)}
+    churn(40)
+    second = next():
+        on Boom:
+            Ev {text: "second"}
+    yield Ev {text: str::concat("out2:", second.text)}
+    third = next():
+        on Boom:
+            Ev {text: str::concat("handled:", box.head)}
+    return Ev {text: str::concat("end:", third.text)}
+
+fn run() -> list:
+    coroutine {step: a, first: fa} = outer("A")
+    coroutine {step: b, first: fb} = outer("B")
+    churn(60)
+    a2 = a()
+    churn(60)
+    b2 = b()
+    churn(60)
+    a3 = a()
+    b3 = b()
+    [fa.text, fb.text, a2.text, b2.text, a3.text, b3.text, coroutine::done?(a), coroutine::done?(b)]
+
+run()
+}
+
+set gcNestedExpected {value {["out1:in1:Ai", "out1:in1:Bi", "out2:in2:Ai?", "out2:in2:Bi?", "end:handled:A#", "end:handled:B#", true, true]}}
+
+test co-gc-nested-suspended-roots {nested suspended coroutines, a failing inner one and heap values held only by their suspended frames survive collections run by every party, on every backend} -body {
+    coAgree $gcNestedProgram
+} -result $gcNestedExpected
+
+test co-gc-nested-suspended-roots-stress {the same program with a collection before every native allocation} -constraints nativeCoroutines -body {
+    withGcStress {
+        set hir [surface::compile $gcNestedProgram -warnings off]
+        list [outcomeUnderHir cranelift $hir] [outcomeUnderHir cranelift-generic $hir]
+    }
+} -cleanup {unset -nocomplain hir} -result [list [concat $gcNestedExpected {{}}] [concat $gcNestedExpected {{}}]]
 
 test co-gc-many-coroutines {thousands of short coroutines: abandoned and finished ones are reclaimed (their stacks pooled), the program stays correct} -body {
     coAgree "import list\nstruct V:\n    n: int\nfn w(k: int) -> V:\n    yield V {n: k}\n    return V {n: k * 2}\nfn one(k: int) -> int:\n    coroutine {step, first} = w(k)\n    coroutine {step: abandoned} = w(k + 1)\n    last = step()\n    first.n + last.n\nxs = loop i from 0 to 2000:\n    one(i)\nlast = list::at(xs, 1999):\n    on IndexNotFound:\n        0\nlist::length(xs) + last\n"
@@ -1099,7 +1177,7 @@ test co-release-tcl-runtime {on the Tcl backends a released suspended coroutine 
     }]
 } -cleanup {unset -nocomplain pre programs results} -result {{{[9, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}}}
 
-test co-release-native-stacks {natively a released suspended coroutine's stack goes back to the pool at once: 2000 constructions abandoned in a loop map one stack and reuse it 1999 times, and no collection sweeps a coroutine still holding one; the same under GC stress} -constraints nativeLinux -body {
+test co-release-native-stacks {natively a released suspended coroutine's stack goes back to the pool at once: 2000 constructions abandoned in a loop map one stack and reuse it 1999 times, and no collection sweeps a coroutine still holding one; the same under GC stress} -constraints nativeCoroutines -body {
     set hir [surface::compile "${releaseDecls}xs = loop i from 0 to 2000:\n    coroutine {first} = w(i)\n    first.n\nlist::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]
@@ -1241,7 +1319,7 @@ test co-exit-release-tcl-runtime {on the Tcl backends no exit leaves a suspended
     }] [core::value::show [core::compiler::evalHir [surface::compile $text -warnings off]] 1 1]
 } -cleanup {unset -nocomplain text} -result {{value 0} {value 0} 0}
 
-test co-exit-release-native-stacks {natively every coroutine an exit leaves is released, none is left for a collection: 2100 rows (27900 constructions, 18000 abandoned suspended on an exit or at a last use) map two stacks (an outer and a loop's inner coroutine are alive at once) and sweep none; the same under GC stress} -constraints nativeLinux -body {
+test co-exit-release-native-stacks {natively every coroutine an exit leaves is released, none is left for a collection: 2100 rows (27900 constructions, 18000 abandoned suspended on an exit or at a last use) map two stacks (an outer and a loop's inner coroutine are alive at once) and sweep none; the same under GC stress} -constraints nativeCoroutines -body {
     set hir [surface::compile "import list\n${exitDecls}${exitProgram}xs = loop j from 0 to 300:\n    ys = loop k from 0 to 7:\n        row(k)\n    list::length(ys)\nlist::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]
@@ -1332,7 +1410,7 @@ test co-source-no-context-dispatch {suspension adds no trait or context machiner
 # ---------------------------------------------------------------------------
 # The fuzzer (item 61)
 
-test co-fuzz-bounded {a bounded run of the coroutine fuzzer (audit/coroutines/tools/fuzz.tcl): every backend agrees with the independent oracle on every accepted program, and every rejected one has the predicted diagnostic} -constraints nativeLinux -body {
+test co-fuzz-bounded {a bounded run of the coroutine fuzzer (audit/coroutines/tools/fuzz.tcl): every backend agrees with the independent oracle on every accepted program, and every rejected one has the predicted diagnostic} -constraints nativeCoroutines -body {
     set here [pwd]
     cd [temporaryDirectory]
     try {

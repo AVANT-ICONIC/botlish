@@ -128,28 +128,39 @@ faster.
 
 @topic backend.native-executable
 title: Standalone native executables
-summary: -emit-native-executable FILE.bot compiles the program into a standalone Linux executable beside the source; it runs without Tcl, Rust, a checkout or a JIT, and prints its output and then its value.
+summary: -emit-native-executable FILE.bot compiles the program into a standalone executable (ELF, or Mach-O on macOS) that runs without Tcl, Rust or a checkout and prints its output, then its value.
 index: backends
 alias: native executable; standalone executable; emit-native-executable; compile to binary
-keywords: executable, ELF, AOT, stub linker, rustc, emit
+keywords: executable, ELF, Mach-O, AOT, stub linker, rustc, emit, macOS
 related: backend.cranelift backend.single-executable backend.platforms cli.exit-status concept.argv
-docs: README.md SINGLE-EXECUTABLE.md ARGV.md
+docs: README.md SINGLE-EXECUTABLE.md ARGV.md MACOS-AARCH64-MILESTONE-5.md
 
 == WHAT IT IS
 `-emit-native-executable game.bot` writes ./game (the input's name without
 its extension) and does not run the program. The executable prints what the
 program prints, then the program's final value on its own line (`unit` for
 a program ending in unit), and exits 0; a run-time error goes to stderr with
-a nonzero exit status. Its argv() is its real process arguments.
+a nonzero exit status. Its argv() is its real process arguments. It is an
+ordinary command-line program of the host: an ELF executable linked
+against glibc on Linux, a Mach-O arm64 executable linked against libSystem
+(and signed ad hoc by the linker, as every arm64 executable is) on macOS.
+It needs no source file, Botlish checkout or compiler to run, only the
+system's own libraries.
 
 == REQUIREMENTS
 Every function instance the program uses must be closed (fully known to the
 ahead-of-time compiler); otherwise NATIVE AOT NOT-READY names the cause
 (-aot-spec explains). A .ir file is rejected (NATIVE AOT INPUT): executables
 are built from .bot, .hir or .hirx. Linking: in a checkout the default
-linker uses rustc and the system C linker (BOTLISH_NATIVE_LINKER=rustc);
-the `stub` linker (BOTLISH_NATIVE_LINKER=stub, what the single executable
-uses) needs no toolchain and is x86-64 only.
+linker uses rustc and the system C linker (BOTLISH_NATIVE_LINKER=rustc),
+on Linux x86-64 and AArch64 and on macOS AArch64; the `stub` linker
+(BOTLISH_NATIVE_LINKER=stub, what the single executable uses) needs no
+toolchain and is Linux x86-64 only. A program that calls C links with the
+rustc linker on every one of those hosts, its declared libraries passed to
+the platform linker (the stub linker refuses it: NATIVE LINK). The
+executable's machine code uses
+the target's baseline instruction set, whichever native backend the
+command line names: it is always the closed, specialized program.
 
 @topic backend.single-executable
 title: The single-file compiler
@@ -242,7 +253,7 @@ A program cannot set its process exit status
 
 @topic backend.platforms
 title: Platforms and what runs where
-summary: The Tcl backends need only Tcl 9; the native backend is tested on Linux x86-64 and AArch64; native coroutines, syscalls and executables are Linux-only; stub linking is x86-64 only.
+summary: The Tcl backends need only Tcl 9; the native backend runs on Linux x86-64 and AArch64 and macOS AArch64, C calls included; syscalls are Linux-only; stub linking is Linux x86-64 only.
 index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, Tcl 9, coroutines, stub
@@ -252,24 +263,37 @@ docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md
 == WHAT IS TESTED
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
-and builds the single executable on Linux x86-64. Nothing here is a promise
+and builds the single executable on Linux x86-64. A separate workflow runs
+the native JIT, native coroutines, the native stack guard, standalone
+executables and C calls on Apple Silicon macOS. Nothing here is a promise
 about other platforms.
 
 == PER COMPONENT
     interp, compile          Tcl 9.0 or newer (Unicode-correct strings);
                              no machine-specific code
     cranelift(-generic)      the native executables (Rust, Cranelift);
-                             Linux x86-64 and AArch64
-    native coroutines        Linux x86-64 and AArch64 only (hand-written
-                             stack switching); elsewhere NATIVE UNSUPPORTED;
-                             the Tcl backends run coroutines everywhere
+                             Linux x86-64 and AArch64; the in-process
+                             native run also on macOS AArch64
+    native coroutines        Linux x86-64 and AArch64 and macOS AArch64
+                             (hand-written stack switching); elsewhere
+                             NATIVE UNSUPPORTED; the Tcl backends run
+                             coroutines everywhere
+    native stack overflow    NATIVE LIMIT STACK, for the thread's stack
+                             and a coroutine's, on Linux x86-64 and
+                             AArch64 and macOS AArch64
+                             (error.native-limit-stack)
     Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
                              AArch64 through linux::abi::aarch64 (one
                              portable surface: linux, linux::io, io);
                              the linux namespaces compile for Linux
                              targets only (error.unsupported-platform)
-    executables              Linux, glibc; rustc linker on x86-64 and
-                             AArch64, stub linker x86-64 only
+    executables              Linux, glibc, ELF: rustc linker on x86-64
+                             and AArch64, stub linker x86-64 only; macOS
+                             AArch64, Mach-O: rustc linker
+    C calls (extern c fn)    Linux, glibc (GNU ld's link plan, the SysV
+                             and AAPCS64 C ABIs) and macOS AArch64
+                             (Apple's ld, Apple's arm64 C ABI); never
+                             with the stub linker
     single executable        Linux x86-64
 
 @topic backend.targets
@@ -277,16 +301,20 @@ title: -target: the compilation target, an operating system and an architecture
 summary: -target NAME picks the operating system and architecture a program is built for (C type sizes, modules, platforms); native code runs only for the host's own target.
 index: backends
 alias: target; -target; cross compile; C ABI target
-keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, ffi, linux::sys, architecture, operating system, triple
+keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, windows-x86_64-gnu, mingw, ffi, linux::sys, architecture, operating system, triple
 related: backend.platforms concept.c-ffi cli.options error.unsupported-platform error.native-target error.hir-interchange-target
 docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md MACOS-AARCH64-MILESTONE-2.md
 
 == WHAT IT DOES
 The targets are linux-x86_64, linux-aarch64, macos-x86_64, macos-aarch64,
-windows-x86_64 and windows-aarch64 (to the native backend, triples:
-x86_64-unknown-linux-gnu, ..., aarch64-apple-darwin); the default is the
-host's. A target is an operating system and an architecture:
-linux-aarch64 and macos-aarch64 share an instruction set, not a target.
+windows-x86_64, windows-x86_64-gnu and windows-aarch64 (to the native
+backend, triples: x86_64-unknown-linux-gnu, ..., aarch64-apple-darwin); the
+default is the host's. A target is an operating system and an architecture:
+linux-aarch64 and macos-aarch64 share an instruction set, not a target. On
+Windows the C toolchain's ABI family is part of the target too:
+windows-x86_64 is MSVC's (x86_64-pc-windows-msvc), windows-x86_64-gnu
+MinGW-w64's (x86_64-pc-windows-gnu), the target of the generated Win32
+bindings (concept.c-bindgen-layouts).
 The target decides:
   * the widths and signedness of ffi::c's C integer types (ffi::c::Long
     is 64 bits on Linux and macOS, 32 on Windows; plain ffi::c::Char is
@@ -394,8 +422,9 @@ docs: README.md
     -target NAME      the target (operating system and architecture) a
                       .bot program is compiled, or a .hirx file read, for:
                       linux-x86_64, linux-aarch64, macos-x86_64,
-                      macos-aarch64, windows-x86_64, windows-aarch64;
-                      default the host's (backend.targets)
+                      macos-aarch64, windows-x86_64, windows-x86_64-gnu,
+                      windows-aarch64; default the host's
+                      (backend.targets)
     -L DIR            add DIR to the system linker's library search path,
                       for a program that calls C (concept.c-ffi)
 

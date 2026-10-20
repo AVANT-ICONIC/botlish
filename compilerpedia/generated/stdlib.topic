@@ -2226,9 +2226,73 @@ related: stdlib.module.binary concept.binary-layouts
 == MODULE
 lib/binary.bot: import binary, then write binary::I64.
 
+@topic stdlib.binary::element
+title: binary::element -- intrinsic of namespace binary
+summary: Element i of a live fixed array, written binary::element(a, i): a scalar's Int, a pointer, or a nested layout's or row's own live view or edit; IndexNotFound unless 0 <= i < N.
+index: stdlib
+symbol: binary::element
+keywords: array element; index native array; read element; c array; subscript
+related: stdlib.module.binary stdlib.binary::store_element stdlib.binary::load stdlib.binary::native::view concept.binary-layouts rule.unhandled-errors
+
+== SIGNATURE
+    binary::element(any, int) -> any
+
+== ERRORS
+    IndexNotFound
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::element. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::element(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+a must statically be a live fixed array, NativeView[array N of E] or
+NativeEdit[array N of E] (an array field read through a view or an edit,
+v.items, or an element of one); anything else is BINARY-OPERAND. One
+access at the array's address plus i times the element's width: a scalar
+element is one load, a pointer element is read fresh (observed, affine
+like any pointer), and a record or row element is its own live view
+(edit, through an edit) at its address, nothing read. The whole array is
+never copied. An index the compiler proves in 0..N-1 (a constant, a loop
+over the extent, a branch) needs no handler; one proven outside is
+KNOWN-ERROR. It reads native memory only on the native backends (a view
+of a non-null pointer is refused on interp and compile). Declared
+nomethod. FIXED-LAYOUT-ARRAYS.md.
+
+== EXAMPLES
+@example accept
+direct module
+
+import binary
+import binary::native
+import ffi::c
+
+layout Name:
+    size 16
+    align 1
+    field chars: array 16 of ffi::c::UChar at 0
+
+fn first_two(p: ffi::c::Ptr[ffi::c::Void]) -> int errors NativeViewNull:
+    v = binary::native::view(Name, p)
+    binary::element(v.chars, 0) + binary::element(v.chars, 1)
+
+r = first_two(ffi::c::null[ffi::c::Void]()):
+    on NativeViewNull:
+        -1
+r
+@caption Proven indices need no handler; a view of null fails first
+@value -1
+@end
+
 @topic stdlib.binary::emit
 title: binary::emit -- intrinsic of namespace binary
-summary: The bytes of a LayoutStruct[L] value laid out by L, written v.emit(): an abi::bytes::Bytes of L's size, padding zero; never fails.
+summary: The bytes of a LayoutStruct[L] value laid out by L, written v.emit(): an abi::bytes::Bytes of L's size, padding zero; fails only when a fixed array's List has another length (LayoutExtentMismatch).
 index: stdlib
 symbol: binary::emit
 keywords: serialize; encode; write struct; pack; to bytes
@@ -2236,6 +2300,12 @@ related: stdlib.module.binary concept.binary-layouts stdlib.binary::parse
 
 == SIGNATURE
     binary::emit(struct) -> struct
+
+== ERRORS
+    LayoutExtentMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
 
 == USE
 An intrinsic of namespace binary: import binary, then write binary::emit.
@@ -2245,13 +2315,18 @@ Method syntax: receiver.emit(...) is the same call.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-L is read from the value's static type, which must be LayoutStruct[L]
-(an untyped value or an ordinary struct is BINARY-OPERAND). Every field
-is written at its offset in its encoding, little-endian, and padding is
-written as zero bytes, so equal values emit equal bytes. It cannot fail:
-a field's value is in its domain by its type. parse of emit's result
-gives the value back. A LayoutStruct is built from its fields with
-`LayoutStruct[L] {field: value, ...}`. It is never a function value.
+L is read from the value's static type, which must be LayoutStruct[L] (an
+untyped value or an ordinary struct is BINARY-OPERAND). Every field is
+written at its offset in its encoding, little-endian, and padding is
+written as zero bytes, so equal values emit equal bytes. A field's value
+is in its domain by its type; a fixed array's List must have exactly the
+array's extent (its type cannot say so), else the call fails with the
+declared LayoutExtentMismatch and emits nothing -- unless the compiler
+proves every extent (a list literal, a counted loop, a value binary::parse
+or binary::load made), when it declares no error. A layout without arrays
+never fails. parse of emit's result gives the value back. A LayoutStruct
+is built from its fields with `LayoutStruct[L] {field: value, ...}`. It is
+never a function value.
 
 == EXAMPLES
 @example accept
@@ -2353,7 +2428,7 @@ keywords: read whole struct; copy native record; snapshot; load view
 related: stdlib.module.binary concept.binary-layouts stdlib.binary::native::view stdlib.binary::parse
 
 == SIGNATURE
-    binary::load(any) -> struct
+    binary::load(any) -> any
 
 == USE
 An intrinsic of namespace binary: import binary, then write binary::load.
@@ -2363,9 +2438,12 @@ Method syntax: receiver.load(...) is the same call.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-v must statically be a NativeView[L] (anything else is BINARY-OPERAND).
-The result is the same immutable LayoutStruct[L] binary::parse would
-give for the same bytes, nested layouts included, so a record read many
+v must statically be a NativeView[L] or a NativeEdit[L] (anything else is
+BINARY-OPERAND) -- or a live fixed array, NativeView[array N of E]
+(v.items, or an element of one), whose copy is its List of exactly N
+elements (rows a List of Lists, records a List of LayoutStructs). The
+result is the same immutable LayoutStruct[L] binary::parse would give for
+the same bytes, nested layouts and arrays included, so a record read many
 times can be loaded once and read as ordinary fields; padding is never
 read. For a native-only layout the LayoutStruct owns the pointers it read
 and is affine like any value that holds a Ptr. Natively only, like the
@@ -2434,9 +2512,254 @@ fn second(data: abi::bytes::Bytes) -> int:
 @value [66, -1]
 @end
 
+@topic stdlib.binary::read
+title: binary::read -- intrinsic of namespace binary
+summary: The one representation a field designator names, imprinted from bytes of exactly L's size, binary::read(data, L.path): a scalar, a record, an array, one alternative of a union.
+index: stdlib
+symbol: binary::read
+keywords: read field from bytes; read one field; union alternative; interpret bytes as; read alternative; pick union member
+related: stdlib.module.binary stdlib.binary::write stdlib.binary::parse concept.layout-unions concept.binary-layouts
+
+== SIGNATURE
+    binary::read(struct, str) -> any
+
+== ERRORS
+    LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::read.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::read(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+data must statically be an abi::bytes::Bytes (abi::bytes::freeze a
+MutableBytes); the designator is written L.FIELD, a path through nested
+layouts and unions (L.u.alt.field) and element indices (L.items[3]),
+resolved statically to one constant offset. It is binary::write's read
+twin, and how a union is read from bytes: a union has no copied value
+(LAYOUT-UNION), so a program reads the alternative it means
+(binary::read(data, U.whole)), each alternative by its own encoding. It
+may name a nested layout (its LayoutStruct) or a fixed array (a List of
+exactly its extent, which the compiler knows); never a union itself
+(LAYOUT-OPERAND: name an alternative), a C pointer, or anything holding
+one (LAYOUT-NATIVE-ONLY: bytes never become a pointer). Runs on every
+backend. Declared nomethod. LAYOUT-UNIONS.md.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+union layout WORD:
+    size 4
+    align 4
+    alternative whole: binary::U32
+    alternative bytes: array 4 of binary::U8
+
+fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = abi::bytes::freeze(binary::write(d, WORD.whole, 16909060))
+    [binary::read(e, WORD.whole), binary::read(e, WORD.bytes), binary::read(e, WORD.bytes[3])]
+
+r = f(abi::bytes::zeroed(abi::usize(4))):
+    on LayoutLengthMismatch:
+        []
+r
+@value [16909060, [4, 3, 2, 1], 1]
+@end
+
+@topic stdlib.binary::store
+title: binary::store -- intrinsic of namespace binary
+summary: One field written into live native memory through a NativeEdit[L], written binary::store(e, L.field, value): one store of the field's width at its offset, nothing else touched.
+index: stdlib
+symbol: binary::store
+keywords: write field; store field; set native field; poke; assign struct field; write pointer field
+related: stdlib.module.binary stdlib.binary::native::edit stdlib.binary::write concept.binary-layouts
+
+== SIGNATURE
+    binary::store(any, str, any) -> unit
+
+== ERRORS
+    LayoutExtentMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::store.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::store(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+e must statically be a NativeEdit[L] (a NativeView is read-only:
+BINARY-OPERAND), and the field is written L.FIELD, or a path through
+nested layouts (L.origin.x), naming a field of e's own layout
+(LAYOUT-OPERAND otherwise). The value is held to the field's type the way
+a construction's field values are: a scalar proven in its integer domain
+(no conversion, truncation or run-time guard), a pointer field exactly its
+declared ffi::c::Ptr or FnPtr type. A pointer stored is observed, never
+moved: its address bits are copied, the memory does not own the pointee,
+and nothing keeps it alive. Padding and every other field are untouched.
+A designator may name an array element statically (L.items[3]) or a
+whole fixed array, whose value is a List of exactly its extent: every
+extent is checked before the first byte is written (LayoutExtentMismatch,
+declared only when the compiler cannot prove the extents). Otherwise it
+declares no error and returns unit. A store is an ordinary native
+store: not volatile, atomic or ordered; another thread's synchronization
+is the program's protocol. Declared nomethod. NATIVE-LAYOUT-WRITES.md.
+
+@topic stdlib.binary::store_element
+title: binary::store_element -- intrinsic of namespace binary
+summary: One scalar or pointer element of a live fixed array written through a native edit, binary::store_element(e.items, i, v): one store at the element's offset; IndexNotFound unless 0 <= i < N.
+index: stdlib
+symbol: binary::store_element
+keywords: write array element; store element; set native array; c array assignment
+related: stdlib.module.binary stdlib.binary::element stdlib.binary::store stdlib.binary::native::edit concept.binary-layouts
+
+== SIGNATURE
+    binary::store_element(any, int, any) -> unit
+
+== ERRORS
+    IndexNotFound
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::store_element. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::store_element(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+The array must statically be NativeEdit[array N of E] (an array read
+through a view is read-only: BINARY-OPERAND) and its element a scalar or
+a pointer (a record or row element is LAYOUT-OPERAND: write its fields
+through binary::element(a, i), the element's own edit). The value is held
+to the element's type as binary::store's is. Exactly the element's bytes
+are written; a store outside 0..N-1 writes nothing. A static index is
+also a designator: binary::store(e, L.items[3], v). Declared nomethod.
+FIXED-LAYOUT-ARRAYS.md.
+
+@topic stdlib.binary::write
+title: binary::write -- intrinsic of namespace binary
+summary: A new abi::bytes::MutableBytes with one ordinary field of layout L written, binary::write(data, L.field, value); data must be exactly L's size (LayoutLengthMismatch).
+index: stdlib
+symbol: binary::write
+keywords: write field into bytes; build record; fill struct in bytes; set field; serialize field; pack field
+related: stdlib.module.binary stdlib.binary::write_foreign stdlib.binary::store stdlib.binary::emit stdlib.module.abi::bytes concept.binary-layouts
+
+== SIGNATURE
+    binary::write(struct, str, any) -> struct
+
+== ERRORS
+    LayoutExtentMismatch, LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::write.
+Declared nomethod: method syntax does not apply (NOMETHOD-CALL); call it
+as binary::write(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+data must statically be an abi::bytes::MutableBytes; the field is written
+L.FIELD or a path through nested layouts, and its value is held to the
+field's integer domain like a construction's. The result is a fresh
+MutableBytes (MutableBytes is a value: data and every copy of it are
+unchanged), so a record is built a write at a time from
+abi::bytes::zeroed(abi::usize(binary::layout_length(L))). A designator may
+name an array element (L.items[3]) or a whole fixed array written from a
+List of exactly its extent (LayoutExtentMismatch otherwise, checked after
+the size and before anything is written). A pointer field, or an array
+holding pointers, is never written this way (LAYOUT-NATIVE-ONLY):
+binary::write_foreign encodes existing pointers. Runs on every backend.
+Declared nomethod.
+
+== EXAMPLES
+@example accept
+import abi
+import abi::bytes
+import binary
+
+layout Pair:
+    size 4
+    align 2
+    field a: binary::U16 at 0
+    field b: binary::I8 at 3
+
+fn build() -> abi::bytes::Bytes errors LayoutLengthMismatch:
+    d = abi::bytes::zeroed(abi::usize(binary::layout_length(Pair)))
+    e = binary::write(d, Pair.a, 258)
+    abi::bytes::freeze(binary::write(e, Pair.b, -1))
+
+r = build():
+    on LayoutLengthMismatch:
+        abi::bytes::from_list([])
+binary::parse(Pair, r):
+    on LayoutLengthMismatch:
+        LayoutStruct[Pair] {a: 0, b: 0}
+@value LayoutStruct[Pair] {a: 258, b: -1}
+@end
+
+@topic stdlib.binary::write_foreign
+title: binary::write_foreign -- intrinsic of namespace binary
+summary: A new abi::bytes::MutableBytes with an existing C pointer's address bits encoded into a pointer field of layout L, binary::write_foreign(data, L.field, p).
+index: stdlib
+symbol: binary::write_foreign
+keywords: write pointer into bytes; encode pointer; build C struct; pointer field; callback field; userdata field
+related: stdlib.module.binary stdlib.binary::write stdlib.binary::store concept.c-ffi concept.binary-layouts
+
+== SIGNATURE
+    binary::write_foreign(struct, str, any) -> struct
+
+== ERRORS
+    LayoutExtentMismatch, LayoutLengthMismatch
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary: import binary, then write
+binary::write_foreign. Declared nomethod: method syntax does not apply
+(NOMETHOD-CALL); call it as binary::write_foreign(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+The explicit foreign encoding: the field must be a C pointer field, or a
+fixed array of them written from a List of pointers of exactly its extent
+(LAYOUT-FOREIGN-WRITE otherwise: an array of records holding pointers is
+filled a field at a time, L.rs[1].p), and p exactly its declared
+ffi::c::Ptr or FnPtr type (an Int is TYPE). p is observed, never moved:
+the bytes do not own it, keep it alive, or know whether C keeps it after a
+call -- a wrapper models that protocol. The record built this way is
+exposed to C by the existing borrowing contract (a read noescape pointer
+parameter). The law is one-way: binary::parse of a layout with a pointer
+field stays LAYOUT-NATIVE-ONLY whatever the bytes hold, and a pointer is
+read back only from native memory, through a view or an edit. Runs on
+every backend (a C pointer's address is its value there too). Declared
+nomethod. NATIVE-LAYOUT-WRITES.md.
+
 @topic stdlib.module.binary
 title: binary -- standard namespace
-summary: Fixed binary layouts: parse bytes into a LayoutStruct (binary::parse), emit one back (binary::emit), read a native view of one (binary::load), and the layout's size and alignment.
+summary: Fixed binary layouts: parse, emit and field writes of byte records (binary::parse, emit, write, write_foreign), native views and edits (load, store, element, store_element), and layout queries.
 index: stdlib
 symbol: binary
 keywords: binary format; struct packing; serialize; deserialize; byte layout; parse bytes
@@ -2505,28 +2828,129 @@ lib/binary.bot (import binary).
     binary::U32                    type
     binary::U64                    type
     binary::U8                     type
+    binary::element                intrinsic -- Element i of a live fixed a...
     binary::emit                   intrinsic -- The bytes of a LayoutStruct...
     binary::layout_alignment       intrinsic -- The alignment in bytes of l...
     binary::layout_length          intrinsic -- The size in bytes of layout...
     binary::load                   intrinsic -- Every field of a native vie...
     binary::parse                  intrinsic -- The LayoutStruct[L] imprint...
+    binary::read                   intrinsic -- The one representation a fi...
+    binary::store                  intrinsic -- One field written into live...
+    binary::store_element          intrinsic -- One scalar or pointer eleme...
+    binary::write                  intrinsic -- A new abi::bytes::MutableBy...
+    binary::write_foreign          intrinsic -- A new abi::bytes::MutableBy...
 
 Each member is a topic: -help NAME (e.g. -help binary::I16).
 
 == NOTES
-`import binary` for the five intrinsics and the scalar field types
+`import binary` for the ten intrinsics and the scalar field types
 binary::U8 ... binary::I64. A `layout` declaration names a fixed number of
 bytes with explicit size, alignment and field offsets; every multi-byte
 field is little-endian (the target's order), and padding is never a
 field. The layout is static: it is named at a parse or a query and read
-from the value's type at an emit, never a runtime value. There are no
-arrays, unions, bitfields, variable-length tails or floats in a layout.
+from the value's type at an emit, never a runtime value. A field may be a
+fixed array, `field name: array 16 of ffi::c::Char at 8`: N elements of
+any representation (a scalar, a pointer, a nested layout, another array),
+element i at the field's offset plus i times the element's width; its
+copied value is a List of exactly N elements (FIXED-LAYOUT-ARRAYS.md).
+There are no unions, bitfields, variable-length tails, zero-length arrays
+or floats in a layout.
 
 A field may be a C pointer (ffi::c::Ptr[T] or ffi::c::FnPtr[F], of the
 target's pointer width). Such a layout is native-only: bytes never become
 a pointer, so binary::parse and binary::emit of it are LAYOUT-NATIVE-ONLY,
 and it is read from live native memory through a NativeView[L]
 (binary::native::view, then its fields or binary::load).
+
+Writes name their field statically, LAYOUT.FIELD or a path through nested
+layouts (Header.origin.x). A record in byte storage the program owns is
+filled a field at a time: binary::write(data, L.f, v) is a new
+abi::bytes::MutableBytes with that field written (data unchanged), and a
+pointer field takes an existing pointer only through the explicit
+binary::write_foreign. Live native memory foreign code handed out is
+written through a NativeEdit[L] (binary::native::edit, then
+binary::store). NATIVE-LAYOUT-WRITES.md.
+
+A fixed array read through a view or an edit (v.items) is a live array,
+NativeView[array N of E] or NativeEdit[array N of E]: binary::element(a, i)
+reads one element at a dynamic index (IndexNotFound outside 0..N-1, no
+failure when the index is proven), binary::store_element(e.items, i, v)
+writes one scalar or pointer element, and binary::load(a) copies the whole
+array into its List. A designator names an element statically too
+(L.items[3], L.m[1][2], L.pts[2].x), and a whole array is written from a
+List of exactly its extent (the declared LayoutExtentMismatch otherwise,
+before anything is written).
+
+@topic stdlib.binary::native::edit
+title: binary::native::edit -- intrinsic of namespace binary::native
+summary: The NativeEdit[L] of the native memory a data pointer addresses -- read and written through layout L -- written binary::native::edit(L, p); a null p fails with NativeEditNull.
+index: stdlib
+symbol: binary::native::edit
+keywords: native edit; write native memory; write C struct; poke; fill struct; out parameter; modify record
+related: stdlib.module.binary::native concept.binary-layouts stdlib.binary::store stdlib.binary::native::view stdlib.binary::load concept.c-ffi rule.unhandled-errors
+
+== SIGNATURE
+    binary::native::edit(str, any) -> any
+
+== ERRORS
+    NativeEditNull
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary::native: import binary::native, then
+write binary::native::edit. Declared nomethod: method syntax does not
+apply (NOMETHOD-CALL); call it as binary::native::edit(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+L is a layout name written at the call; p must statically be an
+ffi::c::Ptr[T] (a data pointer), observed, never moved. Nothing is read or
+written when the edit is made. An edit reads exactly as a NativeView does
+(v.field, destructuring, binary::load) except that a nested layout's field
+is a NativeEdit of the inner layout, and binary::store writes through it.
+It is write authority, never ownership: no lifetime, no exclusive access
+(copies, other edits and views of the same address, and foreign code all
+alias the memory). A NativeView never becomes an edit and an edit is not
+a view: neither is the other's subtype. Making one is raw authority like
+a view: binary::native is a direct namespace, so the calling module must
+be a `direct module` (or mediate the call through a context of its own);
+writing through an edit someone else made is not. It touches memory only
+on the native backends: interp and compile refuse an edit of a non-null
+pointer with NATIVE-ONLY. A null pointer is the builtin declared error
+NativeEditNull on every backend. The memory must be live, writable and at
+least binary::layout_length(L) bytes for as long as the edit is used;
+nothing checks it. Declared nomethod. NATIVE-LAYOUT-WRITES.md.
+
+== EXAMPLES
+@example accept
+direct module
+
+import binary
+import binary::native
+import ffi::c
+
+layout Point:
+    size 4
+    align 2
+    field x: binary::I16 at 0
+    field y: binary::I16 at 2
+
+fn reset(p: ffi::c::Ptr[ffi::c::Void]) -> int errors NativeEditNull:
+    e = binary::native::edit(Point, p)
+    binary::store(e, Point.x, 0)
+    e.y
+
+r = reset(ffi::c::null[ffi::c::Void]()):
+    on NativeEditNull:
+        -1
+r
+@caption An edit of the null pointer fails before anything is written
+@value -1
+@end
 
 @topic stdlib.binary::native::view
 title: binary::native::view -- intrinsic of namespace binary::native
@@ -2606,9 +3030,10 @@ symbol: binary::native
 Compiler intrinsics only, no module file (import binary::native).
 
 == MEMBERS
+    binary::native::edit           intrinsic -- The NativeEdit[L] of the na...
     binary::native::view           intrinsic -- The read-only NativeView[L]...
 
-Each member is a topic: -help NAME (e.g. -help binary::native::view).
+Each member is a topic: -help NAME (e.g. -help binary::native::edit).
 
 @topic stdlib.byte::BelowRange
 title: byte::BelowRange -- Error of module byte
@@ -3617,6 +4042,17 @@ target's plain char is). Arithmetic on them is Botlish arithmetic (no C
 promotion, no wrapping); an Int becomes one only where its range proves it
 fits. ffi::c::Int and ffi::c::Long stay two types where their ranges agree.
 
+C double (an intrinsic type of this namespace, FLOAT64-MILESTONE-1.md):
+
+  ffi::c::Double            Botlish's Float64 under its C ABI name: the
+                            same values, carried as the target's IEEE 754
+                            binary64 in its floating-point register class.
+                            Every Float64 is a double; a double C returns
+                            is a Float64 only when it is finite -- a NaN or
+                            an infinity is the call's NonFiniteFloat (an
+                            extern c fn returning one declares it), and
+                            negative zero is zero.
+
 Pointers (intrinsic types and operations of this namespace):
 
   ffi::c::Void              the C void: an incomplete pointee, no values
@@ -3683,6 +4119,102 @@ pointer is affine (binding, passing or storing it moves it), owns
 nothing, is never dereferenced, and has no arithmetic, ordering,
 equality or conversion to or from an Int. Calling C itself is
 `extern c fn` (concept.c-ffi), which runs only on the native backends.
+
+@topic stdlib.float64::from_int
+title: float64::from_int -- intrinsic of namespace float64
+summary: The Float64 nearest the Int N (ties to even), after `import float64`; an Int beyond the largest Float64 fails with NonFiniteFloat.
+index: stdlib
+symbol: float64::from_int
+keywords: int to float; convert int; float from int; to float
+related: stdlib.module.float64 concept.floats stdlib.float64::truncate
+
+== SIGNATURE
+    float64::from_int(int) -> Float64
+
+== ERRORS
+    NonFiniteFloat
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace float64: import float64, then write
+float64::from_int. Method syntax: receiver.from_int(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Rounds to the nearest Float64, ties to even, from the exact Int however
+large: 2^53 + 1 becomes 9007199254740992.0. An Int whose magnitude is
+beyond the largest finite Float64 (about 1.8e308) has no finite nearest
+value and fails with NonFiniteFloat, decided at compile time when the Int
+is known.
+
+== EXAMPLES
+@example accept
+import float64
+
+[float64::from_int(3), float64::from_int(-12), float64::from_int(9007199254740993)]
+@value [3.0, -12.0, 9007199254740992.0]
+@end
+
+@topic stdlib.float64::truncate
+title: float64::truncate -- intrinsic of namespace float64
+summary: The Int part of the Float64 X, rounding toward zero, after `import float64`: exact at any magnitude, and it never fails.
+index: stdlib
+symbol: float64::truncate
+keywords: float to int; convert float; truncate; integer part; round toward zero
+related: stdlib.module.float64 concept.floats stdlib.float64::from_int
+
+== SIGNATURE
+    float64::truncate(Float64) -> int
+
+== USE
+An intrinsic of namespace float64: import float64, then write
+float64::truncate. Method syntax: receiver.truncate(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Drops the fraction: 2.75 becomes 2 and -2.75 becomes -2. Every Float64 is
+finite, so every one has an integer part, and the Int holds it exactly
+however large it is (1.0e20 becomes 100000000000000000000).
+
+== EXAMPLES
+@example accept
+import float64
+
+big = 1.0e20
+[float64::truncate(2.75), float64::truncate(-2.75), big.truncate()]
+@value [2, -2, 100000000000000000000]
+@end
+
+@topic stdlib.module.float64
+title: float64 -- standard namespace
+summary: The explicit conversions between Int and Float64: float64::from_int and float64::truncate.
+index: stdlib
+symbol: float64
+keywords: float functions; float conversion; int to float; float to int
+related: concept.floats stdlib./
+
+== SOURCE
+Compiler intrinsics only, no module file (import float64).
+
+== MEMBERS
+    float64::from_int              intrinsic -- The Float64 nearest the Int...
+    float64::truncate              intrinsic -- The Int part of the Float64...
+
+Each member is a topic: -help NAME (e.g. -help float64::from_int).
+
+== NOTES
+`float64` has no module file: its members are intrinsics, reached with
+`import float64`. They are the only conversions between the two number
+types: Botlish never converts implicitly, so an expression mixing an Int
+and a Float64 is rejected until one side is converted. There is no
+rounding mode, no Float64-to-String conversion beyond a program's printed
+result, and no bit-level access to a Float64.
 
 @topic stdlib.immutable_set::contains
 title: immutable_set::contains -- intrinsic of namespace immutable_set
@@ -6568,11 +7100,11 @@ admits it. There is no equality or hash for vectors.
 
 @topic stdlib.*
 title: * -- language primitive
-summary: The Int product of A and B, written a * b: exact at any size (no overflow).
+summary: The Int product of A and B, written a * b: exact at any size (no overflow). On two Float64 operands, a * b is Float64 multiplication.
 index: stdlib
 symbol: *
 keywords: multiply; multiplication; times; product
-related: stdlib.module.root concept.integers stdlib.+ stdlib.shift_left capability.integer-division
+related: stdlib.module.root concept.integers concept.floats stdlib.+ stdlib./ stdlib.shift_left capability.integer-division
 
 == SIGNATURE
     *(int, int) -> int
@@ -6585,8 +7117,10 @@ every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
 Written as an operator, a * b, on two Ints; the product is exact however
-many digits it has. There is no power operator (`**` is a syntax error)
-and no division (capability.integer-division); a multiplication by a
+many digits it has. On two Float64 operands it is Float64 multiplication
+(concept.floats), failing with NonFiniteFloat when the product is not
+finite. There is no power operator (`**` is a syntax error) and no
+integer division (capability.integer-division); a multiplication by a
 power of two can also be written x.shift_left(k).
 
 == EXAMPLES
@@ -6597,11 +7131,11 @@ power of two can also be written x.shift_left(k).
 
 @topic stdlib.+
 title: + -- language primitive
-summary: The Int sum of A and B, written a + b: exact at any size, so it never overflows or wraps.
+summary: The Int sum of A and B, written a + b: exact at any size, so it never overflows or wraps. On two Float64 operands, a + b is Float64 addition.
 index: stdlib
 symbol: +
 keywords: add; addition; plus; sum; arithmetic
-related: stdlib.module.root concept.integers stdlib.- stdlib.* stdlib.str::concat capability.integer-division
+related: stdlib.module.root concept.integers concept.floats stdlib.- stdlib.* stdlib./ stdlib.str::concat capability.integer-division
 
 == SIGNATURE
     +(int, int) -> int
@@ -6618,11 +7152,16 @@ source syntax. Both operands must be Ints, and the result is the exact sum
 however large it is: Botlish has one Int type, of arbitrary precision, with
 no 64-bit overflow, wrapping or saturation.
 
-+ is not overloaded. "ab" + "cd" fails when it runs with the TYPE error
-`+: expected int, got "ab"`: join Strings with str::concat (or add one
-character with str::append_char), and add one element to a List with
-list::append. There is no floating-point number and no division operator
-(capability.integer-division).
+On two Float64 operands the operator is Float64 addition instead
+(concept.floats): the compiler chooses by the operands' static types, an
+Int and a Float64 together are rejected (TYPE), and nothing is converted
+implicitly. A sum that is not finite fails with NonFiniteFloat.
+
++ is not overloaded for any other kind. "ab" + "cd" fails when it runs
+with the TYPE error `+: expected int, got "ab"`: join Strings with
+str::concat (or add one character with str::append_char), and add one
+element to a List with list::append. There is no integer division
+(capability.integer-division); / divides Float64 values (stdlib./).
 
 == EXAMPLES
 @example accept
@@ -6634,11 +7173,11 @@ x = 9223372036854775807
 
 @topic stdlib.-
 title: - -- language primitive
-summary: The Int difference A minus B, written a - b, and -x negates: exact at any size, never wrapping.
+summary: The Int difference A minus B, written a - b, and -x negates: exact at any size, never wrapping. On Float64 operands both are Float64 operations.
 index: stdlib
 symbol: -
 keywords: subtract; subtraction; minus; difference; negate; negative number
-related: stdlib.module.root concept.integers stdlib.+ stdlib.mod
+related: stdlib.module.root concept.integers concept.floats stdlib.+ stdlib.mod
 
 == SIGNATURE
     -(int, int) -> int
@@ -6652,7 +7191,9 @@ every backend (interp, compile, cranelift-generic, cranelift)
 == NOTES
 Written as an operator: a - b, and a leading minus negates (-x). Both
 operands must be Ints (another kind fails with the TYPE error when the
-operation runs), and the result is exact at any magnitude.
+operation runs), and the result is exact at any magnitude. On two Float64
+operands a - b is Float64 subtraction, and -x of a Float64 negates it
+(concept.floats); an Int and a Float64 together are rejected (TYPE).
 
 A leading minus binds less tightly than a method call: -7.mod(2) is
 -(7.mod(2)), which is -1. To reduce a negative number, bind it first
@@ -6665,13 +7206,66 @@ x = 5
 @value [-3, -5, -5]
 @end
 
+@topic stdlib./
+title: / -- language primitive
+summary: The Float64 quotient of A and B, written a / b: Float64s only (there is no integer division); a quotient that is not finite, as after division by zero, fails with NonFiniteFloat.
+index: stdlib
+symbol: /
+keywords: divide; division; quotient; slash; float division; divide by zero
+related: stdlib.module.root concept.floats stdlib.* stdlib.float64::from_int stdlib.float64::truncate capability.integer-division error.known-error
+
+== SIGNATURE
+    /(any, any) -> any
+
+== USE
+A language primitive: visible everywhere, no import.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Written as an operator, a / b, on two Float64 operands, giving the
+correctly rounded Float64 quotient. It is the one division of the
+language: on two Ints it is rejected at compile time (TYPE: "Botlish has
+no integer division"), and an Int and a Float64 together are rejected
+too, since nothing converts implicitly; convert with float64::from_int.
+
+A quotient that is not a finite number -- any division by zero, and an
+overflow past the largest Float64 -- fails with the declared error
+NonFiniteFloat, which a handler catches like any declared error. When the
+compiler knows both operands (literals, or bindings of them) it divides
+while compiling: a decided failure is the KNOWN-ERROR diagnostic, not a
+run-time failure.
+
+== EXAMPLES
+@example accept
+fn inverse(x: Float64) -> Float64:
+    1.0 / x:
+        on NonFiniteFloat:
+            0.0
+
+four = 4.0
+zero = 0.0
+[7.0 / 2.0, 1.0 / 3.0, four.inverse(), zero.inverse()]
+@caption Division, and a handled division by zero
+@value [3.5, 0.3333333333333333, 0.25, 0.0]
+@end
+
+@example reject
+x = 7 / 2
+x
+@caption No integer division
+@error CORE SEMANTIC TYPE
+@at 1:5
+@end
+
 @topic stdlib.<
 title: < -- language primitive
-summary: Whether the Int A is less than the Int B, written a < b: Ints only, and comparisons do not chain.
+summary: Whether the Int A is less than the Int B, written a < b: Ints, or two Float64s; comparisons do not chain.
 index: stdlib
 symbol: <
 keywords: less than; compare numbers; comparison; ordering
-related: stdlib.module.root concept.integers stdlib.<= stdlib.> stdlib.>= stdlib.== proof.ranges proof.list-bounds
+related: stdlib.module.root concept.integers concept.floats stdlib.<= stdlib.> stdlib.>= stdlib.== proof.ranges proof.list-bounds
 
 == SIGNATURE
     <(int, int) -> bool
@@ -6683,9 +7277,11 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a < b, giving a Bool. Both operands must be Ints:
-Strings, characters, Lists and Bools have no ordering operator, and an
-operand of another kind fails with the TYPE error when the comparison runs
+Written as an operator, a < b, giving a Bool. Both operands must be Ints,
+or both Float64s (concept.floats: the compiler chooses by the operands'
+static types, and an Int and a Float64 together are rejected). Strings,
+characters, Lists and Bools have no ordering operator, and an operand of
+another kind fails with the TYPE error when the comparison runs
 (`<: expected int, got "a"`). To order characters, compare their
 char::scalar_value.
 
@@ -6705,7 +7301,7 @@ x = 3
 
 @topic stdlib.<=
 title: <= -- language primitive
-summary: Whether the Int A is at most the Int B, written a <= b: Ints only, no chaining.
+summary: Whether the Int A is at most the Int B, written a <= b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: <=
 keywords: less than or equal; at most; compare numbers; comparison
@@ -6721,9 +7317,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a <= b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a <= b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -6754,15 +7350,15 @@ Written as an operator, a == b; `a != b` means not (a == b). It is the
 one equality of the language, for Strings as for everything else (the
 old `eq` is gone).
 
-It compares structure: Ints numerically, Strings by their characters
-(exact Unicode scalar values: no case folding, no normalization), Lists
-element by element, structs by shape (the same declaration, or the same
-anonymous field set) and then field by field, enum cases by identity,
-ImmutableSets as sets (order and duplicates do not matter), Bytes by their
-bytes. Values of different kinds are never equal and nothing is converted:
-"10" == 10 is false, a UnicodeChar never equals a String ('a' == "a" is
-false), and a named struct never equals an anonymous one with the same
-fields.
+It compares structure: Ints and Float64s numerically, Strings by their
+characters (exact Unicode scalar values: no case folding, no
+normalization), Lists element by element, structs by shape (the same
+declaration, or the same anonymous field set) and then field by field,
+enum cases by identity, ImmutableSets as sets (order and duplicates do not
+matter), Bytes by their bytes. Values of different kinds are never equal
+and nothing is converted: "10" == 10 is false, 1.0 == 1 is false, a
+UnicodeChar never equals a String ('a' == "a" is false), and a named
+struct never equals an anonymous one with the same fields.
 
 Some values have no equality. Functions (closures and natives),
 MutableArray and MutableVector values fail with the EQUALITY error when
@@ -6787,7 +7383,7 @@ struct P:
 
 @topic stdlib.>
 title: > -- language primitive
-summary: Whether the Int A is greater than the Int B, written a > b: Ints only, no chaining.
+summary: Whether the Int A is greater than the Int B, written a > b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: >
 keywords: greater than; more than; compare numbers; comparison
@@ -6803,9 +7399,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a > b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a > b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -6816,7 +7412,7 @@ x = 3
 
 @topic stdlib.>=
 title: >= -- language primitive
-summary: Whether the Int A is at least the Int B, written a >= b: Ints only, no chaining.
+summary: Whether the Int A is at least the Int B, written a >= b: Ints, or two Float64s; no chaining.
 index: stdlib
 symbol: >=
 keywords: greater than or equal; at least; compare numbers; comparison
@@ -6832,9 +7428,9 @@ A language primitive: visible everywhere, no import.
 every backend (interp, compile, cranelift-generic, cranelift)
 
 == NOTES
-Written as an operator, a >= b, on two Ints (another kind is the TYPE
-error when it runs). Like every comparison it does not chain and it
-narrows ranges in the branches of an `if` (see stdlib.<).
+Written as an operator, a >= b, on two Ints or two Float64s (another
+kind is the TYPE error when it runs). Like every comparison it does not
+chain and it narrows ranges in the branches of an `if` (see stdlib.<).
 
 == EXAMPLES
 @example accept
@@ -7372,6 +7968,7 @@ import.
     *                              intrinsic -- The Int product of A and B,...
     +                              intrinsic -- The Int sum of A and B, wri...
     -                              intrinsic -- The Int difference A minus ...
+    /                              intrinsic -- The Float64 quotient of A a...
     <                              intrinsic -- Whether the Int A is less t...
     <=                             intrinsic -- Whether the Int A is at mos...
     ==                             intrinsic -- Whether A and B are the sam...

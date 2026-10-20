@@ -8,12 +8,23 @@
 # An ITEM is a tier -- smoke, acceptance or all -- or one thing to run: a
 # Tcl test file (tests/X.test or X.test), a golden suite (tests/golden/X.bot
 # or X.bot), `examples` (main.tcl's sample programs), `cabi`
-# (tests/platform/cabi-facts.tcl) or `rust` (the native crate's Rust tests).
+# (tests/platform/cabi-facts.tcl), `rust` (the native crate's Rust tests),
+# `native-stack-mutants` (audit/native-stack/tools/mutate.tcl: the stack
+# guard's mutants for this host, each rebuilding a private copy of native/;
+# about two minutes a mutant), `native-aot-mutants`
+# (audit/native-aot/tools/mutate.tcl: executable emission's mutants, the
+# same way), `native-stack-bench` (bench/native-stack-guard.tcl against
+# origin's main, built here), `c-ffi-fuzz` (audit/c-ffi/tools/fuzz.tcl: a
+# few seeds of the C FFI fuzzer, one under GC stress), `c-ffi-mutants`
+# (audit/c-ffi/tools/mutate.tcl: the C FFI's mutants for this host;
+# `c-ffi-mutants=NAME,...` only those) or `c-ffi-bench` (bench/c-ffi.tcl);
+# the last six are never part of a tier.
 #
 #   smoke       cabi, examples and a dozen front-end test files that never
 #               reach the native backend: about 15 seconds
 #   acceptance  smoke, every Tcl test file except the ones `notYet` lists
-#               below, and every golden suite on the Tcl backends: what
+#               below, and every golden suite on -golden-backends (all four:
+#               native coroutines run on macOS since milestone 3): what
 #               passes on a macOS arm64 host today
 #   all         every Tcl test file and every golden suite (on
 #               -golden-backends), and rust: the census, which on macOS
@@ -24,17 +35,26 @@
 #   Tcl test files  tests/all.tcl -tmpdir PRIVATE -file "FILES", once per
 #                   backend of -backends (CORE_BACKEND; default interp,compile)
 #   golden suites   tests/golden/run.tcl -quiet -backends B, B the
-#                   -golden-backends (default all four; acceptance keeps only
-#                   interp and compile: the golden runner, lib/test.bot, is a
-#                   coroutine, and native coroutines are not ported yet)
+#                   -golden-backends (default all four; the golden runner,
+#                   lib/test.bot, is a coroutine, which the native backends
+#                   run on macOS since milestone 3)
 #   examples        main.tcl -backend B on the sample programs CI runs, for
 #                   every B of -example-backends (default all four)
 #   cabi            tests/platform/cabi-facts.tcl
 #   rust            cargo test --release --manifest-path native/Cargo.toml
+#   native-stack-mutants  tclsh9.0 audit/native-stack/tools/mutate.tcl
+#   native-aot-mutants    tclsh9.0 audit/native-aot/tools/mutate.tcl
+#   native-stack-bench    tclsh9.0 bench/native-stack-guard.tcl -baseline-rev main
+#   c-ffi-fuzz            tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed S, for
+#                         seeds 1 and 2, and -seed 9 -gc-stress 1
+#   c-ffi-mutants         tclsh9.0 audit/c-ffi/tools/mutate.tcl ?-only NAMES?
+#   c-ffi-bench           tclsh9.0 bench/c-ffi.tcl
 #
 # -gc-stress 1 runs everything with BOTLISH_NATIVE_GC_STRESS=1. -shard I/N
 # (1 <= I <= N) keeps the Ith of every N test files and of every N suites,
-# for parallel CI jobs; examples, cabi and rust run in shard 1 only. -list 1
+# for parallel CI jobs; examples, cabi, rust, native-stack-mutants,
+# native-aot-mutants, native-stack-bench, c-ffi-fuzz, c-ffi-mutants and
+# c-ffi-bench run in shard 1 only. -list 1
 # prints the commands and runs nothing. Each command is printed before it
 # runs and streams its output; at the end a summary lists every failure with
 # the command that reruns it alone. Exits 1 on any failure. It never uses
@@ -56,29 +76,14 @@ set smokeFiles {
 # cause and the roadmap milestone it belongs to (MACOS-AARCH64-PORT-AUDIT.md,
 # sections 15 and 17). The acceptance tier is every other file. A port
 # milestone that makes one pass removes it here; a new test file that fails
-# on macOS for a capability not ported yet is added with its cause.
-set notYet {
-    affine.test                            {4 native coroutines}
-    branch-form-boolean.test               {4 native coroutines}
-    c-abi-types.test                       {4 native coroutines}
-    c-bindgen.test                         {7 the fixture's manifest records Ubuntu's clang, not Apple's}
-    c-ffi.test                             {7 C calls are refused before the linker runs}
-    compilation-isolation.test             {4 native coroutines, the golden runner's too}
-    coroutines.test                        {4 native coroutines}
-    enums.test                             {4 native coroutines}
-    error-payloads.test                    {4 native coroutines}
-    hir-interchange.test                   {4 native coroutines}
-    mutable-array.test                     {4 native coroutines}
-    mutable-vector.test                    {4 native coroutines}
-    namespaced-errors.test                 {4 native coroutines}
-    native-listloop.test                   {4 native coroutines}
-    static-compile.test                    {4 native coroutines}
-    structural-contract-completions.test   {4 native coroutines}
-}
+# on macOS for a capability not ported yet is added with its cause. Empty
+# since milestone 6 (MACOS-AARCH64-MILESTONE-6.md), which brought
+# c-ffi.test and c-bindgen.test, the last two, to macOS.
+set notYet {}
 
 proc usage {} {
     puts stderr "usage: tclsh9.0 tests/platform/tier.tcl ?-backends LIST? ?-golden-backends LIST? ?-example-backends LIST? ?-gc-stress 0|1? ?-shard I/N? ?-list 0|1? ITEM ..."
-    puts stderr "  ITEM: smoke | acceptance | all | tests/X.test | X.test | tests/golden/X.bot | X.bot | examples | cabi | rust"
+    puts stderr "  ITEM: smoke | acceptance | all | tests/X.test | X.test | tests/golden/X.bot | X.bot | examples | cabi | rust | native-stack-mutants | native-aot-mutants | native-stack-bench | c-ffi-fuzz | c-ffi-mutants?=NAME,...? | c-ffi-bench"
     exit 2
 }
 
@@ -155,10 +160,7 @@ proc addTier {name} {
             foreach f [allFiles] {
                 if {![dict exists $notYet $f]} { addFile $f }
             }
-            set tclOnly [lmap b $goldenBackends {expr {$b in {interp compile} ? $b : [continue]}}]
-            if {$tclOnly ne {}} {
-                foreach s [allSuites] { addSuite $s $tclOnly }
-            }
+            foreach s [allSuites] { addSuite $s $goldenBackends }
         }
         all {
             addCheck cabi
@@ -172,14 +174,15 @@ proc addTier {name} {
 foreach item $items {
     if {$item in {smoke acceptance all}} {
         addTier $item
-    } elseif {$item in {examples cabi rust}} {
+    } elseif {$item in {examples cabi rust native-stack-mutants native-aot-mutants native-stack-bench c-ffi-fuzz c-ffi-bench}
+            || [regexp {^c-ffi-mutants(=[A-Za-z0-9,_-]+)?$} $item]} {
         addCheck $item
     } elseif {[string match *.test $item]} {
         addFile $item
     } elseif {[string match *.bot $item]} {
         addSuite $item $goldenBackends
     } else {
-        puts stderr "not a tier, test file, golden suite, examples, cabi or rust: $item"
+        puts stderr "not a tier, test file, golden suite, examples, cabi, rust, native-stack-mutants, native-aot-mutants, native-stack-bench, c-ffi-fuzz, c-ffi-mutants or c-ffi-bench: $item"
         usage
     }
 }
@@ -245,6 +248,33 @@ foreach check $checks {
         rust {
             lappend commands [list "native Rust tests" {} \
                 [list cargo test --release --manifest-path [file join $root native Cargo.toml]] plain]
+        }
+        native-stack-mutants {
+            lappend commands [list "native stack guard mutants" {} \
+                [list $tclsh [file join $root audit native-stack tools mutate.tcl]] plain]
+        }
+        native-aot-mutants {
+            lappend commands [list "native executable mutants" {} \
+                [list $tclsh [file join $root audit native-aot tools mutate.tcl]] plain]
+        }
+        native-stack-bench {
+            lappend commands [list "native stack guard overhead" {} \
+                [list $tclsh [file join $root bench native-stack-guard.tcl] -baseline-rev main] plain]
+        }
+        c-ffi-fuzz {
+            foreach {seed stress} {1 0 2 0 9 1} {
+                lappend commands [list "C FFI fuzzer, seed $seed[expr {$stress ? " (GC stress)" : ""}]" {} \
+                    [list $tclsh [file join $root audit c-ffi tools fuzz.tcl] -n 10 -seed $seed -gc-stress $stress] plain]
+            }
+        }
+        c-ffi-bench {
+            lappend commands [list "C FFI performance" {} [list $tclsh [file join $root bench c-ffi.tcl]] plain]
+        }
+        default {
+            if {[regexp {^c-ffi-mutants(?:=(.*))?$} $check -> only]} {
+                lappend commands [list "C FFI mutants" {} \
+                    [list $tclsh [file join $root audit c-ffi tools mutate.tcl] {*}[expr {$only ne "" ? [list -only $only] : {}}]] plain]
+            }
         }
     }
 }

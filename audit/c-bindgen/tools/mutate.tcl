@@ -2,7 +2,10 @@
 # "Mutation testing").
 #
 #   tclsh9.0 audit/c-bindgen/tools/mutate.tcl ?-only NAME,...? ?-tests FILES?
+#                                             ?-match PATTERNS?
 #                                             ?-fuzz-count N? ?-fuzz-seed N?
+#                                             ?-layout-fuzz-count N?
+#                                             ?-layout-fuzz-seed N?
 #                                             ?-timeout SECONDS?
 #
 # Each mutant is a deliberate bug, written in mutants.txt (beside this
@@ -12,7 +15,10 @@
 # replacements, and the detectors run against it:
 #
 #   * the test files FILES (default tests/c-bindgen.test; each with a private
-#     -tmpdir): killed if any test fails or a file does not complete. The
+#     -tmpdir; with -match, only the tests PATTERNS matches -- tcltest's
+#     -match, e.g. "cb-layout-* cb-fixture-*" for a mutant of the layout
+#     pass, which the real libraries' tests need not repeat): killed if any
+#     test fails or a file does not complete. The
 #     tests that compile, link and run a binding run what the mutated
 #     generator produces, not the committed files; the *-current tests
 #     compare that with the committed files byte for byte. A mutant only
@@ -21,7 +27,10 @@
 #     the fuzzer;
 #   * audit/c-bindgen/tools/fuzz.tcl -n N -seed S (random C libraries bound
 #     and called on both native backends, against its own ABI model):
-#     killed if it reports a disagreement or does not complete.
+#     killed if it reports a disagreement or does not complete;
+#   * audit/c-bindgen/tools/layout-fuzz.tcl -n N -seed S (random C records,
+#     against its own model, GCC and the runtime oracle; C-BINDGEN-LAYOUTS.md):
+#     killed likewise.
 #
 # The generator is Tcl only: the copy's native/target is a link to this
 # checkout's. The real checkout is never modified. The Tcl, BoringSSL and
@@ -30,7 +39,8 @@
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 
-set options [dict create -only "" -tests tests/c-bindgen.test -fuzz-count 3 -fuzz-seed 11 -timeout 1800]
+set options [dict create -only "" -tests tests/c-bindgen.test -match "" -fuzz-count 3 -fuzz-seed 11 \
+    -layout-fuzz-count 2 -layout-fuzz-seed 11 -timeout 1800]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value
@@ -39,7 +49,7 @@ foreach {option value} $argv {
 # The tests whose only check is the committed bindings' equality with the
 # generation.
 set pinned {cb-fixture-current cb-tcl-current cb-tcl-current-cross cb-boringssl-current
-    cb-boringssl-current-cross cb-sdl3-current cb-sdl3-current-cross}
+    cb-boringssl-current-cross cb-sdl3-current cb-sdl3-current-cross cb-win32-current}
 
 # The mutants of mutants.txt (its header has the format), as
 # {NAME DESCRIPTION {FILE OLD NEW ...} ...}.
@@ -184,7 +194,8 @@ try {
         set incomplete ""
         foreach testFile [dict get $options -tests] {
             set tmp [file tempdir botlish-cbindgen-mutant-run]
-            lassign [run [dict get $options -timeout] tclsh9.0 [file join $tree $testFile] -tmpdir $tmp] status output
+            set match [expr {[dict get $options -match] eq "" ? {} : [list -match [dict get $options -match]]}]
+            lassign [run [dict get $options -timeout] tclsh9.0 [file join $tree $testFile] -tmpdir $tmp {*}$match] status output
             file delete -force $tmp
             lappend failedTests {*}[lmap {- n} [regexp -all -inline -line {^==== (\S+) .*FAILED$} $output] {set n}]
             if {$incomplete eq "" && ![regexp {Total\s+\d+\s+Passed\s+\d+\s+Skipped\s+\d+\s+Failed\s+(\d+)} $output]} {
@@ -213,8 +224,21 @@ try {
         } else {
             set fuzz "killed (did not complete: [lastLine $output])"
         }
-        set killed [expr {[string match killed* $tests] || [string match killed* $fuzz]}]
-        set byBehavior [expr {$incomplete ne "" || $behavioral ne {} || [string match killed* $fuzz]}]
+        set scratch [file tempdir botlish-cbindgen-mutant-layout-fuzz]
+        cd $scratch
+        lassign [run [dict get $options -timeout] tclsh9.0 [file join $tree audit c-bindgen tools layout-fuzz.tcl] \
+            -n [dict get $options -layout-fuzz-count] -seed [dict get $options -layout-fuzz-seed] -keep 0] status output
+        cd $here
+        file delete -force $scratch
+        if {[regexp {programs \d+ records \d+ layouts \d+ disagreements (\d+)} [lindex [split [string trim $output] \n] end] -> n]} {
+            set layoutFuzz [expr {$n > 0 ? "killed ($n disagreements in [dict get $options -layout-fuzz-count] programs)" : "survived"}]
+        } else {
+            set layoutFuzz "killed (did not complete: [lastLine $output])"
+        }
+        set fuzzKilled [expr {[string match killed* $fuzz] || [string match killed* $layoutFuzz]}]
+        append fuzz "; layout fuzz $layoutFuzz"
+        set killed [expr {[string match killed* $tests] || $fuzzKilled}]
+        set byBehavior [expr {$incomplete ne "" || $behavioral ne {} || $fuzzKilled}]
         set verdict [expr {$killed ? "KILLED" : "SURVIVED"}]
         lappend results [list $name $description $verdict $tests $fuzz $byBehavior]
         puts "$verdict $name -- $description\n    tests:  $tests"

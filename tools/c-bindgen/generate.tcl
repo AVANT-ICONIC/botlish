@@ -19,6 +19,31 @@ namespace eval ::cbind::generate {}
 
 # The profile's header profile for TARGET with absolute include
 # directories, as the toolchain adapter takes it.
+# The revision of RUN's headers: a pinned checkout's commit; for a toolchain
+# source, its version macros (the profile's `version`), each of which the
+# translation unit must define with exactly the pinned body -- headers of
+# another version are not the profile's, the way a checkout at another
+# commit is not.
+proc ::cbind::generate::Revision {profile run} {
+    set source [dict get $profile headers source]
+    if {![dict exists $source toolchain]} { return [dict get $run revision] }
+    set defined [dict create]
+    foreach m [dict get $run macros] {
+        if {![dict get [lindex $m 2] undefined]} { dict set defined [lindex $m 1] [dict get [lindex $m 2] body] }
+    }
+    set out {}
+    dict for {macro value} [dict get $source version] {
+        if {![dict exists $defined $macro]} {
+            error "c-bindgen: the toolchain's headers define no $macro (the profile [dict get $profile name] pins $macro $value)"
+        }
+        if {[dict get $defined $macro] ne $value} {
+            error "c-bindgen: the toolchain's headers are another version: $macro is [dict get $defined $macro], the profile [dict get $profile name] pins $value"
+        }
+        lappend out "$macro=$value"
+    }
+    return "[dict get $profile headers library] [join $out { }]"
+}
+
 proc ::cbind::generate::ToolProfile {hprofile sourceRoot} {
     set abs {}
     foreach d [dict get $hprofile includeDirs] { lappend abs [file join $sourceRoot $d] }
@@ -42,6 +67,15 @@ proc ::cbind::generate::LabelPrefix {text} {
 # another architecture's bits/, or, where they happen to compile, the
 # host's declarations under the target's name.
 proc ::cbind::generate::CheckCrossHeaders {target config tool hprofile} {
+    if {[string match windows-* $target] && "-nostdlibinc" ni [dict get $hprofile flags]
+            && "-nostdinc" ni [dict get $hprofile flags] && [dict get $config sysroot] eq ""} {
+        # MinGW-w64's headers, where clang finds them for its mingw32 target
+        # (/usr/TRIPLE/include): never the host's /usr/include.
+        set triple [dict get $config target]
+        lassign [::chdr::toolchain::searchDirs $config $tool] ok dirs stderr
+        if {$ok && [lsearch -glob $dirs *$triple*] >= 0} { return }
+        error "c-bindgen: [lindex [dict get $config cc] 0] --target=$triple searches no directory of $target's C headers ([join $dirs {, }]): install MinGW-w64's (Debian and Ubuntu: mingw-w64-x86-64-dev), or set BOTLISH_C_SYSROOT_[string map {- _} $target] (or BOTLISH_C_SYSROOT) to a sysroot"
+    }
     if {![string match linux-* $target] || $target eq [core::cabi::hostTarget]
             || [dict get $config sysroot] ne "" || "-nostdlibinc" in [dict get $hprofile flags]
             || "-nostdinc" in [dict get $hprofile flags]} {
@@ -73,8 +107,8 @@ proc ::cbind::generate::run {profile target {options {}}} {
     if {[dict get $options evidence] ne ""} { dict set profile evidence [dict get $options evidence] }
     set timing [dict create]
     set hprofile [::cbind::profile::headersFor $profile $target]
-    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch]]
     set config [::chdr::toolchain::configFor $target]
+    set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch] $target]
     set tool [ToolProfile $hprofile $sourceRoot]
     # A target's own system headers, or none: never the host's. Off a Mac,
     # clang for an Apple target would fall back to the host's /usr/include
@@ -90,13 +124,18 @@ proc ::cbind::generate::run {profile target {options {}}} {
     if {![dict get $run ok]} {
         error "c-bindgen: preprocessing [dict get $profile name] for $target failed:\n[string range [dict get $run stderr] 0 3000]"
     }
-    dict set timing preprocess [dict get $run timing preprocess]
-    dict set timing parse [dict get $run timing parse]
-    dict set timing macros [expr {[dict get $run timing macroPreprocess] + [dict get $run timing probe]}]
+    set revision [Revision $profile $run]
+    dict set timing preprocess [format %.3f [dict get $run timing preprocess]]
+    dict set timing parse [format %.3f [dict get $run timing parse]]
+    dict set timing macros [format %.3f [expr {[dict get $run timing macroPreprocess] + [dict get $run timing probe]}]]
     set prefix [LabelPrefix [dict get $run predefined]]
 
     set t0 [clock microseconds]
     set model [::cbind::model::candidates $profile $target $run $options]
+
+    # The records' field types raise typedef and enum questions of their own
+    # (records.tcl): one ABI probe asks them all.
+    dict set model requests values [concat [dict get $model requests values] [::cbind::records::requests $model]]
     dict set timing model [Seconds $t0]
 
     set t0 [clock microseconds]
@@ -109,12 +148,41 @@ proc ::cbind::generate::run {profile target {options {}}} {
     set model [::cbind::model::resolve $model [dict create values $values symbols $symbols prefix $prefix]]
     dict set model profile $profile
     dict set model target $target
-    dict set model run [dict create revision [dict get $run revision] command [dict get $run command] \
+    dict set model run [dict create revision $revision command [dict get $run command] \
         tokens [dict get $run tokens] bytes [string length [dict get $run text]]]
     dict set model toolchain [::chdr::toolchain::describe $config]
     dict set model sourceRoot $sourceRoot
     dict set model labelPrefix $prefix
+    set symbolLibs [::cbind::profile::symbolLibraries $profile $target]
+    dict set model symbolLibraries $symbolLibs
+    if {[llength $symbolLibs]} {
+        set model [ImportLibraries $model $config $tool $symbolLibs]
+    }
     dict set timing mapping [Seconds $t0]
+
+    # The records: their layout probe (sizeof, _Alignof, offsetof, each
+    # member's sizeof, in a translation unit of its own whose member and type
+    # names no later macro rewrites), then classification, names and order.
+    set t0 [clock microseconds]
+    set ::cbind::records::allMacros [dict create]
+    foreach m [dict get $run macros] {
+        if {![dict get [lindex $m 2] undefined]} { dict set ::cbind::records::allMacros [lindex $m 1] 1 }
+    }
+    lassign [::cbind::records::probeEntries $model] entries undefs
+    set extra ""
+    foreach u $undefs { append extra "#undef $u\n" }
+    set layoutFacts [::cbind::probe::values $config $tool $entries $extra]
+    # The anonymous members' own layouts (sizeof, alignment, their members'
+    # offsets), which no C expression asks: clang's record layouts of the
+    # records that hold them (probe.tcl's anonymous).
+    set owners [::cbind::records::anonymousOwners $model $layoutFacts]
+    if {[llength $owners]} {
+        lassign [::cbind::probe::anonymous $config $tool $owners $extra] ok blocks message
+        dict set layoutFacts anon:layouts [expr {$ok ? [list ok $blocks] : [list error $message]}]
+    }
+    set model [::cbind::records::resolve $model $layoutFacts]
+    dict set model layoutUndefs $undefs
+    dict set timing layouts [Seconds $t0]
 
     set t0 [clock microseconds]
     set model [Thunks $model $config $tool]
@@ -124,10 +192,93 @@ proc ::cbind::generate::run {profile target {options {}}} {
     set files [::cbind::emit::files $model]
     dict set model files $files
     dict set files report.tsv [::cbind::report::tsv $model]
+    if {[dict exists $model layouts] && [dict size [dict get $model layouts]]} {
+        dict set files layouts.tsv [::cbind::report::layoutsTsv $model]
+    }
+    set emitSeconds [Seconds $t0]
+
+    # Every emitted layout checked by the compiler: layouts-check.c asserts
+    # the numbers the generated Botlish text states (verify.tcl), compiled
+    # here with the target's toolchain; a disagreement stops generation.
+    set t0 [clock microseconds]
+    set check [::cbind::verify::source $files $profile $target [dict get $model layoutUndefs]]
+    if {$check ne ""} {
+        dict set files layouts-check.c $check
+        lassign [::chdr::toolchain::compile $config $tool $check {-w}] ok stderr
+        if {!$ok} {
+            error "c-bindgen: the generated layouts disagree with the C compiler (layouts-check.c):\n[string range $stderr 0 3000]"
+        }
+        # The synthetic layouts' own sizes and alignments, which no C
+        # expression asks: against clang's record layouts (verify.tcl).
+        set problems [::cbind::verify::anonymous $files [dict get $profile name] $config $tool]
+        if {[llength $problems]} {
+            error "c-bindgen: the generated layouts disagree with the C compiler's record layouts:\n[join $problems \n]"
+        }
+    }
+    dict set timing verification [Seconds $t0]
+    set t0 [clock microseconds]
     dict set files report.txt [::cbind::report::text $model]
     dict set files manifest.txt [::cbind::report::manifest $model $files]
-    dict set timing emit [Seconds $t0]
+    dict set timing emit [format %.3f [expr {$emitSeconds + [Seconds $t0]}]]
     return [dict create files $files model $model timing $timing]
+}
+
+# MODEL with each bound function's library: for a profile whose libraries
+# are found by symbol (Windows import libraries), the first library of LIBS
+# whose file (the toolchain's -print-file-name) defines the function's link
+# symbol, as the toolchain's nm reads it; a function none of them defines
+# is unsupported (no-import-library). `inventory` keeps each library's
+# defined symbols (the shim's references are attributed from it, Thunks).
+proc ::cbind::generate::ImportLibraries {model config tool libs} {
+    set owners [dict create]
+    set files [dict create]
+    foreach lib $libs {
+        set path [::chdr::toolchain::libraryFile $config $tool $lib]
+        if {$path eq ""} {
+            error "c-bindgen: the [dict get $model target] toolchain has no library file for -l$lib (its -print-file-name=lib$lib.a): install the target's import libraries"
+        }
+        lassign [::chdr::toolchain::symbolsOf $config $path defined] ok symbols stderr
+        if {!$ok} { error "c-bindgen: the symbols of $path: [string range $stderr 0 2000]" }
+        foreach sym $symbols { dict lappend owners $sym $lib }
+        dict set files $lib [file tail $path]
+    }
+    set out {}
+    foreach e [dict get $model apis] {
+        if {[dict get $e kind] in {direct alias}} {
+            set sym [dict get $e symbol]
+            if {![dict exists $owners $sym]} {
+                dict set e kind unsupported
+                dict set e blockers [list [list no-import-library "no import library the profile searches ([join $libs {, }]) defines $sym"]]
+            } else {
+                set found [dict get $owners $sym]
+                dict set e library [lindex $found 0]
+                dict set e libraryAlso [lrange $found 1 end]
+            }
+        }
+        lappend out $e
+    }
+    dict set model apis $out
+    dict set model libraryOwners $owners
+    dict set model libraryFiles $files
+    return $model
+}
+
+# The libraries of LIBS (in order) whose symbols the symbol list REFS
+# references, attributed as ImportLibraries does: {LIBRARIES UNRESOLVED}.
+proc ::cbind::generate::ReferencedLibraries {model refs} {
+    set owners [dict get $model libraryOwners]
+    set used {}
+    set unresolved {}
+    foreach sym $refs {
+        if {[dict exists $owners $sym]} {
+            set lib [lindex [dict get $owners $sym] 0]
+            if {$lib ni $used} { lappend used $lib }
+        } else {
+            lappend unresolved $sym
+        }
+    }
+    set ordered [lmap l [dict get $model symbolLibraries] {expr {$l in $used ? $l : [continue]}}]
+    return [list $ordered $unresolved]
 }
 
 # The thunks of MODEL, checked: the shim is compiled once (one translation
@@ -148,6 +299,15 @@ proc ::cbind::generate::Thunks {model config tool} {
         ::chdr::writeFile $path $shim
         lassign [::chdr::toolchain::object $config $tool $path [file join $dir shim.o] \
             {-Werror=incompatible-pointer-types -Werror=int-conversion -Werror=implicit-function-declaration -Werror=return-type}] ok stderr command
+        if {$ok && [llength [dict get $model symbolLibraries]]} {
+            # The libraries the shim's own references need (its thunks call
+            # the APIs): attributed like every bound function's.
+            lassign [::chdr::toolchain::symbolsOf $config [file join $dir shim.o] undefined] nmOk refs nmErr
+            if {!$nmOk} { error "c-bindgen: the shim object's symbols: [string range $nmErr 0 2000]" }
+            lassign [ReferencedLibraries $model $refs] shimLibs unresolved
+            dict set model shimLibraries $shimLibs
+            dict set model shimUnresolved $unresolved
+        }
         file delete -force $dir
         if {$ok} break
         set lines [dict create]
@@ -223,7 +383,7 @@ proc ::cbind::generate::write {files dir ns} {
 # The generated files present under DIR (relative paths), sorted.
 proc ::cbind::generate::Existing {dir ns} {
     set out {}
-    foreach f {shim.c manifest.txt report.txt report.tsv} {
+    foreach f {shim.c manifest.txt report.txt report.tsv layouts.tsv layouts-check.c} {
         if {[file exists [file join $dir $f]]} { lappend out $f }
     }
     set stack [list $ns]
@@ -328,7 +488,7 @@ proc ::cbind::generate::buildShim {profile target out {dir ""}} {
     if {![regexp -line {^shim_library (\S+)$} $manifest -> name]} {
         error "c-bindgen build: no shim_library in [file join $dir manifest.txt]"
     }
-    set sourceRoot [::cbind::profile::sourceRoot $profile 0]
+    set sourceRoot [::cbind::profile::sourceRoot $profile 0 $target]
     set hprofile [::cbind::profile::headersFor $profile $target]
     set tool [ToolProfile $hprofile $sourceRoot]
     set config [::chdr::toolchain::configFor $target]

@@ -1426,6 +1426,23 @@ fn register_affine_payload_tests():
             [f(3), f(0)]
     test::value("ep-affine-propagation", [503, 1], b_affine_propagation)
 
+    # ep-affine-propagation-releasing: the function it propagates through
+    # releases an affine value of its own on the error edge and raises the
+    # payload it received, which the handler then resumes.
+    fn b_affine_propagation_releasing() errors compiler::CompilerError:
+        static compile:
+            fn mid(n: int) -> int errors ReadFailed:
+                held = make(7)
+                x = read(n)
+                consume(held) + x
+            fn f(n: int) -> int:
+                mid(n):
+                    on ReadFailed {stream: s, bytesRead: b}:
+                        e = s(Message {value: 5})
+                        e.value * 100 + b
+            [f(3), f(0)]
+    test::value("ep-affine-propagation-releasing", [503, 2], b_affine_propagation_releasing)
+
     # ep-affine-partial-construction: a later payload field that fails
     # abandons the payload, whose moved affine field is released.
     fn b_affine_partial_construction() errors compiler::CompilerError:

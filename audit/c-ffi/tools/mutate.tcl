@@ -7,9 +7,11 @@
 #
 # Each mutant is a deliberate bug, written in mutants.txt (beside this
 # script) as exact source replacements, each replaced text occurring exactly
-# once. For each, a private copy of the compiler, library and native backend
-# (a temporary directory) gets the replacements, and the detectors run
-# against it:
+# once. A mutant of code one host compiles differently (a `%% TARGET ...`
+# line after its header: linux-x86_64, linux-aarch64, macos-aarch64) runs
+# only on those hosts and is SKIPPED elsewhere. For each, a private copy of
+# the compiler, library and native backend (a temporary directory) gets the
+# replacements, and the detectors run against it:
 #
 #   * the test files FILES (default tests/c-ffi.test; each with a private
 #     -tmpdir): killed if any test fails or a file does not complete;
@@ -40,8 +42,14 @@ foreach {option value} $argv {
     dict set options $option $value
 }
 
+# This host's target, named as core::cabi names it (linux-x86_64,
+# linux-aarch64, macos-aarch64).
+set host [string cat [expr {$::tcl_platform(os) eq "Darwin" ? "macos" : [string tolower $::tcl_platform(os)]}] - \
+    [expr {$::tcl_platform(machine) in {arm64 aarch64} ? "aarch64" : ($::tcl_platform(machine) in {amd64 x86_64} ? "x86_64" : $::tcl_platform(machine))}]]
+
 # The mutants of mutants.txt (its header has the format), as
-# {NAME DESCRIPTION {FILE OLD NEW ...} ...}.
+# {NAME DESCRIPTION HOSTS {FILE OLD NEW ...} ...}, HOSTS empty for every
+# host.
 proc readMutants {path} {
     set f [open $path r]
     fconfigure $f -encoding utf-8 -translation lf
@@ -54,10 +62,13 @@ proc readMutants {path} {
         switch -- $state {
             outside {
                 if {[regexp {^@@ (\S+) (.*)$} $line -> n d]} {
-                    if {$name ne ""} { lappend mutants $name $description $edits }
+                    if {$name ne ""} { lappend mutants $name $description $hosts $edits }
                     set name $n
                     set description $d
+                    set hosts {}
                     set edits {}
+                } elseif {[regexp {^%% (.*)$} $line -> h]} {
+                    set hosts $h
                 } elseif {[regexp {^## (\S+)$} $line -> file]} {
                     set current $file
                 } elseif {$line eq "<<<<"} {
@@ -83,7 +94,7 @@ proc readMutants {path} {
             }
         }
     }
-    if {$name ne ""} { lappend mutants $name $description $edits }
+    if {$name ne ""} { lappend mutants $name $description $hosts $edits }
     return $mutants
 }
 
@@ -115,12 +126,12 @@ proc isNative {edits} {
 set only [split [dict get $options -only] ,]
 set selected {}
 set nativeSelected {}
-foreach {name description edits} [readMutants [file join [file dirname [file normalize [info script]]] mutants.txt]] {
+foreach {name description hosts edits} [readMutants [file join [file dirname [file normalize [info script]]] mutants.txt]] {
     if {$only ne {} && $name ni $only} continue
     if {[isNative $edits]} {
-        lappend nativeSelected $name $description $edits
+        lappend nativeSelected $name $description $hosts $edits
     } else {
-        lappend selected $name $description $edits
+        lappend selected $name $description $hosts $edits
     }
 }
 set selected [concat $selected $nativeSelected]
@@ -154,14 +165,33 @@ foreach entry [glob -directory $root -types f *.tcl] {
     file copy $entry $tree
 }
 
+# {STATUS OUTPUT} of ARGS, its standard error merged into its output, run in
+# the current directory; STATUS is "timeout" (the process killed) when it
+# runs longer than TIMEOUT seconds. No timeout(1): macOS has none.
 proc run {timeout args} {
+    set pipe [open |[concat $args [list 2>@1]] r]
+    fconfigure $pipe -blocking 0 -translation lf -encoding utf-8
+    set ::runOutput ""
+    set ::runDone 0
+    fileevent $pipe readable [list apply {{pipe} {
+        append ::runOutput [read $pipe]
+        if {[eof $pipe]} { set ::runDone 1 }
+    }} $pipe]
+    set timer [after [expr {$timeout * 1000}] {set ::runDone timeout}]
+    vwait ::runDone
+    after cancel $timer
+    if {$::runDone eq "timeout"} {
+        catch {exec kill -9 {*}[pid $pipe]}
+        catch {close $pipe}
+        return [list timeout $::runOutput]
+    }
+    fconfigure $pipe -blocking 1
     set status 0
-    if {[catch {exec timeout $timeout {*}$args 2>@1} output options]} {
+    if {[catch {close $pipe} message options]} {
         set status [lindex [dict get $options -errorcode] end]
         if {![string is integer -strict $status]} { set status 1 }
-        regsub {\n?child process exited abnormally$} $output "" output
     }
-    return [list $status $output]
+    return [list $status $::runOutput]
 }
 
 proc lastLine {output} {
@@ -171,7 +201,12 @@ proc lastLine {output} {
 set results {}
 set manifest [file join $tree native Cargo.toml]
 try {
-    foreach {name description edits} $selected {
+    foreach {name description hosts edits} $selected {
+        if {$hosts ne {} && $host ni $hosts} {
+            lappend results [list $name $description SKIPPED "" "" "" ""]
+            puts "SKIPPED $name: not compiled differently for $host"
+            continue
+        }
         set touched [dict create]
         set applied 1
         foreach {file old new} $edits {
@@ -275,5 +310,6 @@ try {
 set survivors [lmap r $results {if {[lindex $r 2] ne "SURVIVED"} continue; lindex $r 0}]
 set unapplied [lmap r $results {if {[lindex $r 2] ni {NOT-APPLIED NOT-BUILT}} continue; lindex $r 0}]
 set killed [llength [lsearch -all -index 2 $results KILLED]]
-puts "[llength $results] mutants, $killed killed, [llength $survivors] survived[expr {$survivors eq {} ? "" : ": [join $survivors {, }]"}][expr {$unapplied eq {} ? "" : ", [llength $unapplied] not applied or not built: [join $unapplied {, }]"}]"
+set skipped [llength [lsearch -all -index 2 $results SKIPPED]]
+puts "[llength $results] mutants, $killed killed, [llength $survivors] survived[expr {$survivors eq {} ? "" : ": [join $survivors {, }]"}], $skipped skipped (another host's)[expr {$unapplied eq {} ? "" : ", [llength $unapplied] not applied or not built: [join $unapplied {, }]"}]"
 exit [expr {$survivors ne {} || $unapplied ne {}}]

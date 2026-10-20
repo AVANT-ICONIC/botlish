@@ -101,7 +101,7 @@ test cp-search-plain-word-code-tails {a code's last word that is a plain word fi
 } -result {{page error.struct} page {page error.range} list {page error.known-error}}
 
 test cp-search-index-pages-and-plurals {a lookup that lands on an index's introduction shows the whole index; plurals in -ies and -es fold to their singular} -body {
-    list [found "best practices"] [found index.errors] [found capabilities] \
+    list [found "style guide"] [found index.errors] [found capabilities] \
         [compilerpedia::Stem capabilities] [compilerpedia::Stem matches] [compilerpedia::Stem class]
 } -result {{index principles} {index errors} {page capability.overview} capability match class}
 
@@ -137,6 +137,50 @@ test cp-search-ambiguous-short-code {a code's last word shared by two codes list
 test cp-search-indices {an index name, its singular, and `all` show the index pages} -body {
     list [found errors] [found warning] [found principle] [found all] [found ""]
 } -result {{index errors} {index warnings} {index principles} {index all} overview}
+
+test cp-idiomatic-queries {the generic questions a newcomer types (best practices, idiomatic, style, how to write Botlish) land on the Idiomatic Botlish page} -body {
+    lmap q {"best practices" "best practice" idiomatic "idiomatic Botlish" style "how should I write Botlish" "how to write Botlish" "coding style"} {
+        found $q
+    }
+} -result [lrepeat 8 {page principle.idiomatic-botlish}]
+
+test cp-idiomatic-does-not-steal {the generic page answers generic questions only: a specific warning, rule, proof, concept or index keeps its own query, and the principles index its own names} -body {
+    list [found METHOD-ELIGIBLE] [found nomethod] [found "bounds proof"] [found import] [found "method syntax"] \
+        [found "receiver first"] [found tuple] [found warnings] [found errors] [found lint] [found principles] \
+        [found "style guide"] [found "recommended practices"] \
+        [lindex [found "loop placement"] 0 0] [lindex [found "loop placement"] 1 0] \
+        [lindex [found "if placement"] 1 0] [lindex [found "module import"] 0]
+} -result {{page warning.method-eligible} {page concept.nomethod} {page proof.list-bounds} {page concept.imports} {page concept.method-sugar} {page principle.receiver-first} {page principle.name-the-parts} {index warnings} {index errors} {index lint} {index principles} {index principles} {index principles} list rule.loop-placement rule.if-placement list}
+
+test cp-idiomatic-names-no-language {the page does not take the names of other languages for itself: they are words of its text only, so a query naming one finds what it found before} -body {
+    list [lindex [found python] 0] [found rust] [lindex [found javascript] 0]
+} -result {none {page backend.native-executable} none}
+
+test cp-idiomatic-shape {the Idiomatic Botlish page stays a map: 8 to 12 numbered principles, each ending in links, a few hundred words of prose, in the principles and concepts indices, and none of the content it leaves to other pages} -body {
+    set topic [compilerpedia::topic principle.idiomatic-botlish]
+    set principles 0
+    set words 0
+    set linked 0
+    foreach section [dict get $topic body] {
+        lassign $section heading items
+        set text [join [lmap item $items {expr {[lindex $item 0] eq "text" ? [lindex $item 1] : [continue]}}] \n]
+        incr words [llength [regexp -all -inline {\S+} $text]]
+        if {[regexp {^[0-9]+\. } $heading]} {
+            incr principles
+            incr linked [regexp {(?n)^See: [a-z]+\.[a-z]} $text]
+        }
+    }
+    set all [join [lmap section [dict get $topic body] {lindex $section 1}] \n]
+    list [expr {$principles >= 8 && $principles <= 12}] [expr {$linked == $principles}] \
+        [expr {$words < 800}] [dict get $topic index] \
+        [regexp -nocase {\m(always|never)\M|hello|install|15-puzzle|\mS[0-9]\M} $all] \
+        [llength [dict get $topic examples]]
+} -cleanup {unset -nocomplain topic principles words linked all section heading items text item} -result {1 1 1 {principles concepts} 0 1}
+
+test cp-string-char-search {the String / UnicodeChar / List[UnicodeChar] explanation adds no alias: the warning keeps its own code and phrase lookups, canonical names reach the concept, and words other languages use for a code point (rune) stay unmatched} -body {
+    list [found ONE-CHAR-STRING-LITERAL] [found "one char string literal"] [found UnicodeChar] \
+        [lindex [found rune] 0] [dict get [compilerpedia::topic concept.strings] alias]
+} -result {{page warning.one-char-string-literal} {page warning.one-char-string-literal} {page concept.strings} none {{str type} UnicodeChar {character literal} {char literal} {text values}}}
 
 test cp-search-missing {a query nothing matches finds nothing and offers near matches: close identifiers by edit distance, then topics holding most of the words; never an invented topic} -body {
     set near [found metod-eligibel]
@@ -225,7 +269,7 @@ test cp-diagnostic-specific-rule {a matcher points a broad code at its specific 
             {t.bot:4:5: this call of "list::at" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
         [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
             {t.bot:4:5: this call may produce the declared error "E", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
-        [compilerpedia::topicForDiagnostic {SURFACE SYNTAX} {t.bot:1:7: unexpected character "/"}] \
+        [compilerpedia::topicForDiagnostic {CORE SEMANTIC TYPE} {t.bot:1:5: "/" divides floating-point numbers, and neither operand here is one (the operands are int and int): Botlish has no integer division}] \
         [compilerpedia::topicForDiagnostic {NO SUCH CODE} {whatever}]
 } -result {proof.list-bounds error.unhandled-error capability.integer-division {}}
 

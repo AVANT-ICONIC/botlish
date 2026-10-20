@@ -38,6 +38,13 @@ macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get; (f
 function	bgf_shadowed	thunk	bgf::thunks::bgf	thunk (macro-shadow: call wrapper: computed arguments)	symbol botlish_bgf_bgf_shadowed; (ffi::c::Int) -> ffi::c::Int
 function	bgf_apple_only	direct	bgf::bgf	direct	symbol bgf_apple_only; () -> ffi::c::Int
 function	bgf_arm_only	direct	bgf::bgf	direct	symbol bgf_arm_only; () -> ffi::c::Int
+function	bgf_stdcall	direct	bgf::records	direct	symbol bgf_stdcall; (ffi::c::Int) -> ffi::c::Int
+function	bgf_rect_area	direct	bgf::records	direct	symbol bgf_rect_area; (ffi::c::Ptr[bgf_rect]) -> ffi::c::Int
+function	bgf_node_link	direct	bgf::records	direct	symbol bgf_node_link; (ffi::c::Ptr[bgf_node], ffi::c::Ptr[bgf_node]) -> unit
+function	bgf_frames	direct	bgf::records	direct	symbol bgf_frames; (ffi::c::Ptr[ffi::c::Ptr[bgf_frame]]) -> ffi::c::Int
+function	bgf_node_first	direct	bgf::records	direct	symbol bgf_node_first; () -> ffi::c::Ptr[bgf_node]
+function	bgf_chars_length	direct	bgf::records	direct	symbol bgf_chars_length; (ffi::c::Ptr[bgf_chars]) -> ffi::c::Int
+function	bgf_secret_open	direct	bgf::records	direct	symbol bgf_secret_open; () -> ffi::c::Ptr[bgf_secret]
 macro	BGF_UINT64_C	unsupported		macro-needs-signature	a function-like macro (expression; paste): no signature of its own
 macro	BGF_TWICE	thunk	bgf::thunks::bgf	thunk (macro)	symbol botlish_bgf_BGF_TWICE; (ffi::c::Int) -> ffi::c::Int
 macro	bgf_legacy	alias	bgf::bgf	alias of bgf_current	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
@@ -47,6 +54,8 @@ enumerator	BGF_GREEN	constant	bgf::bgf	ffi::c::UInt	unsigned int 5
 enumerator	BGF_BLUE	constant	bgf::bgf	ffi::c::UInt	unsigned int 6
 enumerator	BGF_ANON_ONE	constant	bgf::bgf	ffi::c::Int	int 1
 enumerator	BGF_ANON_MINUS	constant	bgf::bgf	ffi::c::Int	int -1
+enumerator	BGF_MODE_OFF	constant	bgf::records	ffi::c::UInt	unsigned int 0
+enumerator	BGF_MODE_ON	constant	bgf::records	ffi::c::UInt	unsigned int 200
 macro	BGF_H	not-constant		empty	empty
 macro	BGF_TYPES_H	not-constant		empty	empty
 macro	BGF_LABEL_PREFIX	not-constant		string-literal	constant: string literal
@@ -63,6 +72,8 @@ macro	BGF_NAME	not-constant		string-literal	constant: string literal
 macro	BGF_NULL_HANDLE	unsupported		not-integer-constant	its type is no C integer type (a pointer or another type)
 macro	BGF_CHAR	constant	bgf::bgf	ffi::c::Int	int 120
 macro	BGF_HIGH_CHAR	constant	bgf::bgf	ffi::c::Char	char -56
+macro	BGF_RECORDS_H	not-constant		empty	empty
+macro	late_value	not-constant		names-nothing	alias: undeclared identifier
 typedef	bgf_u8	scalar		ffi::c::UChar	an ABI alias of C unsigned char
 typedef	bgf_i16	scalar		ffi::c::Short	an ABI alias of C short
 typedef	bgf_u32	scalar		ffi::c::UInt	an ABI alias of C unsigned int
@@ -81,10 +92,236 @@ typedef	bgf_pair	unused		struct bgf_pair	no bound signature points to it
 typedef	bgf_twin	opaque	bgf::ctypes	identity bgf_twin	struct bgf_other
 typedef	bgf_wide	unsupported		typedef-abi-mismatch	typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
 typedef	bgf_table	unused		struct bgf_table	no bound signature points to it
+typedef	bgf_scalars	unused		struct bgf_scalars	no bound signature points to it
+typedef	bgf_longs	unused		struct bgf_longs	no bound signature points to it
+typedef	bgf_long_pair	unused		struct bgf_long_pair	no bound signature points to it
+typedef	bgf_mode	scalar		ffi::c::UInt	enum bgf_mode, C unsigned int on this target
+typedef	bgf_typed	unused		struct bgf_typed	no bound signature points to it
+typedef	bgf_node	opaque	bgf::ctypes	identity bgf_node	struct bgf_node
+typedef	bgf_rect	opaque	bgf::ctypes	identity bgf_rect	struct bgf_rect
+typedef	bgf_frame	opaque	bgf::ctypes	identity bgf_frame	struct bgf_frame
+typedef	bgf_packed1	unused		struct bgf_packed1	no bound signature points to it
+typedef	bgf_packed2	unused		struct bgf_packed2	no bound signature points to it
+typedef	bgf_packed_attr	unused		struct bgf_packed_attr	no bound signature points to it
+typedef	bgf_aligned	unused		struct bgf_aligned	no bound signature points to it
+typedef	bgf_aligned_field	unused		struct bgf_aligned_field	no bound signature points to it
+typedef	bgf_nested_packed	unused		struct bgf_nested_packed	no bound signature points to it
+typedef	bgf_packed_outer	unused		struct bgf_packed_outer	no bound signature points to it
+typedef	bgf_late	unused		struct bgf_late	no bound signature points to it
+typedef	bgf_anon_point	unused		struct anon@bgf_records.h:148	no bound signature points to it
+typedef	bgf_member_anon	unused		struct bgf_member_anon	no bound signature points to it
+typedef	bgf_promoted	unused		struct bgf_promoted	no bound signature points to it
+typedef	bgf_coll	unused		struct bgf_coll_a	no bound signature points to it
+typedef	loop	unused		struct bgf_kw	no bound signature points to it
+typedef	bgf_multi	unused		struct bgf_multi	no bound signature points to it
+typedef	bgf_multi_alias	unused		struct bgf_multi	no bound signature points to it
+typedef	bgf_multi_ptr	pointer		ffi::c::Ptr[<struct bgf_multi>]	struct bgf_multi *
+typedef	bgf_multi2	unused		struct bgf_multi	no bound signature points to it
+typedef	bgf_chars	opaque	bgf::ctypes	identity bgf_chars	struct bgf_chars
+typedef	bgf_wide_text	unused		struct bgf_wide_text	no bound signature points to it
+typedef	bgf_points4	opaque	bgf::ctypes	identity bgf_points4	struct bgf_points4
+typedef	bgf_ptrs3	unused		struct bgf_ptrs3	no bound signature points to it
+typedef	bgf_matrix	unused		struct bgf_matrix	no bound signature points to it
+typedef	bgf_flex	unused		struct bgf_flex	no bound signature points to it
+typedef	bgf_value	unused		union bgf_value	no bound signature points to it
+typedef	bgf_tagged	unused		struct bgf_tagged	no bound signature points to it
+typedef	bgf_overlay	unused		struct bgf_overlay	no bound signature points to it
+typedef	bgf_bits	unused		struct bgf_bits	no bound signature points to it
+typedef	bgf_real	unused		struct bgf_real	no bound signature points to it
+typedef	bgf_ld	unused		struct bgf_ld	no bound signature points to it
+typedef	bgf_flag	unused		struct bgf_flag	no bound signature points to it
+typedef	bgf_vol	unused		struct bgf_vol	no bound signature points to it
+typedef	bgf_wide_field	unused		struct bgf_wide_field	no bound signature points to it
+typedef	bgf_float_ptr	unused		struct bgf_float_ptr	no bound signature points to it
+typedef	bgf_bad_callback	unused		struct bgf_bad_callback	no bound signature points to it
+typedef	bgf_ms_field	unused		struct bgf_ms_field	no bound signature points to it
+typedef	bgf_outer_blocked	unused		struct bgf_outer_blocked	no bound signature points to it
+typedef	bgf_chain2	unused		struct bgf_chain2	no bound signature points to it
+typedef	bgf_points_ref	unused		struct bgf_points_ref	no bound signature points to it
+typedef	bgf_mixed	unused		struct bgf_mixed	no bound signature points to it
+typedef	bgf_flagged_rect	unused		struct bgf_flagged_rect	no bound signature points to it
+typedef	bgf_secret	opaque	bgf::ctypes	identity bgf_secret	struct bgf_secret
+typedef	bgf_word	unused		union bgf_word	no bound signature points to it
+typedef	bgf_shape	unused		union bgf_shape	no bound signature points to it
+typedef	bgf_words3	unused		struct bgf_words3	no bound signature points to it
+typedef	bgf_word_grid	unused		struct bgf_word_grid	no bound signature points to it
+typedef	bgf_packed_u	unused		union bgf_packed_u	no bound signature points to it
+typedef	bgf_overlapped	unused		struct bgf_overlapped	no bound signature points to it
+typedef	bgf_large	unused		union bgf_large	no bound signature points to it
+typedef	bgf_deep	unused		struct bgf_deep	no bound signature points to it
+typedef	bgf_kwu	unused		union bgf_kwu	no bound signature points to it
+typedef	bgf_tail_u	unused		union bgf_tail_u	no bound signature points to it
+typedef	bgf_aligned_u	unused		union bgf_aligned_u	no bound signature points to it
+typedef	bgf_anon_tail	unused		struct bgf_anon_tail	no bound signature points to it
+typedef	bgf_two_anon	unused		struct bgf_two_anon	no bound signature points to it
+typedef	bgf_num	unused		union bgf_num	no bound signature points to it
+typedef	bgf_flagu	unused		union bgf_flagu	no bound signature points to it
+typedef	bgf_bitsu	unused		union bgf_bitsu	no bound signature points to it
+typedef	bgf_holds_bitsu	unused		struct bgf_holds_bitsu	no bound signature points to it
+typedef	bgf_nums2	unused		struct bgf_nums2	no bound signature points to it
+typedef	bgf_anon_float	unused		struct bgf_anon_float	no bound signature points to it
+typedef	bgf_bits_overlay	unused		struct bgf_bits_overlay	no bound signature points to it
+tag	struct List	unused		complete	no bound signature points to it
+tag	struct bgf_aligned	unused		complete	no bound signature points to it
+tag	struct bgf_aligned_field	unused		complete	no bound signature points to it
+tag	struct bgf_anon_float	unused		complete	no bound signature points to it
+tag	struct bgf_anon_tail	unused		complete	no bound signature points to it
+tag	struct bgf_bad_callback	unused		complete	no bound signature points to it
+tag	struct bgf_bits	unused		complete	no bound signature points to it
+tag	struct bgf_bits_overlay	unused		complete	no bound signature points to it
+tag	struct bgf_chain2	unused		complete	no bound signature points to it
+tag	struct bgf_chars	opaque	bgf::ctypes	complete, behind pointers	identity bgf_chars
+tag	struct bgf_coll	unused		complete	no bound signature points to it
+tag	struct bgf_coll_a	unused		complete	no bound signature points to it
+tag	struct bgf_deep	unused		complete	no bound signature points to it
+tag	struct bgf_flag	unused		complete	no bound signature points to it
+tag	struct bgf_flagged_rect	unused		complete	no bound signature points to it
+tag	struct bgf_flex	unused		complete	no bound signature points to it
+tag	struct bgf_float_ptr	unused		complete	no bound signature points to it
+tag	struct bgf_frame	opaque	bgf::ctypes	complete, behind pointers	identity bgf_frame
 tag	struct bgf_handle	opaque	bgf::ctypes	incomplete	identity bgf_handle
+tag	struct bgf_holds_bitsu	unused		complete	no bound signature points to it
+tag	struct bgf_kw	unused		complete	no bound signature points to it
+tag	struct bgf_late	unused		complete	no bound signature points to it
+tag	struct bgf_ld	unused		complete	no bound signature points to it
+tag	struct bgf_long_pair	unused		complete	no bound signature points to it
+tag	struct bgf_longs	unused		complete	no bound signature points to it
+tag	struct bgf_matrix	unused		complete	no bound signature points to it
+tag	struct bgf_member_anon	unused		complete	no bound signature points to it
+tag	struct bgf_mixed	unused		complete	no bound signature points to it
+tag	struct bgf_ms_field	unused		complete	no bound signature points to it
+tag	struct bgf_multi	unused		complete	no bound signature points to it
+tag	struct bgf_nested_packed	unused		complete	no bound signature points to it
+tag	struct bgf_node	opaque	bgf::ctypes	complete, behind pointers	identity bgf_node
+tag	struct bgf_nums2	unused		complete	no bound signature points to it
 tag	struct bgf_other	opaque	bgf::ctypes	incomplete	identity bgf_twin
+tag	struct bgf_outer_blocked	unused		complete	no bound signature points to it
+tag	struct bgf_overlapped	unused		complete	no bound signature points to it
+tag	struct bgf_overlapped_member3	unused		complete	no bound signature points to it
+tag	struct bgf_overlay	unused		complete	no bound signature points to it
+tag	struct bgf_packed1	unused		complete	no bound signature points to it
+tag	struct bgf_packed2	unused		complete	no bound signature points to it
+tag	struct bgf_packed_attr	unused		complete	no bound signature points to it
+tag	struct bgf_packed_outer	unused		complete	no bound signature points to it
 tag	struct bgf_pair	unused		complete	no bound signature points to it
 tag	struct bgf_point	opaque	bgf::ctypes	complete, behind pointers	identity bgf_point
+tag	struct bgf_points4	opaque	bgf::ctypes	complete, behind pointers	identity bgf_points4
+tag	struct bgf_points_ref	unused		complete	no bound signature points to it
+tag	struct bgf_promoted	unused		complete	no bound signature points to it
+tag	struct bgf_ptrs3	unused		complete	no bound signature points to it
+tag	struct bgf_real	unused		complete	no bound signature points to it
+tag	struct bgf_rect	opaque	bgf::ctypes	complete, behind pointers	identity bgf_rect
+tag	struct bgf_scalars	unused		complete	no bound signature points to it
+tag	struct bgf_secret	opaque	bgf::ctypes	incomplete	identity bgf_secret
 tag	struct bgf_table	unused		complete	no bound signature points to it
+tag	struct bgf_tagged	unused		complete	no bound signature points to it
 tag	struct bgf_twin	opaque	bgf::ctypes	incomplete	identity bgf_twin_struct
+tag	struct bgf_two_anon	unused		complete	no bound signature points to it
+tag	struct bgf_typed	unused		complete	no bound signature points to it
+tag	struct bgf_vol	unused		complete	no bound signature points to it
+tag	struct bgf_wide_field	unused		complete	no bound signature points to it
+tag	struct bgf_wide_text	unused		complete	no bound signature points to it
 tag	struct bgf_window_	opaque	bgf::ctypes	incomplete	identity bgf_window
+tag	struct bgf_word_grid	unused		complete	no bound signature points to it
+tag	struct bgf_words3	unused		complete	no bound signature points to it
+tag	union bgf_aligned_u	unused		complete	no bound signature points to it
+tag	union bgf_bitsu	unused		complete	no bound signature points to it
+tag	union bgf_flagu	unused		complete	no bound signature points to it
+tag	union bgf_kwu	unused		complete	no bound signature points to it
+tag	union bgf_large	unused		complete	no bound signature points to it
+tag	union bgf_num	unused		complete	no bound signature points to it
+tag	union bgf_packed_u	unused		complete	no bound signature points to it
+tag	union bgf_shape	unused		complete	no bound signature points to it
+tag	union bgf_tail_u	unused		complete	no bound signature points to it
+tag	union bgf_value	unused		complete	no bound signature points to it
+tag	union bgf_word	unused		complete	no bound signature points to it
+record	struct bgf_point	layout-direct	bgf::layouts	bgf_point	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_pair	layout-direct	bgf::layouts	bgf_pair	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_table	layout-direct	bgf::layouts	bgf_table	sizeof 8, _Alignof 8, 1 fields
+record	struct bgf_scalars	layout-direct	bgf::layouts	bgf_scalars	sizeof 40, _Alignof 8, 9 fields
+record	struct bgf_longs	layout-direct	bgf::layouts	bgf_longs	sizeof 56, _Alignof 8, 7 fields
+record	struct bgf_long_pair	layout-direct	bgf::layouts	bgf_long_pair	sizeof 72, _Alignof 8, 3 fields
+record	struct bgf_typed	layout-direct	bgf::layouts	bgf_typed	sizeof 40, _Alignof 8, 8 fields
+record	struct bgf_node	layout-direct	bgf::layouts	bgf_node	sizeof 72, _Alignof 8, 9 fields
+record	struct bgf_rect	layout-direct	bgf::layouts	bgf_rect	sizeof 16, _Alignof 4, 2 fields
+record	struct bgf_frame	layout-direct	bgf::layouts	bgf_frame	sizeof 48, _Alignof 8, 4 fields
+record	struct bgf_packed1	layout-direct	bgf::layouts	bgf_packed1	sizeof 7, _Alignof 1, 3 fields
+record	struct bgf_packed2	layout-direct	bgf::layouts	bgf_packed2	sizeof 14, _Alignof 2, 3 fields
+record	struct bgf_packed_attr	layout-direct	bgf::layouts	bgf_packed_attr	sizeof 11, _Alignof 1, 3 fields
+record	struct bgf_aligned	layout-direct	bgf::layouts	bgf_aligned	sizeof 16, _Alignof 16, 1 fields
+record	struct bgf_aligned_field	layout-direct	bgf::layouts	bgf_aligned_field	sizeof 32, _Alignof 16, 3 fields
+record	struct bgf_nested_packed	layout-direct	bgf::layouts	bgf_nested_packed	sizeof 12, _Alignof 4, 3 fields
+record	struct bgf_packed_outer	layout-direct	bgf::layouts	bgf_packed_outer	sizeof 11, _Alignof 1, 3 fields
+record	struct bgf_late	layout-direct	bgf::layouts	bgf_late	sizeof 8, _Alignof 4, 2 fields
+record	struct anon@bgf_records.h:148	layout-direct	bgf::layouts	bgf_anon_point	sizeof 8, _Alignof 4, 2 fields
+record	struct anon@bgf_records.h:155	layout-direct	bgf::layouts	bgf_member_anon_range	sizeof 4, _Alignof 2, 2 fields
+record	struct bgf_member_anon	layout-direct	bgf::layouts	bgf_member_anon	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_promoted	layout-direct	bgf::layouts	bgf_promoted	sizeof 16, _Alignof 4, 4 fields
+record	struct bgf_coll_a	layout-direct	bgf::layouts	bgf_coll	sizeof 4, _Alignof 4, 1 fields
+record	struct bgf_coll	layout-direct	bgf::layouts	bgf_coll_struct	sizeof 4, _Alignof 4, 1 fields
+record	struct bgf_kw	layout-direct	bgf::layouts	loop_	sizeof 12, _Alignof 4, 3 fields
+record	struct List	layout-direct	bgf::layouts	List_	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_multi	layout-direct	bgf::layouts	bgf_multi	sizeof 4, _Alignof 4, 1 fields
+record	struct bgf_chars	layout-direct	bgf::layouts	bgf_chars	sizeof 20, _Alignof 4, 2 fields
+record	struct bgf_wide_text	layout-direct	bgf::layouts	bgf_wide_text	sizeof 36, _Alignof 4, 2 fields
+record	struct bgf_points4	layout-direct	bgf::layouts	bgf_points4	sizeof 32, _Alignof 4, 1 fields
+record	struct bgf_ptrs3	layout-direct	bgf::layouts	bgf_ptrs3	sizeof 24, _Alignof 8, 1 fields
+record	struct bgf_matrix	layout-direct	bgf::layouts	bgf_matrix	sizeof 24, _Alignof 4, 1 fields
+record	struct bgf_flex	layout-blocked		flexible-array	field items: scalar elements, int []
+record	union bgf_value	layout-direct	bgf::layouts	bgf_value	sizeof 8, _Alignof 8, 3 fields
+record	struct bgf_tagged	layout-direct	bgf::layouts	bgf_tagged	sizeof 16, _Alignof 8, 2 fields
+record	union anon@bgf_records.h:189	layout-direct	bgf::layouts	bgf_overlay_member2	sizeof 8, _Alignof 8, 2 fields
+record	struct bgf_overlay	layout-direct	bgf::layouts	bgf_overlay	sizeof 16, _Alignof 8, 2 fields
+record	struct bgf_bits	layout-blocked		bitfield	field a: bitfield a: unsigned int : 3; field b: bitfield b: unsigned int : 5
+record	struct bgf_real	layout-blocked		double,float	field f: float (float); field d: double (double)
+record	struct bgf_ld	layout-blocked		long-double	field x: long double (long double)
+record	struct bgf_flag	layout-blocked		c-bool	field ok: C _Bool (_Bool)
+record	struct bgf_vol	layout-blocked		volatile	field counter: a volatile field: volatile int
+record	struct bgf_wide_field	layout-blocked		typedef-abi-mismatch	field w: typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
+record	struct bgf_float_ptr	layout-blocked		unsupported-pointer	field values: a pointer to float (float)
+record	struct bgf_bad_callback	layout-blocked		unsupported-pointer	field measure: callback argument 1: double (double) (unsupported-callback-signature); callback result: double (double) (unsupported-callback-signature)
+record	struct bgf_ms_field	layout-blocked		unsupported-calling-convention	field cb: an explicit calling convention: ms_abi
+record	struct bgf_outer_blocked	layout-direct	bgf::layouts	bgf_outer_blocked	sizeof 24, _Alignof 4, 2 fields
+record	struct bgf_chain2	layout-direct	bgf::layouts	bgf_chain2	sizeof 32, _Alignof 8, 2 fields
+record	struct bgf_points_ref	layout-direct	bgf::layouts	bgf_points_ref	sizeof 16, _Alignof 8, 2 fields
+record	struct bgf_mixed	layout-direct	bgf::layouts	bgf_mixed	sizeof 16, _Alignof 8, 2 fields
+record	struct bgf_flagged_rect	layout-blocked		nested-layout-blocked	field flag (struct bgf_flag, field) -> c-bool
+record	union bgf_word	layout-direct	bgf::layouts	bgf_word	sizeof 4, _Alignof 4, 3 fields
+record	union bgf_shape	layout-direct	bgf::layouts	bgf_shape	sizeof 8, _Alignof 8, 3 fields
+record	struct bgf_words3	layout-direct	bgf::layouts	bgf_words3	sizeof 16, _Alignof 4, 2 fields
+record	struct bgf_word_grid	layout-direct	bgf::layouts	bgf_word_grid	sizeof 20, _Alignof 4, 2 fields
+record	union bgf_packed_u	layout-direct	bgf::layouts	bgf_packed_u	sizeof 7, _Alignof 1, 2 fields
+record	struct anon@bgf_records.h:240	layout-direct	bgf::layouts	bgf_overlapped_member3_member1	sizeof 8, _Alignof 4, 2 fields
+record	union anon@bgf_records.h:239	layout-direct	bgf::layouts	bgf_overlapped_member3_union	sizeof 8, _Alignof 8, 2 fields
+record	struct bgf_overlapped	layout-direct	bgf::layouts	bgf_overlapped	sizeof 32, _Alignof 8, 4 fields
+record	struct bgf_overlapped_member3	layout-direct	bgf::layouts	bgf_overlapped_member3	sizeof 4, _Alignof 4, 1 fields
+record	struct anon@bgf_records.h:250	layout-direct	bgf::layouts	bgf_large_member1	sizeof 8, _Alignof 4, 2 fields
+record	struct anon@bgf_records.h:251	layout-direct	bgf::layouts	bgf_large_u	sizeof 8, _Alignof 4, 2 fields
+record	union bgf_large	layout-direct	bgf::layouts	bgf_large	sizeof 8, _Alignof 8, 3 fields
+record	union anon@bgf_records.h:258	layout-direct	bgf::layouts	bgf_deep_member2_member2	sizeof 4, _Alignof 4, 2 fields
+record	union anon@bgf_records.h:262#2	layout-direct	bgf::layouts	bgf_deep_member3_member1_member3	sizeof 2, _Alignof 2, 2 fields
+record	struct anon@bgf_records.h:262	layout-direct	bgf::layouts	bgf_deep_member3_member1	sizeof 6, _Alignof 2, 3 fields
+record	union anon@bgf_records.h:261	layout-direct	bgf::layouts	bgf_deep_member3	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_deep	layout-direct	bgf::layouts	bgf_deep	sizeof 20, _Alignof 4, 4 fields
+record	union bgf_kwu	layout-direct	bgf::layouts	bgf_kwu	sizeof 4, _Alignof 4, 2 fields
+record	union bgf_tail_u	layout-direct	bgf::layouts	bgf_tail_u	sizeof 8, _Alignof 4, 2 fields
+record	union bgf_aligned_u	layout-direct	bgf::layouts	bgf_aligned_u	sizeof 16, _Alignof 16, 2 fields
+record	union anon@bgf_records.h:269	layout-direct	bgf::layouts	bgf_anon_tail_member2	sizeof 8, _Alignof 4, 2 fields
+record	struct bgf_anon_tail	layout-direct	bgf::layouts	bgf_anon_tail	sizeof 16, _Alignof 4, 3 fields
+record	union anon@bgf_records.h:270	layout-direct	bgf::layouts	bgf_two_anon_member1	sizeof 4, _Alignof 4, 2 fields
+record	union anon@bgf_records.h:270#2	layout-direct	bgf::layouts	bgf_two_anon_member2	sizeof 8, _Alignof 8, 2 fields
+record	struct bgf_two_anon	layout-direct	bgf::layouts	bgf_two_anon	sizeof 16, _Alignof 8, 2 fields
+record	union bgf_num	layout-blocked		float	field f: float (float)
+record	union bgf_flagu	layout-blocked		c-bool	field b: C _Bool (_Bool)
+record	union bgf_bitsu	layout-blocked		nested-layout-blocked	field bits (struct bgf_bits, union-member) -> bitfield
+record	struct bgf_holds_bitsu	layout-blocked		nested-layout-blocked	field u (union bgf_bitsu, field) -> struct bgf_bits -> bitfield
+record	struct bgf_nums2	layout-blocked		nested-layout-blocked	field nums (union bgf_num, array-element) -> float
+record	union anon@bgf_records.h:281	layout-blocked		float	field f: float (float)
+record	struct bgf_anon_float	layout-blocked		nested-layout-blocked	member2 (union anon@bgf_records.h:281, anonymous-member) -> float
+record	union anon@bgf_records.h:282	layout-unheld		bgf_bits_overlay_member2	an anonymous member of struct bgf_bits_overlay, whose layout is blocked: representable, not emitted
+record	struct bgf_bits_overlay	layout-blocked		bitfield	field flag: bitfield flag: unsigned int : 1
+record	struct bgf_handle	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bgf_other	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bgf_secret	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bgf_twin	opaque-only		incomplete	no definition: a pointee identity only
+record	struct bgf_window_	opaque-only		incomplete	no definition: a pointee identity only

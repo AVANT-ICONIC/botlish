@@ -9,6 +9,17 @@
 #   ffi::c::Bool                         C _Bool: Botlish's own bool (the
 #                                        same type, the C ABI's spelling of
 #                                        it), carried as the one byte 0 or 1
+#   ffi::c::Double                       C double: Botlish's own Float64 (the
+#                                        same type, the C ABI's spelling of
+#                                        it), carried as the target's IEEE
+#                                        754 binary64 in its floating-point
+#                                        register class. The two differ at
+#                                        the boundary only: every Float64 is
+#                                        a double, but a double C returns is
+#                                        a Float64 only when it is finite
+#                                        (NaN and the infinities are the
+#                                        call's NonFiniteFloat, negative
+#                                        zero is zero: FLOAT64-MILESTONE-1.md)
 #   ffi::c::Void                         the C void: a permanently
 #                                        incomplete pointee, never a type of
 #                                        a value
@@ -54,7 +65,7 @@
 namespace eval hir::cabi {
     # The intrinsic type names of namespace ffi::c besides its scalars: the
     # incomplete pointee and the two pointer constructors.
-    variable intrinsicTypes {Void Ptr FnPtr Bool}
+    variable intrinsicTypes {Void Ptr FnPtr Bool Double}
 }
 
 # The C target a compilation uses: TARGET when given, else the host's. An
@@ -81,7 +92,7 @@ proc hir::cabi::HasNamespaceTypes {ns} {
 # every target's. A HIR from HIR text records the target its C integer
 # scalars name (hir::read); one from core IR text none.
 proc hir::cabi::targetOf {hir} {
-    return [expr {[dict exists $hir target] ? [dict get $hir target] : ""}]
+    return [dict getdef $hir target ""]
 }
 
 # Why HIR cannot stand for a compilation for TARGET, or "" when it can: a HIR
@@ -125,7 +136,10 @@ proc hir::cabi::NamespaceTypeDecls {ns target span} {
 # ffi::c), which the loader authorizes like a module's own types.
 proc hir::cabi::IntrinsicTypeNames {ns} {
     variable intrinsicTypes
-    return [expr {$ns eq $::core::cabi::namespace ? $intrinsicTypes : {}}]
+    if {$ns eq $::core::cabi::namespace} {
+        return $intrinsicTypes
+    }
+    return {}
 }
 
 # The C target of the compilation whose declarations are installed: the one
@@ -133,12 +147,16 @@ proc hir::cabi::IntrinsicTypeNames {ns} {
 # hir/read.tcl from HIR text), or "" when no file of it imports ffi::c.
 proc hir::cabi::CompilationTarget {} {
     set info [core::type::cabiOf "$::core::cabi::namespace\::[lindex [core::cabi::scalarNames] 0]"]
-    return [expr {$info eq "" ? "" : [dict get $info target]}]
+    if {$info eq ""} {
+        return ""
+    }
+    return [dict get $info target]
 }
 
 # The spellings of the intrinsic types, as a type expression writes them.
 proc hir::cabi::VoidName {} { return "$::core::cabi::namespace\::Void" }
 proc hir::cabi::BoolName {} { return "$::core::cabi::namespace\::Bool" }
+proc hir::cabi::DoubleName {} { return "$::core::cabi::namespace\::Double" }
 proc hir::cabi::PtrName {} { return "$::core::cabi::namespace\::Ptr" }
 proc hir::cabi::FnPtrName {} { return "$::core::cabi::namespace\::FnPtr" }
 
@@ -211,10 +229,11 @@ proc hir::cabi::SignatureProblem {fn} {
     return ""
 }
 
-# 1 if TYPE is a C ABI value type: a C integer scalar, C _Bool (bool), a C
-# data or function pointer, or an imprint variable (bound at each call).
+# 1 if TYPE is a C ABI value type: a C integer scalar, C _Bool (bool), C
+# double (Float64), a C data or function pointer, or an imprint variable
+# (bound at each call).
 proc hir::cabi::IsValueType {type} {
-    return [expr {[core::type::cabiScalar $type] ne "" || $type eq "bool" || [hir::types::IsCPtr $type]
+    return [expr {[core::type::cabiScalar $type] ne "" || $type in {bool Float64} || [hir::types::IsCPtr $type]
         || [hir::types::IsCFnPtr $type] || [hir::types::IsImprint $type]}]
 }
 
@@ -223,7 +242,7 @@ proc hir::cabi::ValueTypeProblem {type} {
     if {[IsValueType $type]} {
         return ""
     }
-    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [PtrName]\[...\] or [FnPtrName]\[...\])"
+    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [DoubleName], [PtrName]\[...\] or [FnPtrName]\[...\])"
 }
 
 proc hir::cabi::ScalarExample {} {
@@ -305,7 +324,11 @@ proc hir::cabi::verify {hirVar} {
             # A C function pointer (or any C address) is no Botlish callable:
             # calling C is the next milestone (C-ABI-TYPES.md).
             set callee [dict get $hir exprs [dict get $node callee]]
-            set name [expr {[dict get $callee kind] eq "ref" ? [hir::semantic::RefName $hir [dict get $node callee]] : "this value"}]
+            if {[dict get $callee kind] eq "ref"} {
+                set name [hir::semantic::RefName $hir [dict get $node callee]]
+            } else {
+                set name "this value"
+            }
             hir::Diagnose hir TYPE [format \
                 {%s is a C %s, %s: Botlish cannot call one yet (calling C is the next milestone)} \
                 $name [expr {[hir::types::IsCFnPtr $calleeType] ? "function pointer" : "pointer"}] \
@@ -325,14 +348,19 @@ proc hir::cabi::verify {hirVar} {
             set paramType [lindex $paramTypes [expr {min($index, [llength $paramTypes] - 1)}]]
             incr index
             set argType [hir::typeOf $hir $arg]
-            if {[hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+            if {[hir::types::IsNativeMemory $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
                     && [dict get [core::native::metadata $name] imprint] eq ""} {
                 # (An imprinted native's signature rejects it itself: IMPRINT.)
                 # A native view's word is its pointer's, but a view is no
                 # pointer and no Int (NATIVE-LAYOUT-VIEWS.md): no pointer
                 # operation (null?, clone, ...) and no other native takes one.
-                hir::Diagnose hir TYPE [format \
-                    {argument %d of %s is %s, a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value} \
+                if {[hir::types::IsNativeEdit $argType]} {
+                    # (A native edit, NATIVE-LAYOUT-WRITES.md, likewise.)
+                    set what "a native edit, where %s requires %s: a native edit is a window onto native memory, read by its fields (or binary::load) and written by binary::store, never a pointer, an Int or any other value"
+                } else {
+                    set what "a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value"
+                }
+                hir::Diagnose hir TYPE [format "argument %d of %s is %s, $what" \
                     $index $name [hir::types::show $argType] $name [core::type::show $paramType]] $arg
                 continue
             }
@@ -358,5 +386,5 @@ proc hir::cabi::ResolveImprint {typeExpr ns {variables {}}} {
     if {$typeExpr eq [VoidName]} {
         return void
     }
-    return [hir::resolve::ResolveTypeExpr $typeExpr $ns [expr {$variables eq "" ? 0 : $variables}]]
+    return [hir::resolve::ResolveTypeExpr $typeExpr $ns [if {$variables eq ""} {string cat 0} else {set variables}]]
 }

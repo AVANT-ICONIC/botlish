@@ -3,7 +3,7 @@
 //! See native/lower.tcl for the format. This module parses and validates it;
 //! it knows nothing about Cranelift.
 
-use crate::runtime::value::Kind;
+use crate::runtime::value::{FloatType, Kind};
 use std::collections::HashSet;
 use std::fmt;
 use crate::runtime::ops::{op_may_allocate, op_may_error};
@@ -135,6 +135,30 @@ pub enum OpCode {
     /// fails. A scalar value always fits the small-Int range, so the result
     /// is always an immediate small Int, never a BigInt.
     CharCodepoint,
+    /// The floating-point operations (FLOAT64-MILESTONE-1.md; core/float.tcl
+    /// has the semantics): `f64add` .. `f64div` (may fail with the declared
+    /// NonFiniteFloat; allocate the result), `f64neg` (allocates), the
+    /// comparisons `f64lt` .. `f64ge` (never fail or allocate),
+    /// `f64fromint` (an Int's nearest Float64; NonFiniteFloat) and
+    /// `f64trunc` (the Int toward zero). Operands have the kinds the native
+    /// declares. `float()` names the type and operation, which is what
+    /// codegen and the runtime dispatch on: a further width is a variant
+    /// group of its own.
+    F64Add,
+    F64Sub,
+    F64Mul,
+    F64Div,
+    F64Neg,
+    F64Lt,
+    F64Le,
+    F64Gt,
+    F64Ge,
+    /// `==` of two operands statically Float64 (native/lower.tcl's
+    /// NativeCallOp): equality of the two numbers' bits, which is numeric
+    /// equality (one representation per number); never fails.
+    F64Eq,
+    F64FromInt,
+    F64Trunc,
     MkOk,
     MkError,
     /// Structural hash (core/hashing.tcl's hash): consistent with VEq,
@@ -351,6 +375,48 @@ pub enum OpCode {
     NativeLoadPtr,
     CPtrOffset,
     CPtrFixtureMemory,
+    /// Native layout writes (NATIVE-LAYOUT-WRITES.md, runtime/nview.rs): one
+    /// op per field write of one statically known layout, with constant
+    /// operands. `nativestore %e %o %c %v`: the Int %v written at address
+    /// %e + %o (a `NativeEdit[L]`'s word, never null) in the scalar encoding
+    /// %c (`binstore`'s word): one unaligned store of the field's width,
+    /// nothing else touched. `nativestoreptr %e %o %w %p`: the %w-byte
+    /// address bits of the C address word %p written at %e + %o (a pointer
+    /// field; %p observed). `mbyteswrite %m %o %c %v` and `mbyteswriteptr %m
+    /// %o %w %p`: the same into a FRESH copy of the writable byte storage %m
+    /// (MUTABLE-BYTES.md: published storage is never written), which is the
+    /// result. `cptrfixturebytes %p %n`: the test fixture's copy of the %n
+    /// bytes at the C address %p, as a List of Ints (core/cabi.tcl's
+    /// installTestFixture; the oracle of a native write, read without any
+    /// layout). The stores allocate nothing; the writes and the fixture one
+    /// object. All are fallible only on an operand a checked program cannot
+    /// produce (a value outside its encoding, no C address word).
+    NativeStore,
+    NativeStorePtr,
+    MBytesWrite,
+    MBytesWritePtr,
+    CPtrFixtureBytes,
+    /// Fixed arrays (FIXED-LAYOUT-ARRAYS.md, runtime/nview.rs): a row of %n
+    /// contiguous scalars of one encoding %c read or written whole.
+    /// `binloadarray %s %o %c %n` and `nativeloadarray %v %o %c %n`: the List
+    /// of the row at offset %o of byte storage %s (imprinting) or at address
+    /// %v + %o (a live array's copy), one allocation (a u64 above i64::MAX a
+    /// BigInt too). `binstorearray %s %o %c %l`: the List %l written at %o of
+    /// the FRESH storage %s an emission or a whole-array byte write is
+    /// building (byteszeroed / mbytesclone: still private), every element
+    /// encoded before any byte is written. `nativestorearray %e %o %c %l`:
+    /// the same at address %e + %o of a native edit. `binstoreptr %s %o %w
+    /// %q`: the %w-byte address bits of %q written at %o of such a fresh
+    /// storage (one element of an array of pointers, binary::write_foreign).
+    /// Every other array (of layouts, of pointers, of rows) is a NIR loop
+    /// over the per-field ops; an element access is one of those at a
+    /// computed offset. Fallible only on an operand a checked program never
+    /// produces (the length was checked against the extent before).
+    BinLoadArray,
+    NativeLoadArray,
+    BinStoreArray,
+    NativeStoreArray,
+    BinStorePtr,
     /// The borrow test fixture's synthetic foreign operations
     /// (C-POINTER-BORROWING.md; runtime/ffifixture.rs): only the natives
     /// core/cabi.tcl's installBorrowFixture registers lower to them, so no
@@ -676,6 +742,18 @@ op_spellings! {
     "resultvalue" => ResultValue,
     "resulterror" => ResultError,
     "charcodepoint" => CharCodepoint,
+    "f64add" => F64Add,
+    "f64sub" => F64Sub,
+    "f64mul" => F64Mul,
+    "f64div" => F64Div,
+    "f64neg" => F64Neg,
+    "f64lt" => F64Lt,
+    "f64le" => F64Le,
+    "f64gt" => F64Gt,
+    "f64ge" => F64Ge,
+    "f64eq" => F64Eq,
+    "f64fromint" => F64FromInt,
+    "f64trunc" => F64Trunc,
     "mkok" => MkOk,
     "mkerror" => MkError,
     "hash" => Hash,
@@ -711,6 +789,16 @@ op_spellings! {
     "nativeloadptr" => NativeLoadPtr,
     "cptroffset" => CPtrOffset,
     "cptrfixturememory" => CPtrFixtureMemory,
+    "nativestore" => NativeStore,
+    "nativestoreptr" => NativeStorePtr,
+    "mbyteswrite" => MBytesWrite,
+    "mbyteswriteptr" => MBytesWritePtr,
+    "binloadarray" => BinLoadArray,
+    "nativeloadarray" => NativeLoadArray,
+    "binstorearray" => BinStoreArray,
+    "nativestorearray" => NativeStoreArray,
+    "binstoreptr" => BinStorePtr,
+    "cptrfixturebytes" => CPtrFixtureBytes,
     "ffifixtureread" => FfiFixtureRead,
     "ffifixturereadreentrant" => FfiFixtureReadReentrant,
     "ffifixturefill" => FfiFixtureFill,
@@ -776,7 +864,46 @@ op_spellings! {
     "asciishorteq" => AsciiShortEq,
 }
 
+/// What a floating-point operation computes (OpCode::float).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloatOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Neg,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    FromInt,
+    Trunc,
+}
+
 impl OpCode {
+    /// The floating-point type and operation of OP, if it is one
+    /// (FLOAT64-MILESTONE-1.md).
+    pub fn float(self) -> Option<(FloatType, FloatOp)> {
+        use OpCode::*;
+        let ty = FloatType::Float64;
+        Some(match self {
+            F64Add => (ty, FloatOp::Add),
+            F64Sub => (ty, FloatOp::Sub),
+            F64Mul => (ty, FloatOp::Mul),
+            F64Div => (ty, FloatOp::Div),
+            F64Neg => (ty, FloatOp::Neg),
+            F64Lt => (ty, FloatOp::Lt),
+            F64Le => (ty, FloatOp::Le),
+            F64Gt => (ty, FloatOp::Gt),
+            F64Ge => (ty, FloatOp::Ge),
+            F64Eq => (ty, FloatOp::Eq),
+            F64FromInt => (ty, FloatOp::FromInt),
+            F64Trunc => (ty, FloatOp::Trunc),
+            _ => return None,
+        })
+    }
+
     /// Number of operands, or None for any.
     pub fn arity(self) -> Option<usize> {
         use OpCode::*;
@@ -787,6 +914,7 @@ impl OpCode {
             StrLen | StrLower | ListLen | MutArrayAllocate | MutArrayCapacity | IsInt | IsStr | IsList | IsMutArray
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
             | StrByteLen | StrUtf8Bytes | StrIsTclAlpha | StrIsTclAlnum | CharCodepoint | SetFromList
+            | F64Neg | F64FromInt | F64Trunc
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
             | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | BytesZeroed | MBytesNew | MBytesFrom | MBytesLen
             | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
@@ -794,7 +922,9 @@ impl OpCode {
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | NativeLoad | NativeLoadPtr | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
-            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed => Some(4),
+            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed
+            | NativeStore | NativeStorePtr | MBytesWrite | MBytesWritePtr
+            | BinLoadArray | NativeLoadArray | BinStoreArray | NativeStoreArray | BinStorePtr => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),
             _ => Some(2),
         }
@@ -874,6 +1004,12 @@ pub enum Inst {
     /// UNICODE-CHAR-LITERALS.md); codegen packs it as the immediate
     /// `make_char` word directly, no allocation and no runtime call.
     Char { dst: Reg, digits: String },
+    /// `%d = float TYPE BITS`: the floating-point value of TYPE (`Float64`)
+    /// whose bits (runtime::value::FloatObj) are the hexadecimal BITS
+    /// (`0x3ff8000000000000`), validated as a finite number that is not
+    /// negative zero (FloatType::admit); codegen loads it from the
+    /// constant table (a static object), never allocating it.
+    Float { dst: Reg, ty: FloatType, bits: u64 },
     /// `%d = enum E C`: the case number C of the program's enum number E (an
     /// `enum` declaration, ENUMS.md); codegen packs it as the immediate
     /// `make_enum` word directly, no allocation and no runtime call.
@@ -1318,6 +1454,9 @@ pub enum CAbi {
     I64,
     U64,
     Bool,
+    /// C double, an IEEE 754 binary64 in the target's floating-point
+    /// register class: a Float64 value's number (FLOAT64-MILESTONE-1.md).
+    F64,
     Ptr,
     Void,
 }
@@ -1334,6 +1473,7 @@ impl CAbi {
             "i64" => CAbi::I64,
             "u64" => CAbi::U64,
             "bool" => CAbi::Bool,
+            "f64" => CAbi::F64,
             "ptr" => CAbi::Ptr,
             "void" => CAbi::Void,
             _ => return None,
@@ -1346,7 +1486,7 @@ impl CAbi {
             CAbi::I8 | CAbi::U8 | CAbi::Bool => 8,
             CAbi::I16 | CAbi::U16 => 16,
             CAbi::I32 | CAbi::U32 => 32,
-            CAbi::I64 | CAbi::U64 | CAbi::Ptr => 64,
+            CAbi::I64 | CAbi::U64 | CAbi::Ptr | CAbi::F64 => 64,
             CAbi::Void => 0,
         }
     }
@@ -1689,11 +1829,12 @@ fn summarize_call_effects(program: &mut Program, enabled: bool) {
                 Inst::Construct { .. } => local[i] = (true, true),
                 Inst::CallValue { .. } => local[i] = (true, true),
                 // A C call (C-FFI.md) is a safepoint; it fails only on a
-                // result it cannot represent (an address, a _Bool byte) or
-                // a violated alias contract.
+                // result it cannot represent (an address, a _Bool byte, a
+                // double that is no finite number) or a violated alias
+                // contract.
                 Inst::ForeignCall { foreign, .. } => {
                     let decl = &program.foreigns[*foreign as usize];
-                    local[i].0 |= decl.result == CAbi::Ptr || decl.result == CAbi::Bool || decl.alias.is_some();
+                    local[i].0 |= matches!(decl.result, CAbi::Ptr | CAbi::Bool | CAbi::F64) || decl.alias.is_some();
                     local[i].1 = true;
                 }
                 _ => {}
@@ -2109,6 +2250,18 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 }
                 Inst::Char { dst, digits }
             }
+            "float" => {
+                let Some(ty) = tokens.get(3).and_then(word).and_then(FloatType::parse) else {
+                    return p.err("bad float type");
+                };
+                let text = tokens.get(4).and_then(word).unwrap_or("");
+                let Some(hex) = text.strip_prefix("0x") else { return p.err("float bits must be 0x hexadecimal") };
+                let Ok(bits) = u64::from_str_radix(hex, 16) else { return p.err("bad float bits") };
+                if ty.admit(f64::from_bits(bits)) != Some(bits) {
+                    return p.err("float literal is not a finite number with one representation");
+                }
+                Inst::Float { dst, ty, bits }
+            }
             "enum" => {
                 let index = num(3)?;
                 let case = num(4)?;
@@ -2442,6 +2595,7 @@ fn validate(program: &Program) -> Result<(), NirError> {
                 | Inst::Str { dst, .. }
                 | Inst::Bytes { dst, .. }
                 | Inst::Char { dst, .. }
+                | Inst::Float { dst, .. }
                 | Inst::Enum { dst, .. }
                 | Inst::Bool { dst, .. }
                 | Inst::Unit { dst }
@@ -2839,7 +2993,7 @@ fn validate_plans(program: &Program) -> Result<(), NirError> {
                 | Inst::ClearDeclaredError | Inst::PushErrorExit(_) | Inst::PopErrorExit | Inst::Reraise
                 | Inst::Jump(_) | Inst::DeclaredErrorEq { .. } | Inst::DeclaredPayload { .. } | Inst::Int { .. } | Inst::RawInt { .. } | Inst::ShortLit { .. }
                 | Inst::AsciiLit { .. }
-                | Inst::Str { .. } | Inst::Bytes { .. } | Inst::Char { .. } | Inst::Enum { .. } | Inst::Bool { .. } | Inst::Unit { .. }
+                | Inst::Str { .. } | Inst::Bytes { .. } | Inst::Char { .. } | Inst::Float { .. } | Inst::Enum { .. } | Inst::Bool { .. } | Inst::Unit { .. }
                 | Inst::Native { .. } | Inst::FnValue { .. } | Inst::SelfClosure { .. } | Inst::Capture { .. }
                 | Inst::StaticGet { .. } | Inst::ContextLoad { .. } => {}
                 Inst::StaticSet { value, .. } => used.push(*value),
@@ -3015,7 +3169,7 @@ fn check_plan_linearity(f: &Function, consumes: &[Vec<Reg>]) -> Result<(), Strin
 fn def_of(inst: &Inst) -> Option<Reg> {
     match inst {
         Inst::Int { dst, .. } | Inst::RawInt { dst, .. } | Inst::ShortLit { dst, .. } | Inst::AsciiLit { dst, .. } | Inst::Str { dst, .. } | Inst::Bytes { dst, .. } | Inst::Char { dst, .. }
-        | Inst::Enum { dst, .. } | Inst::Bool { dst, .. } | Inst::Unit { dst } | Inst::Native { dst, .. } | Inst::FnValue { dst, .. }
+        | Inst::Float { dst, .. } | Inst::Enum { dst, .. } | Inst::Bool { dst, .. } | Inst::Unit { dst } | Inst::Native { dst, .. } | Inst::FnValue { dst, .. }
         | Inst::SelfClosure { dst } | Inst::Capture { dst, .. } | Inst::Move { dst, .. }
         | Inst::Closure { dst, .. }
         | Inst::Op { dst, .. } | Inst::Call { dst, .. } | Inst::CallEnv { dst, .. } | Inst::CallValue { dst, .. }

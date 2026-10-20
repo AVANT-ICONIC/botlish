@@ -155,7 +155,10 @@ proc hir::structs::OwnedRecursionFrom {target type crossed path visitedVar} {
     if {[hir::types::IsNamedStruct $type]} {
         set id [lindex $type 1]
         if {$path ne {} && $id eq $target} {
-            return [expr {$crossed ? $path : ""}]
+            if {$crossed} {
+                return $path
+            }
+            return ""
         }
         if {[dict exists $visited $id,$crossed] || ![dict exists $registry $id]} {
             return ""
@@ -187,7 +190,10 @@ proc hir::structs::Fail {span message {kind TYPE}} {
 # The declaration identity a struct NAME declared in module NAMESPACE (""
 # for the entry program) has.
 proc hir::structs::identity {name namespace} {
-    return [expr {$namespace eq "" ? $name : "${namespace}::${name}"}]
+    if {$namespace eq ""} {
+        return $name
+    }
+    return "${namespace}::${name}"
 }
 
 # 1 if ID is a registered struct declaration identity, or the identity of
@@ -206,10 +212,16 @@ proc hir::structs::declared {id} {
 proc hir::structs::lookup {name {ns ""}} {
     variable registry
     if {[string first :: $name] >= 0} {
-        return [expr {[dict exists $registry $name] ? $name : ""}]
+        if {[dict exists $registry $name]} {
+            return $name
+        }
+        return ""
     }
     set id [identity $name $ns]
-    return [expr {[dict exists $registry $id] ? $id : ""}]
+    if {[dict exists $registry $id]} {
+        return $id
+    }
+    return ""
 }
 
 proc hir::structs::names {id} {
@@ -233,10 +245,10 @@ proc hir::structs::fieldType {id name} {
             return ""
         }
         set types [hir::layouts::StructFieldTypes $layout]
-        return [expr {[dict exists $types $name] ? [dict get $types $name] : ""}]
+        return [dict getdef $types $name ""]
     }
     set types [dict get $registry $id types]
-    return [expr {[dict exists $types $name] ? [dict get $types $name] : ""}]
+    return [dict getdef $types $name ""]
 }
 
 # {FIELD TYPE ...} in declared order.
@@ -375,7 +387,7 @@ proc hir::structs::apply {decls} {
         set ns [dict get $decl namespace]
         set id [identity $name $ns]
         if {$name in {Int any never Fn Coroutine enum} || [core::type::isBuiltinName $name] || [core::type::valid $id]
-                || [dict exists $::hir::types::constructors $name]} {
+                || [dict exists $::hir::types::constructors $name] || [core::native::isBuiltinEnum $name]} {
             Fail [dict get $decl nameSpan] "\"$name\" cannot be declared as a struct: the name is already a built-in or declared type"
         }
         if {[hir::enums::declared $id]} {
@@ -558,14 +570,16 @@ proc hir::structs::ProjectionProblem {hir e} {
         return ""
     }
     set kind [hir::types::kindOf $type]
-    set view [hir::layouts::OfViewType $type]
+    set view [hir::layouts::OfNativeType $type]
     if {$view ne ""} {
-        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
-        # layout's fields, nothing else.
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) or a
+        # native edit (NATIVE-LAYOUT-WRITES.md): the layout's fields,
+        # nothing else.
         if {[hir::layouts::ViewFieldType $view $name] ne ""} {
             return ""
         }
-        return [list UNKNOWN-FIELD [format {native view type %s has no field "%s" (layout %s has fields: %s)} \
+        return [list UNKNOWN-FIELD [format {native %s type %s has no field "%s" (layout %s has fields: %s)} \
+            [expr {[hir::types::IsNativeEdit $type] ? "edit" : "view"}] \
             [hir::types::show $type] $name $view [join [hir::layouts::StructNames $view] {, }]]]
     }
     if {[projectionDenied $type $node]} {
@@ -692,7 +706,7 @@ proc hir::structs::MissingImportMessage {name candidates} {
 proc hir::structs::UnimportedCandidates {hir e type} {
     set node [dict get $hir exprs $e]
     set name [dict get $node name]
-    set own [expr {[dict exists $node ns] ? [dict get $node ns] : ""}]
+    set own [dict getdef $node ns ""]
     set imported [hir::imports::namespaces $own]
     set argCount [MethodArgCount $hir $e]
     set kind [hir::types::kindOf $type]
@@ -708,7 +722,11 @@ proc hir::structs::UnimportedCandidates {hir e type} {
         set arity [dict get $meta arity]
         if {$arity ne "*" && $argCount ne "" && $arity != $argCount} continue
         set paramTypes [dict get $meta paramTypes]
-        set wanted [expr {$paramTypes eq "" ? "" : [core::type::base [lindex $paramTypes 0]]}]
+        if {$paramTypes eq ""} {
+            set wanted ""
+        } else {
+            set wanted [core::type::base [lindex $paramTypes 0]]
+        }
         if {$kind ne "" && $wanted ni {"" any} && $kind ne $wanted} continue
         lappend found $native
     }
@@ -822,8 +840,11 @@ proc hir::structs::SynthesizedReceiver {hir node} {
     }
     set b [dict get $receiver binding]
     set binding [dict get $hir bindings $b]
-    set written [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]
-    return [expr {[string first # $written] >= 0 ? $b : ""}]
+    set written [dict getdef $binding spelling [dict get $binding name]]
+    if {[string first # $written] >= 0} {
+        return $b
+    }
+    return ""
 }
 
 # "": the method-style call E (a call carrying `method`, i.e. written
@@ -884,7 +905,10 @@ proc hir::structs::FieldCompetes {type name context} {
 # the top level).
 proc hir::structs::OwnerBlock {hir e} {
     set invocation [dict get $hir scopes [dict get $hir exprs $e scope] invocation]
-    return [expr {$invocation eq "" ? "program" : $invocation}]
+    if {$invocation eq ""} {
+        return "program"
+    }
+    return $invocation
 }
 
 # The blocks whose generic analysis can actually run (see the header): a

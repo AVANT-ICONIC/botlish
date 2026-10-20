@@ -39,6 +39,52 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
     CallConv::triple_default(triple)
 }
 
+/// How many of a foreign C signature's integer-register parameters -- every
+/// class but a double, counted in order -- carry their narrow integer's
+/// extension attribute (`sext`/`uext`, `clif::c_signature`) in convention
+/// CONV: every one, except under AppleAarch64, where only the eight passed
+/// in registers do.
+///
+/// Apple's arm64 ABI ("Writing ARM64 code for Apple platforms") makes the
+/// caller sign- or zero-extend an argument narrower than 32 bits to 32 bits
+/// *in its register*, and gives an argument passed on the stack a slot of
+/// its natural size, packed at its natural alignment (a `char` one byte):
+/// a stack slot has nothing to extend into. Cranelift 0.135.2 implements
+/// both, but stores an extended *stack* argument at the full register width
+/// into its narrow slot (machinst/abi.rs `gen_call_args`: an 8-byte `str`
+/// at a 1-, 2- or 4-byte slot's offset). Stored in parameter order, each
+/// such store spills over into the next argument's slots before that
+/// argument is stored, but the last one can write up to seven bytes past
+/// the argument area, into the calling function's own frame -- in the
+/// reduced case, the explicit stack slot right above it, the kind Botlish
+/// keeps roots and call scratch in (MACOS-AARCH64-MILESTONE-6.md, section
+/// 9). A parameter without an attribute
+/// is stored at its natural width, which is exactly Apple's contract for a
+/// stack argument, so the attribute is left off the stack-passed ones.
+/// Cranelift 0.136.0 fixed the store the same way (its `get_ext_mode` takes
+/// the argument's location and extends only register arguments under
+/// AppleAarch64): with that upgrade this exception goes, which
+/// `clif::apple_tests::ffi_apple_extended_stack_argument_defect_still_present`
+/// will say by failing.
+///
+/// Every C ABI class a foreign call passes but a double is one
+/// general-purpose register (an integer, a `_Bool`, a pointer: no
+/// aggregate or 128-bit value), and a double takes a floating-point one
+/// (FLOAT64-MILESTONE-1.md). AAPCS64's register assignment, which Apple
+/// keeps, counts the two kinds separately: the first eight integer-register
+/// parameters are x0-x7 however many doubles come before or between them
+/// (v0-v7), and every later one is on the stack -- so the count is of those
+/// parameters, never of a parameter's position. Botlish places nothing: the
+/// slots and registers stay Cranelift's. Elsewhere every narrow parameter keeps its attribute (SysV
+/// x86-64's stack slots are eight bytes, and Cranelift ignores the attribute
+/// for Linux AArch64's AAPCS64, whose callee extends).
+pub fn c_extended_parameters(conv: CallConv) -> usize {
+    match conv {
+        CallConv::AppleAarch64 => 8,
+        _ => usize::MAX,
+    }
+}
+
 /// The operating system family of OS, as targets distinguish them.
 fn os_family(os: OperatingSystem) -> String {
     if os.is_like_darwin() {
@@ -124,7 +170,7 @@ mod tests {
         c_call_conv(&parse_triple(text).unwrap())
     }
 
-    // The triples of core/cabi.tcl's six targets (tests/target-model.test
+    // The triples of core/cabi.tcl's seven targets (tests/target-model.test
     // checks the table's triples against this driver's `target` report).
     #[test]
     fn c_call_conv_is_the_platform_c_convention_of_each_target() {
@@ -133,6 +179,7 @@ mod tests {
         assert_eq!(conv("x86_64-unknown-linux-gnu"), CallConv::SystemV);
         assert_eq!(conv("x86_64-apple-darwin"), CallConv::SystemV);
         assert_eq!(conv("x86_64-pc-windows-msvc"), CallConv::WindowsFastcall);
+        assert_eq!(conv("x86_64-pc-windows-gnu"), CallConv::WindowsFastcall);
         assert_eq!(conv("aarch64-pc-windows-msvc"), CallConv::WindowsFastcall);
     }
 

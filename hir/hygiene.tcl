@@ -240,7 +240,11 @@ proc hir::hygiene::RenameTo {hirVar b new {recordSpelling 0}} {
     dict set hir scopes $s names $new $b
     variable uses
     variable active
-    set index [expr {$active ? $uses : [Uses $hir]}]
+    if {$active} {
+        set index $uses
+    } else {
+        set index [Uses $hir]
+    }
     if {[dict exists $index $b]} {
         foreach id [dict get $index $b] {
             dict set hir exprs $id name $new

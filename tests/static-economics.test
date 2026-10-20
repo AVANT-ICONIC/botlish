@@ -1396,15 +1396,19 @@ test se-method-memo {a method-call decision builds no configuration twice: a tri
         set counts {}
         set records {}
         foreach {reuse audit} {1 0 0 0 1 1} {
-            set saved [list $hir::methodBuildReuse $hir::methodBuildAudit]
+            # (The exact decision only: the kind filter, hir/methodfilter.tcl,
+            # decides before it and takes other builds; tests/method-filter.test
+            # owns it.)
+            set saved [list $hir::methodBuildReuse $hir::methodBuildAudit $hir::methodFilter]
             set hir::methodBuildReuse $reuse
             set hir::methodBuildAudit $audit
+            set hir::methodFilter 0
             try {
                 set before [hir::BuildStats]
                 lappend records [sdCompile batched $text]
                 set after [hir::BuildStats]
             } finally {
-                lassign $saved hir::methodBuildReuse hir::methodBuildAudit
+                lassign $saved hir::methodBuildReuse hir::methodBuildAudit hir::methodFilter
             }
             lappend counts [expr {[dict get $after methodTrials] - [dict get $before methodTrials]}]
         }
@@ -1533,7 +1537,7 @@ test se-property-subsume-positions {what the contract-boundary edges rely on (hi
         [regexp {set thunk \[hir::coroutines::thunkOfHandle \$hir \$value\]\s*if \{\$thunk eq ""\} \{\s*return} [info body hir::completions::SubsumeHandle]] \
         $reporters $walkers \
         [regexp {dict set hir beforeCompletions \[list 0 \[llength \[dict get \$hir diagnostics\]\]\]\s*hir::errorsets::verify hir\n} [info body hir::CheckOnce]] \
-        [regexp {dict set final diagnostics \[concat \[list \$added\] \$diagnostics\]\s*if \{\[dict exists \$final beforeCompletions\]\}} [info body hir::DecideMethodCalls]]
+        [regexp {dict set final diagnostics \[concat \[list \$added\] \$diagnostics\]\s*if \{\[dict exists \$final beforeCompletions\]\}} [info body hir::DecideMethodCallsExact]]
 } -result {1 1 completions.tcl errorsets.tcl 1 1}
 
 test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-UNSUPPORTED, are computed only for a program the ownership analysis accepts as a whole, whose diagnostics are exactly the kinds hir/staticdeps.tcl's C:verdict lists; a semantic instance's carried to its call reads "call to" -- the facts the verdict's edges rely on} -body {
@@ -1541,7 +1545,7 @@ test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-U
     set text [read $f]
     close $f
     set kinds [lsort -unique [lmap {- kind} [regexp -all -inline {\[list (?:reject )?(AFFINE-[A-Z-]+|USE-AFTER-MOVE)\M} $text] {set kind}]]
-    list [regexp {set scopes \[expr \{!\$accepted } [info body hir::affine::verify]] \
+    list [regexp {if \{!\$accepted \|\| [^\n]*\} \{\n\s*set scopes \{\}} [info body hir::affine::verify]] \
         [expr {$kinds eq [lsort $hir::staticdeps::ownershipKinds]}] \
         [regexp {format \{call to %s } [info body hir::semantic::Derived]]
 } -result {1 1 1}

@@ -62,9 +62,12 @@
 @@ platform-by-spelling every standard namespace named like an operating system of the target table is that system's platform, designated or not
 ## core/cabi.tcl
 <<<<
-    return [expr {[dict exists $platforms $root] ? [dict get $platforms $root] : ""}]
+    return [dict getdef $platforms $root ""]
 ====
-    return [expr {$root in [operatingSystems] ? $root : ""}]
+    if {$root in [operatingSystems]} {
+        return $root
+    }
+    return ""
 >>>>
 
 @@ platform-by-architecture-only the platform check accepts any target, the architecture deciding alone
@@ -78,7 +81,7 @@
 @@ hir-target-not-recorded the HIR never records its target
 ## surface/modules.tcl
 <<<<
-    dict set hir target [expr {[dict get $state targetRead] ? [dict get $state target] : ""}]
+    dict set hir target [if {[dict get $state targetRead]} {dict get $state target} else {string cat ""}]
 ====
     dict set hir target ""
 >>>>
@@ -124,7 +127,7 @@
         libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
 ====
         libraries $::core::loadedLibraries strict $strict warnings $mode \
-        target [expr {$target eq "" ? "" : [dict get [core::cabi::target $target] arch]}] \
+        target [if {$target eq ""} {string cat ""} else {dict get [core::cabi::target $target] arch}] \
 >>>>
 
 @@ cache-decode-unchecked a cache hit's HIR is not checked against the compilation's target

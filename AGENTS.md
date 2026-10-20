@@ -151,6 +151,22 @@ and with no locale the system encoding falls back to `iso8859-1`, which
 makes writing non-ASCII/astral output fail outright instead of being
 silently mangled.
 
+### Tcl's `expr` reads a numeric-looking result as a number
+
+`expr` converts its result to a number when the result string looks like
+one: `expr {$c ? $name : ""}` is `Inf` for the name `inf` or `infinity`
+and a domain error for `nan` (any letter case, and a one-element list of
+such a name). Botlish names and String text are strings in the compiler,
+so the compiler never selects a value that may be a string with `expr`'s
+`?:`. Write `if` (a statement, or `[if {C} {set a} else {set b}]`) or
+`[dict getdef D K DEFAULT]` instead. A ternary over numbers, or over
+constant strings that do not read as numbers, is fine.
+`tests/numeric-looking-names.test` checks the sources for the rule
+(`nl-no-string-ternary`) and compiles programs with such names against the
+same programs renamed (FLOAT64-MILESTONE-1.md, section 16). Compare
+strings with `eq`/`ne`, never `==` (`"nan" == "nan"` is false,
+`"inf" == "Infinity"` true).
+
 ### Known Tcl core bug: compiled `incr` wraps instead of promoting at the i64 boundary
 
 Confirmed directly (BYTE-NIBBLE-BIT-ARITHMETIC.md's own account has the full
@@ -240,7 +256,18 @@ the test suite, still install the `.deb`s.
 * Standalone executables have two linkers, chosen by `BOTLISH_NATIVE_LINKER`:
   `rustc` (the default) and `stub` (no toolchain: `botlish-aot-stub` with the
   program image appended, `native/src/runtime/aotimage.rs`; the single
-  executable uses it). A test that reads a rustc-linked executable's
+  executable uses it). The stub is Linux x86-64's only; macOS AArch64
+  executables are Mach-O, linked by rustc through Apple's ld
+  (MACOS-AARCH64-MILESTONE-5.md): never extend the stub, or write a linker,
+  loader or signing step, for Mach-O. A program that calls C is linked on
+  the same hosts (`codegen/aot.rs`'s `C_CALLS`), with the platform linker's
+  own link plan (`LinkerFlavor`: GNU ld's archive group on Linux, never on
+  macOS, whose ld rejects it; MACOS-AARCH64-MILESTONE-6.md). If you change
+  which hosts link (`EXECUTABLES`, `C_CALLS`), the
+  rustc link, the generated startup or `runtime::aot::run`, also run
+  `tests/native-executable.test`, `tests/platform/aot-facts.tcl` and
+  `audit/native-aot/tools/mutate.tcl` (every mutant in its `mutants.txt`
+  that applies to the host must still apply and be killed). A test that reads a rustc-linked executable's
   `botlish_fn_N` symbols (objdump, `strace -k`) or tests rustc's invocation
   carries the `rustcLinker` constraint (`tests/helpers.tcl`). CI's
   `stub-linker` job runs every executable test file with the stub linker.
@@ -820,8 +847,64 @@ checkout's). A change to native stack switching or its GC walk also needs a
 `bench/coroutines.tcl` regenerates the performance report.
 
 Native coroutines switch stacks with hand-written x86-64 and AArch64
-assembly and exist on Linux x86-64 and AArch64 only; elsewhere the native
-backend reports them unsupported (the Tcl backends run them everywhere).
+assembly and exist on Linux x86-64, Linux AArch64 and macOS AArch64
+(MACOS-AARCH64-MILESTONE-3.md); elsewhere the native backend reports them
+unsupported (the Tcl backends run them everywhere). The AArch64 switch is
+one text (`aarch64_switch!`, `aarch64_trampoline!` in
+runtime/coroutine.rs) in ELF and Mach-O spelling: change it for both, run
+the coroutine Rust tests on Linux AArch64 (CI's arm64 workflow, or
+qemu-user) and on macOS (the macOS workflow's smoke job runs them), and
+never touch x18. A Tcl test that needs coroutines, the collector around
+them or native counters carries `nativeCoroutines` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`.
+
+## The native stack guard
+
+A native run that exhausts a stack -- the worker thread's or a coroutine's
+-- ends in `NATIVE LIMIT STACK` on every host the native backend runs on
+(MACOS-AARCH64-MILESTONE-4.md, NATIVE-STACK-OVERFLOW.md): Linux x86-64 and
+AArch64 and macOS AArch64, `native_stack_overflow_supported()`. One guard
+serves them all, `runtime/platform/guard.rs`; a host adds only how the
+current thread's stack and guard are found and how a thread is named
+(`platform/linux.rs`: glibc's report; `platform/macos.rs`: libpthread's
+bounds, the usable low bound and the guard confirmed with `mach_vm_region`).
+Keep it so:
+
+* The handler only classifies and reports: an address in the guard of the
+  stack *published* as running, on the guarded thread, writes the result
+  line and `_exit`s. It never resumes, unwinds, allocates or touches the
+  runtime, and it uses nothing but lock-free atomics stored before the
+  fault and async-signal-safe calls. Any other fault goes to the
+  disposition the process had before the guard; never relabel one.
+* A guard is confirmed, never assumed from a reported stack end: a host
+  that cannot confirm one reports none (`guard_low == low_bound`) and
+  install refuses it. The macOS main thread's lowest reported page is
+  itself inaccessible: its usable bound is above the reported one.
+* Every coroutine switch publishes the stack it *arrives* on, after the
+  switch (runtime/coroutine.rs's `segment`, `co_body`, `rt_co_yield`), never
+  the one it is about to switch to: bl_co_switch's pushes land on the stack
+  it leaves. Publication stays inlined atomic stores (no frame of its own).
+* NATIVE LIMIT STACK is terminal: no in-process recovery, no Botlish
+  handler, no new error. Its line is RtError::StackOverflow's.
+
+A Tcl test of an overflow carries `nativeStackGuard` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`. If you change the guard,
+a host's stack discovery, publication or the switch, the stack probes or
+`native_stack_overflow_supported()`, run `cargo test --release
+--manifest-path native/Cargo.toml --test native_stack` (it runs every
+faulting check in a child process: never fault in a test's own process),
+the Rust tests (also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`tests/native-stack-overflow.test`, `tests/coroutines.test`,
+`tests/platform/native-status.tcl`,
+`audit/native-stack/tools/mutate.tcl` (every mutant in its `mutants.txt`
+that applies to the host must still apply and be killed: update a mutant's
+text when you change the code it mutates, keeping it a mutant of the same
+rule; a mutant of `platform/macos.rs` runs on macOS only), and the macOS
+smoke job and `CI-Tests: native-stack-overflow.test rust
+native-stack-mutants` on a branch (macOS facts are CI's: the shared Mac is
+not used). `bench/native-stack-guard.tcl` compares a driver against a
+baseline build (`-baseline-rev main`; the tier item `native-stack-bench`
+on a macOS runner).
 
 ## Linux AArch64
 
@@ -829,7 +912,7 @@ The native backend runs on Linux AArch64 (the `tests-arm64.yml` CI jobs) with
 the x86-64 feature set except what is tied to the x86-64 instruction set:
 the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
 map entry is a root's distance below its own frame's FP, codegen::clif's
-`define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
+`define`), the stack-overflow guard (runtime/platform/), coroutines
 and rustc-linked executables, and Linux syscalls through the AArch64
 transport (next section). The `stub` linker remains x86-64 only: the Tcl
 tests that need it carry `stubLinker`. A Tcl test that needs the native
@@ -862,7 +945,8 @@ and no acceptance depends on one.
   -- not Homebrew's newer Tcl, whose Unicode 17 case tables break the Tcl
   backends' Unicode 16 semantics -- `tests/platform/cabi-facts.tcl`, the
   native build and its Rust unit tests, `tests/platform/native-status.tcl`,
-  `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
+  `tests/platform/aot-facts.tcl` (the program object and an executable as
+  the host's tools see them), `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
   shards) and the same smoke on ubuntu as a control. Locally, `tclsh9.0
   tests/platform/tier.tcl smoke` takes seconds, and `tier.tcl X.test
   Y.bot` runs any file or suite the way CI does.
@@ -891,7 +975,9 @@ and no acceptance depends on one.
 A compilation target (core/cabi.tcl's table; MACOS-AARCH64-MILESTONE-2.md)
 is an operating system *and* an architecture, named to the native backend
 by its triple: linux-aarch64 and macos-aarch64 share an instruction set, not
-a target. Keep it so:
+a target. On Windows the C toolchain's ABI family is part of it too:
+windows-x86_64 (MSVC's) and windows-x86_64-gnu (MinGW-w64's,
+C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
 
 * Never read an operating system from an architecture, a pointer width or a
   data model, and never take a matching architecture for a matching target
@@ -917,7 +1003,15 @@ a target. Keep it so:
 * Foreign C signatures use `codegen::target::c_call_conv` (the triple's C
   convention: AppleAarch64 on Apple AArch64); Botlish-internal and runtime
   helper calls the ISA's default. Never hard-code a convention, a register
-  or a stack placement: Cranelift owns them.
+  or a stack placement: Cranelift owns them. Botlish decides only what it
+  asks of them: a narrow parameter's extension attribute, which Apple's
+  stack-passed parameters do not carry (`c_extended_parameters`:
+  cranelift-codegen 0.135.2 stores an extended stack argument at register
+  width, past its slot; fixed in 0.136.0, where
+  `ffi_apple_extended_stack_argument_defect_still_present` fails and the
+  exception goes). The registers are counted per kind, as AAPCS64 does:
+  the eight that keep it are integer-register parameters, never the first
+  eight positions (doubles take v0-v7; `cf-abi-doubles-before-integers`).
 * A test that compiles a Linux program (one importing `linux::*`) compiles
   it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
   it on `backendsFor` its HIR's target; the golden runner, the warning
@@ -1316,9 +1410,9 @@ description language. Keep it so:
   `LAYOUT-NATIVE-ONLY`). Never let byte storage, an Int or a layout make a
   pointer, and never add pointer arithmetic, `Ptr <-> Int` or a dereference
   outside the view's field reads.
-* Views are read-only: no setter, write, writable view, native allocation or
-  native record (a later milestone designs them, section 16). The only
-  memory-writing native op is the test fixture's private copy.
+* Views are read-only: no setter, write or writable view; writing is a
+  separate capability, `NativeEdit[L]` (next section), never a view's. No
+  native allocation or native record.
 * `NativeView[L]` is its own nominal type: never a pointer, a LayoutStruct
   or another layout's view; unrestricted, with no equality. A field read is
   elaborated after the checks to `binary#view_field(v, FIELD)` with the
@@ -1343,6 +1437,203 @@ mutates, keeping it a mutant of the same rule) and `cargo test --release
 --manifest-path native/Cargo.toml --lib nview`, plus the binary-layout
 harnesses (above) for a change to the layout registry or the descriptor.
 `bench/native-view.tcl` regenerates the performance report.
+
+## Native layout writes
+
+The write half (NATIVE-LAYOUT-WRITES.md) has two deliberately different
+mechanisms: `binary::native::edit(L, p)` is `NativeEdit[L]`, write authority
+over live native memory (`binary::store(e, L.f, v)`: one store of the field's
+width at its offset), and `binary::write(d, L.f, v)` /
+`binary::write_foreign(d, L.p, q)` write one field of a
+`abi::bytes::MutableBytes` as a new value. A write names its field by a
+static designator, `L.f` or a path `L.inner.x`, resolved to a constant with
+the leaf's absolute offset and encoding. Keep it so:
+
+* `NativeEdit[L]` is `{nedit L}`: its own nominal type, never a
+  `NativeView[L]` with a flag, a subtype of one either way, a pointer, a
+  `MutableBytes` or a struct. A view never becomes an edit (no upgrade, no
+  conversion); write authority is made from a pointer by
+  `binary::native::edit`, which is `binary::native`'s and so direct; storing
+  through an edit someone made, and every byte write, are not.
+* Native memory is raw: one layout's integer field and another's pointer
+  field can alias an address, so a holder of write authority can pun bits
+  into a pointer (`ne-native-memory-is-raw`). That is why making an edit is
+  direct: never make it ordinary, and never let byte storage (Botlish
+  values) decode into a pointer, which is the law that holds.
+* An edit is unrestricted, non-owning authority: never add affinity,
+  uniqueness, a borrow rule, pinning, lifetime regions or ownership of the
+  memory, and never claim exclusive access. A store is an ordinary store:
+  no volatile, atomic or fenced access, never cached or merged (each one a
+  runtime call).
+* A store or write touches exactly its field's bytes: never the record, its
+  padding or a neighbour; a store never copies the record through bytes,
+  allocates or reads a `LayoutStruct` (one `nativestore`/`nativestoreptr`
+  with constant operands). Scalar encoding is ops.rs's `bin_encode`, shared
+  with `binstore`, and checks the range before anything is written.
+* The value is held to the field's type statically (`VerifyWriteValue`): a
+  scalar proven in its domain, a pointer field exactly its declared
+  `Ptr`/`FnPtr` type -- no C conversion, truncation, implicit erasure or Int.
+  A pointer stored or encoded is observed, never moved; nothing records a
+  dependency on it or keeps it alive (lifetime protocols are a wrapper's).
+* `MutableBytes` stays a value: a write returns a fresh storage and never
+  writes its operand (MUTABLE-BYTES.md); its size must be exactly the
+  layout's (`LayoutLengthMismatch`). Pointers enter bytes only through the
+  explicit `binary::write_foreign`, into a pointer field: an ordinary
+  `binary::write` or `binary::emit` of one stays `LAYOUT-NATIVE-ONLY`, and
+  `binary::parse` of a pointer layout stays rejected whatever the bytes hold.
+  Never add `Ptr -> Int`, `Ptr -> Bytes` or any decoding of a pointer from
+  bytes.
+* No native record allocation, `extern c struct`, layout guarantee for an
+  ordinary struct, bitfields or `ffi::c::Bool` fields here
+  (NATIVE-LAYOUT-WRITES.md section 22 records what a generated layout will
+  need; fixed arrays are FIXED-LAYOUT-ARRAYS.md's and unions
+  LAYOUT-UNIONS.md's, next sections).
+* `ffi_fixture::memory_bytes(p, n)` (the oracle of a native write) is a test
+  process's own, like `ffi_fixture::memory`.
+
+If you change any of that (NATIVE-LAYOUT-WRITES.md, "What to run when
+changing this", lists the files), run `tests/native-edit.test` (its C
+oracle, tests/cffi/nedit-fixture.c, needs `cc`), `tests/native-view.test`,
+`tests/binary-layout.test`, `tests/c-abi-types.test`,
+`tests/c-pointer-borrowing.test`, `tests/direct-modules.test`,
+`audit/native-edit/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`,
+once with `-backends "interp compile cranelift-generic cranelift"`),
+`audit/native-edit/tools/mutate.tcl` (every mutant in its `mutants.txt` must
+still apply and be killed: update a mutant's text when you change the code it
+mutates, keeping it a mutant of the same rule) and `cargo test --release
+--manifest-path native/Cargo.toml --lib nview`, plus the native-view and
+binary-layout harnesses for a change to code they share (`bin_encode`,
+`ViewBase`, the native types' subtype rule). `bench/native-edit.tcl`
+regenerates the performance report.
+
+## Fixed layout arrays
+
+A layout field may be a fixed array, `field NAME: array N of E at OFFSET`
+(FIXED-LAYOUT-ARRAYS.md): repetition in an external representation, element
+i at the field's offset plus i times E's own width (a scalar's encoding, a
+nested layout's size with its tail padding, a row's whole width), E any
+representation (a scalar, a C scalar, a pointer, a nested layout, another
+array). Its copied value is an ordinary List of exactly N element values;
+read through a view or an edit it is a live array, `NativeView[array N of
+E]` / `NativeEdit[array N of E]` (binary::element, binary::store_element,
+binary::load). Keep it so:
+
+* No new object model: never add a FixedArray type, a runtime array object,
+  a slice, an array value distinct from a List, a String conversion of a
+  character array, or pointer arithmetic. A layout knows no C: no C
+  alignment or padding rule computes a stride or an extent.
+* The extent is part of the representation, not of the List's type: a
+  whole-array write, store or emit checks every List's length before the
+  first byte is written (the declared LayoutExtentMismatch), unless the
+  completion analysis proves it (`-bounds {extents V}`: a literal, a
+  counted loop, a branch on list::length, a copy binary::load or
+  binary::parse made); a proven write has no failure path in native code.
+  An element index is checked the same way (`-bounds {index narray ...}`,
+  IndexNotFound). Never weaken either to a run-time-only check, and never
+  read an extent from a List's type.
+* Read and write authority stay distinct inside arrays: an array read
+  through a view is a view's (store_element through it is BINARY-OPERAND),
+  an element of an array of records is its own view or edit. Pointer
+  authority is recursive: bytes never decode into a pointer inside an
+  array (parse of a layout holding one is LAYOUT-NATIVE-ONLY), and an
+  array of pointers is encoded only by binary::write_foreign.
+* An element access is O(1): one load or store at the array's address plus
+  the index times the stride, never a copy of the array; a copy allocates
+  exactly the List (and records) it returns.
+* Arrays and unions compose orthogonally (LAYOUT-UNIONS.md, next sections):
+  an array of unions strides the union's declared size, a union's
+  alternative may be an array; neither knows the other beyond the
+  representation it holds.
+
+If you change the array grammar (surface/parser.tcl's `ArrayTypeExpr`, the
+static designator indices), hir/layouts.tcl's representations
+(`ResolveRepr`, `ReprOfTerm`, `ResolveArrayTerm`, `FieldPath`, the array
+problems),
+the extent and index proofs (hir/completions.tcl's `ExtentsVerdict`,
+`ReprValueVerdict`, `ExactCopy`, the narray bounds; hir/cardinality.tcl's
+`extent` result length), core/binary.tcl's array codec, the Tcl compiler's
+`LayoutLeaves`, native lowering (`ElementAccess`, `ArrayRead`,
+`ArrayCheck`, `ReprWrite`) or the row helpers (native/src/runtime/nview.rs),
+run `tests/layout-arrays.test` (its C oracle, tests/cffi/narray-fixture.c,
+needs `cc`), its golden suite (`tclsh9.0 tests/local.tcl
+tests/golden/layout-arrays.bot`), `tests/binary-layout.test`,
+`tests/native-view.test`, `tests/native-edit.test`,
+`audit/layout-arrays/tools/fuzz.tcl` (several seeds, once with `-gc-stress
+1`), `audit/layout-arrays/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule), the
+binary-layout, native-view and native-edit mutation tools (they mutate the
+same code) and `cargo test --release --manifest-path native/Cargo.toml --lib
+nview`. A change to the generator's arrays (tools/c-bindgen/records.tcl's
+`ArrayField`, verify.tcl's array checks, oracle.tcl's array leaves) is a
+change to the generator (next sections' checks; regenerate and commit).
+`bench/layout-arrays.tcl` regenerates the performance report.
+
+## Union layouts
+
+A `union layout U:` (LAYOUT-UNIONS.md) declares several interpretations of
+the same bytes -- `alternative NAME: TYPE`, every one at the union's first
+byte, any representation (a scalar, a C scalar, a pointer, a nested layout,
+a fixed array, another union), with an explicit `size` and `align` that are
+never computed -- held by value in a field, an array element or another
+union's alternative. Arrays repeat representation; unions overlap it.
+Keep it so:
+
+* A union is no sum type: never add a tag, a case, an active alternative,
+  a discriminant, a pattern match, a conversion between alternatives or a
+  check of which one was last written. Selecting an alternative is
+  interpretation: a native read is one load at the alternative's address
+  (`ViewBase` folds the union's offset), never a whole-union load, a copy,
+  an allocation or a cached value, and costs the same for the first and the
+  sixty-fourth alternative.
+* Overlap is declared only by a union: an ordinary layout's fields never
+  share a byte (LAYOUT-FIELD-OVERLAP). Never infer a union, accept overlap
+  elsewhere, or let a union's size or alignment be computed from its
+  alternatives; an alternative wider than its union is an error.
+* A union has no copied value: no `LayoutStruct` of a union or of anything
+  holding one by value, so `binary::parse`, `binary::emit`, `binary::load`
+  and whole-array writes of one are `LAYOUT-UNION` (`compiler::DiagnosticCode`
+  `LayoutUnion`), statically and, for a program compiled unchecked, when the
+  call runs. Bytes are read and written one alternative at a time through a
+  static designator (`binary::read(data, L.u.alt)`, `binary::write`,
+  `binary::write_foreign`); a designator names an alternative, never the
+  union. Never make a copied union a struct of every alternative, a byte
+  blob with interpretation methods, or anything else, without a design
+  decision recorded in LAYOUT-UNIONS.md ("The copied-value decision").
+* A write touches exactly its alternative's bytes: a narrow alternative
+  never zeroes or normalizes the rest of the union, nor the bytes around it.
+* Pointer authority is recursive through alternatives: bytes never become a
+  pointer through any alternative (`binary::read` or `binary::parse` of a
+  pointer path is `LAYOUT-NATIVE-ONLY`); native write authority may store
+  scalar bits that a pointer alternative then reads (raw native memory),
+  and a pointer stored through an alternative is observed, never moved.
+* A union is a declaration registry entry (`hir/layouts.tcl`, `union 1`):
+  compilation isolation, HIR text (`union layout ...`) and interchange
+  carry it; a same-named record of another compilation is never taken for
+  it.
+
+If you change the union grammar (surface/parser.tcl's `LayoutDecl`),
+hir/layouts.tcl's union cases (`IsUnion`, `ReprUnionPath`, `UnionRefusal`,
+`FieldPath` through unions, the overlap and bounds checks), `binary::read`
+(core/binary.tcl, core/native.tcl's registration, native/lower.tcl's
+`LayoutCall`), the union cases of `ViewBase`, `ReprRead`/`ReprWrite`,
+`ViewFieldType`, `hir/completions.tcl`'s `ExactCopy`/`ExtentsVerdict`, or the
+HIR text of a union, run `tests/layout-unions.test` (its C oracle,
+tests/cffi/nunion-fixture.c, needs `cc`), its golden suite (`tclsh9.0
+tests/local.tcl tests/golden/layout-unions.bot`), `tests/layout-arrays.test`,
+`tests/binary-layout.test`, `tests/native-view.test`,
+`tests/native-edit.test`, `audit/layout-unions/tools/fuzz.tcl` (several
+seeds, once with `-gc-stress 1`), `audit/layout-unions/tools/mutate.tcl`
+(every mutant in its `mutants.txt` must still apply and be killed: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule), the layout-arrays, binary-layout, native-view and
+native-edit mutation tools (they mutate the same code) and `cargo test
+--release --manifest-path native/Cargo.toml --lib nview`. A change to the
+generator's unions (tools/c-bindgen/records.tcl's `Synthetic`, `Block`,
+`Base`, `Members`; probe.tcl's `anonymous`; verify.tcl's `Fields` and
+`anonymous`; oracle.tcl's `Selected`) is a change to the generator (the C
+binding generator's checks below; regenerate and commit).
+`bench/layout-unions.tcl` regenerates the performance report.
 
 ## C ABI types and imprinting
 
@@ -1454,6 +1745,16 @@ so:
   declaration designates nothing.
 * The registry is a declaration registry (`hir::foreign::capture`/`Install`):
   compilation isolation and HIR interchange carry it.
+* C calls run on Linux x86-64 and AArch64 and on macOS AArch64
+  (MACOS-AARCH64-MILESTONE-6.md). The link plan is the platform linker's
+  (codegen/aot.rs's `LinkerFlavor`): GNU ld's archive group on Linux,
+  byte for byte, the bare `-L`/`-l` list on macOS, whose ld rejects the
+  group; never a GNU-only flag in Apple's plan, an rpath, an SDK path or a
+  decorated (`_`) symbol of ours. The target's C ABI is checked against
+  real callees and the C compiler's own calls (c-ffi.test's `cf-abi-*`,
+  `bcf_capture`): a change to a foreign signature's types or extension
+  attributes needs them on macOS (the acceptance tier) and Linux AArch64
+  (tests-arm64.yml), not only here.
 
 If you change any of that (C-FFI.md, "What to run when changing this", lists
 the files), run `tests/c-ffi.test` (also under `BOTLISH_NATIVE_GC_STRESS=1`),
@@ -1525,11 +1826,51 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   produces: after changing the generator, a profile or a pinned source,
   regenerate (`tools/c-bindgen.tcl generate PROFILE -target T`) and commit
   the diff.
+* Record layouts (C-BINDGEN-LAYOUTS.md: `NS/layouts.bot`, `layouts.tsv`,
+  `layouts-check.c`) are the target C compiler's answers -- sizeof,
+  _Alignof, offsetof and each member's type, probed -- never a layout rule
+  computed in Tcl or Botlish: no padding, alignment, packing or bitfield
+  rule anywhere in the generator. A field a layout cannot represent (a
+  flexible array member, a bitfield, float, double, `_Bool`, an array of
+  one of those) blocks its record and every record holding it by value,
+  with its reason in the manifest: never flatten, approximate or
+  reinterpret it, and never extend the layout language from the generator.
+  A fixed array of representable elements is a layout field (`array N of
+  E`, FIXED-LAYOUT-ARRAYS.md) whose extents are the compiler's answers (one
+  probe per dimension), never the declaration's expressions. A layout and
+  the record's opaque pointee identity stay two declarations; a pointer
+  field keeps its pointee's identity.
+* A C union is a `union layout` (LAYOUT-UNIONS.md) whose alternatives are
+  at the offsets the compiler gives (a member off the union's start is
+  `union-member-offset`, never assumed 0); a union of representable
+  alternatives is no blocker, and a blocked one is blocked by its
+  alternatives' own root reasons. An anonymous member that is no struct
+  inside a struct (an anonymous union; an anonymous struct inside a union)
+  is a synthetic layout of its own, named by its place
+  (`CONTAINER_memberN`), held by a generated field: never flatten it into
+  overlapping fields, never promote it, never drop it. Its members are
+  probed through the record that names them (C11's promoted names), its
+  size, alignment and members' offsets within it are clang's record layout
+  (`-fdump-record-layouts`, the toolchain adapter's `recordLayouts`), and
+  the two must agree; a synthetic layout whose record is blocked is not
+  emitted (`layout-unheld`). The manifest maps every promoted C name to its
+  generated path (`promoted` rows); layouts-check.c checks every
+  alternative, and a synthetic layout's members through its record, and
+  generation compares every synthetic layout's size and alignment with a
+  fresh record layout dump.
+* A generated layout is its target's and its toolchain's: windows-x86_64-gnu
+  is MinGW-w64's (Windows x86-64, the GNU ABI), the Win32 profile's target.
+  Never generate, label or check it as MSVC's windows-x86_64, and add no
+  MSVC header, tool or comparison (a separate milestone); nothing runs a
+  Windows binary.
 
 If you change `tools/c-bindgen/`, `tools/cheader/`, a profile or the
 fixture, run `tclsh9.0 tests/c-bindgen.test`, `tools/c-bindgen.tcl check
 PROFILE -target committed` for every profile (fixture, tcl, tclstubs,
-boringssl, sdl3), `audit/c-bindgen/tools/fuzz.tcl` (several seeds) and
+boringssl, sdl3, win32), `audit/c-bindgen/tools/fuzz.tcl` (several seeds),
+`audit/c-bindgen/tools/layout-fuzz.tcl` (several seeds, for the host and
+with `-target` for each cross target), `audit/c-bindgen/tools/layout-scale.tcl`
+for a change to the layout pass (linear in the records) and
 `audit/c-bindgen/tools/mutate.tcl` (every mutant in
 `audit/c-bindgen/tools/mutants.txt` must still apply and be killed by a test
 of behavior or the fuzzer, not only by the pinned comparison: update a
@@ -1541,6 +1882,10 @@ skipped without them; their `linux-aarch64` generation on an x86-64 host
 needs the arm64 cross C library where clang finds it (`gcc-aarch64-linux-gnu`,
 which brings `libc6-dev-arm64-cross`; the headers package alone is not
 enough, and generation then stops rather than read the host's headers). The
+Win32 binding and the fixture's windows-x86_64-gnu target need MinGW-w64's
+cross headers and import libraries (`mingw-w64-x86-64-dev`, version 11.0.1:
+the profile pins its version macros), `llvm-nm` and, for the second
+compiler, `gcc-mingw-w64-x86-64`. The
 `c-bindgen` workflow
 (`.github/workflows/c-bindgen.yml`) runs all of it. macOS bindings of real
 libraries need the macOS SDK (`BOTLISH_C_SYSROOT_macos_aarch64`, or a Mac).
@@ -1669,6 +2014,48 @@ machine. So:
   the run has not finished, report it as pending, never as passed.
 * **A failing run on main is a standing signal**, like a failing `gc-stress`
   run: reproduce the disagreement on a small program and fix it.
+
+## Method-call decisions (the kind filter)
+
+`hir::DecideMethodCalls` decides which function a method-style call means by
+the rule of METHOD-SUGAR.md: the exact decision (`DecideMethodCallsExact`)
+tries candidates with whole-program trial builds; the kind filter
+(`hir/methodfilter.tcl`, METHOD-DECISION-FILTER.md) settles most calls from
+the receiver's kind first and gives everything else to the exact decision, made
+from the start. The filter changes how many builds a decision takes, never its
+outcome. Keep it so:
+
+* The filter *excludes*, it never *accepts*. A candidate is excluded only when
+  the ordinary call is provably invalid by kind (a native's first parameter,
+  a module function's declared or inferred first-parameter contract, the plain
+  value kinds only); that a survivor is valid is the certificate's job (a
+  build with no problem in the call), never an inference. Never exclude a
+  lexical name, never exclude by a domain, a refinement or a type's name, and
+  never decide a call with several survivors (no precedence, ever).
+* One statement of each rule. The native receiver rule is
+  `hir::methodfilter::NativeMismatch`, which `hir::MethodCallProblems` also
+  asks; a second copy of it, a restated admission rule, or a table of
+  methods by type is a second source of truth.
+* A rejection, an ambiguity, a message and every diagnostic is the exact
+  decision's. The filter hands over (certified 0) on anything it cannot settle;
+  it never discards or reorders a diagnostic. The decisions it made before
+  handing over are discarded, not passed on as seeds.
+* Its builds are counted as `methodTrials`; `hir::methodFilter` and
+  `hir::methodFilterAudit` are no front-end input (no cache key, no new
+  interchange rule). The exact decision's own audits run without the filter.
+
+If you change `hir/methodfilter.tcl`, `hir::DecideMethodCalls`,
+`hir::MethodCallProblems`, `hir::resolve::MethodCandidates`, the contracts
+`hir/signatures.tcl` records on a first parameter, or `hir::types::kindOf`, run
+`tests/method-filter.test`, `tests/static-economics.test`,
+`tests/static-compile.test`, `tests/method-sugar.test`,
+`audit/method-filter/tools/fuzz.tcl` (several seeds) and
+`audit/method-filter/tools/mutate.tcl` (every mutant in it must still apply and
+be killed: update a mutant's text when you change the code it mutates, keeping
+it a mutant of the same rule), and run the golden suites that decide method
+calls (`bench/method-filter.tcl -suites -audit 1`) and the suites above under
+`BOTLISH_METHOD_FILTER_AUDIT=1`. A new test file's tests get census rows
+(`audit/golden/migration/census/method-filter.tsv`).
 
 ## Workloads (examples/games/2048)
 
