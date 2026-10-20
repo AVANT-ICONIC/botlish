@@ -307,3 +307,17 @@ KILLED link-failure-removes-earlier -- a link removes the executable already at 
     fuzz:   survived
     rust:   survived
 44 mutants, 44 killed, 0 survived, 0 skipped (another host's)
+
+# tclsh9.0 audit/c-ffi/tools/mutate.tcl -only doubles-counted-as-integer-registers,apple-register-boundary-off-by-one
+# (2026-10-20, macOS arm64: run 39396419481, Tier C job 118540168682 at
+# 8210f85, under BOTLISH_NATIVE_GC_STRESS=1; after the merge with Float64)
+
+KILLED apple-register-boundary-off-by-one -- the eighth parameter (x7) is taken for a stack one and loses its extension under Apple's convention
+    tests:  killed (4 failed: cf-abi-doubles-before-integers, cf-abi-pick, cf-abi-register-extension, cf-abi-stack-layout)
+    fuzz:   killed (2 disagreements in 6 programs)
+    rust:   killed (2 failed: codegen::clif::apple_tests::ffi_apple_doubles_leave_the_integer_registers, codegen::clif::apple_tests::ffi_apple_stack_arguments_stored_at_their_width)
+KILLED doubles-counted-as-integer-registers -- a double counts against the eight integer registers under Apple's convention: a narrow integer after doubles, in x0-x7, loses its extension
+    tests:  killed (1 failed: cf-abi-doubles-before-integers)
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::clif::apple_tests::ffi_apple_doubles_leave_the_integer_registers)
+2 mutants, 2 killed, 0 survived, 0 skipped (another host's)

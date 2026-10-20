@@ -1094,6 +1094,7 @@ tier.tcl's `c-ffi-mutants` item. On macOS all 44 are killed (run
 | `mach-o-symbol-double-prefixed` | skipped | 53 tests, the fuzzer |
 | `link-failure-removes-earlier` | `cf-link-failure-keeps-executable` | the same |
 | `fixture-wrong-architecture` | skipped | 48 tests |
+| `doubles-counted-as-integer-registers` (after the merge with FLOAT64-MILESTONE-1.md) | skipped | `cf-abi-doubles-before-integers`, `ffi_apple_doubles_leave_the_integer_registers` |
 
 `apple-stack-parameters-extended` is caught only statically: the defect it
 puts back (an extended narrow stack argument stored at register width)

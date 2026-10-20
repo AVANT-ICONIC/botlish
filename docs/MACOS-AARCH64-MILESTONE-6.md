@@ -1292,4 +1292,27 @@ macOS, and needed two changes beyond the textual merge:
   infinities and negative zero coming back) build their fixture wherever C
   calls run (`nativeCCalls`), so they run in the macOS acceptance tier.
 
-CI for the merged branch is in section 34.
+CI for the merged branch: section 34.
+
+## 34. CI of the merged branch
+
+At 8210f85 (the merge with main and section 33's changes), every run green:
+
+* **macOS**, run
+  [39396419481](https://github.com/mwagner-webdev/botlish/actions/runs/39396419481):
+  smoke, both acceptance shards, the Linux control job, and Tier C under
+  GC stress: c-ffi.test and float64.test on interp and compile -- 140 tests
+  each pass, 134 passed, 0 failed, 6 skipped (the BoringSSL and libtcl
+  tests, x86-64's `cf-bool-register`, and float64.test's own Linux-only
+  executable and GC-stress constraints; its C double tests ran) -- and two
+  mutants: `doubles-counted-as-integer-registers` killed by
+  `cf-abi-doubles-before-integers` and
+  `ffi_apple_doubles_leave_the_integer_registers`,
+  `apple-register-boundary-off-by-one` by four `cf-abi-*` tests, the
+  fuzzer and both Apple register tests.
+* **Linux x86-64**, `tests.yml` run
+  [39396426013](https://github.com/mwagner-webdev/botlish/actions/runs/39396426013):
+  every job green (GC stress runs on main's push).
+* **Linux AArch64**, `tests-arm64.yml` run
+  [39396429781](https://github.com/mwagner-webdev/botlish/actions/runs/39396429781):
+  every job green, the native GC-stress run included.
