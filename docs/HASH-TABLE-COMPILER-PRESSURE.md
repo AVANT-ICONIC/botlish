@@ -209,9 +209,10 @@ one at 0 shares and 0 detaches in steady state.
     callers have already decided to copy.
 * **Evidence.** `tools/copies.tcl` on the `memo` driver with `lpa`, N =
   1,000: 8,908 shares, 8,872 detaches, 15,606,418 elements copied, and
-  15,642 object allocations. At N = 10,000 it takes 5.7 s natively. The
-  same algorithm written as a read-only walk followed by a threaded insert
-  loop (`drivers/memo2.bot`) takes 39 ms, and the Rust reference 3 ms.
+  15,642 object allocations. At N = 10,000 it takes 2.7 s natively on the
+  baseline compiler. The same algorithm written as a read-only walk
+  followed by a threaded insert loop (`drivers/memo2.bot`) takes 12 ms,
+  and the Rust reference 2.3 ms.
 * **Generality.** Any function that returns a record holding a
   collection: memo results, parse states, builders.
 * **Candidate fix.** Two parts:
