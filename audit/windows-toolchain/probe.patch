@@ -1,6 +1,6 @@
 diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
 --- a/native/src/codegen/aot.rs	2026-10-20 15:50:08.798939188 +0000
-+++ b/native/src/codegen/aot.rs	2026-10-20 15:50:09.302899775 +0000
++++ b/native/src/codegen/aot.rs	2026-10-20 16:17:10.920361442 +0000
 @@ -87,8 +87,7 @@
          "}\nextern \"C\" fn entry(vm: *mut Vm) -> Value {\n\
          let f: aot::ProgramEntry = unsafe { std::mem::transmute(botlish_fn_0 as *const ()) };\n\
@@ -27,7 +27,30 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
      all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
      all(target_os = "macos", target_arch = "aarch64")
  ));
-@@ -349,10 +350,18 @@
+@@ -298,7 +299,8 @@
+     let object = emit_object(program).map_err(|e| e.message().to_string())?;
+     let object_path = work.0.join("program.o");
+     let source_path = work.0.join("startup.rs");
+-    let executable = work.0.join("executable");
++    // WINDOWS PROBE: gcc (MinGW) appends .exe to an output without one.
++    let executable = work.0.join(if cfg!(windows) { "executable.exe" } else { "executable" });
+     std::fs::write(&object_path, &object.bytes).map_err(|e| e.to_string())?;
+     std::fs::write(&source_path, startup(program, &object)).map_err(|e| e.to_string())?;
+     let output = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+@@ -319,6 +321,12 @@
+         .arg("-C")
+         .arg(format!("link-arg={}", object_path.display()))
+         .args(link_plan_args(program, link_dirs))
++        // WINDOWS PROBE: BOTLISH_PROBE_CRT_STATIC=1 links the C runtime statically.
++        .args(if std::env::var_os("BOTLISH_PROBE_CRT_STATIC").is_some() {
++            vec!["-C", "target-feature=+crt-static"]
++        } else {
++            vec![]
++        })
+         .arg(&source_path)
+         .arg("-o")
+         .arg(&executable)
+@@ -349,10 +357,18 @@
      Gnu,
      /// Apple's ld through Apple clang: macOS.
      Apple,
@@ -47,7 +70,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
  
  /// rustc's arguments passing PROGRAM's link plan to this host's system
  /// linker (`link_plan_args_for`).
-@@ -400,6 +409,17 @@
+@@ -400,6 +416,17 @@
          return args;
      }
      args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
@@ -65,7 +88,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
      for dir in link_dirs {
          args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
      }
-@@ -451,6 +471,7 @@
+@@ -451,6 +478,7 @@
      let work = WorkDir::beside(destination)?;
      let executable = work.0.join("executable");
      std::fs::write(&executable, &bytes).map_err(|e| e.to_string())?;
@@ -75,8 +98,8 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
          std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
 diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
 --- a/native/src/codegen/clif.rs	2026-10-20 15:50:08.798978081 +0000
-+++ b/native/src/codegen/clif.rs	2026-10-20 15:50:09.303431833 +0000
-@@ -646,7 +646,11 @@
++++ b/native/src/codegen/clif.rs	2026-10-20 16:17:10.919966715 +0000
+@@ -646,7 +646,12 @@
          // original, narrower RootStorage::NativeFrame rule (roots::plan's
          // own doc). Must agree with roots::report's
          // `native_frame_supported` and framewalk's own target gates.
@@ -85,13 +108,14 @@ diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
 +        // Botlish call on the shadow stack (the fallback root plan), to tell
 +        // the native-frame walk's failure from the fallback's.
 +        let stack_maps = matches!(module.isa().name(), "x64" | "aarch64")
-+            && !(cfg!(windows) && std::env::var_os("BOTLISH_PROBE_SHADOW").is_some());
++            && !(cfg!(windows)
++                && (std::env::var_os("BOTLISH_PROBE_SHADOW").is_some() || std::env::var_os("BOTLISH_PROBE_ALL_SHADOW").is_some()));
          let plan = roots::plan(f, stack_maps);
          let listget_fast = std::env::var("BOTLISH_NATIVE_LISTGET_FAST_OPT").ok().as_deref() != Some("0");
          let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
 diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
 --- a/native/src/codegen/mod.rs	2026-10-20 15:50:08.799054199 +0000
-+++ b/native/src/codegen/mod.rs	2026-10-20 15:50:09.303039567 +0000
++++ b/native/src/codegen/mod.rs	2026-10-20 16:17:10.918170524 +0000
 @@ -155,7 +155,10 @@
      set(&mut flags, "is_pic", if pic { "true" } else { "false" })?;
      // Probe only large frames (default spacing: one 4 KiB page). Without
@@ -104,9 +128,33 @@ diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
          set(&mut flags, "enable_probestack", "true")?;
          set(&mut flags, "probestack_strategy", "inline")?;
      }
+diff -ruN clean-a/native/src/codegen/roots.rs clean-b/native/src/codegen/roots.rs
+--- a/native/src/codegen/roots.rs	2026-10-20 15:50:08.799079553 +0000
++++ b/native/src/codegen/roots.rs	2026-10-20 16:17:10.919391245 +0000
+@@ -792,7 +792,10 @@
+     // nested native frames, so a Botlish call no longer disqualifies it --
+     // this milestone's own goal). On the fallback path, unchanged: only a
+     // function with no Botlish call qualifies (RootStorage's own doc).
+-    let storage = if native_frame_supported || !has_call {
++    // WINDOWS PROBE: BOTLISH_PROBE_ALL_SHADOW=1 puts every root on the
++    // shadow stack, leaf functions' too, so no root is found by a frame walk.
++    let all_shadow = cfg!(windows) && std::env::var_os("BOTLISH_PROBE_ALL_SHADOW").is_some();
++    let storage = if (native_frame_supported || !has_call) && !all_shadow {
+         RootStorage::NativeFrame
+     } else {
+         RootStorage::RuntimeStack
 diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
 --- a/native/src/main.rs	2026-10-20 15:50:08.799161943 +0000
-+++ b/native/src/main.rs	2026-10-20 15:50:09.299866637 +0000
++++ b/native/src/main.rs	2026-10-20 16:17:10.919127002 +0000
+@@ -423,7 +423,7 @@
+         }
+     }
+     let _cleanup = Cleanup(work.clone());
+-    let executable = work.join("program");
++    let executable = work.join(if cfg!(windows) { "program.exe" } else { "program" }); // WINDOWS PROBE
+     if let Err(e) = codegen::aot::emit_executable(program, &executable, link_dirs) {
+         emit_error(&["NATIVE", "LINK"], &e);
+         return 0;
 @@ -437,13 +437,23 @@
          );
          return 0;
@@ -135,3 +183,17 @@ diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
          .env("BOTLISH_NATIVE_RESULT", &result)
          .env("BOTLISH_NATIVE_COMPILE_US", started.elapsed().as_micros().to_string());
      if command == "bench" {
+diff -ruN clean-a/native/src/runtime/framewalk.rs clean-b/native/src/runtime/framewalk.rs
+--- a/native/src/runtime/framewalk.rs	2026-10-20 15:50:08.799774891 +0000
++++ b/native/src/runtime/framewalk.rs	2026-10-20 16:17:10.920137877 +0000
+@@ -184,6 +184,10 @@
+ /// frame record holds a zero frame pointer).
+ #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+ pub fn walk_from(map: &ProgramMap, start: usize, stack: Option<&NativeStack>, mut visit: impl FnMut(*mut Value)) {
++    // WINDOWS PROBE: no frame walk under BOTLISH_PROBE_ALL_SHADOW=1.
++    if cfg!(windows) && std::env::var_os("BOTLISH_PROBE_ALL_SHADOW").is_some() {
++        return;
++    }
+     let mut record = start;
+     for _ in 0..MAX_FRAMES {
+         if record == 0 || record % 8 != 0 || stack.is_some_and(|s| !s.contains(record, 16)) {
