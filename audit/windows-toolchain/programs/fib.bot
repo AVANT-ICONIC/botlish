@@ -1,0 +1,12 @@
+# fib.bot -- the Windows toolchain probe's pure program
+# (WINDOWS-TOOLCHAIN-CENSUS.md): calls, a String, and an Int past 64 bits.
+# Its HIR names no target, so the same program runs on every host.
+#
+#   [75025, "hello", 18446744073709551614]
+fn fib(n: int) -> int:
+    if n < 2:
+        n
+    else:
+        fib(n - 1) + fib(n - 2)
+
+[fib(25), "hello", 9223372036854775807 + 9223372036854775807]

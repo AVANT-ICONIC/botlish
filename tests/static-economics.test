@@ -856,6 +856,17 @@ test se-equal-every-mention {every mention of a binding is an edge of the analys
     set results
 } -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
 
+test se-equal-vector-context-callee {a bounds proof over a context's vector reads its callees' bodies: a call between two loops over the member is a site only when the callee may reach the installed context (hir::cardinality::ContextSite, over exact call edges), so f's block depends on the block in g's body that calls add -- accepted once that block is rejected (g no longer pushes to the member), UNHANDLED-ERROR while g's block holds the call; the batched decisions are the sequential ones, with no build contradicting a prediction} -body {
+    set text "import compiler\nimport mutable_vector\nimport list\n\ncontext struct Log:\n    items: MutableVector\[int\]\n\nfn add(x: int, context log: Log):\n    log.items.push(x)\n\nfn g(x: int) -> int errors compiler::CompilerError:\n    if x > 100:\n        static compile:\n            add(x)\n            %s\n    x\n\nfn f(h: int, context log: Log) -> int errors compiler::CompilerError:\n    ys = loop x in log.items:\n        x * 10\n    k = g(h)\n    static compile:\n        zs = loop x in log.items:\n            x\n        ys.at(k.mod(list::length(zs)))\n\nwith context Log {items: mutable_vector::from_list(\[1, 2\])}\nr = f(3):\n    on compiler::CompilerError {code, primary, message}:\n        -1\nr\n"
+    set results {}
+    foreach body {bogus_name(1) {x + 0}} {
+        set source [format $text $body]
+        set hir [seHir $source]
+        lappend results [seSame $source] [seOutcomes $source] [dict get $hir staticStats mispredicted]
+    }
+    set results
+} -result {{} {UNBOUND accepted} {} {} {accepted UNHANDLED-ERROR} {}}
+
 test se-equal-plan-gate {the trait monomorphization's plan runs only on a program with no diagnostic at all, so a site whose diagnostic only the plan reports fails only once every other site's diagnostic is gone (hir/staticdeps.tcl's C:plan): judged beside two checker failures it is unknown, not predicted ok (the dependency analysis once missed the gate, and the next build contradicted its prediction); two plan diagnostics in one build are decided one per build, as the sequential order does (the plan is one computation over the whole program) -- the batched decisions are the sequential ones} -body {
     set results {}
     foreach text [list [sePlanAffine {a nested b}] [sePlanTraits]] {

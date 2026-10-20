@@ -172,6 +172,22 @@
 #                                   non-owning capability whose copies prove
 #                                   nothing about other aliases of the
 #                                   memory; no equality
+#   {srefined FAMILY FACTS}         a scalar refinement (hir/refinements.tcl,
+#                                   DECIMAL-ROUNDED-MILESTONE-1.md): the
+#                                   values of FAMILY's base type of which
+#                                   the compiler knows the integer facts
+#                                   FACTS (canonical: present parameters in
+#                                   schema order), e.g. {srefined
+#                                   DecimalRounded {minDecimalsPreserved 2}},
+#                                   source-spelled DecimalRounded{
+#                                   minDecimalsPreserved: 2}. A subtype of
+#                                   another member when its facts imply the
+#                                   other's (weakening), and of its family's
+#                                   base (forgetting every fact); nothing
+#                                   else is a subtype of it: a fact is only
+#                                   ever established by a proof
+#                                   (hir/decimal.tcl). Its runtime kind is
+#                                   the base's; the facts are static only.
 #   {imprint T}                     an imprint variable (hir/imprint.tcl):
 #                                   in a function's declared signature, the
 #                                   type a call imprints as T. Rigid in the
@@ -279,6 +295,12 @@ proc hir::types::resolveNamed {name {ns ""}} {
     if {[dict exists $constructors $name]} {
         error "type constructor \"$name\" requires [dict get $constructors $name]\
             type argument(s) (e.g. $name\[...\])"
+    }
+    if {[hir::refinements::isFamily $name]} {
+        # A scalar-refinement family (DECIMAL-ROUNDED-MILESTONE-1.md): its
+        # parameters are part of every type of it, so its bare name is no
+        # annotation (DecimalRounded{minDecimalsPreserved: N} is).
+        return -code error -errorcode {BOTLISH REFINEMENT-PARAMETER} [hir::refinements::BareMessage $name]
     }
     # A declared struct (hir/structs.tcl): `Person` in the code's own
     # namespace NS, or a module-qualified `geo::Point`. The struct
@@ -408,6 +430,14 @@ proc hir::types::resolveApplication {ctor argTypes} {
             return -code error -errorcode {BOTLISH AFFINE-CONTAINER-UNSUPPORTED} \
                 "$ctor\[[show $t]\] would hold affine values: an ImmutableSet compares and hashes its members, so it cannot own them (a List, MutableVector or MutableArray of them can)"
         }
+        if {$ctor eq "ImmutableSet" && [hir::decimal::Mentions $t]} {
+            # A set hashes and compares its members by value, which knows
+            # no precision: a DecimalRounded member's hash would read
+            # digits its type does not guarantee (hir/decimal.tcl,
+            # "Observations"; core::hashing refuses one at run time).
+            return -code error -errorcode {BOTLISH TYPE} \
+                "$ctor\[[show $t]\] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)"
+        }
         if {[MentionsTrait $t]} {
             # A container of trait values would have to carry arbitrary
             # witnesses: there is no erased/heterogeneous trait
@@ -437,7 +467,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview nedit})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview nedit srefined})}]
 }
 
 # C ABI pointer forms (C-ABI-TYPES.md; the header's {cptr ...}/{cfnptr ...}).
@@ -1171,6 +1201,13 @@ proc hir::types::glb {a b} {
     if {$a eq $b} {
         return $a
     }
+    if {[hir::refinements::IsRefined $a] && [hir::refinements::IsRefined $b]} {
+        # Two scalar refinements of one family: each fact the stronger.
+        if {[hir::refinements::Family $a] ne [hir::refinements::Family $b]} {
+            return ""
+        }
+        return [hir::refinements::Glb $a $b]
+    }
     set aNarrower [Admits $b $a]
     set bNarrower [Admits $a $b]
     set core [expr {![IsSpecific $a] && ![IsSpecific $b] && $a ne "any" && $b ne "any"
@@ -1555,6 +1592,17 @@ proc hir::types::subtype {a b} {
         # authority's, and an edit is not silently narrowed into a view.
         return 0
     }
+    if {[hir::refinements::IsRefined $b]} {
+        # A scalar refinement (hir/refinements.tcl): only a member of the
+        # same family whose facts imply B's -- never a value of its base,
+        # which states no fact (a fact is minted by a proof, never by
+        # subtyping).
+        return [expr {[hir::refinements::IsRefined $a] && [hir::refinements::Implies $a $b]}]
+    }
+    if {[hir::refinements::IsRefined $a]} {
+        # Forgetting every fact: a member is a value of its family's base.
+        return [subtype [hir::refinements::base [hir::refinements::Family $a]] $b]
+    }
     if {[IsList $b]} {
         if {![IsList $a] || ![subtype [lindex $a 1] [lindex $b 1]]} {
             return 0
@@ -1701,6 +1749,17 @@ proc hir::types::lub {a b} {
         # one layout neither: NATIVE-LAYOUT-WRITES.md.)
         return any
     }
+    if {[hir::refinements::IsRefined $a] && [hir::refinements::IsRefined $b]
+            && [hir::refinements::Family $a] eq [hir::refinements::Family $b]} {
+        # Two members of one scalar-refinement family: each fact the weaker
+        # of the two (hir::refinements::Lub), or the base when none holds
+        # for both.
+        set joined [hir::refinements::Lub $a $b]
+        if {$joined ne ""} {
+            return $joined
+        }
+        return [hir::refinements::base [hir::refinements::Family $a]]
+    }
     if {[IsEnum $a] || [IsEnum $b]} {
         # Nominal (ENUMS.md): the same enum was decided above ($a eq $b).
         # Two different enums -- or an enum and anything else -- have no
@@ -1835,7 +1894,8 @@ proc hir::types::narrow {current fact} {
         return $fact
     }
     if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]
-            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeMemory $fact]} {
+            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeMemory $fact]
+            || [hir::refinements::IsRefined $fact]} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
@@ -1908,6 +1968,10 @@ proc hir::types::kindOf {type} {
     if {[IsStructLike $type]} {
         return struct
     }
+    if {[hir::refinements::IsRefined $type]} {
+        # (The facts are static: the runtime kind is the base's.)
+        return [hir::refinements::base [hir::refinements::Family $type]]
+    }
     if {[IsSpecific $type]} {
         return [lindex $type 0]
     }
@@ -1924,6 +1988,9 @@ proc hir::types::semantic {type} {
     }
     if {[IsStructLike $type]} {
         return struct
+    }
+    if {[hir::refinements::IsRefined $type]} {
+        return [hir::refinements::base [hir::refinements::Family $type]]
     }
     if {[IsSpecific $type]} {
         return [lindex $type 0]
@@ -2052,6 +2119,11 @@ proc hir::types::show {type} {
             imprint {
                 # An imprint variable, by its name (hir/imprint.tcl).
                 return [lindex $type 1]
+            }
+            srefined {
+                # A scalar refinement, by its source spelling
+                # (DecimalRounded{minDecimalsPreserved: 2}).
+                return [hir::refinements::Show $type]
             }
         }
     }
@@ -2795,6 +2867,11 @@ proc hir::types::Expr {hirVar ctxVar e} {
     dict set hir exprs $e reachable [dict get $ctx reachable]
     switch -- [dict get $node kind] {
         const {
+            if {[dict exists $node decimalExpected]} {
+                # The root of a DecimalRounded constant expression: the type
+                # its position expects, which hir::decimal::verify proves.
+                return [SetType hir $e [dict get $node decimalExpected]]
+            }
             if {[dict exists $ctx spec]} {
                 return [SetType hir $e [AggregateOfValue [dict get $node value]]]
             }
@@ -3506,6 +3583,12 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # the operation has no value -- poison.
                 set dead 1
             }
+            if {!$dead && [MakesPoison $hir $ctx] && [dict get $ctx reachable]
+                    && [hir::decimal::Unprovable $hir $e]} {
+                # DecimalRounded arithmetic no proof can give a guarantee
+                # (DECIMAL-GUARANTEE-LOST, hir/decimal.tcl): no value.
+                set dead 1
+            }
             if {$spec && !$dead} {
                 foreach argType $argTypes paramType [dict get $meta paramTypes] {
                     set kind [kindOf $argType]
@@ -3577,6 +3660,11 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # exposures, recorded on the node, and its type -- the C
                 # result, or the write-back struct of the bytes C wrote.
                 set result [hir::borrow::Type hir $e $meta $argTypes]
+            }
+            if {[dict exists $node decimalExpected]} {
+                # The root of a DecimalRounded constant expression: the type
+                # its position expects, which hir::decimal::verify proves.
+                set result [dict get $node decimalExpected]
             }
             if {!$dead} {
                 # The call returned, so every argument had its parameter type.

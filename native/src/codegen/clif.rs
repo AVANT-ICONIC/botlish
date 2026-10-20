@@ -349,6 +349,7 @@ pub fn define<M: Module>(
     pool: &mut ConstPool,
     sites: &mut Vec<Site>,
     instrument_sites: bool,
+    count_accesses: bool,
     listing: bool,
 ) -> Result<DefineResult, BackendError> {
     let mut text = String::new();
@@ -360,7 +361,7 @@ pub fn define<M: Module>(
     let config = module.isa().frontend_config();
     {
         let b = FunctionBuilder::new(&mut ctx.func, &mut fctx);
-        let mut t = Translator::new(b, module, symbols, f, pool, sites, instrument_sites);
+        let mut t = Translator::new(b, module, symbols, f, pool, sites, instrument_sites, count_accesses);
         t.function()?;
         let Translator { mut b, .. } = t;
         b.seal_all_blocks();
@@ -613,6 +614,19 @@ struct Translator<'a, 'b, M: Module> {
     /// is a pure Cranelift-codegen choice, not something native/lower.tcl's
     /// NIR emission needs to know about).
     listget_fast: bool,
+    /// Whether `op mutarraycapacity` is the inline load of the header's LEN
+    /// word (`mutarray_capacity` below) instead of a `rt_mutarray_capacity`
+    /// call. On by default; BOTLISH_NATIVE_MUTARRAY_INLINE_OPT=0 disables
+    /// every inline MutableArray path (this one and `mutarray_access`), for
+    /// differential testing and benchmark comparison (like `listget_fast`).
+    mutarray_inline: bool,
+    /// Whether `op mutarrayget`/`mutarraygetproven`/`mutarrayset`/
+    /// `mutarraysetproven` are inline loads and stores through the header's
+    /// LEN/PTR/UNIQUE words (`mutarray_get`, `mutarray_set` below), their
+    /// helpers only on a slow path: `mutarray_inline`, unless the program
+    /// counts MutableArray reads and writes (CompileOptions::count_accesses:
+    /// only the helpers count them).
+    mutarray_access: bool,
     /// Whether the prologue zeroes only the physical shadow slots F3b's
     /// per-slot definite-initialization analysis (codegen::roots's
     /// `RootPlan::entry_zero`) says still need it, instead of eagerly
@@ -632,6 +646,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         pool: &'a mut ConstPool,
         sites: &'a mut Vec<Site>,
         instrument_sites: bool,
+        count_accesses: bool,
     ) -> Self {
         let vars = (0..f.regs).map(|_| b.declare_var(I64)).collect();
         let closure = f.env.then(|| b.declare_var(I64));
@@ -649,6 +664,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let stack_maps = matches!(module.isa().name(), "x64" | "aarch64");
         let plan = roots::plan(f, stack_maps);
         let listget_fast = std::env::var("BOTLISH_NATIVE_LISTGET_FAST_OPT").ok().as_deref() != Some("0");
+        let mutarray_inline = std::env::var("BOTLISH_NATIVE_MUTARRAY_INLINE_OPT").ok().as_deref() != Some("0");
         let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
         Translator {
             b,
@@ -682,6 +698,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             plan,
             result_buf: None,
             listget_fast,
+            mutarray_inline,
+            mutarray_access: mutarray_inline && !count_accesses,
             root_init_opt,
         }
     }
@@ -1467,8 +1485,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutByteStore => KIND_MUTBYTES,
             Kind::Coroutine => KIND_COROUTINE,
             Kind::MutVec => KIND_MUTVEC,
-            // (Every FloatObj is a Float64 today: FloatType's own header.)
+            // (A FloatObj's heap kind says which: FloatType::heap_kind.)
             Kind::Float64 => KIND_FLOAT,
+            Kind::DecimalRounded => KIND_DECIMAL,
             Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum | Kind::CPtr => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
@@ -1901,10 +1920,18 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let a: Vec<ir::Value> = args.iter().map(|r| self.get(*r)).collect();
         match op {
             IAdd | ISub | IMul => self.int_arith(op, a[0], a[1]),
+            IMod => self.int_mod(a[0], a[1]),
             IAnd | IOr | IXor => self.int_bitop(op, a[0], a[1]),
             ILt | ILe | IGt | IGe | IEq => self.int_compare(op, a[0], a[1]),
             ListGet if self.listget_fast => self.list_get(a[0], a[1]),
             ListGetProven if self.listget_fast => self.list_get_proven(a[0], a[1]),
+            // MutableArray (MUTABLE-ARRAY.md): the header's LEN/PTR/UNIQUE
+            // words (value.rs's MutArrayObj), read inline.
+            MutArrayCapacity if self.mutarray_inline => self.mutarray_capacity(a[0]),
+            MutArrayGet if self.mutarray_access => self.mutarray_get(a[0], a[1], false),
+            MutArrayGetProven if self.mutarray_access => self.mutarray_get(a[0], a[1], true),
+            MutArraySet if self.mutarray_access => self.mutarray_set(a[0], a[1], a[2], false),
+            MutArraySetProven if self.mutarray_access => self.mutarray_set(a[0], a[1], a[2], true),
             // Inline String/UnicodeChar reads (ENCODE-UTF8-ALLOCATION-
             // RESEARCH.md): a character scan over str::length, str::char_at
             // and char::scalar_value runs without a helper call on ASCII text.
@@ -1950,9 +1977,31 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             // Floating-point arithmetic and comparisons (FLOAT64-MILESTONE-1.md):
             // the target's own floating-point instructions on the unboxed
             // numbers (float_op); the conversions are runtime helpers.
-            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq => {
+            F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq
+            | D64Add | D64Sub | D64Mul | D64Div | D64Neg => {
                 let (ty, fop) = op.float().expect("a floating-point operation");
                 self.float_op(ty, fop, &a)
+            }
+            // DecimalRounded's observations (DECIMAL-ROUNDED-MILESTONE-1.md):
+            // exact decimal rounding at the precision operand, a runtime
+            // helper (runtime::decimal).
+            D64Lt | D64Le | D64Gt | D64Ge | D64Eq => {
+                let cc = match op {
+                    D64Lt => IntCC::SignedLessThan,
+                    D64Le => IntCC::SignedLessThanOrEqual,
+                    D64Gt => IntCC::SignedGreaterThan,
+                    D64Ge => IntCC::SignedGreaterThanOrEqual,
+                    _ => IntCC::Equal,
+                };
+                let order = self.call_helper("rt_decimal_cmp", &[self.vm, a[0], a[1], a[2]]);
+                let flag = self.b.ins().icmp_imm_s(cc, order, 0);
+                self.bool_of(flag)
+            }
+            D64ToF64 => self.call_allocating("rt_decimal_to_f64", &[self.vm, a[0], a[1]], "d64tof64", KIND_FLOAT),
+            D64Round => {
+                let v = self.call_allocating("rt_decimal_round", &[self.vm, a[0], a[1]], "d64round", KIND_DECIMAL);
+                self.check(v);
+                v
             }
             F64FromInt => {
                 let v = self.call_allocating("rt_f64_from_int", &[self.vm, a[0]], "f64fromint", KIND_FLOAT);
@@ -2119,6 +2168,26 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             RIAnd => self.b.ins().band(a[0], a[1]),
             RIOr => self.b.ins().bor(a[0], a[1]),
             RIXor => self.b.ins().bxor(a[0], a[1]),
+            // native/lower.tcl's RawEligibleCall proved both raw operands
+            // small, so the remainder is small too and no path allocates.
+            // RIModTotal's divisor Range excludes 0 (no test at all); RIMod
+            // tests it and, for 0, raises rt_int_mod's own ARITHMETIC error
+            // on a cold path (the helper given a zero divisor only records
+            // the error: no allocation, so no safepoint).
+            RIModTotal => self.euclid_mod(a[0], a[1]),
+            RIMod => {
+                let nonzero = self.b.create_block();
+                let zero = self.b.create_block();
+                self.b.set_cold_block(zero);
+                self.b.ins().brif(a[1], nonzero, &[], zero, &[]);
+                self.b.switch_to_block(zero);
+                let shifted = self.b.ins().ishl_imm_s(a[0], 1);
+                let dividend = self.b.ins().bor_imm_s(shifted, 1);
+                let tagged_zero = self.iconst(1);
+                self.fail_with("rt_int_mod", &[self.vm, dividend, tagged_zero]);
+                self.b.switch_to_block(nonzero);
+                self.euclid_mod(a[0], a[1])
+            }
             RILt | RILe | RIGt | RIGe | RIEq => {
                 let cc = match op {
                     RILt => IntCC::SignedLessThan,
@@ -2136,9 +2205,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 // `call_allocating`. None for helpers that never allocate.
                 let (helper, extra, fallible, alloc): (&str, Option<u64>, bool, Option<(&'static str, u8)>) =
                     match op {
-                        IMod => ("rt_int_mod", None, true, None),
-                        // Shifts always take the plain helper path (like
-                        // IMod): unlike IAdd/ISub/IMul/IAnd/IOr/IXor, a
+                        // Shifts always take the plain helper path: unlike
+                        // IAdd/ISub/IMul/IMod/IAnd/IOr/IXor, a
                         // shift's tagged-word representation does not
                         // correspond to shifting the logical integer at all,
                         // so there is no cheap tagged-word trick to inline
@@ -2513,6 +2581,47 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         result
     }
 
+    /// Euclidean modulo of two raw small Ints, Y nonzero: `srem` (the sign
+    /// of X) and the fix-up `r < 0 ? r + |Y| : r`, which lands on the one
+    /// representative in [0, |Y|) -- rt_int_mod's and
+    /// core::primitives::modulo's own rule. No overflow: X and Y lie in
+    /// [-2^62, 2^62), so `srem` never sees i64::MIN / -1, |Y| <= 2^62, and
+    /// r + |Y| < |Y|.
+    fn euclid_mod(&mut self, x: ir::Value, y: ir::Value) -> ir::Value {
+        let r = self.b.ins().srem(x, y);
+        let abs = self.b.ins().iabs(y);
+        let fixed = self.b.ins().iadd(r, abs);
+        let negative = self.b.ins().icmp_imm_s(IntCC::SignedLessThan, r, 0);
+        self.b.ins().select(negative, fixed, r)
+    }
+
+    /// Tagged `imod`: two small Ints with a nonzero divisor are decoded,
+    /// reduced inline (`euclid_mod`) and re-tagged -- the remainder is small,
+    /// |r| < |y| <= 2^62. A BigInt operand or a zero divisor (the tagged word
+    /// 1) takes rt_int_mod, which allocates a BigInt remainder (so the op
+    /// stays a safepoint, ops.rs's op_may_allocate, its stack map on that
+    /// one call, like int_arith's) and raises ARITHMETIC for 0.
+    fn int_mod(&mut self, a: ir::Value, b: ir::Value) -> ir::Value {
+        let (fast, slow, done, result) = self.both_small_split(a, b);
+        self.b.switch_to_block(fast);
+        let compute = self.b.create_block();
+        let zero = self.b.ins().icmp_imm_s(IntCC::Equal, b, 1);
+        self.b.ins().brif(zero, slow, &[], compute, &[]);
+        self.b.switch_to_block(compute);
+        let x = self.b.ins().sshr_imm_s(a, 1);
+        let y = self.b.ins().sshr_imm_s(b, 1);
+        let r = self.euclid_mod(x, y);
+        let shifted = self.b.ins().ishl_imm_s(r, 1);
+        let tagged = self.b.ins().bor_imm_s(shifted, 1);
+        self.b.ins().jump(done, &[BlockArg::Value(tagged)]);
+        self.b.switch_to_block(slow);
+        let r = self.call_helper("rt_int_mod", &[self.vm, a, b]);
+        self.check(r);
+        self.b.ins().jump(done, &[BlockArg::Value(r)]);
+        self.b.switch_to_block(done);
+        result
+    }
+
     /// Bitwise AND/OR/XOR directly on the tagged words, never falling to a
     /// helper: unlike `+`/`-`/`*` (which can leave the small-Int range and
     /// need a BigInt fallback), AND/OR/XOR of two tagged Ints can never
@@ -2564,7 +2673,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// the target's floating-point class.
     fn float_number(&mut self, ty: FloatType, v: ir::Value) -> ir::Value {
         match ty {
-            FloatType::Float64 => self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET),
+            // (A DecimalRounded value's representation is a binary64 in the
+            // same object layout.)
+            FloatType::Float64 | FloatType::DecimalRounded => {
+                self.b.ins().load(types::F64, MemFlagsData::trusted(), v, FLOAT_BITS_OFFSET)
+            }
         }
     }
 
@@ -2593,7 +2706,6 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// needs (codegen::roots).
     fn float_op(&mut self, ty: FloatType, op: nir::FloatOp, a: &[ir::Value]) -> ir::Value {
         use nir::FloatOp::*;
-        let FloatType::Float64 = ty;
         if op == Eq {
             let x = self.b.ins().load(I64, MemFlagsData::trusted(), a[0], FLOAT_BITS_OFFSET);
             let y = self.b.ins().load(I64, MemFlagsData::trusted(), a[1], FLOAT_BITS_OFFSET);
@@ -2642,7 +2754,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 }
                 let bits = self.b.ins().bitcast(I64, MemFlagsData::new(), r);
                 let code = self.iconst(ty.code());
-                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", KIND_FLOAT)
+                self.call_allocating("rt_float_new", &[self.vm, code, bits], "floatnew", ty.heap_kind())
             }
             Eq | FromInt | Trunc => unreachable!("not computed in floating-point registers"),
         }
@@ -2745,6 +2857,152 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
         self.b.switch_to_block(done);
         result
+    }
+
+    // -----------------------------------------------------------------------
+    // MutableArray (MUTABLE-ARRAY.md) inline paths. A header (value.rs's
+    // MutArrayObj) carries, at fixed offsets, its element count (LEN), the
+    // address of its first element (PTR) and whether its copy-on-write
+    // backing is its alone (UNIQUE), kept exact by the runtime at every
+    // change of the backing or the start. So `capacity` is one load, `at`
+    // a bounds compare and two loads, `set` the same plus the copy-on-write
+    // test and a store, and only what the runtime must decide -- a BigInt or
+    // invalid index (the declared IndexNotFound), a shared backing (the
+    // detach) -- calls the helper, which defines it exactly as before. None
+    // of these paths allocates or is a safepoint (none was:
+    // `op_may_allocate`), so roots and stack maps are unchanged; the
+    // slow-path helpers are the same calls, in the same instruction, as the
+    // whole operation was.
+
+    /// The memory flags of an inline access to a MutableArray header's words
+    /// (HEADER) or to its elements' slots: trusted (aligned and never
+    /// trapping: a live array's header, an address among its elements), each
+    /// in an alias region of its own. Generated code never stores to a
+    /// header (only runtime helpers change it, and every call is a fence for
+    /// every region in Cranelift's alias analysis) and no other CLIF access
+    /// touches a header or a slot, so no location is ever accessed in two
+    /// regions, the property alias regions require. It lets a header word's
+    /// load be reused across stores to slots (redundant load elimination: a
+    /// `capacity(a)` after an `a.set` needs no second load), though not
+    /// across a call or a store in no region (a root slot's), which
+    /// Cranelift treats as a fence.
+    fn mutarray_flags(&mut self, header: bool) -> MemFlagsData {
+        let (user_id, description) = if header { (1, "mutarray header") } else { (2, "mutarray slots") };
+        let region = self.b.func.dfg.alias_regions.insert(ir::AliasRegionData { user_id, description: description.into() });
+        MemFlagsData::trusted().with_alias_region(Some(region))
+    }
+
+    /// `mutable_array::capacity(ARR)`: the header's LEN, tagged. LEN is at
+    /// most MAX_COLLECTION_LENGTH, a small Int, so the tag never overflows
+    /// (the helper's `new_int` never allocated either).
+    fn mutarray_capacity(&mut self, arr: ir::Value) -> ir::Value {
+        let flags = self.mutarray_flags(true);
+        let len = self.b.ins().load(I64, flags, arr, MUTARRAY_LEN_OFFSET);
+        let shifted = self.b.ins().ishl_imm_s(len, 1);
+        self.b.ins().bor_imm_s(shifted, 1)
+    }
+
+    /// The address of element IDX (a raw, valid index) of ARR: PTR + 8 IDX.
+    fn mutarray_slot(&mut self, arr: ir::Value, idx: ir::Value) -> ir::Value {
+        let flags = self.mutarray_flags(true);
+        let ptr = self.b.ins().load(I64, flags, arr, MUTARRAY_PTR_OFFSET);
+        let byte_offset = self.b.ins().ishl_imm_s(idx, 3);
+        self.b.ins().iadd(ptr, byte_offset)
+    }
+
+    /// Branches to SLOW unless INDEX is a small Int below ARR's LEN; returns
+    /// the decoded index, in the block where it is known valid. The unsigned
+    /// compare rejects a negative index and a too-large one alike (LEN is a
+    /// small nonnegative Int), exactly `list_get`'s test.
+    fn mutarray_index(&mut self, arr: ir::Value, index: ir::Value, slow: ir::Block) -> ir::Value {
+        let idx_tag = self.b.ins().band_imm_s(index, 1);
+        let check_bounds = self.b.create_block();
+        self.b.ins().brif(idx_tag, check_bounds, &[], slow, &[]);
+        self.b.switch_to_block(check_bounds);
+        let idx = self.b.ins().sshr_imm_s(index, 1);
+        let flags = self.mutarray_flags(true);
+        let len = self.b.ins().load(I64, flags, arr, MUTARRAY_LEN_OFFSET);
+        let in_bounds = self.b.ins().icmp(IntCC::UnsignedLessThan, idx, len);
+        let valid = self.b.create_block();
+        self.b.ins().brif(in_bounds, valid, &[], slow, &[]);
+        self.b.switch_to_block(valid);
+        idx
+    }
+
+    /// `mutable_array::at(ARR, INDEX)`, inline. PROVEN (`mutarraygetproven`,
+    /// hir/completions.tcl's bounds proof): INDEX is a small Int designating
+    /// an element, so the read is the bare load, with no test and no slow
+    /// path, exactly `list_get_proven`. Otherwise INDEX is tested
+    /// (`mutarray_index`), and a BigInt or invalid one calls
+    /// `rt_mutarray_get`, which reports the declared IndexNotFound.
+    fn mutarray_get(&mut self, arr: ir::Value, index: ir::Value, proven: bool) -> ir::Value {
+        if proven {
+            let idx = self.b.ins().sshr_imm_s(index, 1);
+            let addr = self.mutarray_slot(arr, idx);
+            let flags = self.mutarray_flags(false);
+            return self.b.ins().load(I64, flags, addr, 0);
+        }
+        let done = self.b.create_block();
+        let result = self.b.append_block_param(done, I64);
+        let slow = self.b.create_block();
+        let idx = self.mutarray_index(arr, index, slow);
+        let addr = self.mutarray_slot(arr, idx);
+        let flags = self.mutarray_flags(false);
+        let elem = self.b.ins().load(I64, flags, addr, 0);
+        self.b.ins().jump(done, &[BlockArg::Value(elem)]);
+
+        self.b.switch_to_block(slow);
+        self.b.set_cold_block(slow);
+        let r = self.call_helper("rt_mutarray_get", &[self.vm, arr, index]);
+        self.check(r);
+        self.b.ins().jump(done, &[BlockArg::Value(r)]);
+
+        self.b.switch_to_block(done);
+        result
+    }
+
+    /// `mutable_array::set(ARR, INDEX, VALUE)`, inline: the store of VALUE
+    /// into the element's slot, when the header's UNIQUE word says its
+    /// backing is its alone -- the copy-on-write test `array_writable` makes
+    /// (`Rc::strong_count == 1`), answered by one load, since the runtime
+    /// clears UNIQUE wherever a backing gains a holder (value.rs's
+    /// MutArrayObj). A shared backing (or, unless PROVEN, a BigInt or
+    /// invalid index) calls the helper, which detaches it, writes, and
+    /// re-enables UNIQUE (or reports IndexNotFound). The result is UNIT
+    /// either way. Like the helper, this stores no Botlish object anywhere
+    /// but the slot and allocates nothing: the collector, which traces an
+    /// array's slots, sees the stored value at its next collection.
+    fn mutarray_set(&mut self, arr: ir::Value, index: ir::Value, value: ir::Value, proven: bool) -> ir::Value {
+        let done = self.b.create_block();
+        let slow = self.b.create_block();
+        let idx = if proven {
+            self.b.ins().sshr_imm_s(index, 1)
+        } else {
+            self.mutarray_index(arr, index, slow)
+        };
+        let flags = self.mutarray_flags(true);
+        let unique = self.b.ins().load(I64, flags, arr, MUTARRAY_UNIQUE_OFFSET);
+        let store = self.b.create_block();
+        self.b.ins().brif(unique, store, &[], slow, &[]);
+
+        self.b.switch_to_block(store);
+        let addr = self.mutarray_slot(arr, idx);
+        let flags = self.mutarray_flags(false);
+        self.b.ins().store(flags, value, addr, 0);
+        self.b.ins().jump(done, &[]);
+
+        self.b.switch_to_block(slow);
+        self.b.set_cold_block(slow);
+        if proven {
+            self.call_helper("rt_mutarray_set_proven", &[self.vm, arr, index, value]);
+        } else {
+            let r = self.call_helper("rt_mutarray_set", &[self.vm, arr, index, value]);
+            self.check(r);
+        }
+        self.b.ins().jump(done, &[]);
+
+        self.b.switch_to_block(done);
+        self.iconst(UNIT)
     }
 }
 

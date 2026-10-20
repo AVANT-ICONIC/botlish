@@ -221,7 +221,7 @@ test cp-render-code-lists-rules {a broad code's page lists the specific rules wh
 test cp-render-examples-and-related {examples are shown with their expectation, related topics with their summaries, design documents as optional repository paths} -body {
     set page [compilerpedia::render proof.list-bounds]
     list [string match "*Accepted (value 3) -- A counted loop*" $page] \
-        [string match "*Rejected (CORE SEMANTIC UNHANDLED-ERROR at 7:5)*" $page] \
+        [string match "*Rejected (CORE SEMANTIC UNHANDLED-ERROR at 6:5)*" $page] \
         [string match "*RELATED*proof.slices *" $page] \
         [string match "*DESIGN DOCUMENTS (in a repository checkout; optional)*docs/STDLIB-NAMESPACES.md*" $page]
 } -cleanup {unset -nocomplain page} -result {1 1 1 1}

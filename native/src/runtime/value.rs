@@ -150,6 +150,11 @@ pub const KIND_MUTVEC: u8 = 16;
 /// number of one primitive float type, never NaN, an infinity or negative
 /// zero, so equality and hashing compare its bits.
 pub const KIND_FLOAT: u8 = 17;
+/// A DecimalRounded value (DECIMAL-ROUNDED-MILESTONE-1.md): a FloatObj
+/// holding the binary64 that represents it, under a kind of its own, so it
+/// is never taken for a Float64 (a kind guard, equality, display). Its
+/// guaranteed precision is static only: nothing here records it.
+pub const KIND_DECIMAL: u8 = 18;
 
 #[repr(C)]
 pub struct Header {
@@ -313,17 +318,125 @@ impl SetObj {
 /// but in an array a consuming loop drains (`rt_mutarray_take_front` moves
 /// its first element out by advancing it) or an affine drop emptied. Slots
 /// before START are no element: nothing reads or traces them again.
+///
+/// Generated code reads three words of the header directly, at fixed
+/// `#[repr(C)]` offsets, the way it reads a List's `len`/`ptr`
+/// (codegen::clif's inline `mutable_array::capacity`, `at` and `set`):
+///
+///   * LEN (`MUTARRAY_LEN_OFFSET`), the number of elements, `backing.len()
+///     - START` (so START is not stored: it is `backing.len() - LEN`);
+///   * PTR (`MUTARRAY_PTR_OFFSET`), the address of the first element,
+///     `&backing[START]` (one past the last slot when there is none);
+///   * UNIQUE (`MUTARRAY_UNIQUE_OFFSET`), nonzero only while the backing is
+///     known to be this header's alone (`Rc::strong_count == 1`, no weak
+///     reference: what `Rc::get_mut` requires), so a write through PTR
+///     changes this array and no logical copy of it.
+///
+/// They are a cache of the backing and START, never independent state: the
+/// backing is private, and the only operations that change it or START
+/// (`new`, `replace_backing`, `advance`) set LEN and PTR from it. UNIQUE
+/// may be stale only in the safe direction (0 for a backing that has
+/// become unique again, when the collector freed the other header): it is
+/// set by `new` from the counts, cleared by `share_backing` (the one place
+/// a backing gains a holder) and refreshed by `items_mut` (every runtime
+/// write's entry, so the helper slow path re-enables the inline one).
 #[repr(C)]
 pub struct MutArrayObj {
     pub hdr: Header,
-    pub start: usize,
-    pub backing: std::rc::Rc<[Value]>,
+    len: usize,
+    ptr: *mut Value,
+    unique: usize,
+    backing: std::rc::Rc<[Value]>,
 }
 
 impl MutArrayObj {
+    /// A header on BACKING whose elements are its slots from START on.
+    pub fn new(start: usize, backing: std::rc::Rc<[Value]>) -> MutArrayObj {
+        assert!(start <= backing.len(), "a MutableArray's start is inside its backing");
+        let mut obj = MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), len: 0, ptr: std::ptr::null_mut(), unique: 0, backing };
+        obj.cache(start);
+        obj
+    }
+
+    /// Sets LEN, PTR and UNIQUE from the backing and START.
+    fn cache(&mut self, start: usize) {
+        use std::rc::Rc;
+        self.len = self.backing.len() - start;
+        // SAFETY: START <= backing.len(): an address inside the backing's
+        // slots, or one past its last.
+        self.ptr = unsafe { (Rc::as_ptr(&self.backing) as *mut Value).add(start) };
+        self.unique = (Rc::strong_count(&self.backing) == 1 && Rc::weak_count(&self.backing) == 0) as usize;
+    }
+
+    /// The index of the first element in the backing.
+    fn start(&self) -> usize {
+        self.backing.len() - self.len
+    }
+
     /// The array's elements, first to last.
     pub fn items(&self) -> &[Value] {
-        &self.backing[self.start..]
+        let items = &self.backing[self.start()..];
+        debug_assert!(items.len() == self.len && std::ptr::eq(items.as_ptr(), self.ptr), "a stale MutableArray cache");
+        items
+    }
+
+    /// The number of elements.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// The elements, writable, when the backing is this header's alone
+    /// (refreshing UNIQUE either way); None when it is shared.
+    pub fn items_mut(&mut self) -> Option<&mut [Value]> {
+        let start = self.start();
+        match std::rc::Rc::get_mut(&mut self.backing) {
+            Some(slots) => {
+                self.unique = 1;
+                Some(&mut slots[start..])
+            }
+            None => {
+                self.unique = 0;
+                None
+            }
+        }
+    }
+
+    /// START and a new holder of the backing, for a logical copy's header
+    /// (`MutArrayObj::new` of them): the backing is shared from now on.
+    pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+        self.unique = 0;
+        (self.start(), std::rc::Rc::clone(&self.backing))
+    }
+
+    /// Makes BACKING's slots, all of them, the array's elements (a detach:
+    /// a copy of the elements this header had).
+    pub fn replace_backing(&mut self, backing: std::rc::Rc<[Value]>) {
+        self.backing = backing;
+        self.cache(0);
+    }
+
+    /// Moves the first N elements out of the array (START advances past
+    /// them) and returns them; they stay in the backing's slots, which
+    /// nothing reads again.
+    pub fn advance(&mut self, n: usize) -> &[Value] {
+        assert!(n <= self.len, "a MutableArray advances past its elements only");
+        let start = self.start();
+        self.len -= n;
+        // SAFETY: still inside the backing's slots, or one past its last.
+        self.ptr = unsafe { self.ptr.add(n) };
+        &self.backing[start..start + n]
+    }
+
+    /// The number of slots of the backing (its elements and any drained
+    /// before START) and of headers holding it (the collector's size
+    /// estimate, ops.rs's array_object_size).
+    pub fn backing_extent(&self) -> (usize, usize) {
+        (self.backing.len(), std::rc::Rc::strong_count(&self.backing))
+    }
+
+    /// Whether this header and OTHER are on one backing.
+    pub fn same_backing(&self, other: &MutArrayObj) -> bool {
+        std::rc::Rc::ptr_eq(&self.backing, &other.backing)
     }
 }
 
@@ -340,13 +453,18 @@ pub struct FloatObj {
 
 pub const FLOAT_BITS_OFFSET: i32 = offset_of!(FloatObj, bits) as i32;
 
-/// A primitive floating-point type (core/type.tcl's float family). Each is a
-/// semantic Kind of its own; what the native backend knows of one -- its
-/// machine type, its object, its arithmetic -- hangs off this enum, so a
-/// further width is a variant every `match` on it then asks about.
+/// A type whose values the native backend represents as one IEEE 754
+/// number in a FloatObj: a primitive floating-point type (core/type.tcl's
+/// float family), or DecimalRounded, whose first implementation is a
+/// binary64 (a representation, never its semantics:
+/// DECIMAL-ROUNDED-MILESTONE-1.md). Each is a semantic Kind of its own; what
+/// the native backend knows of one -- its machine type, its object, its
+/// arithmetic -- hangs off this enum, so a further width is a variant every
+/// `match` on it then asks about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FloatType {
     Float64,
+    DecimalRounded,
 }
 
 impl FloatType {
@@ -354,6 +472,7 @@ impl FloatType {
     pub fn parse(name: &str) -> Option<FloatType> {
         match name {
             "Float64" => Some(FloatType::Float64),
+            "DecimalRounded" => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -362,13 +481,23 @@ impl FloatType {
     pub fn code(self) -> u64 {
         match self {
             FloatType::Float64 => 0,
+            FloatType::DecimalRounded => 1,
         }
     }
 
     pub fn from_code(code: u64) -> FloatType {
         match code {
             0 => FloatType::Float64,
+            1 => FloatType::DecimalRounded,
             _ => panic!("bad floating-point type number {code}"),
+        }
+    }
+
+    /// The heap kind of the FloatObj holding a value of this type.
+    pub fn heap_kind(self) -> u8 {
+        match self {
+            FloatType::Float64 => KIND_FLOAT,
+            FloatType::DecimalRounded => KIND_DECIMAL,
         }
     }
 
@@ -377,12 +506,14 @@ impl FloatType {
     pub fn prefix(self) -> &'static str {
         match self {
             FloatType::Float64 => "f64",
+            FloatType::DecimalRounded => "d64",
         }
     }
 
     pub fn of_prefix(prefix: &str) -> Option<FloatType> {
         match prefix {
             "f64" => Some(FloatType::Float64),
+            "d64" => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -390,12 +521,14 @@ impl FloatType {
     pub fn kind(self) -> Kind {
         match self {
             FloatType::Float64 => Kind::Float64,
+            FloatType::DecimalRounded => Kind::DecimalRounded,
         }
     }
 
     pub fn of_kind(kind: Kind) -> Option<FloatType> {
         match kind {
             Kind::Float64 => Some(FloatType::Float64),
+            Kind::DecimalRounded => Some(FloatType::DecimalRounded),
             _ => None,
         }
     }
@@ -405,7 +538,9 @@ impl FloatType {
     /// zero (a value has one representation).
     pub fn admit(self, x: f64) -> Option<u64> {
         match self {
-            FloatType::Float64 => {
+            // (A DecimalRounded value's binary64 is finite with one zero,
+            // exactly like a Float64's: core/decimal.tcl's `value`.)
+            FloatType::Float64 | FloatType::DecimalRounded => {
                 if !x.is_finite() {
                     return None;
                 }
@@ -417,21 +552,26 @@ impl FloatType {
 
 /// The float type of the floating-point value V.
 pub fn float_type_of(v: Value) -> FloatType {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
-    // Every FloatObj is a Float64 today; a further width records its type
-    // in the object.
-    FloatType::Float64
+    // The heap kind says which (a FloatObj's layout is every type's).
+    match heap_kind(v) {
+        KIND_DECIMAL => FloatType::DecimalRounded,
+        kind => {
+            debug_assert_eq!(kind, KIND_FLOAT);
+            FloatType::Float64
+        }
+    }
 }
 
-/// The number of the Float64 value V.
+/// The number of the Float64 value V, or the binary64 representing the
+/// DecimalRounded value V.
 pub fn float64_of(v: Value) -> f64 {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    debug_assert!(matches!(heap_kind(v), KIND_FLOAT | KIND_DECIMAL));
     f64::from_bits(unsafe { as_ref::<FloatObj>(v) }.bits)
 }
 
 /// The bits of the floating-point value V (FloatObj::bits).
 pub fn float_bits(v: Value) -> u64 {
-    debug_assert_eq!(heap_kind(v), KIND_FLOAT);
+    debug_assert!(matches!(heap_kind(v), KIND_FLOAT | KIND_DECIMAL));
     unsafe { as_ref::<FloatObj>(v) }.bits
 }
 
@@ -467,6 +607,9 @@ pub const LIST_LEN_OFFSET: i32 = offset_of!(ListObj, len) as i32;
 
 pub const LIST_PTR_OFFSET: i32 = offset_of!(ListObj, ptr) as i32;
 pub const STRUCT_PTR_OFFSET: i32 = offset_of!(StructObj, ptr) as i32;
+pub const MUTARRAY_LEN_OFFSET: i32 = offset_of!(MutArrayObj, len) as i32;
+pub const MUTARRAY_PTR_OFFSET: i32 = offset_of!(MutArrayObj, ptr) as i32;
+pub const MUTARRAY_UNIQUE_OFFSET: i32 = offset_of!(MutArrayObj, unique) as i32;
 
 #[inline]
 pub fn is_small(v: Value) -> bool {
@@ -625,6 +768,10 @@ pub enum Kind {
     /// A Float64 (FLOAT64-MILESTONE-1.md, FloatType): a FloatObj. Named as
     /// its core/type.tcl spelling, like UnicodeChar.
     Float64,
+    /// A DecimalRounded value (DECIMAL-ROUNDED-MILESTONE-1.md): a FloatObj
+    /// of kind KIND_DECIMAL. No equality and no hash a type-blind operation
+    /// may use: its precision is its static type's.
+    DecimalRounded,
 }
 
 impl Kind {
@@ -649,6 +796,7 @@ impl Kind {
             "enum" => Kind::Enum,
             "cptr" => Kind::CPtr,
             "Float64" => Kind::Float64,
+            "DecimalRounded" => Kind::DecimalRounded,
             _ => return None,
         })
     }
@@ -674,6 +822,7 @@ impl Kind {
             Kind::Enum => "enum",
             Kind::CPtr => "cptr",
             Kind::Float64 => "Float64",
+            Kind::DecimalRounded => "DecimalRounded",
         }
     }
 
@@ -685,7 +834,7 @@ impl Kind {
         [
             Kind::Int, Kind::Str, Kind::Bool, Kind::Unit, Kind::List, Kind::Result, Kind::Block, Kind::Native,
             Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct, Kind::ByteStore, Kind::MutByteStore,
-            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr, Kind::Float64,
+            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr, Kind::Float64, Kind::DecimalRounded,
         ][code as usize]
     }
 }
@@ -723,7 +872,7 @@ pub fn kind_of(v: Value) -> Kind {
         KIND_MUTBYTES => Kind::MutByteStore,
         KIND_COROUTINE => Kind::Coroutine,
         KIND_MUTVEC => Kind::MutVec,
-        KIND_FLOAT => float_type_of(v).kind(),
+        KIND_FLOAT | KIND_DECIMAL => float_type_of(v).kind(),
         _ => panic!("not a program value: {v:#x}"),
     }
 }
@@ -804,6 +953,13 @@ pub fn int_to_big(v: Value) -> BigInt {
         debug_assert_eq!(heap_kind(v), KIND_BIGINT);
         unsafe { as_ref::<BigIntObj>(v) }.n.clone()
     }
+}
+
+/// The BigInt object's own value of the Int V that is not small (borrowed:
+/// `int_to_big` clones it).
+pub fn big_of<'a>(v: Value) -> &'a BigInt {
+    debug_assert_eq!(heap_kind(v), KIND_BIGINT);
+    &unsafe { as_ref::<'a, BigIntObj>(v) }.n
 }
 
 /// The Int V as an i64, if it is small.

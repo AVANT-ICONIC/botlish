@@ -98,6 +98,7 @@ use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
 use crate::nir::OpCode;
+use super::decimal::{rt_decimal_cmp, rt_decimal_round, rt_decimal_to_f64};
 use num_bigint::BigInt;
 use num_traits::Signed;
 use std::cmp::Ordering;
@@ -114,6 +115,9 @@ use unicode_general_category::{get_general_category, GeneralCategory};
 /// alone, so the whole instruction is conservatively a safepoint (see
 /// codegen::roots's module doc). `IMod` likewise: a BigInt operand can give
 /// a remainder outside the small-Int range, which `rt_int_mod` allocates.
+/// The raw `RIMod`/`RIModTotal` are not here: both operands are proven small,
+/// so the remainder is small too (|r| < |b| <= 2^62) and no path allocates
+/// (RIMod's zero-divisor path only records the error).
 pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
@@ -121,6 +125,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
         // A floating-point result is a heap object (KIND_FLOAT); truncation
         // may make a BigInt. The comparisons allocate nothing.
         F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64FromInt | F64Trunc |
+        // A DecimalRounded result is one too (KIND_DECIMAL), its decay a
+        // Float64; its comparisons allocate nothing.
+        D64Add | D64Sub | D64Mul | D64Div | D64Neg | D64ToF64 | D64Round |
         IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat | StrAppendChar
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
@@ -187,7 +194,14 @@ pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
     matches!(op, IMod | IShl | IShr | VEq | Hash | Substr
         // The declared NonFiniteFloat (FLOAT64-MILESTONE-1.md).
-        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt
+        // DecimalRounded's arithmetic (NonFiniteFloat) and quantization
+        // (UnrepresentableDecimal: DECIMAL-ROUNDED-MILESTONE-1.md).
+        | D64Add | D64Sub | D64Mul | D64Div | D64Round | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        // The raw mod's zero divisor (ARITHMETIC, IMod's own error).
+        // RIModTotal is not here: native/lower.tcl emits it only where the
+        // divisor's Range excludes 0 (see OpCode::RIMod).
+        | RIMod
         // The C pointer test fixture's out-of-range address (RANGE).
         | CPtrFixture
         // The borrow test fixture: an operand that is no address or count
@@ -417,6 +431,9 @@ pub extern "C" fn rt_int_mul(p: *mut Vm, a: Value, b: Value) -> Value {
 /// negative, add |b|" always lands on the unique representative in [0, |b|)
 /// congruent to a mod b, so both paths agree with each other and with the
 /// reference interpreter's identical fixup (core::primitives::modulo).
+/// Generated code computes the small x small case inline (codegen::clif's
+/// `euclid_mod`): it calls this only for a BigInt operand or a zero divisor,
+/// and the raw `rimod` calls it with a zero divisor to raise the same error.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_int_mod(p: *mut Vm, a: Value, b: Value) -> Value {
     if let (Some(x), Some(y)) = (int_small(a), int_small(b)) {
@@ -533,6 +550,11 @@ pub extern "C" fn rt_int_cmp(_p: *mut Vm, a: Value, b: Value) -> i64 {
 // ---------------------------------------------------------------------------
 // Equality (core::value::equal)
 
+/// core::value::equal's and core::hashing::Mix's refusals of a
+/// DecimalRounded value, word for word.
+pub const DECIMAL_EQUALITY_MESSAGE: &str = "== of a DecimalRounded value needs the precision of its type, which this equality does not know (compare DecimalRounded values directly)";
+pub const DECIMAL_HASH_MESSAGE: &str = "hash of a DecimalRounded value needs the precision of its type, which a hash does not know";
+
 fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
     let (ka, kb) = (kind_of(a), kind_of(b));
     // MutableArray, like Block/Native, has no structural equality (req #31:
@@ -541,6 +563,13 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr)
     {
         vm(p).fail(RtError::Equality { a, b });
+        return Err(());
+    }
+    if ka == Kind::DecimalRounded || kb == Kind::DecimalRounded {
+        // core::value::equal's DecimalRounded case: equality at the
+        // precision of a static type, which a type-blind `==` does not know
+        // (DECIMAL-ROUNDED-MILESTONE-1.md).
+        vm(p).fail(RtError::Semantic { kind: "EQUALITY", message: DECIMAL_EQUALITY_MESSAGE.to_string() });
         return Err(());
     }
     if ka != kb {
@@ -563,6 +592,9 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         // A finite number with one representation (no NaN, no negative
         // zero: FloatType::admit), so equal numbers have equal bits.
         Kind::Float64 => float_bits(a) == float_bits(b),
+        // (Refused above: a DecimalRounded value has no type-blind
+        // equality.)
+        Kind::DecimalRounded => unreachable!(),
         // Exact byte-sequence equality (core::value::equal's bytestore
         // case): length and every byte, never the storage's identity or
         // address -- a static constant, a heap buffer and a copy of either
@@ -679,12 +711,76 @@ fn fnv1a(h: u64, bytes: &[u8]) -> u64 {
     h
 }
 
+/// "00", "01", ..., "99": two digits per division halve the dependent
+/// division chain of a number's text.
+const DECIMAL_PAIRS: &[u8; 200] = b"0001020304050607080910111213141516171819\
+2021222324252627282930313233343536373839\
+4041424344454647484950515253545556575859\
+6061626364656667686970717273747576777879\
+8081828384858687888990919293949596979899";
+
+/// Writes N's decimal digits, at least MIN_DIGITS of them (zero-padded),
+/// into BUF ending before END; returns where they start.
+#[inline]
+fn put_decimal_digits(buf: &mut [u8], mut end: usize, mut n: u64, min_digits: usize) -> usize {
+    let stop = end - min_digits;
+    while n >= 100 {
+        let pair = 2 * (n % 100) as usize;
+        n /= 100;
+        end -= 2;
+        buf[end..end + 2].copy_from_slice(&DECIMAL_PAIRS[pair..pair + 2]);
+    }
+    if n >= 10 {
+        let pair = 2 * n as usize;
+        end -= 2;
+        buf[end..end + 2].copy_from_slice(&DECIMAL_PAIRS[pair..pair + 2]);
+    } else {
+        end -= 1;
+        buf[end] = b'0' + n as u8;
+    }
+    while end > stop {
+        end -= 1;
+        buf[end] = b'0';
+    }
+    end
+}
+
+/// The canonical decimal text of the integer of magnitude MAG, negative when
+/// NEG (never for zero): an optional '-', then the digits, without leading
+/// zeros ("0" for zero) -- exactly the bytes `to_string()` gives an i64, a
+/// u32 or a BigInt of that value (`tests::decimal_text_is_to_string`),
+/// which is core/hashing.tcl's `Utf8Bytes` of an Int's or a code point's
+/// text. Written into BUF, never the heap: hashing an Int or a UnicodeChar
+/// used to format through `to_string`, one malloc and free per hash. 40
+/// bytes hold u128::MAX's 39 digits and a sign; a magnitude beyond 64 bits
+/// is cut into 19-digit chunks, so only those few rare values divide a u128.
+#[inline]
+fn decimal_text(neg: bool, mut mag: u128, buf: &mut [u8; 40]) -> &[u8] {
+    const CHUNK: u128 = 10_000_000_000_000_000_000;
+    let mut start = buf.len();
+    while mag > u64::MAX as u128 {
+        let rest = mag / CHUNK;
+        start = put_decimal_digits(buf, start, (mag - rest * CHUNK) as u64, 19);
+        mag = rest;
+    }
+    start = put_decimal_digits(buf, start, mag as u64, 1);
+    if neg {
+        start -= 1;
+        buf[start] = b'-';
+    }
+    &buf[start..]
+}
+
 /// H folded with V's kind tag and payload, recursing into List elements and
 /// a Result payload exactly as `equal` recurses (see ops.rs's `equal`).
 fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
     let kind = kind_of(v);
     if matches!(kind, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr) {
         vm(p).fail(RtError::Unhashable { value: v });
+        return Err(());
+    }
+    if kind == Kind::DecimalRounded {
+        vm(p).fail(RtError::Semantic { kind: "EQUALITY", message: DECIMAL_HASH_MESSAGE.to_string() });
         return Err(());
     }
     // Kind tags matching core/hashing.tcl's KindTag dict exactly (int str
@@ -705,18 +801,28 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::MutByteStore => 10,
         Kind::Enum => 11,
         Kind::Float64 => 12,
-        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr
+        | Kind::DecimalRounded => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
     Ok(match kind {
         // Canonical decimal text, matching how core::value::equal treats
         // textual identity as numeric equality for every Int, small or big.
+        // Formatted on the stack (`decimal_text`); a BigInt of more than 128
+        // bits, by num-bigint from the object's own value (no clone).
         Kind::Int => {
-            let text = match int_small(v) {
-                Some(n) => n.to_string(),
-                None => int_to_big(v).to_string(),
-            };
-            fnv1a(h, text.as_bytes())
+            let mut buf = [0u8; 40];
+            match int_small(v) {
+                Some(n) => fnv1a(h, decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf)),
+                None => {
+                    use num_traits::ToPrimitive;
+                    let n = big_of(v);
+                    match n.magnitude().to_u128() {
+                        Some(mag) => fnv1a(h, decimal_text(n.is_negative(), mag, &mut buf)),
+                        None => fnv1a(h, n.to_str_radix(10).as_bytes()),
+                    }
+                }
+            }
         }
         // Evidence is metadata, not part of the value (equal ignores it too).
         Kind::Str => fnv1a(h, str_of(v).as_bytes()),
@@ -739,10 +845,11 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         }
         // Canonical decimal codepoint text, matching how Int's own text is
         // hashed above (core/hashing.tcl's identical choice).
-        Kind::UnicodeChar => fnv1a(h, char_of(v).to_string().as_bytes()),
+        Kind::UnicodeChar => fnv1a(h, decimal_text(false, char_of(v) as u128, &mut [0u8; 40])),
         // The bits, 8 bytes little-endian (core/hashing.tcl's Float64 case):
         // consistent with the bit equality above.
         Kind::Float64 => fnv1a(h, &float_bits(v).to_le_bytes()),
+        Kind::DecimalRounded => unreachable!(),
         // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
         // declaration identity text, a 0xFF separator, the case's declared
         // name -- never the numbers the word carries.
@@ -775,19 +882,22 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
             // core/hashing.tcl's struct case, byte for byte: the declaration
             // identity text (empty for an anonymous struct), the field
             // count, then each slot's name text and sub-hash in slot order.
+            // The shape is borrowed for the whole fold, never cloned: a
+            // field's sub-hash (a nested struct's or enum's) borrows the
+            // program again, and RefCell's shared borrows nest (only
+            // `Vm::new` borrows it mutably, and hashing makes no Vm).
             let obj = struct_of(v);
-            let (name, fields) = current_program(|prog| {
+            current_program(|prog| {
                 let shape = &prog.shapes[obj.shape as usize];
-                (shape.name.clone().unwrap_or_default(), shape.fields.clone())
-            });
-            let mut h = fnv1a(h, name.as_bytes());
-            h = fnv1a(h, &(fields.len() as u64).to_le_bytes());
-            for (field, item) in fields.iter().zip(obj.fields().iter()) {
-                h = fnv1a(h, field.as_bytes());
-                let sub = hash_mix(p, FNV_OFFSET, *item)?;
-                h = fnv1a(h, &sub.to_le_bytes());
-            }
-            h
+                let mut h = fnv1a(h, shape.name.as_deref().unwrap_or("").as_bytes());
+                h = fnv1a(h, &(shape.fields.len() as u64).to_le_bytes());
+                for (field, item) in shape.fields.iter().zip(obj.fields().iter()) {
+                    h = fnv1a(h, field.as_bytes());
+                    let sub = hash_mix(p, FNV_OFFSET, *item)?;
+                    h = fnv1a(h, &sub.to_le_bytes());
+                }
+                Ok(h)
+            })?
         }
         Kind::ImmutableSet => {
             // Order-independent (XOR-combined member sub-hashes), matching
@@ -2032,7 +2142,10 @@ pub extern "C" fn rt_set_contains(p: *mut Vm, s: Value, v: Value) -> Value {
 // The writes (set, swap, copy, and their affine `_drop` forms) are the only
 // places a slot's value ever changes after construction: a future write
 // barrier (e.g. for a generational collector) has exactly these call sites
-// to instrument.
+// to instrument -- and codegen::clif's inline `mutable_array::set` fast
+// path (`mutarray_set`), the one store generated code makes to a slot,
+// through the header's PTR word when its UNIQUE word says the backing is
+// this header's alone (value.rs's MutArrayObj).
 //
 // "No misleading copy accounting": record_mutarray_copy is called only for
 // movement of *existing* values -- bulk copy and finalization -- never for a
@@ -2045,7 +2158,7 @@ pub extern "C" fn rt_set_contains(p: *mut Vm, s: Value, v: Value) -> Value {
 /// with the heap: a new backing's, or 0 for a share (counted when it was
 /// made; a detach counts its own copy).
 pub fn new_mutarray_header(p: *mut Vm, start: usize, backing: Rc<[Value]>, bytes: usize) -> Value {
-    vm(p).alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), start, backing }, bytes)
+    vm(p).alloc(MutArrayObj::new(start, backing), bytes)
 }
 
 /// The elements of array ARR, unique to its header: a shared backing is
@@ -2053,25 +2166,21 @@ pub fn new_mutarray_header(p: *mut Vm, start: usize, backing: Rc<[Value]>, bytes
 /// backing of exactly their length), a unique one returned as is.
 fn array_writable<'a>(p: *mut Vm, arr: Value) -> &'a mut [Value] {
     let obj = mutarray_of_mut(arr);
-    if Rc::strong_count(&obj.backing) > 1 {
-        let n = obj.items().len();
+    if obj.backing_extent().1 > 1 {
+        let n = obj.len();
         let vm = vm(p);
         vm.metrics.record_mutarray_detach(n);
         vm.heap.note_growth(n * 8);
-        obj.backing = backing_of(obj.items());
-        obj.start = 0;
+        obj.replace_backing(backing_of(obj.items()));
     }
-    let start = obj.start;
-    &mut Rc::get_mut(&mut obj.backing).expect("a detached backing is unique")[start..]
+    obj.items_mut().expect("a detached backing is unique")
 }
 
 /// The elements of affine array ARR: its backing is never shared (an affine
 /// array is moved, never copied), so this never copies an element.
 pub fn array_owned<'a>(arr: Value, what: &str) -> &'a mut [Value] {
-    let obj = mutarray_of_mut(arr);
-    let start = obj.start;
-    match Rc::get_mut(&mut obj.backing) {
-        Some(slots) => &mut slots[start..],
+    match mutarray_of_mut(arr).items_mut() {
+        Some(slots) => slots,
         None => panic!("{what}: an affine MutableArray's backing is shared (an ownership invariant violation)"),
     }
 }
@@ -2082,9 +2191,7 @@ pub fn array_owned<'a>(arr: Value, what: &str) -> &'a mut [Value] {
 /// element is copied.
 fn take_elements<'a>(arr: Value, what: &str) -> &'a [Value] {
     let n = array_owned(arr, what).len();
-    let obj = mutarray_of_mut(arr);
-    obj.start += n;
-    &obj.backing[obj.start - n..]
+    mutarray_of_mut(arr).advance(n)
 }
 
 /// The checked capacity of a new array for operation NAME: an Int in
@@ -2186,7 +2293,7 @@ fn generate(p: *mut Vm, capacity: Value, factory: Value, d: Option<Value>, name:
         }
         // No safepoint between the call's return and the store: X is in
         // the (rooted) array before anything can collect again.
-        Rc::get_mut(&mut mutarray_of_mut(arr).backing).expect("a unique backing under construction")[i] = x;
+        mutarray_of_mut(arr).items_mut().expect("a unique backing under construction")[i] = x;
     }
     vm(p).temp_roots.truncate(rooted);
     arr
@@ -2402,9 +2509,8 @@ pub extern "C" fn rt_mutarray_empty(_p: *mut Vm, arr: Value) -> Value {
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_take_front(_p: *mut Vm, arr: Value) -> Value {
     let obj = mutarray_of_mut(arr);
-    let x = *obj.items().first().expect("mutable_array#take_front: no element left");
-    obj.start += 1;
-    x
+    assert!(obj.len() > 0, "mutable_array#take_front: no element left");
+    obj.advance(1)[0]
 }
 
 /// The `a` drop of affine.rs: every element of array ARR by the element
@@ -2425,8 +2531,7 @@ pub fn drop_array_elements(p: *mut Vm, arr: Value, d: &[u8], pos: &mut usize) {
 /// A logical copy of array ARR (`mvshare`'s `h` of an array header): a new
 /// header on the same backing (and the same elements of it), O(1).
 pub fn share_array(p: *mut Vm, arr: Value) -> Value {
-    let obj = mutarray_of(arr);
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     new_mutarray_header(p, start, backing, 0)
 }
@@ -2439,8 +2544,8 @@ pub fn array_elements(arr: Value) -> impl Iterator<Item = Value> {
 /// Approximate bytes array ARR owns (heap.rs's object_size): its header and
 /// its share of the backing.
 pub fn array_object_size(arr: Value) -> usize {
-    let obj = mutarray_of(arr);
-    std::mem::size_of::<MutArrayObj>() + obj.backing.len() * 8 / Rc::strong_count(&obj.backing)
+    let (slots, holders) = mutarray_of(arr).backing_extent();
+    std::mem::size_of::<MutArrayObj>() + slots * 8 / holders
 }
 
 // ---------------------------------------------------------------------------
@@ -2571,6 +2676,23 @@ pub(crate) fn float_apply(p: *mut Vm, ty: FloatType, op: crate::nir::FloatOp, a:
                     FromInt | Trunc | Neg => unreachable!(),
                 }
             }
+        },
+        // DecimalRounded's arithmetic: the binary64 operation on the
+        // representations, exactly Float64's (core::decimal::apply); its
+        // result is a DecimalRounded value. Its comparisons and conversions
+        // are runtime::decimal's.
+        FloatType::DecimalRounded => match op {
+            Neg => float_value(p, ty, 0.0 - float64_of(a)),
+            Add | Sub | Mul | Div => {
+                let (x, y) = (float64_of(a), float64_of(b));
+                float_value(p, ty, match op {
+                    Add => x + y,
+                    Sub => x - y,
+                    Mul => x * y,
+                    _ => x / y,
+                })
+            }
+            Lt | Le | Gt | Ge | Eq | FromInt | Trunc => unreachable!("no DecimalRounded operation"),
         },
     }
 }
@@ -2767,10 +2889,23 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         ResultValue => rt_result_payload(p, a[0], 1),
         ResultError => rt_result_payload(p, a[0], 0),
         CharCodepoint => rt_char_codepoint(p, a[0]),
-        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc => {
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc
+        | D64Add | D64Sub | D64Mul | D64Div | D64Neg => {
             let (ty, fop) = op.float().expect("a floating-point operation");
             float_apply(p, ty, fop, a[0], a.get(1).copied().unwrap_or(NO_VALUE))
         }
+        D64Lt | D64Le | D64Gt | D64Ge | D64Eq => {
+            let order = super::decimal::rt_decimal_cmp(p, a[0], a[1], a[2]);
+            bool_value(match op {
+                D64Lt => order < 0,
+                D64Le => order <= 0,
+                D64Gt => order > 0,
+                D64Ge => order >= 0,
+                _ => order == 0,
+            })
+        }
+        D64ToF64 => super::decimal::rt_decimal_to_f64(p, a[0], a[1]),
+        D64Round => super::decimal::rt_decimal_round(p, a[0], a[1]),
         MkOk => rt_result_new(p, 1, a[0]),
         MkError => rt_result_new(p, 0, a[0]),
         Hash => rt_hash(p, a[0]),
@@ -2797,7 +2932,7 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         CoRelease => rt_co_release(p, a[0]),
         AffineDrop => rt_affine_drop(p, a[0], a[1]),
         RegionCheck | RegionEq | RBox | RUnbox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq
-        | RIShr | RIShl | RIAnd | RIOr | RIXor | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
+        | RIShr | RIShl | RIAnd | RIOr | RIXor | RIMod | RIModTotal | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
         | AsciiLen | AsciiEq | AsciiToShort | AsciiShortEq
         | DecodeCharAt | StrByteLen | StrRegionIsTclAlpha | StrRegionIsTclAlnum
         // The syscall transports and the raw address bridges are never
@@ -2843,6 +2978,9 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     vec![
         h!(rt_type_error, 4),
         h!(rt_float_new, 3),
+        h!(rt_decimal_cmp, 4),
+        h!(rt_decimal_to_f64, 3),
+        h!(rt_decimal_round, 3),
         h!(rt_float_nonfinite, 2),
         h!(rt_f64_from_int, 2),
         h!(rt_f64_trunc, 2),
@@ -3172,6 +3310,174 @@ mod tests {
         assert_eq!(h(&mut vm, one), h(&mut vm, two));
         assert_ne!(h(&mut vm, one), h(&mut vm, other));
         assert_ne!(h(&mut vm, other), h(&mut vm, named));
+    }
+
+    // -----------------------------------------------------------------------
+    // hash's byte encoding is formatted without the heap (decimal_text) and
+    // folds borrowed shapes; the bytes are the ones `to_string()` and the
+    // shape's own strings always gave (core/hashing.tcl's, byte for byte).
+
+    /// Interesting magnitudes: every power of ten and of two in range, each
+    /// minus one and plus one, and a deterministic spread in between.
+    fn decimal_samples() -> Vec<u128> {
+        let mut out = vec![0, 1, 9, 10, 11, 99, 100, 101, u64::MAX as u128, u128::MAX];
+        let mut p: u128 = 1;
+        while let Some(next) = p.checked_mul(10) {
+            out.extend([p - 1, p, p + 1]);
+            p = next;
+        }
+        out.extend([p - 1, p, p + 1]);
+        for bit in 1..128 {
+            let q = 1u128 << bit;
+            out.extend([q - 1, q, q + 1]);
+        }
+        let mut x: u128 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..20000 {
+            x = x.wrapping_mul(0x2545_F491_4F6C_DD1D_9E37_79B9_7F4A_7C15).wrapping_add(1442695040888963407);
+            out.push(x >> (x % 127) as u32);
+        }
+        out
+    }
+
+    #[test]
+    fn decimal_text_is_to_string() {
+        let mut buf = [0u8; 40];
+        for mag in decimal_samples() {
+            for neg in [false, true] {
+                if neg && mag == 0 {
+                    continue;
+                }
+                let big = if neg { -BigInt::from(mag) } else { BigInt::from(mag) };
+                assert_eq!(decimal_text(neg, mag, &mut buf), big.to_string().as_bytes(), "{big}");
+                if let Ok(n) = i64::try_from(&big) {
+                    assert_eq!(decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf), n.to_string().as_bytes());
+                }
+            }
+        }
+        for n in [i64::MIN, i64::MIN + 1, i64::MAX, SMALL_MIN, SMALL_MIN - 1, SMALL_MAX, SMALL_MAX + 1, -1, 0] {
+            assert_eq!(decimal_text(n < 0, n.unsigned_abs() as u128, &mut buf), n.to_string().as_bytes());
+        }
+        for cp in (0..=0x10FFFFu32).filter(|cp| !(0xD800..=0xDFFF).contains(cp)) {
+            assert_eq!(decimal_text(false, cp as u128, &mut buf), cp.to_string().as_bytes());
+        }
+    }
+
+    /// hash_mix as it was before decimal_text and the borrowed shapes (every
+    /// Int and code point through `to_string()`, every BigInt through a
+    /// clone, every shape's strings cloned), for the kinds those changed:
+    /// the reference the allocation-free implementation must equal.
+    fn reference_mix(v: Value) -> u64 {
+        let tagged = |tag: u8| fnv1a(FNV_OFFSET, &[tag]);
+        match kind_of(v) {
+            Kind::Int => {
+                let text = match int_small(v) {
+                    Some(n) => n.to_string(),
+                    None => int_to_big(v).to_string(),
+                };
+                fnv1a(tagged(0), text.as_bytes())
+            }
+            Kind::Str => fnv1a(tagged(1), str_of(v).as_bytes()),
+            Kind::UnicodeChar => fnv1a(tagged(6), char_of(v).to_string().as_bytes()),
+            Kind::List => {
+                let items = list_of(v).items();
+                let mut h = fnv1a(tagged(4), &(items.len() as u64).to_le_bytes());
+                for item in items {
+                    h = fnv1a(h, &reference_mix(*item).to_le_bytes());
+                }
+                h
+            }
+            Kind::Enum => {
+                let (e, c) = enum_parts(v);
+                let (name, case) = current_program(|prog| {
+                    let info = &prog.enums[e as usize];
+                    (info.name.clone(), info.cases[c as usize].clone())
+                });
+                fnv1a(fnv1a(fnv1a(tagged(11), name.as_bytes()), &[0xFF]), case.as_bytes())
+            }
+            Kind::Struct => {
+                let obj = struct_of(v);
+                let (name, fields) = current_program(|prog| {
+                    let shape = &prog.shapes[obj.shape as usize];
+                    (shape.name.clone().unwrap_or_default(), shape.fields.clone())
+                });
+                let mut h = fnv1a(tagged(8), name.as_bytes());
+                h = fnv1a(h, &(fields.len() as u64).to_le_bytes());
+                for (field, item) in fields.iter().zip(obj.fields().iter()) {
+                    h = fnv1a(h, field.as_bytes());
+                    h = fnv1a(h, &reference_mix(*item).to_le_bytes());
+                }
+                h
+            }
+            other => panic!("reference_mix: no {other:?} here"),
+        }
+    }
+
+    fn reference_hash(v: Value) -> Value {
+        make_small((reference_mix(v) & HASH_MASK) as i64)
+    }
+
+    #[test]
+    fn int_and_char_hashes_are_their_to_string_bytes() {
+        let mut vm = vm();
+        for mag in decimal_samples() {
+            for neg in [false, true] {
+                let big = if neg { -BigInt::from(mag) } else { BigInt::from(mag) };
+                let v = rooted!(vm, vm.new_big(big.clone()));
+                assert_eq!(rt_hash(&mut *vm, v), reference_hash(v), "hash({big})");
+                // Beyond 128 bits: num-bigint's own text of the borrowed value.
+                let wide = rooted!(vm, vm.new_big(big.clone() * BigInt::from(u128::MAX) + 7));
+                assert_eq!(rt_hash(&mut *vm, wide), reference_hash(wide), "hash({big} * (2^128-1) + 7)");
+            }
+        }
+        for n in [0, -1, 7, SMALL_MIN, SMALL_MAX, (1 << 61) - 1, 1 << 61, -(1 << 61)] {
+            assert_eq!(rt_hash(&mut *vm, small(n)), reference_hash(small(n)), "hash({n})");
+        }
+        for cp in [0u32, 0x61, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x1F642, 0x10FFFF] {
+            assert_eq!(rt_hash(&mut *vm, make_char(cp)), reference_hash(make_char(cp)), "hash(char {cp})");
+        }
+        // core/hashing.tcl's values of 7, i64::MIN (a BigInt here) and 2^80
+        // (tests/native-hashing.test's hash-parity-kinds-1 compares many
+        // more with interp).
+        assert_eq!(rt_hash(&mut *vm, small(7)), small(590693963425087288));
+        let min = rooted!(vm, vm.new_big(BigInt::from(i64::MIN)));
+        assert_eq!(rt_hash(&mut *vm, min), small(707785774613091011));
+        let two80 = rooted!(vm, vm.new_big(BigInt::from(1u128 << 80)));
+        assert_eq!(rt_hash(&mut *vm, two80), small(999613055982882793));
+    }
+
+    #[test]
+    fn nested_struct_hashes_borrow_their_shapes() {
+        use crate::runtime::vm::{EnumInfo, ShapeInfo};
+        // shape 0: P {x, y}; 1: Q {a, b, c}; 2: anonymous {p, q, e}.
+        let shape = |name: Option<&str>, fields: &[&str]| ShapeInfo {
+            name: name.map(String::from),
+            fields: fields.iter().map(|f| f.to_string()).collect(),
+            opaque: false,
+        };
+        let mut vm = Vm::new(
+            std::rc::Rc::new(ProgramInfo {
+                functions: Vec::new(),
+                natives: Vec::new(),
+                shapes: vec![shape(Some("P"), &["x", "y"]), shape(Some("m::Q"), &["a", "b", "c"]), shape(None, &["p", "q", "e"])],
+                enums: vec![EnumInfo { name: "Color".to_string(), cases: vec!["Red".to_string(), "Green".to_string()] }],
+            }),
+            AllocMode::Summary,
+        );
+        let s = rooted!(vm, str_val(&mut vm, "h\u{e9}llo \u{1F642}"));
+        let p = rooted!(vm, vm.new_struct(0, vec![small(-5), small(SMALL_MAX)]));
+        let list = rooted!(vm, vm.new_list(vec![p, make_char(0x1F642), make_enum(0, 1)]));
+        let q = rooted!(vm, vm.new_struct(1, vec![p, list, s]));
+        let anon = rooted!(vm, vm.new_struct(2, vec![p, q, make_enum(0, 0)]));
+        for v in [p, q, anon, list] {
+            assert_eq!(rt_hash(&mut *vm, v), reference_hash(v));
+        }
+        // A failing field's sub-hash leaves the borrow unwound, the next
+        // hash borrows again.
+        let array = rooted!(vm, vm.new_mutarray(1));
+        let bad = rooted!(vm, vm.new_struct(0, vec![small(1), array]));
+        assert_eq!(rt_hash(&mut *vm, bad), NO_VALUE);
+        assert!(vm.error.take().is_some());
+        assert_eq!(rt_hash(&mut *vm, anon), reference_hash(anon));
     }
 
     #[test]
@@ -4548,7 +4854,7 @@ mod tests {
         let b = rooted!(vm, share_array(p, a));
         // A new header on the same backing: no element copied.
         assert_ne!(a, b);
-        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(b).backing));
+        assert!(mutarray_of(a).same_backing(mutarray_of(b)));
         assert_eq!((vm.metrics.mutarray.shares, vm.metrics.mutarray.detaches), (1, 0));
         // The first write through either detaches it, once.
         rt_mutarray_set(p, b, small(0), small(9));
@@ -4594,7 +4900,7 @@ mod tests {
         // A failed write neither changes the array nor detaches its backing.
         assert_eq!(mutarray_contents(a), vec![5, 6]);
         assert_eq!(vm.metrics.mutarray.detaches, 0);
-        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(copy).backing));
+        assert!(mutarray_of(a).same_backing(mutarray_of(copy)));
         vm.temp_roots.clear();
     }
 
@@ -4694,6 +5000,81 @@ mod tests {
         assert_eq!(small_of(rt_mutarray_take_front(p, after)), 20);
         assert_eq!(mutarray_contents(after), vec![3, 4]);
         assert_eq!(mutarray_contents(a), vec![2, 3, 4]);
+        vm.temp_roots.clear();
+    }
+
+    /// The three header words generated code reads (codegen::clif's inline
+    /// capacity/at/set), read the way it reads them -- raw loads at
+    /// MUTARRAY_LEN/PTR/UNIQUE_OFFSET -- after every operation that changes
+    /// a header's backing, its start or its backing's holders: LEN and PTR
+    /// always designate exactly `items()`, and UNIQUE is nonzero only for a
+    /// backing no other header holds (stale only towards 0, and refreshed
+    /// by the next runtime write).
+    #[test]
+    fn mutarray_header_words_track_the_backing() {
+        fn words(arr: Value) -> (usize, *const Value, u64) {
+            let at = |offset: i32| unsafe { *((arr as usize + offset as usize) as *const u64) };
+            (at(MUTARRAY_LEN_OFFSET) as usize, at(MUTARRAY_PTR_OFFSET) as *const Value, at(MUTARRAY_UNIQUE_OFFSET))
+        }
+        fn exact(arr: Value) -> u64 {
+            let (len, ptr, unique) = words(arr);
+            let items = mutarray_of(arr).items();
+            assert_eq!((len, ptr), (items.len(), items.as_ptr()), "LEN/PTR are the elements");
+            for (i, &item) in items.iter().enumerate() {
+                assert_eq!(unsafe { *ptr.add(i) }, item, "PTR + 8i is element i");
+            }
+            let (_, holders) = mutarray_of(arr).backing_extent();
+            assert!(unique == 0 || holders == 1, "UNIQUE only for a backing one header holds");
+            unique
+        }
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[1, 2, 3, 4]);
+        assert_eq!(exact(a), 1, "a new array is unique");
+        let empty = rooted!(vm, rt_mutarray_allocate(p, small(0)));
+        assert_eq!(exact(empty), 1);
+        // A share: both headers on one backing, neither unique.
+        let b = rooted!(vm, share_array(p, a));
+        assert_eq!((exact(a), exact(b)), (0, 0));
+        assert_eq!(words(a).1, words(b).1);
+        // B's first write detaches B (a new, unique backing); A's backing is
+        // A's alone again but A still says shared, until A's next write.
+        rt_mutarray_set(p, b, small(0), small(9));
+        assert_eq!((exact(a), exact(b)), (0, 1));
+        assert_ne!(words(a).1, words(b).1);
+        rt_mutarray_set_proven(p, a, small(1), small(8));
+        assert_eq!(exact(a), 1);
+        assert_eq!(vm.metrics.mutarray.detaches, 1);
+        assert_eq!((mutarray_contents(a), mutarray_contents(b)), (vec![1, 8, 3, 4], vec![9, 2, 3, 4]));
+        // A copy the collector frees leaves A stale-shared; A's next write
+        // finds its backing unique (no detach) and re-enables UNIQUE.
+        let roots = vm.temp_roots.len();
+        let c = share_array(p, a);
+        assert_eq!((exact(a), exact(c)), (0, 0));
+        vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        assert_eq!(mutarray_of(a).backing_extent().1, 1);
+        assert_eq!(exact(a), 0);
+        rt_mutarray_set(p, a, small(2), small(7));
+        assert_eq!((exact(a), vm.metrics.mutarray.detaches), (1, 1));
+        assert_eq!(vm.temp_roots.len(), roots);
+        // A consuming loop's step advances PTR past the element and LEN.
+        let (len, ptr, _) = words(a);
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 1);
+        assert_eq!(words(a), (len - 1, unsafe { ptr.add(1) }, 1));
+        exact(a);
+        for _ in 0..3 {
+            rt_mutarray_take_front(p, a);
+        }
+        assert_eq!(words(a).0, 0);
+        exact(a);
+        // A detach of a drained-then-shared header copies only its elements:
+        // PTR moves to the new backing's first slot.
+        let d = mutarray_of_ints(&mut vm, &[5, 6, 7]);
+        rt_mutarray_take_front(p, d);
+        let e = rooted!(vm, share_array(p, d));
+        rt_mutarray_set(p, e, small(0), small(60));
+        assert_eq!((exact(d), exact(e)), (0, 1));
+        assert_eq!((mutarray_contents(d), mutarray_contents(e)), (vec![6, 7], vec![60, 7]));
         vm.temp_roots.clear();
     }
 }

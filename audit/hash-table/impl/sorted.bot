@@ -1,0 +1,328 @@
+# sorted -- an immutable map sorted by hash, searched by bisection
+# (audit/hash-table/SPEC.md section 3): the entries are held in three
+# parallel structures, in the order of (hash, insertion order) -- `hs`, the
+# entries' hashes, ascending, and `ks`, their keys, both immutable Lists;
+# `vs`, their values, a MutableArray, so that a replacement is made in
+# place. There are no slots and no probe sequence: a lookup of KEY (hash h)
+# binary-searches `hs` for the first position whose hash is at least h,
+# then walks the run of entries with hash h from there, comparing keys.
+# With 61-bit hashes such a run is almost always one entry or none.
+#
+#   * from_lists, the representation's real constructor, hashes the input
+#     keys once, orders the input positions by hash with a stable merge
+#     sort (Botlish has no `<` on Strings or structs, which is why the
+#     order is the hash's), and keeps each key's first occurrence, at its
+#     place in its hash's run, with its last occurrence's value -- the
+#     table the same puts in input order would make -- in O(n log n). The
+#     sort is bottom-up over two MutableArray[int]s of positions that swap
+#     roles each pass (local scratch, threaded linearly: no copies); merging
+#     Lists instead, top-down, allocates a List per merge and measured 3-4x
+#     slower;
+#   * put of a present key replaces its value in place, O(log n); of an
+#     absent key it builds the three structures again with the entry
+#     inserted at the end of its hash's run (so equal hashes stay in
+#     insertion order), O(n): the hashes and keys collected again element
+#     by element (a List has no splice or concatenation), the values
+#     spliced with two copies;
+#   * drop builds them again without the entry, O(n).
+#
+# Indexing (whether a function needs IndexNotFound is one of the
+# experiment's measurements): only the sort's read-out (a counted loop over
+# a local array) and the value splices (a parameter index guarded against
+# the parameter array's capacity) are proven. The bisection's midpoint is a
+# computed local, the run scan's index has no lower guard, and nothing
+# relates the lengths of the parallel structures, so every reader declares
+# IndexNotFound.
+#
+# A table is a value (SPEC.md section 7): `hs` and `ks` are immutable, so a
+# rebuild shares nothing; every Table literal's `vs` is a fresh array (a
+# constructor call, or a splice helper returning the array it made, which
+# reads the old one through an observed parameter); `vs` is written only
+# through the place `t.vs` of a table taken at its last use (put's
+# replacement), which returns it; readers only read.
+#
+# The capacity model of SPEC.md section 2 does not apply (no slots, no
+# load factor, no growth): slots(t) is the entry count, the length of each
+# of the three structures.
+#
+# policy: none
+import list
+import mutable_array
+
+struct Table:
+    hs: List[int]
+    ks: list
+    vs: mutarray
+
+fn fresh(expected: int) -> Table:
+    Table {hs: [], ks: [], vs: mutable_array::from_list([])}
+
+fn size(t: Table) -> int:
+    list::length(t.hs)
+
+fn slots(t: Table) -> int:
+    size(t)
+
+# ---------------------------------------------------------------------------
+# Search
+
+# The first position from LO up to HI (exclusive) whose hash is at least H,
+# or HI when there is none: HS is ascending, so every position before the
+# answer holds a smaller hash and every one from it on a hash >= H.
+fn lower_bound(hs: List[int], h: int, lo: int, hi: int) -> int errors IndexNotFound:
+    if lo >= hi:
+        return lo
+    mid = shift_right(lo + hi, 1)
+    if list::at(hs, mid) < h:
+        return lower_bound(hs, h, mid + 1, hi)
+    lower_bound(hs, h, lo, mid)
+
+# The position of KEY in the run of hash H that continues at I, or the end
+# of the run (the first position after it) when KEY is not in it.
+fn scan(hs: List[int], ks: list, h: int, key, i: int) -> int errors IndexNotFound:
+    if i >= list::length(hs) or list::at(hs, i) != h or list::at(ks, i) == key:
+        return i
+    scan(hs, ks, h, key, i + 1)
+
+# The position of KEY (hash H), or the end of its hash's run, where an
+# insertion of KEY goes.
+fn find(t: Table, h: int, key) -> int errors IndexNotFound:
+    scan(t.hs, t.ks, h, key, lower_bound(t.hs, h, 0, size(t)))
+
+# Whether position I, find's answer for a key of hash H, holds the key.
+fn present?(t: Table, i: int, h: int) -> bool errors IndexNotFound:
+    i < size(t) and list::at(t.hs, i) == h
+
+# ---------------------------------------------------------------------------
+# Lookup
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    if not present?(t, i, h):
+        return default
+    t.vs.at(i)
+
+fn has?(t: Table, key) -> bool errors IndexNotFound:
+    h = hash(key)
+    present?(t, find(t, h, key), h)
+
+# The bisection steps lower_bound takes from LO to HI, each one entry's
+# hash examined, added to ACC.
+fn steps(hs: List[int], h: int, lo: int, hi: int, acc: int) -> int errors IndexNotFound:
+    if lo >= hi:
+        return acc
+    mid = shift_right(lo + hi, 1)
+    if list::at(hs, mid) < h:
+        return steps(hs, h, mid + 1, hi, acc + 1)
+    steps(hs, h, lo, mid, acc + 1)
+
+# 1 when position I is an entry of a table of N entries, else 0.
+fn entry_count(i: int, n: int) -> int:
+    if i < n:
+        1
+    else:
+        0
+
+# The entries a lookup of KEY examines: the bisection's, then the run's from
+# its start up to the position the scan stops at (that one included when it
+# is an entry).
+fn probes(t: Table, key) -> int errors IndexNotFound:
+    h = hash(key)
+    n = size(t)
+    start = lower_bound(t.hs, h, 0, n)
+    stop = scan(t.hs, t.ks, h, key, start)
+    steps(t.hs, h, 0, n, 0) + stop - start + entry_count(stop, n)
+
+# ---------------------------------------------------------------------------
+# Insertion and removal: the structures built again
+
+# OLD's values with X inserted at position P: a new array holding a copy
+# of OLD's values before P, X, then a copy of the rest. P is always a
+# position of OLD or its end; the guard is what lets the compiler prove
+# both copies' and the store's bounds (OLD a parameter, P checked against
+# its capacity), so none of them can fail and the empty array is never
+# made.
+fn spliced_in(old: mutarray, p: int, x) -> mutarray:
+    n = mutable_array::capacity(old)
+    if p < 0 or p > n:
+        return mutable_array::allocate(0)
+    a = mutable_array::allocate(n + 1)
+    mutable_array::copy(a, 0, old, 0, p)
+    a.set(p, x)
+    mutable_array::copy(a, p + 1, old, p, n - p)
+    a
+
+# OLD's values without the one at position P (a position of OLD), proven
+# the same way.
+fn spliced_out(old: mutarray, p: int) -> mutarray:
+    n = mutable_array::capacity(old)
+    if p < 0 or p >= n:
+        return mutable_array::allocate(0)
+    a = mutable_array::allocate(n - 1)
+    mutable_array::copy(a, 0, old, 0, p)
+    mutable_array::copy(a, p, old, p + 1, n - 1 - p)
+    a
+
+# T's entries with (H, KEY, VALUE) inserted at position P. Lists have no
+# splice: the hashes and keys are collected again, element by element.
+fn inserted(t: Table, p: int, h: int, key, value) -> Table errors IndexNotFound:
+    n = size(t)
+    hs = loop j from 0 through n:
+        if j < p:
+            list::at(t.hs, j)
+        elif j == p:
+            h
+        else:
+            list::at(t.hs, j - 1)
+    ks = loop j from 0 through n:
+        if j < p:
+            list::at(t.ks, j)
+        elif j == p:
+            key
+        else:
+            list::at(t.ks, j - 1)
+    Table {hs: hs, ks: ks, vs: spliced_in(t.vs, p, value)}
+
+# T's entries without the one at position P.
+fn removed(t: Table, p: int) -> Table errors IndexNotFound:
+    n = size(t)
+    hs = loop j from 0 to n:
+        if j == p:
+            continue
+        list::at(t.hs, j)
+    ks = loop j from 0 to n:
+        if j == p:
+            continue
+        list::at(t.ks, j)
+    Table {hs: hs, ks: ks, vs: spliced_out(t.vs, p)}
+
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    if present?(t, i, h):
+        t.vs.set(i, value)
+        return t
+    inserted(t, i, h, key, value)
+
+fn drop(t: Table, key) -> Table errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    if not present?(t, i, h):
+        return t
+    removed(t, i)
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4): order the input positions by hash,
+# then keep each key's first occurrence with its last value
+
+fn identity(i: int) -> int:
+    i
+
+fn min(a: int, b: int) -> int:
+    if a < b:
+        a
+    else:
+        b
+
+# DST with the runs SRC[I..MID) and SRC[J..HI) -- input positions, each
+# run ordered by the positions' hashes in HS -- merged into it from K on.
+# On equal hashes the first run's position goes first: since the first
+# run's positions all precede the second's, the merge is stable.
+fn merged(hs: List[int], src: MutableArray[int], dst: MutableArray[int], i: int, mid: int, j: int, hi: int, k: int) -> MutableArray[int] errors IndexNotFound:
+    if i >= mid:
+        if j >= hi:
+            return dst
+        dst.set(k, src.at(j))
+        return merged(hs, src, dst, i, mid, j + 1, hi, k + 1)
+    if j >= hi:
+        dst.set(k, src.at(i))
+        return merged(hs, src, dst, i + 1, mid, j, hi, k + 1)
+    x = src.at(i)
+    y = src.at(j)
+    if list::at(hs, y) < list::at(hs, x):
+        dst.set(k, y)
+        return merged(hs, src, dst, i, mid, j + 1, hi, k + 1)
+    dst.set(k, x)
+    merged(hs, src, dst, i + 1, mid, j, hi, k + 1)
+
+# DST with every pair of adjacent runs of WIDTH positions of SRC (N of
+# them), from LO on, merged; the last run may be shorter, or alone.
+fn pass(hs: List[int], n: int, src: MutableArray[int], dst: MutableArray[int], width: int, lo: int) -> MutableArray[int] errors IndexNotFound:
+    if lo >= n:
+        return dst
+    mid = min(lo + width, n)
+    hi = min(lo + 2 * width, n)
+    pass(hs, n, src, merged(hs, src, dst, lo, mid, mid, hi, lo), width, lo + 2 * width)
+
+# SRC, whose runs of WIDTH positions are each ordered, ordered whole: a
+# bottom-up merge sort, each pass merging into DST, after which the two
+# arrays swap roles (the old SRC is the next pass's destination).
+fn sorted_from(hs: List[int], n: int, src: MutableArray[int], dst: MutableArray[int], width: int) -> MutableArray[int] errors IndexNotFound:
+    if width >= n:
+        return src
+    merged_pass = pass(hs, n, src, dst, width, 0)
+    sorted_from(hs, n, merged_pass, src, 2 * width)
+
+# The positions of HS ordered by their hashes, stably (the positions of
+# equal hashes in increasing order).
+fn order(hs: List[int]) -> List[int] errors IndexNotFound:
+    n = list::length(hs)
+    a = sorted_from(hs, n, mutable_array::generate(n, identity), mutable_array::create(n, 0), 1)
+    loop p from 0 to mutable_array::capacity(a):
+        a.at(p)
+
+# The input being built from: its keys, values and hashes, and the order
+# of its positions by hash.
+struct Input:
+    keys: list
+    vals: list
+    hs: List[int]
+    order: List[int]
+
+# Whether no position of the run of hash H before sorted position Q + 1
+# holds KEY: then the entry at Q + 1 is KEY's first occurrence (the sort
+# is stable, so a run lists its entries in input order).
+fn first?(s: Input, h: int, key, q: int) -> bool errors IndexNotFound:
+    if q < 0:
+        return true
+    i = list::at(s.order, q)
+    if list::at(s.hs, i) != h:
+        return true
+    if list::at(s.keys, i) == key:
+        return false
+    first?(s, h, key, q - 1)
+
+# The input position of KEY's (hash H) last occurrence, whose value it
+# keeps: the last position holding KEY in its hash's run from sorted
+# position Q on, or LAST_I, the last one before Q.
+fn last(s: Input, h: int, key, q: int, last_i: int) -> int errors IndexNotFound:
+    if q >= list::length(s.order):
+        return last_i
+    i = list::at(s.order, q)
+    if list::at(s.hs, i) != h:
+        return last_i
+    if list::at(s.keys, i) == key:
+        return last(s, h, key, q + 1, i)
+    last(s, h, key, q + 1, last_i)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    hs = loop k in keys:
+        hash(k)
+    s = Input {keys: keys, vals: vals, hs: hs, order: order(hs)}
+    # The sorted positions of first occurrences: one per entry.
+    kept = loop p from 0 to n:
+        i = list::at(s.order, p)
+        if not first?(s, list::at(hs, i), list::at(keys, i), p - 1):
+            continue
+        p
+    khs = loop p in kept:
+        list::at(hs, list::at(s.order, p))
+    kks = loop p in kept:
+        list::at(keys, list::at(s.order, p))
+    kvs = loop p in kept:
+        i = list::at(s.order, p)
+        list::at(vals, last(s, list::at(hs, i), list::at(keys, i), p + 1, i))
+    Table {hs: khs, ks: kks, vs: mutable_array::from_list(kvs)}

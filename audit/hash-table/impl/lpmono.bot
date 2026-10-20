@@ -1,0 +1,168 @@
+# lpmono -- lpa's algorithm and state (linear probing with stored hashes and
+# backward-shift deletion, audit/hash-table/SPEC.md section 3; the count in a
+# one-slot MutableArray[int]) written monolithically: each operation is one
+# function, plus one self-recursive probe loop of its own where the operation
+# probes, with every helper of lpa (home, next_slot, slots, find, store,
+# counted, between?) inlined by hand, the capacity read once per operation
+# and passed along, and a lookup returning the value from the slot it found
+# instead of re-reading the slot's hash (brief section 9, organization B).
+#
+# policy: 7/10
+import list
+import mutable_array
+
+struct Table:
+    hashes: MutableArray[int]
+    keys: mutarray
+    vals: mutarray
+    meta: MutableArray[int]
+
+fn fresh(expected: int) -> Table:
+    fn capacity_for(cap: int) -> int:
+        if expected * 10 <= cap * 7:
+            return cap
+        capacity_for(cap * 2)
+    cap = capacity_for(8)
+    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), meta: mutable_array::create(1, 0)}
+
+fn slots(t: Table) -> int:
+    t.hashes.capacity()
+
+fn size(t: Table) -> int errors IndexNotFound:
+    t.meta.at(0)
+
+# ---------------------------------------------------------------------------
+# Lookup
+
+fn get_from(t: Table, h: int, key, default, i: int, cap: int) errors IndexNotFound:
+    stored = t.hashes.at(i)
+    if stored < 0:
+        return default
+    if stored == h and t.keys.at(i) == key:
+        return t.vals.at(i)
+    get_from(t, h, key, default, mod(i + 1, cap), cap)
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    h = hash(key)
+    cap = t.hashes.capacity()
+    get_from(t, h, key, default, h.mod(cap), cap)
+
+fn has_from(t: Table, h: int, key, i: int, cap: int) -> bool errors IndexNotFound:
+    stored = t.hashes.at(i)
+    if stored < 0:
+        return false
+    if stored == h and t.keys.at(i) == key:
+        return true
+    has_from(t, h, key, mod(i + 1, cap), cap)
+
+fn has?(t: Table, key) -> bool errors IndexNotFound:
+    h = hash(key)
+    cap = t.hashes.capacity()
+    has_from(t, h, key, h.mod(cap), cap)
+
+fn probes_from(t: Table, h: int, key, i: int, cap: int, n: int) -> int errors IndexNotFound:
+    stored = t.hashes.at(i)
+    if stored < 0 or stored == h and t.keys.at(i) == key:
+        return n
+    probes_from(t, h, key, mod(i + 1, cap), cap, n + 1)
+
+fn probes(t: Table, key) -> int errors IndexNotFound:
+    h = hash(key)
+    cap = t.hashes.capacity()
+    probes_from(t, h, key, h.mod(cap), cap, 1)
+
+# ---------------------------------------------------------------------------
+# Insertion and growth
+
+# The slot of KEY (hash H) or the empty slot ending its sequence, from I.
+fn slot_from(t: Table, h: int, key, i: int, cap: int) -> int errors IndexNotFound:
+    stored = t.hashes.at(i)
+    if stored < 0 or stored == h and t.keys.at(i) == key:
+        return i
+    slot_from(t, h, key, mod(i + 1, cap), cap)
+
+# The first empty slot of T (capacity CAP) from slot J on.
+fn empty_from(t: Table, j: int, cap: int) -> int errors IndexNotFound:
+    if t.hashes.at(j) < 0:
+        return j
+    empty_from(t, mod(j + 1, cap), cap)
+
+# DEST (capacity CAP) with every entry of OLD from slot I on placed into
+# its first empty slot.
+fn moved(old: Table, i: int, dest: Table, cap: int) -> Table errors IndexNotFound:
+    if i >= old.hashes.capacity():
+        return dest
+    h = old.hashes.at(i)
+    if h < 0:
+        return moved(old, i + 1, dest, cap)
+    j = empty_from(dest, h.mod(cap), cap)
+    dest.hashes.set(j, h)
+    dest.keys.set(j, old.keys.at(i))
+    dest.vals.set(j, old.vals.at(i))
+    moved(old, i + 1, dest, cap)
+
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    h = hash(key)
+    cap = t.hashes.capacity()
+    i = slot_from(t, h, key, h.mod(cap), cap)
+    if t.hashes.at(i) >= 0:
+        t.vals.set(i, value)
+        return t
+    count = t.meta.at(0)
+    if (count + 1) * 10 > cap * 7:
+        bigger = 2 * cap
+        g = moved(t, 0, Table {hashes: mutable_array::create(bigger, -1), keys: mutable_array::allocate(bigger), vals: mutable_array::allocate(bigger), meta: mutable_array::create(1, 0)}, bigger)
+        j = slot_from(g, h, key, h.mod(bigger), bigger)
+        g.hashes.set(j, h)
+        g.keys.set(j, key)
+        g.vals.set(j, value)
+        g.meta.set(0, count + 1)
+        return g
+    t.hashes.set(i, h)
+    t.keys.set(i, key)
+    t.vals.set(i, value)
+    t.meta.set(0, count + 1)
+    t
+
+# ---------------------------------------------------------------------------
+# Removal: backward shift
+
+# T after the entry at slot HOLE was removed, the entries after it shifted
+# back: J is the last slot looked at.
+fn shifted(t: Table, hole: int, j: int, cap: int) -> Table errors IndexNotFound:
+    n = mod(j + 1, cap)
+    stored = t.hashes.at(n)
+    if stored < 0:
+        t.hashes.set(hole, -1)
+        t.keys.set(hole, unit)
+        t.vals.set(hole, unit)
+        return t
+    k = stored.mod(cap)
+    if hole <= n and hole < k and k <= n or n < hole and (hole < k or k <= n):
+        return shifted(t, hole, n, cap)
+    t.hashes.set(hole, stored)
+    t.keys.set(hole, t.keys.at(n))
+    t.vals.set(hole, t.vals.at(n))
+    shifted(t, n, n, cap)
+
+fn drop(t: Table, key) -> Table errors IndexNotFound:
+    h = hash(key)
+    cap = t.hashes.capacity()
+    i = slot_from(t, h, key, h.mod(cap), cap)
+    if t.hashes.at(i) < 0:
+        return t
+    s = shifted(t, i, i, cap)
+    s.meta.set(0, s.meta.at(0) - 1)
+    s
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)

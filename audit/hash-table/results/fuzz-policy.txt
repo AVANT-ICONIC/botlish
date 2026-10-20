@@ -1,0 +1,18 @@
+# fuzz.tcl -impls "lpa rh" -policy 1/2 -seeds 2 -profiles "small grow collide edge large"
+lpa -policy 1/2 int: 10 traces x 4 backends
+lpa -policy 1/2 str: 10 traces x 4 backends
+lpa -policy 1/2 point: 10 traces x 4 backends
+rh -policy 1/2 int: 10 traces x 4 backends
+rh -policy 1/2 str: 10 traces x 4 backends
+rh -policy 1/2 point: 10 traces x 4 backends
+fuzz: 240 checks, 0 failures
+exit 0
+# fuzz.tcl -impls "lpa rh" -policy 17/20 -seeds 2 -profiles "small grow collide edge large"
+lpa -policy 17/20 int: 10 traces x 4 backends
+lpa -policy 17/20 str: 10 traces x 4 backends
+lpa -policy 17/20 point: 10 traces x 4 backends
+rh -policy 17/20 int: 10 traces x 4 backends
+rh -policy 17/20 str: 10 traces x 4 backends
+rh -policy 17/20 point: 10 traces x 4 backends
+fuzz: 240 checks, 0 failures
+exit 0

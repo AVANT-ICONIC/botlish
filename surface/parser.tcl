@@ -2199,6 +2199,15 @@ proc surface::parser::TypeExpr {pVar what} {
         set member [Expect p IDENT "a type name after \"::\""]
         set name "${name}::[dict get $member value]"
     }
+    if {$name ne "unit" && [Kind p] eq "\{"} {
+        # NAME{param: N ...}: a scalar refinement (DECIMAL-ROUNDED-
+        # MILESTONE-1.md), DecimalRounded{minDecimalsPreserved: 2}. No other
+        # type expression is followed by an opening brace, so it is
+        # unambiguous;
+        # which names have refinements, and with which parameters, is
+        # resolution's (hir/refinements.tcl), never the parser's.
+        return [ScalarRefinement p $name]
+    }
     if {[Kind p] ne "\["} {
         return $name
     }
@@ -2206,6 +2215,73 @@ proc surface::parser::TypeExpr {pVar what} {
     set arg [TypeExpr p "a type argument after \"\["]
     Expect p \] "\"\]\" after the type argument"
     return [list $name $arg]
+}
+
+# "{" [ field { separator field } [ "," ] ] "}" after the type name NAME:
+#
+#   field     = IDENT ":" [ "-" ] INT
+#   separator = "," | a line break
+#
+# A scalar refinement's parameters (DECIMAL-ROUNDED-MILESTONE-1.md):
+# compiler-known integer facts of the type, never types. The fields of one
+# line are separated by commas; a field on a line of its own needs none
+# (newlines inside braces are no tokens, so the field's own line says it):
+#
+#   DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}
+#   DecimalRounded{
+#       minDecimalsPreserved: 2
+#       maxDecimalsPreserved: 4
+#   }
+#
+# A value is an integer literal, optionally negative so that resolution can
+# say what range it must be in. Returns {refine NAME FIELDS}, FIELDS the
+# {PARAM TEXT} pairs in written order: three words whose first is "refine",
+# like no applied type {NAME ARG} and no array {array N ELEMENT}.
+proc surface::parser::ScalarRefinement {pVar name} {
+    upvar 1 $pVar p
+    set open [Advance p]
+    set fields {}
+    set seen {}
+    set separated 1
+    set previousLine [dict get $open span line]
+    while {[Kind p] ne "\}"} {
+        set token [Peek p]
+        if {[dict get $token kind] ne "IDENT"} {
+            Fail $token "expected a refinement parameter name in $name\{...\}, found [Describe $token]"
+        }
+        if {!$separated && [dict get $token span line] == $previousLine} {
+            Fail $token "expected \",\" between the refinement parameters of $name\{...\} on one line, found [Describe $token]"
+        }
+        set param [dict get $token value]
+        if {$param in $seen} {
+            Fail $token "duplicate refinement parameter \"$param\" in $name\{...\}"
+        }
+        lappend seen $param
+        Advance p
+        if {[Kind p] ne ":"} {
+            Fail [Peek p] "expected \":\" after the refinement parameter \"$param\", found [Describe [Peek p]]"
+        }
+        Advance p
+        set sign ""
+        if {[Kind p] eq "-"} {
+            Advance p
+            set sign -
+        }
+        set value [Peek p]
+        if {[dict get $value kind] ne "INT"} {
+            Fail $value "the refinement parameter \"$param\" of $name\{...\} is an integer, found [Describe $value]"
+        }
+        Advance p
+        lappend fields [list $param $sign[dict get $value value]]
+        set previousLine [dict get $value span endLine]
+        set separated 0
+        if {[Kind p] eq ","} {
+            Advance p
+            set separated 1
+        }
+    }
+    Advance p
+    return [list refine $name $fields]
 }
 
 # "array" INT "of" TypeExpr -- a fixed array representation

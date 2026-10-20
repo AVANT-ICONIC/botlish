@@ -1,0 +1,20 @@
+compiler: the baseline (tag baseline)
+variant     mode       shares  detaches     elements
+as-written  build       13488      7344      9223752
+as-written  replace     25488      9344     13319752
+no-VS-3     build       10648      4496      5314024
+no-VS-3     replace     22648      6496      9410024
+no-VS-7     build       10416      7344      9223752
+no-VS-7     replace     16416      9344     13319752
+no-VS-3+7   build        6144      3072      3359160
+no-VS-3+7   replace     12144      5072      7455160
+compiler: the baseline plus VS-1 and VS-2 (tag vs)
+variant     mode       shares  detaches     elements
+as-written  build        7368      7344      9223752
+as-written  replace     13368      9344     13319752
+no-VS-3     build        4504      4480      5305864
+no-VS-3     replace     10504      6480      9401864
+no-VS-7     build        4296      4296      5876832
+no-VS-7     replace      4296      4296      5876832
+no-VS-3+7   build           0         0            0
+no-VS-3+7   replace         0         0            0

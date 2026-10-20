@@ -810,8 +810,7 @@ impl Vm {
     /// The floating-point value of type TY whose bits (FloatObj::bits) are
     /// BITS: a number FloatType::admit accepted.
     pub fn new_float(&mut self, ty: FloatType, bits: u64) -> Value {
-        let _ = ty;
-        self.alloc(FloatObj { hdr: Header::new(KIND_FLOAT, false), bits }, 0)
+        self.alloc(FloatObj { hdr: Header::new(ty.heap_kind(), false), bits }, 0)
     }
 
     pub fn new_result(&mut self, ok: bool, payload: Value) -> Value {
@@ -829,7 +828,7 @@ impl Vm {
         // One allocation: the iterator's exact length lets the Rc be
         // allocated at its final size and filled in place.
         let slots: std::rc::Rc<[Value]> = std::iter::repeat_n(UNIT, capacity).collect();
-        self.alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), start: 0, backing: slots }, capacity * 8)
+        self.alloc(MutArrayObj::new(0, slots), capacity * 8)
     }
 }
 

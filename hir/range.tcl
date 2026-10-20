@@ -342,7 +342,16 @@ proc hir::range::Mod {x d} {
     set dmn [dict get $d min]
     set dmx [dict get $d max]
     if {$dmn ne "-inf" && $dmx ne "+inf"} {
-        set m [expr {max(abs($dmn), abs($dmx))}]
+        # Not max(abs($dmn), abs($dmx)): Tcl 9.0.1's max() and min() abort
+        # the process (an invalid free) when an argument is a BigInt the
+        # expression computed, such as abs() of a bound below -2^63.
+        set lo [expr {abs($dmn)}]
+        set hi [expr {abs($dmx)}]
+        if {$lo > $hi} {
+            set m $lo
+        } else {
+            set m $hi
+        }
         if {$m > 0} {
             return [dict create min 0 max [expr {$m - 1}]]
         }
@@ -835,7 +844,8 @@ proc hir::range::SeedRange {hir e} {
 
 # InstanceId -> list of Range, one per parameter: the join of the literal
 # argument ranges every *other* used instance's direct calls pass it.
-# Self-recursive calls are excluded (Analyze below feeds those back).
+# Self-recursive calls are excluded, tail or not: hir/induction.tcl, the one
+# reader, counts every one of them as a step of its own proof.
 #
 # A dormant caller (DormantInstances) passes nothing.
 proc hir::range::ExternalSeeds {hir spec} {
@@ -1477,7 +1487,12 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
-            || [hir::types::IsNativeMemory $declared]} {
+            || [hir::types::IsNativeMemory $declared] || [hir::refinements::IsRefined $declared]} {
+        # A scalar refinement (hir/refinements.tcl) only by a type whose
+        # facts imply its own: a fact is proven where a value acquires it
+        # (a DecimalRounded constant's root, hir/decimal.tcl), never from a
+        # Range.
+        #
         # A native view (NATIVE-LAYOUT-VIEWS.md) only by the view of the same
         # layout, a native edit (NATIVE-LAYOUT-WRITES.md) by the edit.
         #
@@ -2033,6 +2048,12 @@ proc hir::range::MismatchClause {argType declared} {
     set refinement [RefinementClause $argType $declared]
     if {$refinement ne ""} {
         return $refinement
+    }
+    set decimal [hir::decimal::MismatchClause $argType $declared]
+    if {$decimal ne ""} {
+        # DecimalRounded (DECIMAL-ROUNDED-MILESTONE-1.md): a guarantee not
+        # strengthened, an upper bound not dropped, no implicit conversion.
+        return $decimal
     }
     if {[hir::types::IsNamedStruct $argType] && [hir::types::IsNamedStruct $declared]
             && $argType ne $declared} {

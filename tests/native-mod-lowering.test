@@ -1,0 +1,485 @@
+# native-mod-lowering.test -- the native lowering of the root `mod`
+# (native/lower.tcl's "Euclidean mod" section; native/src/nir.rs's RIMod/
+# RIModTotal; native/src/codegen/clif.rs's euclid_mod/int_mod): a divisor
+# proved a single +-2^k is a mask (`riand`, or the tagged `iand`), two
+# operands proved small are the raw `rimodtotal` (the divisor's Range excludes
+# 0) or `rimod` (an inline zero test), and everything else is the tagged
+# `imod`, whose code reduces two small operands inline and calls rt_int_mod
+# only for a BigInt operand or a zero divisor. Every form computes Euclidean
+# mod exactly (core/primitives.tcl's modulo: 0 <= r < |d|) and raises its
+# ARITHMETIC error for a zero divisor; only the tagged form is a safepoint.
+# Nothing here names a function or a divisor the lowering looks for: the
+# choice is read from hir/range.tcl's facts alone.
+# audit/mod-lowering/tools/fuzz.tcl is the randomized differential check.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+interp recursionlimit {} 100000
+
+proc sourceHir {text} {
+    return [surface::compile $text t.bot -strict 0 -warnings off]
+}
+
+# NIR of TEXT, tiny-leaf inlining off so a small function keeps its own body.
+proc nirOf {text args} {
+    return [native::nir [sourceHir $text] -tiny-leaf-inline-opt 0 {*}$args]
+}
+
+proc FunctionBody {text name} {
+    set idx [string first "\"$name\"" $text]
+    if {$idx < 0} {
+        error "function \"$name\" not found"
+    }
+    set endIdx [string first "\nend" $text $idx]
+    return [string range $text $idx $endIdx]
+}
+
+# The sorted unique mod-family and bitwise ops of NIR function body BODY.
+proc ModOps {body} {
+    return [lsort -unique [lmap m [regexp -all -inline {op (?:rimodtotal|rimod|imod|riand|iand)\M} $body] {lindex $m 1}]]
+}
+
+# The `effects:` line of function NAME in native::roots' report.
+proc EffectsOf {text name} {
+    set report [native::roots [sourceHir $text] -tiny-leaf-inline-opt 0]
+    set at [string first "\"$name\"" $report]
+    regexp {effects: (may_error=\S+ may_gc=\S+)} [string range $report $at end] -> effects
+    return $effects
+}
+
+test mod-lowering-total-nir {two small operands and a constant divisor that is no power of two: the raw rimodtotal, no tagged imod, no helper} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(0 - 5), f(123456)]}] f]
+    ModOps $body
+} -result rimodtotal
+
+test mod-lowering-checked-nir {a divisor whose Range contains 0 keeps the inline zero test: the raw rimod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 3), f(0 - 5, 0)]}] f]
+    ModOps $body
+} -result rimod
+
+test mod-lowering-total-negative-range {a divisor Range wholly below 0, or an exact set without 0, also needs no zero test} -body {
+    set a [FunctionBody [nirOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 0 - 3), f(0 - 5, 0 - 7)]}] f]
+    set b [FunctionBody [nirOf {fn g(x: int, d: int) -> int:
+    mod(x, d)
+
+[g(5, 0 - 3), g(0 - 5, 7)]}] g]
+    list [ModOps $a] [ModOps $b]
+} -result {rimodtotal rimodtotal}
+
+test mod-lowering-mask-nir {a divisor proved the single value 2^k or -2^k is the mask 2^k - 1 (riand on a small dividend): no mod at all} -body {
+    set a [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1024)
+
+[f(5), f(0 - 5)]}] f]
+    set b [FunctionBody [nirOf {fn g(x: int) -> int:
+    x.mod(0 - 8)
+
+[g(5), g(0 - 5)]}] g]
+    list [ModOps $a] [regexp {rawint 1023\M} $a] [ModOps $b] [regexp {rawint 7\M} $b]
+} -result {riand 1 riand 1}
+
+test mod-lowering-mask-tagged-nir {a power-of-two divisor of a dividend that may be a BigInt is the tagged iand (rt_int_and for a BigInt), still no mod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(16)
+
+[f(5), f(100000000000000000000)]}] f]
+    ModOps $body
+} -result iand
+
+test mod-lowering-tagged-nir {a dividend of unknown range keeps the tagged imod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(100000000000000000000)]}] f]
+    ModOps $body
+} -result imod
+
+test mod-lowering-repr-opt-off {-repr-opt 0 turns the raw and mask forms off: every mod is the tagged imod} -body {
+    set text {fn f(x: int) -> int:
+    x.mod(1024) + x.mod(1000)
+
+[f(5), f(0 - 5)]}
+    ModOps [FunctionBody [nirOf $text -repr-opt 0] f]
+} -result imod
+
+test mod-lowering-effects {only the tagged imod makes its function may_gc; rimodtotal is neither fallible nor a safepoint, rimod is fallible only} -body {
+    list [EffectsOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(0 - 5)]} f] [EffectsOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 3), f(0 - 5, 0)]} f] [EffectsOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(100000000000000000000)]} f]
+} -result {{may_error=false may_gc=false} {may_error=true may_gc=false} {may_error=true may_gc=true}}
+
+test mod-lowering-values-agree {every form agrees with the reference on every backend: negative dividends and divisors, +-1, divisors near and beyond +-2^62, BigInt operands} -body {
+    sourceAgree {fn total(x: int) -> int:
+    x.mod(1000)
+
+fn neg(x: int) -> int:
+    x.mod(0 - 7)
+
+fn mask(x: int) -> int:
+    x.mod(1024)
+
+fn negmask(x: int) -> int:
+    x.mod(0 - 1024)
+
+fn one(x: int) -> int:
+    x.mod(0 - 1)
+
+fn top(x: int) -> int:
+    x.mod(4611686018427387904)
+
+fn var(x: int, d: int) -> int:
+    mod(x, d)
+
+fn wide(x: int, d: int) -> int:
+    mod(x, d)
+
+[total(0 - 1), total(1999), total(0 - 4611686018427387904), total(4611686018427387903),
+ neg(10), neg(0 - 10), neg(0),
+ mask(0 - 1), mask(1025), mask(0 - 4611686018427387904), mask(4611686018427387903),
+ negmask(0 - 1), negmask(2047),
+ one(12345), one(0 - 4611686018427387904),
+ top(0 - 1), top(4611686018427387903), top(0 - 4611686018427387904),
+ var(7, 2), var(0 - 7, 2), var(7, 0 - 2), var(0 - 7, 0 - 2), var(0 - 4611686018427387904, 4611686018427387903),
+ var(4611686018427387903, 0 - 4611686018427387904), var(0 - 4611686018427387904, 0 - 1),
+ wide(100000000000000000000, 7), wide(0 - 100000000000000000000, 7), wide(7, 100000000000000000000),
+ wide(0 - 7, 100000000000000000000), wide(18446744073709551617, 18446744073709551616),
+ wide(0 - 4611686018427387905, 4611686018427387904), wide(9223372036854775807, 0 - 9223372036854775807)]}
+} -result {value {[999, 999, 96, 903, 3, 4, 0, 1023, 1, 0, 1023, 1023, 1023, 0, 0, 4611686018427387903, 4611686018427387903, 0, 1, 1, 1, 1, 4611686018427387902, 4611686018427387903, 0, 2, 5, 7, 99999999999999999993, 1, 4611686018427387903, 0]}}
+
+test mod-lowering-zero-divisor {a zero divisor raises the same ARITHMETIC error from the raw rimod, the tagged imod (small and BigInt dividend) and a constant 0, on every backend} -body {
+    set outcomes {}
+    foreach call {{var(5, 0)} {var(0 - 5, 0)} {wide(100000000000000000000, 0)} {mod(9, 0)}} {
+        lappend outcomes [sourceAgree "fn var(x: int, d: int) -> int:
+    mod(x, d)
+
+fn wide(x: int, d: int) -> int:
+    mod(x, d)
+
+\[var(5, 3), var(0 - 5, 0 - 3), wide(5, 3), wide(100000000000000000000, 3)\]
+$call"]
+    }
+    lsort -unique $outcomes
+} -result {{error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+# The raw and mask forms trust the divisor's Range without a runtime check:
+# rimodtotal has no zero test (a zero divisor traps, killing the process),
+# a mask computes one fixed residue. So a Range the program leaves is a
+# wrong value or a crash here. Two such Ranges came from hir/induction.tcl:
+# a non-tail self call the proof did not count (f(9, 1) calls f(12, 2), so
+# i was locked to [9, 10]: mod(100, i - 1) became `riand 100 7` and the
+# program returned 19; f(8, 1) calls f(11, 0), so 11 - i was [2, 3], a
+# rimodtotal that met 0), and an `==` bound that is a native call of an
+# argument changing every step (i was locked to [0, 1114111] against
+# char::scalar_value(c), the mod(1000, i) of the else branch became
+# rimodtotal -- inlined from a leaf, too -- and met 0).
+test mod-lowering-nontail-self-call {a non-tail self call is a step the induction proof counts: no mask and no rimodtotal from the Range it would leave, and every backend computes 21 and raises ARITHMETIC at the zero divisor the non-tail call reaches, directly and through an inlined leaf} -body {
+    set mask {fn f(i: int, d: int) -> int:
+    if i == 10:
+        d
+    else:
+        if d > 12:
+            return d
+        x = if d == 1:
+            f(i + 3, 2)
+        else:
+            0
+        f(i + 1, d + x + mod(100, i - 1))
+
+f(9, 1)}
+    set total {fn f(i: int, d: int) -> int:
+    if i == 10:
+        d
+    else:
+        x = if d > 0:
+            f(i + 3, 0)
+        else:
+            0
+        f(i + 1, x + mod(100, 11 - i))
+
+f(8, 1)}
+    set leaf {fn reduce(h: int, c: int) -> int:
+    h.mod(c)
+
+fn f(i: int, d: int) -> int:
+    if i == 10:
+        d
+    else:
+        x = if d > 0:
+            f(i + 3, 0)
+        else:
+            0
+        f(i + 1, x + reduce(100, 11 - i))
+
+f(8, 1)}
+    list [ModOps [FunctionBody [nirOf $mask] f]] [ModOps [FunctionBody [nirOf $total] f]] \
+        [ModOps [FunctionBody [native::nir [sourceHir $leaf]] f]] \
+        [sourceAgree $mask] [sourceAgree $total] [sourceAgree $leaf]
+} -result {imod imod {} {value 21} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+# i counts down from 1114111 (the proof's start must be at least the bound's
+# largest value) and never equals the bound, so the last step is
+# mod(1000, 0). The native backends run the 1114112 steps as a loop; the Tcl
+# compiler agrees (in about 15 s) and the interpreter's recursion limit
+# stops it first, so this compares the native outcomes with that error.
+test mod-lowering-varying-bound {an == bound that is a native call of an argument changing every step is no stable bound: no rimodtotal for mod(1000, i), directly or through an inlined leaf, and both native backends raise ARITHMETIC at i = 0 instead of dying with SIGFPE} -body {
+    set direct {import char
+
+fn f(i: int, c: UnicodeChar, acc: int) -> int:
+    if i == char::scalar_value(c):
+        acc
+    else:
+        n = if (i - 1).mod(2) == 0:
+            'a'
+        else:
+            'b'
+        f(i - 1, n, acc + mod(1000, i))
+
+f(1114111, 'b', 0)}
+    set leaf {import char
+
+fn reduce(h: int, c: int) -> int:
+    h.mod(c)
+
+fn f(i: int, c: UnicodeChar, acc: int) -> int:
+    if i == char::scalar_value(c):
+        acc
+    else:
+        n = if (i - 1).mod(2) == 0:
+            'a'
+        else:
+            'b'
+        f(i - 1, n, acc + reduce(1000, i))
+
+f(1114111, 'b', 0)}
+    set out [list [expr {"rimodtotal" in [ModOps [FunctionBody [nirOf $direct] f]]}] \
+        [expr {"rimodtotal" in [ModOps [FunctionBody [native::nir [sourceHir $leaf]] f]]}]]
+    foreach text [list $direct $leaf] {
+        set hir [sourceHir $text]
+        foreach backend {cranelift cranelift-generic} {
+            lappend out [lrange [outcomeUnderHir $backend $hir] 0 end-1]
+        }
+    }
+    set out
+} -result {0 0 {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+test mod-lowering-induction-forms-kept {the induction facts of sound counted recursion still select the raw and mask forms: an == guard with only tail calls, a non-tail self call stepping like the tail call inside the continuing side, and a bound computed from a parameter passed unchanged} -body {
+    set text {import char
+
+fn up(i: int, n: int, acc: int) -> int:
+    if i == n:
+        acc
+    else:
+        up(i + 1, n, acc + mod(1000, n - i) + (i + 1).mod(8))
+
+fn tree(i: int, n: int, acc: int) -> int:
+    if i == n:
+        return acc
+    x = tree(i + 1, n, 0)
+    tree(i + 1, n, acc + x + mod(1000, n - i))
+
+fn scalar(i: int, c: UnicodeChar, acc: int) -> int:
+    if i == char::scalar_value(c):
+        acc
+    else:
+        scalar(i + 1, c, acc + mod(1000, i + 1))
+
+[up(0, 9, 0), tree(0, 5, 0), scalar(0, 'z', 0)]}
+    set nir [nirOf $text]
+    list [ModOps [FunctionBody $nir up]] [ModOps [FunctionBody $nir tree]] [ModOps [FunctionBody $nir scalar]] \
+        [sourceAgree $text]
+} -result {{riand rimodtotal} rimodtotal rimodtotal {value {[41, 4, 3620]}}}
+
+# A bound captured from outside the function is one value only along self
+# calls that run the same closure. Here the self call through k reaches the
+# other closure of `down`, whose bound is 'z' (122): entered at i = 99 it
+# counts down past 122 to i = -1, where mod(1000, i + 1) divides by zero.
+# Locked to [0, 1114111] against a's 'a', that mod was rimodtotal, and the
+# process died with SIGFPE. 1114112 calls deep, past the interpreter's
+# recursion limit, so the native outcomes are compared with that error.
+test mod-lowering-other-closure-bound {a captured == bound is not stable when a self call goes through a parameter holding another closure of the function: no rimodtotal for mod(1000, i + 1), and both native backends raise ARITHMETIC at i = -1 instead of dying with SIGFPE} -body {
+    set text {import char
+
+fn mk(c: UnicodeChar):
+    fn down(i, acc, k):
+        if i == char::scalar_value(c):
+            acc
+        else:
+            x = if i == 100:
+                k(i - 1, acc, k)
+            else:
+                0
+            down(i - 1, acc + x + mod(1000, i + 1), k)
+    down
+
+a = mk('a')
+z = mk('z')
+a(1114111, 0, z)}
+    set hir [sourceHir $text]
+    set out [list [ModOps [nirOf $text]]]
+    foreach backend {cranelift cranelift-generic} {
+        lappend out [lrange [outcomeUnderHir $backend $hir] 0 end-1]
+    }
+    set out
+} -result {imod {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+test mod-lowering-invariant-bounds-kept {the induction facts of bounds every invocation reads alike still select rimodtotal: a field of an unchanged struct parameter, a top-level binding, a captured binding with self calls through the function's own name, a local bound to a repeatable function's result, and a non-tail self call passing i unchanged} -body {
+    set text {import str
+
+struct P:
+    name: str
+
+text = "hello world"
+
+fn twice(s: str) -> str:
+    str::concat(s, s)
+
+fn field(i: int, p: P, acc: int) -> int:
+    if i == str::length(p.name):
+        acc
+    else:
+        field(i + 1, p, acc + mod(1000, i + 1))
+
+fn top(i: int, acc: int) -> int:
+    if i == str::length(text):
+        acc
+    else:
+        top(i + 1, acc + mod(1000, i + 1))
+
+fn outer(s: str) -> int:
+    fn captured(i: int, acc: int) -> int:
+        if i == str::length(s):
+            acc
+        else:
+            captured(i + 1, acc + mod(1000, i + 1))
+    captured(0, 0)
+
+fn local(i: int, s: str, acc: int) -> int:
+    t = twice(s)
+    if i == str::length(t):
+        acc
+    else:
+        local(i + 1, s, acc + mod(1000, i + 1))
+
+fn same(i: int, n: int, d: int) -> int:
+    if i == n:
+        d
+    else:
+        x = if d == 1:
+            same(i, n, 2)
+        else:
+            0
+        same(i + 1, n, d + x + mod(1000, i + 1))
+
+[field(0, P{name: "hello"}, 0), top(0, 0), outer("abc"), local(0, "ab", 0), same(0, 10, 1)]}
+    set nir [nirOf $text]
+    concat [lmap name {field top captured local same} {ModOps [FunctionBody $nir $name]}] \
+        [list [sourceAgree $text]]
+} -result {rimodtotal rimodtotal rimodtotal rimodtotal rimodtotal {value {[1, 22, 1, 1, 27]}}}
+
+test mod-lowering-invariant-values-kept {the induction facts of bounds built of values every invocation reads alike select rimodtotal too: a field of a struct built from an unchanged parameter, an `if` value over unchanged parameters, a closure the invocation makes over an unchanged parameter, a context parameter's field, and the capacity of an unchanged array that every step sets} -body {
+    set text {import str
+import char
+import mutable_array
+
+struct P:
+    name: str
+    n: int
+
+context struct Cfg:
+    c: UnicodeChar
+
+fn built(i: int, s: str, acc: int) -> int:
+    if i == str::length(P{name: s, n: 1}.name):
+        acc
+    else:
+        built(i + 1, s, acc + mod(1000, i + 1))
+
+fn chosen(i: int, s: str, u: str, d: bool, acc: int) -> int:
+    t = if d:
+        s
+    else:
+        u
+    if i == str::length(t):
+        acc
+    else:
+        chosen(i + 1, s, u, d, acc + mod(1000, i + 1))
+
+fn closure(i: int, s: str, acc: int) -> int:
+    fn g(x: str) -> str:
+        str::concat(x, s)
+    if i == str::length(g("!")):
+        acc
+    else:
+        closure(i + 1, s, acc + mod(1000, i + 1))
+
+fn installed(i: int, acc: int, context cfg: Cfg) -> int:
+    if i == char::scalar_value(cfg.c):
+        acc
+    else:
+        installed(i + 1, acc + mod(1000, i + 1))
+
+fn capacity(i: int, a: MutableArray[int], acc: int) -> int:
+    if i == mutable_array::capacity(a):
+        acc
+    else:
+        a.set(0, i):
+            on IndexNotFound:
+                unit
+        capacity(i + 1, a, acc + mod(1000, i + 1))
+
+with context Cfg {c: 'e'}
+[built(0, "ab", 0), chosen(0, "abc", "x", true, 0), closure(0, "ab", 0), installed(0, 0), capacity(0, mutable_array::create(4, 0), 0)]}
+    set nir [nirOf $text]
+    concat [lmap name {built chosen closure installed capacity} {ModOps [FunctionBody $nir $name]}] \
+        [list [sourceAgree $text]]
+} -result {rimodtotal rimodtotal rimodtotal rimodtotal rimodtotal {value {[0, 1, 1, 2501, 1]}}}
+
+test mod-lowering-loop-gc-stress {mod in a self-tail loop that allocates every iteration, with a fresh String live across a call of a function whose only op is the raw rimod (so the call is no safepoint), computes the same values under GC stress, collecting at every allocation} -body {
+    set text {import str
+fn reduce(x: int, d: int) -> int:
+    mod(x, d)
+
+fn step(i: int, n: int, acc: int) -> int:
+    if i >= n:
+        acc
+    else:
+        s = str::lowercase(str::concat("A", "B"))
+        r = reduce(i * 7, i * i + 1) + i.mod(64) + (i * 3).mod(1000)
+        t = str::lowercase(s)
+        step(i + 1, n, acc + r + str::length(s) + str::length(t))
+
+step(0 - 50, 200, 0)}
+    set hir [sourceHir $text]
+    set saved [array get ::env BOTLISH_NATIVE_GC_STRESS]
+    unset -nocomplain ::env(BOTLISH_NATIVE_GC_STRESS)
+    try {
+        set plain [native::evalHir $hir]
+        set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+        set stressed [native::measure $hir 1]
+    } finally {
+        unset -nocomplain ::env(BOTLISH_NATIVE_GC_STRESS)
+        array set ::env $saved
+    }
+    set nir [native::nir $hir]
+    list [ModOps [FunctionBody $nir reduce]] [ModOps [FunctionBody $nir step]] [EffectsOf $text reduce] \
+        [expr {$plain eq [lindex $stressed 4]}] [expr {[lindex $stressed 3] >= 250}] [lindex [sourceAgree $text] 1]
+} -result {rimod {riand rimodtotal} {may_error=true may_gc=false} 1 1 288226}
+
+cleanupTests

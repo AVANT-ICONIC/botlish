@@ -344,6 +344,10 @@ proc hir::sourcetypes::TypeExprNames {typeExpr} {
         # element's names (the extent is a number).
         return [TypeExprNames [lindex $typeExpr 2]]
     }
+    if {[hir::refinements::IsRefinementExpr $typeExpr]} {
+        # A scalar refinement (DECIMAL-ROUNDED-MILESTONE-1.md): its name.
+        return [list [lindex $typeExpr 1]]
+    }
     lassign $typeExpr head arg
     if {$head eq "fn"} {
         set names {}

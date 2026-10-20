@@ -140,7 +140,58 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   loop binding), `{max FORM}`, `{v B}` (an Int-valued binding) and `{e E}` (one
   specific expression no rule folds, equal only to itself). Immutable
   single-assignment bindings are what make equal atoms the same value — the
-  argument `hir/exactvalue.tcl` already relies on.
+  argument `hir/exactvalue.tcl` already relies on. A `MutableVector` the
+  program resizes is the exception: a push, pop or clear changes its length
+  in place while its binding, field path or context member stays the same
+  (a swap does not: an operation registered `-keeps-length` replaces an
+  element and never changes a length, `hir::cardinality::Resizes`). A
+  vector keeps its key's length only when no place its value was copied
+  through on its way from the key's definition (`w` and `v` for `w = v`:
+  `KeyPlaces`) is the receiver of a resizing operation anywhere in the
+  program, and the key is not rooted at a context parameter, whose vector
+  another function may grow: a vector is otherwise a value, which an alias,
+  a struct field or a callee holds as a logical copy, a nested function
+  cannot mutate a place it captured, and an operation that mutates is only
+  ever called, never a value (`MUTABLE-PLACE-RECEIVER`). So `w = v; u = v;
+  u.push(x)` leaves `v` and `w` one length. Any other vector is measured by
+  its *place* (its binding and field path), which no mutation of another
+  place -- a copy included -- changes: a place nothing resizes keeps one
+  length wherever it is evaluated (unless its root is a context parameter,
+  whose member another function may grow; a local copy `items = log.items`
+  is a place of its own). A domain `x in v` over any other place has the
+  length `v` has at that evaluation, which it shares with every evaluation
+  of the same place that no *site* can come between
+  (`hir::cardinality::Evaluation`): a resize of the place in the same
+  function body, and, for a context member, also every call that may reach
+  the installed context (`ContextSite`): a function that requires the
+  context, directly or through a function it calls (it may grow the member
+  through its own context parameter), a coroutine segment or a call of a
+  coroutine handle, a function value given an affine argument (it may
+  resume a handle the argument carries), a trait operation, and every yield
+  (the resumer runs before the body goes on). A function that requires no
+  context and is given no handle cannot reach the installed value: a
+  context is obtained only through a context parameter, and a context value
+  passed as an ordinary argument is a copy. The statements of a body run in
+  order, once per run of the body, so two evaluations in one *quiet run* --
+  consecutive statements none of which holds a site -- have one length
+  however deep each sits in its statement; an evaluation in a statement that
+  holds a site lies in one of its bodies or in its operands, which belong to
+  the run before the statement when every site of the statement runs after
+  them (a loop's domains before its body's pushes). In a body the classes
+  are the body's own -- a loop body runs again after its own sites -- except
+  that the first run of a body that runs at most once per run of its
+  statement (an `if` branch, a handler), entered with no site before it (in
+  the condition, the handled call or an earlier operand; the other branch
+  and the other handlers never run first), continues the run its statement
+  is in (`Epoch`): a loop in a branch before the branch's own push has the
+  length of the loops before the `if`. So a vector built with pushes, then
+  walked twice, has one length, as do the clauses of a lockstep loop over it
+  and a List collected over it after the pushes; two loops with a push (or,
+  for a context member, a call that may reach it) between them, or a copy
+  taken before a push and one after it, are unrelated sizes. A List and a
+  MutableArray (whose length is its capacity, fixed at allocation) keep the
+  key of their binding or path; so does an iterable of no collection type,
+  which the loop requires to be a List on every backend.
 * **Existing facts reused**, no new List-length inference: exact Ints and exact
   List literals from `hir/exactvalue.tcl` (followed through immutable
   bindings); the `+ - *` and `list_length` natives; `list(...)` literals; and

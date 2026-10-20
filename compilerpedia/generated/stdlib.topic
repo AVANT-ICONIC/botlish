@@ -3839,6 +3839,83 @@ binding, suspends at `yield`, and is resumed by calling its handle
 (concept.coroutines); the operations behind them are internal
 coroutine#... natives no source can name.
 
+@topic stdlib.decimal_rounded::round
+title: decimal_rounded::round -- intrinsic of namespace decimal_rounded
+summary: decimal_rounded::round[T](x): the value of the DecimalRounded type T whose decimal is the Float64 x rounded half to even to T's places, after `import decimal_rounded`.
+index: stdlib
+symbol: decimal_rounded::round
+keywords: round to places; quantize; float to decimal; make decimal; banker's rounding
+related: stdlib.module.decimal_rounded concept.decimal-rounded stdlib.float64::from_decimal_rounded error.decimal-guarantee-lost
+
+== SIGNATURE
+    decimal_rounded::round(Float64) -> DecimalRounded
+
+== ERRORS
+    UnrepresentableDecimal
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace decimal_rounded: import decimal_rounded, then
+write decimal_rounded::round. Method syntax: receiver.round(...) is the
+same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+The one way to mint a guarantee from a value computed at run time: it
+does not claim x already is a decimal, it rounds it. T is imprinted
+explicitly and must be a refined DecimalRounded type (decimal_rounded::
+round[Float64](x) is a TYPE error, and without [T] it is IMPRINT). The
+rounding reads x's exact binary value: the Float64 1.005 is
+1.00499999999999989..., so it rounds to 1.00 at two places. The result is
+represented to satisfy every place up to N; when no representation does
+-- a decimal finer than binary64 holds at its magnitude, such as
+4873863637.854281 at nine places -- the call fails with the declared
+error UnrepresentableDecimal. Runs on every backend.
+
+== EXAMPLES
+@example accept
+import decimal_rounded
+
+fn cents(x: Float64) -> DecimalRounded{minDecimalsPreserved: 2} errors UnrepresentableDecimal:
+    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)
+
+fn safe(x: Float64) -> DecimalRounded{minDecimalsPreserved: 2}:
+    x.cents():
+        on UnrepresentableDecimal:
+            0.00
+
+[safe(0.1 + 0.2), safe(1.005), safe(-0.125)]
+@value [0.30, 1.00, -0.12]
+@end
+
+@topic stdlib.module.decimal_rounded
+title: decimal_rounded -- standard namespace
+summary: The explicit quantization from Float64 to DecimalRounded: decimal_rounded::round[T](x).
+index: stdlib
+symbol: decimal_rounded
+keywords: decimal functions; decimal conversion; float to decimal; quantize; round to places
+related: concept.decimal-rounded stdlib.float64::from_decimal_rounded
+
+== SOURCE
+Compiler intrinsics only, no module file (import decimal_rounded).
+
+== MEMBERS
+    decimal_rounded::round         intrinsic -- decimal_rounded::round[T](x...
+
+Each member is a topic: -help NAME (e.g. -help decimal_rounded::round).
+
+== NOTES
+`decimal_rounded` has no module file: its member is an intrinsic, reached
+with `import decimal_rounded`. With float64::from_decimal_rounded it is
+one of the two conversions between DecimalRounded and Float64: nothing
+converts implicitly, a Float64 never becomes a DecimalRounded value by
+being relabeled, and the operators on DecimalRounded values are the
+language's own (concept.decimal-rounded).
+
 @topic stdlib.ffi::c::clone
 title: ffi::c::clone -- intrinsic of namespace ffi::c
 summary: A second alias of a C pointer (the same address, the same type), written p.clone(): the one way to have two pointers.
@@ -4120,6 +4197,46 @@ nothing, is never dereferenced, and has no arithmetic, ordering,
 equality or conversion to or from an Int. Calling C itself is
 `extern c fn` (concept.c-ffi), which runs only on the native backends.
 
+@topic stdlib.float64::from_decimal_rounded
+title: float64::from_decimal_rounded -- intrinsic of namespace float64
+summary: The Float64 nearest round(x, N), N the places the DecimalRounded x's type guarantees, after `import float64`: the visible decay of a guarantee; it never fails.
+index: stdlib
+symbol: float64::from_decimal_rounded
+keywords: decimal to float; decay; forget precision; convert decimal
+related: stdlib.module.float64 concept.decimal-rounded stdlib.decimal_rounded::round error.decimal-guarantee-lost
+
+== SIGNATURE
+    float64::from_decimal_rounded(DecimalRounded) -> Float64
+
+== USE
+An intrinsic of namespace float64: import float64, then write
+float64::from_decimal_rounded. Method syntax:
+receiver.from_decimal_rounded(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+Decays a DecimalRounded value to a Float64 explicitly: the guarantee is
+forgotten, and the Float64 is the one nearest the guaranteed decimal --
+never the value's hidden representation digits, so every backend and
+every representation give the same Float64. The decimal is round(x, N)
+with N x's static minDecimalsPreserved (a value of
+DecimalRounded{minDecimalsPreserved: 2} representing 0.295 gives 0.3).
+It is how a program computes with DecimalRounded values that are not
+constants (error.decimal-guarantee-lost).
+
+== EXAMPLES
+@example accept
+import float64
+
+fn cents() -> DecimalRounded{minDecimalsPreserved: 2}:
+    0.295
+
+[float64::from_decimal_rounded(cents()), cents().from_decimal_rounded()]
+@value [0.3, 0.3]
+@end
+
 @topic stdlib.float64::from_int
 title: float64::from_int -- intrinsic of namespace float64
 summary: The Float64 nearest the Int N (ties to even), after `import float64`; an Int beyond the largest Float64 fails with NonFiniteFloat.
@@ -4193,26 +4310,29 @@ big = 1.0e20
 
 @topic stdlib.module.float64
 title: float64 -- standard namespace
-summary: The explicit conversions between Int and Float64: float64::from_int and float64::truncate.
+summary: The explicit conversions of Float64: from and to Int (float64::from_int, float64::truncate) and from DecimalRounded (float64::from_decimal_rounded).
 index: stdlib
 symbol: float64
-keywords: float functions; float conversion; int to float; float to int
-related: concept.floats stdlib./
+keywords: float functions; float conversion; int to float; float to int; decimal to float
+related: concept.floats stdlib./ concept.decimal-rounded
 
 == SOURCE
 Compiler intrinsics only, no module file (import float64).
 
 == MEMBERS
+    float64::from_decimal_rounded  intrinsic -- The Float64 nearest round(x...
     float64::from_int              intrinsic -- The Float64 nearest the Int...
     float64::truncate              intrinsic -- The Int part of the Float64...
 
-Each member is a topic: -help NAME (e.g. -help float64::from_int).
+Each member is a topic: -help NAME (e.g. -help
+float64::from_decimal_rounded).
 
 == NOTES
 `float64` has no module file: its members are intrinsics, reached with
-`import float64`. They are the only conversions between the two number
-types: Botlish never converts implicitly, so an expression mixing an Int
-and a Float64 is rejected until one side is converted. There is no
+`import float64`. They are the only conversions between Float64 and the
+other number types: Botlish never converts implicitly, so an expression
+mixing an Int and a Float64 is rejected until one side is converted (and
+so is one mixing a Float64 and a DecimalRounded value). There is no
 rounding mode, no Float64-to-String conversion beyond a program's printed
 result, and no bit-level access to a Float64.
 
@@ -7519,7 +7639,9 @@ bit_and, bit_or and bit_xor are declared nomethod: their two operands are
 symmetric, so neither is a receiver, and a.bit_and(b) is rejected with
 NOMETHOD-CALL. The range analysis bounds the result (an AND with a
 nonnegative mask lies in 0..mask), which is how lib/byte.bot's functions
-prove their Byte and Nibble results.
+prove their Byte and Nibble results; a mask that is a container's size minus
+one, with the size proven not 0, proves an index into it
+(`a.at(bit_and(h, a.capacity() - 1))`, proof.list-bounds).
 
 == EXAMPLES
 @example accept
@@ -7756,7 +7878,7 @@ summary: The Euclidean remainder of A divided by B, written mod(a, b) or a.mod(b
 index: stdlib
 symbol: mod
 keywords: modulo; remainder; modulus; divisible; even or odd; wrap around; bucket index
-related: stdlib.module.root concept.integers capability.integer-division stdlib.hash stdlib.shift_right proof.ranges
+related: stdlib.module.root concept.integers capability.integer-division stdlib.hash stdlib.shift_right proof.ranges proof.list-bounds
 
 == SIGNATURE
     mod(int, int) -> int
@@ -7782,7 +7904,9 @@ the divisor first.
 There is no integer division (no `/`, no `div`): see
 capability.integer-division. The range analysis knows mod's result: with a
 divisor of bounded magnitude m it lies in 0..m-1, so `xs.at(k.mod(3))` is
-proven in range where xs is known to have three elements.
+proven in range where xs is known to have three elements; and a divisor that
+is the container's own size proves the read whatever that size is,
+`xs.at(k.mod(xs.length()))` (proof.list-bounds).
 
 A leading minus binds less tightly than the method call: -7.mod(3) is
 -(7.mod(3)), which is -1, not 2.
