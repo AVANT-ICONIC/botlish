@@ -27,14 +27,18 @@
 #     from i so that a Range read from the tail calls alone would be one
 #     power of two or would exclude 0 where the jumped chain meets other
 #     values, 0 among them. A fuel parameter bounds every chain.
-#   * a deep program (about one seed in four), its own: an `==` bound that is
+#   * a deep program (about one seed in two), its own: an `==` bound that is
 #     a native call with a registered Range, char::scalar_value(c), with c
 #     recomputed every step (varying: the bound is no single value, and i may
-#     step past it) or passed unchanged (invariant: the fact fires). The
-#     proof needs i to start at the bound's largest value, 1114111, so the
-#     recursion is 1114112 calls deep: too deep for interp's recursion limit
-#     and slow on compile, so its reference is a Tcl model of the program
-#     (DeepModel), and only the native outcomes are compared with it.
+#     step past it) or passed unchanged (invariant: the fact fires), read
+#     directly, through a local, a struct field or a function returning it;
+#     or c captured by a closure whose non-tail self call goes through a
+#     parameter holding another closure of the same function, with another
+#     c. The proof needs i to start at the bound's largest value, 1114111,
+#     so the recursion is 1114112 calls deep: too deep for interp's
+#     recursion limit and slow on compile, so its reference is a Tcl model
+#     of the program (DeepModel), and only the native outcomes are compared
+#     with it.
 #
 #   tclsh9.0 audit/mod-lowering/tools/fuzz.tcl ?-n N? ?-seed S? ?-gc-stress 0|1?
 #
@@ -149,15 +153,15 @@ proc program {} {
             }
             nontail {
                 # i steps by DIR toward END on the tail call; the non-tail
-                # call jumps it by JUMP (the same step, another, backwards
-                # or past END, where only fuel stops the chain). Nested, it
-                # is made by the first invocation only (fuel == FUEL); as a
-                # statement, by every one.
+                # call jumps it by JUMP (none: i unchanged, the same step,
+                # another, backwards or past END, where only fuel stops the
+                # chain). Nested, it is made by the first invocation only
+                # (fuel == FUEL); as a statement, by every one.
                 set dir [pick {1 -1}]
                 set end [pick {0 10 -7 100}]
                 set dist [pick {1 1 2 3}]
                 set start [expr {$end - $dir * $dist}]
-                set jump [expr {$dir * [pick [list 1 1 2 3 -1 [expr {$dist + 1}]]]}]
+                set jump [expr {$dir * [pick [list 0 1 1 2 3 -1 [expr {$dist + 1}]]]}]
                 set fuel [pick {4 6 9}]
                 set x [pick {100 1000 -1000 7 1023 999999}]
                 # The divisor: a power of two at i = START (a mask, were i
@@ -169,7 +173,7 @@ proc program {} {
                     shift { set div "i - [lit [expr {$start - $dir * [pick {1 2 5}]}]]" }
                 }
                 set stepText [expr {$dir > 0 ? "i + 1" : "i - 1"}]
-                set jumpText [expr {$jump > 0 ? "i + $jump" : "i - [expr {-$jump}]"}]
+                set jumpText [expr {$jump == 0 ? "i" : ($jump > 0 ? "i + $jump" : "i - [expr {-$jump}]")}]
                 if {rand() < 0.75} {
                     set rest "        x = if fuel == $fuel:\n            f$i\($jumpText, fuel - 1, 0)\n        else:\n            0\n        f$i\($stepText, fuel - 1, acc + x + mod([lit $x], $div))\n"
                 } else {
@@ -193,18 +197,37 @@ proc program {} {
 # 97, before an even i, a 'b', 98, before an odd one: i steps past every
 # bound and the run ends at the zero divisor), `threshold`, 'z' (122) where
 # i - 1 is T and 'a' elsewhere (it may stop at 97 or 122, or never), or
-# `same`, c passed unchanged (the invariant bound) -- and a mod of i + OFF,
-# direct or through an inlined leaf. Returns {TEXT {DeepModel arguments}}.
+# `same`, c passed unchanged (the invariant bound) -- the bound reading c as
+# FORM says: `direct`, through a local (`d = c`), a struct field (`q.c`, the
+# struct rebuilt when c changes), a top-level function returning it
+# (`same(c)`) or a nested one capturing it (`pick(0)`) -- and a mod of
+# i + OFF, direct or through an inlined leaf. NEXT `closure` is the other
+# shape: c captured by the closure mk(C0) returns, which at i == HOP makes a
+# non-tail self call through its parameter k, holding mk(C1), from i - 1:
+# HOP just above C1 (that chain meets C1) or at or below it (it runs past
+# C1 to the zero divisor, which OFF then puts below HOP). Returns {TEXT
+# {DeepModel arguments}}.
 proc deepProgram {} {
-    set next [pick {parity parity threshold same}]
+    set next [pick {parity parity threshold same same closure closure}]
+    set form [pick {direct local field call nested}]
     set c0 [pick {97 98 122}]
+    set c1 [pick {97 98 122}]
     set t [pick {97 122 5000}]
     set x [pick {1000 7 -1000 123456789}]
     set off [pick {0 1 -50 -200}]
-    switch $next {
-        parity { set nextText "if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'" }
-        threshold { set nextText "if i - 1 == $t:\n            'z'\n        else:\n            'a'" }
-        same { set nextText c }
+    if {$next eq "closure"} {
+        set c0 [pick {97 98}]
+        set c1 [pick {98 122}]
+        if {rand() < 0.6} {
+            set hop [expr {$c1 - [pick {0 3 20}]}]
+            if {$hop - 1 < -$off} {
+                set off [pick {0 1}]
+            }
+        } else {
+            set hop [expr {$c1 + [pick {1 3 100}]}]
+        }
+    } else {
+        set hop 0
     }
     set divText [expr {$off == 0 ? "i" : ($off > 0 ? "i + $off" : "i - [expr {-$off}]")}]
     set text ""
@@ -214,16 +237,59 @@ proc deepProgram {} {
     } else {
         set term "mod([lit $x], $divText)"
     }
-    append text "fn b(i: int, c: UnicodeChar, acc: int) -> int:\n    if i == char::scalar_value(c):\n        acc\n    else:\n        n = $nextText\n        b(i - 1, n, acc + $term)\n\n"
-    append text "b(1114111, '[format %c $c0]', 0)\n"
-    return [list $text [list $next $c0 $t $x $off]]
+    set char0 '[format %c $c0]'
+    if {$next eq "closure"} {
+        append text "fn mk(c: UnicodeChar):\n    fn b(i, acc, k):\n        if i == char::scalar_value(c):\n            acc\n        else:\n            x = if i == $hop:\n                k(i - 1, acc, k)\n            else:\n                0\n            b(i - 1, acc + x + $term, k)\n    b\n\n"
+        append text "first = mk($char0)\nother = mk('[format %c $c1]')\nfirst(1114111, 0, other)\n"
+        return [list $text [list $next $c0 $t $x $off $c1 $hop]]
+    }
+    switch $next {
+        parity { set nextText "if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'" }
+        threshold { set nextText "if i - 1 == $t:\n            'z'\n        else:\n            'a'" }
+        same { set nextText "" }
+    }
+    set param "c: UnicodeChar"
+    set start $char0
+    set arg [expr {$next eq "same" ? "c" : "n"}]
+    set prelude ""
+    switch $form {
+        direct { set bound c }
+        local {
+            set prelude "    d = c\n"
+            set bound d
+        }
+        call {
+            append text "fn same(u: UnicodeChar) -> UnicodeChar:\n    u\n\n"
+            set bound "same(c)"
+        }
+        nested {
+            set prelude "    fn pick(z: int) -> UnicodeChar:\n        c\n"
+            set bound "pick(0)"
+        }
+        field {
+            append text "struct Box:\n    c: UnicodeChar\n\n"
+            set param "q: Box"
+            set start "Box{c: $char0}"
+            set bound q.c
+            set arg [expr {$next eq "same" ? "q" : "Box{c: n}"}]
+        }
+    }
+    set step [expr {$nextText eq "" ? "" : "        n = $nextText\n"}]
+    append text "fn b(i: int, $param, acc: int) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n${step}        b(i - 1, $arg, acc + $term)\n\n"
+    append text "b(1114111, $start, 0)\n"
+    return [list $text [list $next $c0 $t $x $off $c1 $hop]]
 }
 
 # The outcome of deepProgram's program, computed the way it runs: from
 # i = 1114111 down, stop when i is c's scalar value, else add
 # mod(X, i + OFF) (core::primitives::modulo: X % |d| in Tcl, whose result
-# takes the divisor's sign) or fail with ARITHMETIC when i + OFF is 0.
-proc DeepModel {next c0 t x off} {
+# takes the divisor's sign) or fail with ARITHMETIC when i + OFF is 0. For
+# NEXT `closure`, at i == HOP first the nested chain of C1 from i - 1 (its
+# value added, its error the program's).
+proc DeepModel {next c0 t x off c1 hop} {
+    if {$next eq "closure"} {
+        return [DeepChain $c0 1114111 0 $x $off $c1 $hop]
+    }
     set i 1114111
     set c $c0
     set acc 0
@@ -243,6 +309,34 @@ proc DeepModel {next c0 t x off} {
         set acc [expr {$acc + $x % abs($d)}]
         set i [expr {$i - 1}]
         set c $n
+        if {$i < -1000} {
+            error "DeepModel: no outcome by i = $i"
+        }
+    }
+}
+
+# One closure's chain of DeepModel's `closure` shape: bound C, from I with
+# ACC; at i == HOP the other closure's chain (bound C1, which never reaches
+# HOP again) from i - 1.
+proc DeepChain {c i acc x off c1 hop} {
+    while 1 {
+        if {$i == $c} {
+            return [list value $acc]
+        }
+        set extra 0
+        if {$i == $hop} {
+            set nested [DeepChain $c1 [expr {$i - 1}] $acc $x $off $c1 $hop]
+            if {[lindex $nested 0] ne "value"} {
+                return $nested
+            }
+            set extra [lindex $nested 1]
+        }
+        set d [expr {$i + $off}]
+        if {$d == 0} {
+            return [list error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}]
+        }
+        set acc [expr {$acc + $extra + $x % abs($d)}]
+        set i [expr {$i - 1}]
         if {$i < -1000} {
             error "DeepModel: no outcome by i = $i"
         }
@@ -335,7 +429,7 @@ proc Check {name file text expected} {
 for {set s $seed0} {$s < $seed0 + $n} {incr s} {
     expr {srand($s)}
     Check "seed $s" p$s [program] ""
-    if {rand() < 0.25} {
+    if {rand() < 0.5} {
         lassign [deepProgram] text model
         incr deep
         Check "seed $s (deep)" d$s $text [DeepModel {*}$model]
