@@ -52,7 +52,8 @@
 #               a call of a function whose every result is fresh -- one of
 #               these, or a place root of its own: FreshFunctions): a local
 #               binding's value, a parameter on entry, a loop variable per
-#               iteration, a context installation's value.
+#               iteration, a handler's payload binding, a context
+#               installation's value.
 #
 # A share descriptor ("h" a collection header; "s"N"."(SLOT"."D)*N a struct
 # whose listed slots are shared) is type-directed through struct fields only:
@@ -303,6 +304,14 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
 # array header), "s"N"."(SLOT"."D)*N a struct whose listed layout slots hold
 # collection-bearing values. An affine type is never copied (it moves).
 #
+# A slot whose type is too imprecise to say but may hold a header
+# (MayHoldVector: `any`, a generic position, a struct of such) is listed
+# with "d", a copy of whatever it holds at run time, like a whole value of
+# such a type (HeldDescriptor): a copy gives every slot its own headers,
+# which the last uses per path rely on (ReadsPath). A struct whose only
+# such slots are imprecise has no static descriptor ("": the "d" of the
+# whole value copies the same).
+#
 # A named struct may name itself, directly or through other structs
 # (STRUCTS.md, `struct-named-recursive-declaration`). The walk goes through
 # struct fields only, so a struct it meets again inside itself is one no
@@ -329,9 +338,16 @@ proc hir::mutvec::ShareDescriptor {type} {
         try {
             set parts {}
             set n 0
+            set dynamic 0
             set slot 0
             foreach name [hir::types::StructLayout $type] {
-                set d [ShareDescriptor [hir::types::StructField $type $name]]
+                set field [hir::types::StructField $type $name]
+                set d [ShareDescriptor $field]
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+                        && !([hir::types::IsNamedStruct $field] && [lindex $field 1] in $shareVisiting)} {
+                    set d d
+                    incr dynamic
+                }
                 if {$d ne ""} {
                     append parts "$slot.$d"
                     incr n
@@ -343,7 +359,7 @@ proc hir::mutvec::ShareDescriptor {type} {
                 set shareVisiting [lrange $shareVisiting 0 end-1]
             }
         }
-        if {$n == 0} {
+        if {$n == $dynamic} {
             return ""
         }
         return "s$n.$parts"
@@ -427,7 +443,7 @@ proc hir::mutvec::Elaborate {hirVar} {
     # by copy wherever they are read, mutated here or not.
     dict for {b binding} [dict get $hir bindings] {
         if {[dict get $binding kind] eq "local" && $b ni $roots && [IsContextParam $hir $b]
-                && [ShareDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
+                && [HeldDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
             lappend roots $b
         }
     }
@@ -888,9 +904,11 @@ proc hir::mutvec::ReadsPath {s b fields} {
 # the branches after a condition, the handlers after a handled call, and
 # every iteration after this one of a loop B is not bound inside. Uses of
 # paths disjoint from P (a sibling field) do not count: they read other
-# headers. A statement that never completes (a `return`, a `fail`, a
-# `break`) ends the walk: nothing after it runs. A reference from a nested
-# function is never a last use.
+# headers. A statement that never completes skips the rest of its sequence:
+# one that leaves the function (a `return`, a `fail`) ends the walk --
+# nothing after it runs -- while a `break` goes on after its loop and a
+# `continue` with the loop's next iteration (Leaves), unless B is bound
+# inside that loop. A reference from a nested function is never a last use.
 proc hir::mutvec::NoLaterUse {hir parent e b} {
     set home [dict get $hir scopes [dict get $hir bindings $b scope] invocation]
     if {[dict get $hir scopes [dict get $hir exprs $e scope] invocation] ne $home} {
@@ -905,15 +923,30 @@ proc hir::mutvec::NoLaterUse {hir parent e b} {
         }
         set p [lindex [dict get $parent $x] 0]
         if {$p eq ""} {
-            return [expr {[LaterIn $hir [dict get $hir roots] $x $b $fields] != 0}]
+            return [expr {[lindex [LaterIn $hir [dict get $hir roots] $x $b $fields] 0] in {1 2}}]
         }
         set node [dict get $hir exprs $p]
         set kind [dict get $node kind]
         set sequence [hir::coroutines::SequenceOf $hir $p $x]
         if {$sequence ne ""} {
-            switch -- [LaterIn $hir $sequence $x $b $fields] {
+            set later [LaterIn $hir $sequence $x $b $fields]
+            switch -- [lindex $later 0] {
                 0 { return 0 }
                 2 { return 1 }
+                loop {
+                    # The rest of the sequence is skipped for loop L: a
+                    # `continue` runs its next iteration, a `break` what
+                    # follows it. A binding of L's iteration is done with.
+                    lassign $later - loop kinds
+                    if {[BoundInside $hir $parent $b $loop]} {
+                        return 1
+                    }
+                    if {"continue" in $kinds} {
+                        return 0
+                    }
+                    set x $loop
+                    continue
+                }
             }
             switch -- $kind {
                 block {
@@ -985,25 +1018,73 @@ proc hir::mutvec::NoLaterUse {hir parent e b} {
 }
 
 # What may read binding B's path FIELDS (ReadsPath) after statement X of
-# SEQUENCE: 0 a later statement may; 2 none can, because a later statement
-# never completes before any does; 1 none does.
+# SEQUENCE: 0 a later statement may; 1 none does (what follows the sequence
+# runs next); otherwise X or a later statement never completes before any
+# does, and the rest of the sequence is skipped -- 2 for good (nothing of
+# the function runs after it), or {loop L KINDS} when it goes on at loop L
+# (Leaves).
 proc hir::mutvec::LaterIn {hir sequence x b fields} {
     set at [lsearch -exact $sequence $x]
     if {$at < 0} {
         return 0
     }
     if {[hir::typeOf $hir $x] eq "never"} {
-        return 2
+        return [Leaves $hir $x]
     }
     foreach s [lrange $sequence [expr {$at + 1}] end] {
         if {[ReadsPath $s $b $fields]} {
             return 0
         }
         if {[hir::typeOf $hir $s] eq "never"} {
-            return 2
+            return [Leaves $hir $s]
         }
     }
     return 1
+}
+
+# Where the function goes on after statement S, which never completes: 2
+# nowhere (S returns, fails, or calls what never returns), or {loop L
+# KINDS} when a `break` or `continue` of S (not of a loop inside S) leaves
+# for loop L -- after L, or with L's next iteration -- KINDS the sorted
+# kinds that do; 0 (anywhere) if such exits name two loops.
+proc hir::mutvec::Leaves {hir s} {
+    set inner [dict create]
+    set exits {}
+    set work [list $s]
+    while {$work ne {}} {
+        set x [lindex $work end]
+        set work [lrange $work 0 end-1]
+        set node [dict get $hir exprs $x]
+        switch -- [dict get $node kind] {
+            block {
+                # A nested function: its exits are its own.
+                continue
+            }
+            loop - listloop - countloop - lockloop {
+                dict set inner $x 1
+            }
+            break - continue {
+                lappend exits [dict get $node kind] [dict get $node target]
+            }
+        }
+        lappend work {*}[hir::children $hir $x]
+    }
+    set loops {}
+    set kinds {}
+    foreach {kind target} $exits {
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+            lappend loops $target
+        }
+        if {$kind ni $kinds} {
+            lappend kinds $kind
+        }
+    }
+    switch -- [llength $loops] {
+        0 { return 2 }
+        1 { return [list loop [lindex $loops 0] [lsort $kinds]] }
+    }
+    return 0
 }
 
 # 1 if binding B is bound inside loop P's body (a binding of one iteration:
@@ -1118,12 +1199,14 @@ proc hir::mutvec::WrittenLater {hir p a} {
     return 0
 }
 
-# 1 if call E may run Botlish code: a call of anything but a native, or of
-# a native that calls an argument (its ownership role says so: factory,
-# resume) or is given one that may be a callable.
+# 1 if call E may run Botlish code: a call of anything but a native, of a
+# native that calls an argument (its ownership role says so: factory,
+# resume) or is given one that may be a callable, or a yield (one of the
+# coroutine analysis's yield sites): it suspends the coroutine, and its
+# resumer runs until it resumes it.
 proc hir::mutvec::MayRunCode {hir e} {
     set name [hir::affine::NativeName $hir $e]
-    if {$name eq ""} {
+    if {$name eq "" || [dict exists $hir coroutines yields $e]} {
         return 1
     }
     set index 0
@@ -1266,7 +1349,7 @@ proc hir::mutvec::Installations {hirVar} {
         if {[dict get $node kind] ne "call" || ![hir::contexts::isInstall $hir $e]} continue
         set value [lindex [dict get $node args] 0]
         if {$value eq ""} continue
-        set d [ShareDescriptor [hir::typeOf $hir $value]]
+        set d [HeldDescriptor [hir::typeOf $hir $value]]
         if {$d ne "" && ![Fresh $hir $value]} {
             lappend wraps [list $value [ShareNative] $d]
         }
@@ -1420,6 +1503,12 @@ proc hir::mutvec::Results {hir f} {
 # Result payload or a callable is never a place (extracting one into a place
 # is an entry, which copies): those do not count.
 proc hir::mutvec::MayHoldVector {type {seen {}}} {
+    if {[lindex $type 0] eq "refined"} {
+        # A refined value has exactly its carrier's representation
+        # (REFINEMENT-VALUES.md): an integer domain, a C scalar, a
+        # refinement of a String hold no header.
+        return [MayHoldVector [lindex $type 1] $seen]
+    }
     if {[hir::types::IsStruct $type]} {
         foreach {name t} [lindex $type 1] {
             if {[MayHoldVector $t $seen]} {
@@ -1628,10 +1717,11 @@ proc hir::mutvec::ReplaceChild {hirVar p old new} {
     error "hir::mutvec::ReplaceChild: $old is not a child of $p"
 }
 
-# The entry of place root B, a parameter (of a function, or a loop's
-# per-iteration variable): B becomes a local bound, as the body's first
-# statement, to a logical copy (share descriptor D) of a new parameter that
-# takes B's place -- so the place owns the header it mutates.
+# The entry of place root B, a parameter (of a function, a loop's
+# per-iteration variable, or a handler's payload binding): B becomes a
+# local bound, as the body's first statement, to a logical copy (share
+# descriptor D) of a new parameter that takes B's place -- so the place owns
+# the header it mutates.
 proc hir::mutvec::EntryRename {hirVar b d} {
     upvar 1 $hirVar hir
     set binding [dict get $hir bindings $b]
@@ -1641,6 +1731,25 @@ proc hir::mutvec::EntryRename {hirVar b d} {
         return
     }
     set node [dict get $hir exprs $e]
+    set kind [dict get $node kind]
+    switch -- $kind {
+        block - listloop - lockloop {
+            set body [dict get $node body]
+            set reachable 1
+        }
+        handle {
+            # The handler whose branch scope binds B.
+            set k [lsearch -exact [dict get $node handlerScopes] $s]
+            if {$k < 0 || [lindex [dict get $node handlerPayloads] $k] ne $b} {
+                error "hir::mutvec::EntryRename: $b is no payload binding of $e"
+            }
+            set body [lindex [dict get $node handlerBodies] $k]
+            set reachable [expr {$body eq {} || [dict get $hir exprs [lindex $body 0] reachable]}]
+        }
+        default {
+            error "hir::mutvec::EntryRename: no entry for a parameter of a $kind"
+        }
+    }
     set name [dict get $binding name]
     # The parameter's static type (declared, or inferred), recorded on both
     # bindings: the new parameter receives it, the local keeps it.
@@ -1659,7 +1768,7 @@ proc hir::mutvec::EntryRename {hirVar b d} {
     set bindings [dict get $hir scopes $s bindings]
     set i [lsearch -exact $bindings $b]
     dict set hir scopes $s bindings [linsert $bindings $i $p]
-    switch -- [dict get $node kind] {
+    switch -- $kind {
         block {
             dict set hir exprs $e params [lmap x [dict get $node params] {expr {$x eq $b ? $p : $x}}]
         }
@@ -1674,25 +1783,30 @@ proc hir::mutvec::EntryRename {hirVar b d} {
                 set dom
             }]
         }
-        default {
-            return
+        handle {
+            dict set hir exprs $e handlerPayloads [lreplace [dict get $node handlerPayloads] $k $k $p]
         }
     }
     # The body's first statement: `NAME = share(NAME#entry)`.
-    set body [dict get $node body]
     set at [expr {$body ne {} ? [lindex $body 0] : $e}]
     set atNode [dict get $hir exprs $at]
     set r [hir::NewId hir expr]
     dict set hir exprs $r [dict create id $r kind ref origin [dict get $atNode origin] scope $s \
-        type [hir::types::intern hir $type] reachable 1 name $pname binding $p init yes]
+        type [hir::types::intern hir $type] reachable $reachable name $pname binding $p init yes]
     set c [NewCall hir [ShareNative] [list $r] $type $r]
     dict set hir exprs $c args [list $r [NewConst hir $d $r]]
     set n [hir::NewId hir expr]
     dict set hir exprs $n [dict create id $n kind bind origin [dict get $atNode origin] scope $s \
-        type [hir::types::intern hir $type] reachable 1 name $name binding $b value $c duplicate 0]
+        type [hir::types::intern hir $type] reachable $reachable name $name binding $b value $c duplicate 0]
     dict set hir bindings $b kind local
     dict set hir bindings $b declaredBy $n
-    dict set hir exprs $e body [linsert $body 0 $n]
+    if {$kind eq "handle"} {
+        set bodies [dict get $hir exprs $e handlerBodies]
+        lset bodies $k [linsert $body 0 $n]
+        dict set hir exprs $e handlerBodies $bodies
+    } else {
+        dict set hir exprs $e body [linsert $body 0 $n]
+    }
 }
 
 # 1 if projection P (in parent map PARENT) is a step of a collection

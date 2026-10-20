@@ -163,6 +163,16 @@ one at 0 shares and 0 detaches in steady state.
     detaches on every write. Two other triggers cause that: VS-3 and VS-7.
     With their workarounds applied as well, `lp` copies nothing (VS-7's
     table).
+* **Soundness fix after review.** The rule relies on every slot of a held
+  binding owning its headers. A struct's share descriptor skipped its
+  `any` slots (`s1.0.h` for `{a: MutableVector[int], d1: any, d2: any}`),
+  so such a slot kept its source's header, and `k = w.d1` moved while
+  `w.d2` held the same header: a miscompile the per-binding rule had hidden
+  (the unrestricted copy of an `any` slot was wrong before it too, through
+  a place). The descriptor now lists an imprecise slot with `d`, a copy of
+  what it holds at run time (MUTABLE-VECTOR.md, item 8;
+  `mv-any-slot-copies`, `ma-any-slot-copies`); a struct without `any`
+  slots copies exactly as before.
 * **Cost.** Cheap: one analysis, no new kind of fact.
 
 ### VS-2. A struct literal in an exclusive position does not demand its fields

@@ -133,6 +133,17 @@
             # (no entry copy)
 >>>>
 
+@@ payload-no-entry a handler's payload binding gets no entry copy: a handler mutating `details.items` mutates the vector the raiser put in the payload, which its caller still owns
+## hir/mutvec.tcl
+<<<<
+        handle {
+            # The handler whose branch scope binds B.
+====
+        handle {
+            return
+            # The handler whose branch scope binds B.
+>>>>
+
 @@ fresh-result-unowned a function returning any place path counts as fresh: a call returning its unmutated parameter enters the caller's place without a copy (the caller's mutations change the argument)
 ## hir/mutvec.tcl
 <<<<
@@ -238,6 +249,14 @@ proc hir::mutvec::ShareDescriptor {type} {
             if {0 && $context && [MayRunCode $hir $x]} {
 >>>>
 
+@@ byref-context-yield-ignored a yield in a later argument is taken to run no code: a context member handed over by reference stays uncopied while the coroutine is suspended and its resumer replaces the member, so `at(c.values, (yield ...).i)` reads the replacement
+## hir/mutvec.tcl
+<<<<
+    if {$name eq "" || [dict exists $hir coroutines yields $e]} {
+====
+    if {$name eq ""} {
+>>>>
+
 @@ byref-place-copied a mutating receiver is copied like a read when a later argument mutates the same place: `v.push(v.pop() + 10)` pushes onto a copy, and the update is lost
 ## hir/mutvec.tcl
 <<<<
@@ -248,11 +267,13 @@ proc hir::mutvec::ShareDescriptor {type} {
 
 # ---------------------------------------------------------------------------
 # Last uses per path (hir/mutvec.tcl's NoLaterUse, LaterIn, ReadsPath,
-# UseMap): a read-out moves its header only when no later use may read a
-# header at its path. The first nine are unsound (a later use observes the
-# moved header: tests/mutable-vector.test's mv-path-last-use-semantics, the
-# fuzzer's struct family); the last two only copy more than they must (the
-# copy counts of mv-path-last-use-copies pin the moves).
+# UseMap, Leaves): a read-out moves its header only when no later use may
+# read a header at its path. Those not marked economic are unsound (a later
+# use observes the moved header: tests/mutable-vector.test's
+# mv-path-last-use-semantics and mv-break-continue-last-use, the fuzzer's
+# struct family); the economic ones only copy more than they must (the copy
+# counts of mv-path-last-use-copies and mv-break-continue-last-use pin the
+# moves).
 
 @@ path-prefix-use-ignored a later use of a prefix of the moved path (the binding itself, an enclosing struct field) does not count: `T {keys: t.keys, ...}` moves t.keys while `t` is still read whole afterwards
 ## hir/mutvec.tcl
@@ -361,6 +382,43 @@ proc hir::mutvec::ShareDescriptor {type} {
                     return 1
 >>>>
 
+@@ path-break-ends-walk a `break` or `continue` after a read-out ends the walk like a `return`: a vector moved into a mutating callee just before `break` (or `continue`) is changed for the code after the loop (or the next iteration)
+## hir/mutvec.tcl
+<<<<
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+====
+        continue
+        if {$target ni $loops} {
+>>>>
+
+@@ path-continue-as-break a `continue` is taken as a `break`: only what follows the loop is looked at, not its next iteration, which reads the vector a mutating callee was handed
+## hir/mutvec.tcl
+<<<<
+                    if {"continue" in $kinds} {
+                        return 0
+                    }
+====
+>>>>
+
+@@ path-break-copies (economic) a `break` makes every read-out before it a copy, also when nothing after the loop reads the path
+## hir/mutvec.tcl
+<<<<
+                    set x $loop
+                    continue
+====
+                    return 0
+>>>>
+
+@@ path-iteration-binding-break-copies (economic) a binding of the loop's iteration is not taken as done with at a `break` or `continue`: its read-out before a `continue` is copied
+## hir/mutvec.tcl
+<<<<
+                    if {[BoundInside $hir $parent $b $loop]} {
+                        return 1
+                    }
+====
+>>>>
+
 @@ path-context-moved a context parameter's path moves at its last use in a function like any held path: a local taking a context member's header mutates the installed context
 ## hir/mutvec.tcl
 <<<<
@@ -418,6 +476,45 @@ proc hir::mutvec::ShareDescriptor {type} {
     # copies (a held binding's path read before its last use) is fresh too.
     set freshFunctions [FreshFunctions $hir $parent $blocks $rootSet]
 ====
+>>>>
+
+# ---------------------------------------------------------------------------
+# Imprecise slots (hir/mutvec.tcl's ShareDescriptor, HeldDescriptor): a copy
+# of a struct copies an `any` slot by what it holds at run time (`d`), so
+# every slot of a held binding owns its headers, which the last uses per
+# path rely on; a context of `any` members is copied on installation and
+# read out by copy (tests/mutable-vector.test's mv-any-slot-copies).
+
+@@ any-slot-skipped a struct's share descriptor skips its `any` slots (`s1.0.h` for {a: MutableVector, d: any}): a place's entry leaves the `any` slot on its source's header, and two `any` slots of one copy share one, so moving one at its path's last use writes the other
+## hir/mutvec.tcl
+<<<<
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+====
+                if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+>>>>
+
+@@ refined-may-hold (economic) a refined value (an integer domain, a C scalar) is taken to possibly hold a header like an `any` value: a struct of a vector and a domain field copies the domain slot dynamically, and a context of domain members is read out by copy
+## hir/mutvec.tcl
+<<<<
+    if {[lindex $type 0] eq "refined"} {
+====
+    if {0 && [lindex $type 0] eq "refined"} {
+>>>>
+
+@@ installation-any-static a context installation copies by the static descriptor alone: a context whose members are all `any`, installed from a vector, shares its header, and the context's writes reach the vector
+## hir/mutvec.tcl
+<<<<
+        set d [HeldDescriptor [hir::typeOf $hir $value]]
+====
+        set d [ShareDescriptor [hir::typeOf $hir $value]]
+>>>>
+
+@@ context-any-read-aliases a context parameter is read out by copy only when its type has a static descriptor: a vector read out of a context's `any` member aliases the member's later writes
+## hir/mutvec.tcl
+<<<<
+                && [HeldDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
+====
+                && [ShareDescriptor [hir::affine::BindingType $hir $b]] ne ""} {
 >>>>
 
 # ---------------------------------------------------------------------------

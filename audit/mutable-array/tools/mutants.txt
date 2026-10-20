@@ -181,6 +181,35 @@
         if {[OwnResult $hir $parent $e [lindex $path 0]]} {
 >>>>
 
+@@ any-slot-skipped a struct's share descriptor skips its `any` slots (`s1.0.h` for {hashes: MutableArray, slots: any}): a copy of the struct keeps the `any` slot's array on the same header, and moving it into a writing callee at its path's last use writes the copy
+## hir/mutvec.tcl
+<<<<
+                if {$d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+====
+                if {0 && $d eq "" && ![hir::types::IsAffine $field] && [MayHoldVector $field]
+>>>>
+
+@@ break-ends-walk a `break` or `continue` after a read-out ends the walk like a `return`: a copy taken just before `break` (or `continue`) is the array itself, and the code after the loop (or the next iteration) writes it
+## hir/mutvec.tcl
+<<<<
+        if {[dict exists $inner $target]} continue
+        if {$target ni $loops} {
+====
+        continue
+        if {$target ni $loops} {
+>>>>
+
+@@ payload-no-entry a handler's payload binding gets no entry copy: a handler writing `details.items` writes the array the raiser put in the payload, which its caller still owns
+## hir/mutvec.tcl
+<<<<
+        handle {
+            # The handler whose branch scope binds B.
+====
+        handle {
+            return
+            # The handler whose branch scope binds B.
+>>>>
+
 @@ array-always-affine MutableArray is always affine: a copy of an array of Ints moves it
 ## hir/types.tcl
 <<<<

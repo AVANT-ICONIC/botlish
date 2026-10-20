@@ -284,7 +284,16 @@ same list object.
 `mutable_vector#share(v, "h")` (`rt_mv_share`): a new header on
 `Rc::clone` of the backing -- one allocation, no element copied, counted as
 `shares`. Struct-bearing values are shared by descriptor (`s1.0.h`: a new
-struct whose slot 0 is shared). Where the compiler writes shares: item 11.
+struct whose slot 0 is shared). A slot of a type too imprecise to say
+(`any`, a generic position) beside a typed collection slot is listed with
+`d`, a copy of whatever it holds at run time (`W {a: MutableVector[int], d:
+any}` is `s2.0.h1.d`), so every slot of a copy owns its headers; a struct
+whose only such slots are imprecise is copied whole by `d`
+(`mv-any-slot-copies`: the descriptor once skipped those slots, so an
+`any` field kept its source's header, and two `any` fields of one copy
+shared one). A refined value has its carrier's representation, so an
+integer domain or a C scalar (`abi::I32`'s field, `ffi::c::Int`) holds no
+header and is no such slot (`MayHoldVector` looks through the refinement). Where the compiler writes shares: item 11.
 The descriptor walks struct fields only, so a struct that names itself
 (STRUCTS.md) is met again inside itself only through fields -- a type no
 finite value has -- and shares nothing there: `Chain {items, next: Chain}`
@@ -322,7 +331,9 @@ never on HIR rebuilt from Core IR) writes out:
 * **entries** -- a place root's initial value is shared unless it is fresh:
   a local's bound value, a parameter on entry (renamed: `v#entry`, and `v`
   becomes a local bound by its share), a loop variable per iteration, a
-  context installation's value. *Fresh* is a `from_list` result, a share, a
+  handler's payload binding (`on Full details:`, the same renaming in the
+  handler's body: the payload may hold a header the raiser's caller still
+  owns, `mv-payload-entry-copy`), a context installation's value. *Fresh* is a `from_list` result, a share, a
   struct literal of fresh fields (a field whose type may hold a vector --
   `any`, a generic position -- must be fresh too), or a call of a function
   whose every result is fresh;
@@ -366,7 +377,10 @@ header is a GC root (`ctxroot`, `vm.context_roots`). A context
 parameter is always a place root for read-outs, so a snapshot
 (`snapshot() -> MutableVector[str]: io.output`) is independent of later
 writes, in any function (`mv-context-member`); installing a context copies
-the installed value logically (`mv-context-installed-copy`).
+the installed value logically (`mv-context-installed-copy`). Both hold for a
+context whose members are all `any` too (a dynamic copy, `d`; on the Tcl
+backends: natively such a context is CONTEXT-NATIVE-LOWERING-UNSUPPORTED),
+`mv-any-slot-copies`.
 
 ### 16. `length`
 
@@ -1132,7 +1146,10 @@ operand after it (`NoLaterUse`: the later argument is copied instead of
 moved), and it is copied itself when a later argument of the call mutates
 the same place, or -- a context member, which any function sharing the
 context may mutate -- calls anything that may run code (`WrittenLater`,
-`MayRunCode`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
+`MayRunCode`), a yield included: it suspends the coroutine, and the
+resumer may mutate the installed context before it resumes it
+(`mutable_vector::at(c.values, (yield Ev {...}).i)` read the resumer's
+replacement until `mv-cow-by-reference-yield`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
 + 10)` updates `v`), and later arguments that only read cost nothing
 (`x = v.at(v.length() - 1)` copies nothing). `tests/mutable-vector.test`'s
 `mv-cow-by-reference-arguments` pins the seven cases;
@@ -1169,7 +1186,10 @@ List field) does not count. That omits only copies nothing could observe:
 every struct field of a binding the elaboration holds owns its headers
 alone -- a place root's or demanded local's entry and a consumed
 parameter's argument are exclusive (fresh, moved, or shared slot by slot by
-the descriptor, which gives each slot its own header), and no read-out puts
+the descriptor, which gives each slot its own header -- an `any` slot too,
+by `d`: the rule relies on it, and the first version of this change, when
+the descriptor skipped `any` slots, moved `k = w.d1` while `w.d2` held the
+same header), and no read-out puts
 one field's header into another -- so a sibling holds other headers; an
 Int or List field of an immutable struct cannot change when a header is
 mutated, and a List element or a closure's capture is never a place. A
@@ -1181,6 +1201,18 @@ is demanded (`r = put(t, i); fill(r.table, i + 1, acc + r.old)`), and
 `FreshFunctions` -- whose struct-literal case asks `Moved` of each field --
 sees the moves: a function ending in such a rebuild is fresh, and its
 callers copy nothing either.
+
+A statement that never completes skips the rest of its sequence, but only a
+`return` or a `fail` ends the walk there. A `break` goes on after its loop
+and a `continue` with the loop's next iteration (`Leaves`: the loop a
+`break` or `continue` of the statement leaves for, not one of a loop inside
+it), so `if found: r = consume(t); break` copies `t` when the code after the
+loop reads it, and `x = grow1(t, 10); continue` when the next iteration may
+(conservatively: every iteration of a loop the binding is not bound inside
+counts, as at the end of the body); a binding of the loop's own iteration is
+done with at either (`mv-break-continue-last-use`, `ma-break-continue-copies`:
+the rule once took both for a `return`, so the moved header was the one the
+code after the loop or the next iteration read and wrote, on every backend).
 
 Remaining gaps of the same kind (all sound, all still copies): a whole
 struct passed to a consumed parameter is copied when a later argument of
@@ -1203,8 +1235,11 @@ arguments read by reference before a later argument of the same call that
 moves or pops the same path); and the
 `path-*` mutants of `audit/mutable-vector/tools/mutants.txt` (a prefix, the
 same path, a header-bearing extension, later statements, later operands,
-branches, handlers or the next iteration ignored, a context path moved; and
-two economic ones: the per-binding rule back, an Int extension counted).
+branches, handlers or the next iteration ignored, a context path moved, a
+`break` or `continue` ending the walk, a `continue` taken for a `break`;
+and four economic ones: the per-binding rule back, an Int extension
+counted, a `break` copying what nothing after its loop reads, a binding of
+the iteration kept alive across a `continue`).
 
 ## Demand through struct literals
 
