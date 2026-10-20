@@ -735,12 +735,22 @@ exception.
 * **Native**: `cargo test --release --lib decimal` (4 tests: the nearest
   binary64 of six decimals across binary64's range against Rust's own
   parser, ties, the representation of a tie, quantization).
-* **The existing suites**: `tests/local.tcl` (every Tcl test file on
-  interp and compile, every golden suite on four backends) passes; the
-  changes it required were inventories (`stdlib-namespaces.test`,
-  `linux-syscall.test`'s value-family namespaces), the DiagnosticCode count
-  (`golden-framework.test`, `framework-semantics.bot`) and the static-compile
-  census. `tools/compilerpedia.tcl check` passes.
+* **The existing suites**: `tests/local.tcl` (200 Tcl test files on
+  interp and compile, 98 golden suites on four backends: 6,278 and 6,273 Tcl
+  tests, 4,882 / 4,882 / 4,790 / 4,892 golden tests) passes. The changes it
+  required were inventories (`stdlib-namespaces.test`, `linux-syscall.test`'s
+  value-family namespaces), the DiagnosticCode count (`golden-framework.test`,
+  `framework-semantics.bot`, `static-compile.test`'s `sc-codes-one-to-one`)
+  and the static-compile census. Also run, all passing: the decimal tests
+  under `BOTLISH_NATIVE_GC_STRESS=1` and with the stub linker,
+  `aot-stub-linker.test` and the `aotimage` Rust tests (the constants'
+  heap kind), the interchange and cache tests and their roundtrip audits
+  (the default suites and `decimal-rounded.bot`, 0 differences) and mutants
+  (27/27 killed), `compilation-isolation.test`, the warning gate,
+  `golden.test`, `method-eligible.test`, `diagnostic-recovery.test`, and the
+  golden framework's mutants (20/20 killed, run with `-suites 0`: the
+  framework test file and fuzzer as detectors) after the new
+  `test::code_name` cases. `tools/compilerpedia.tcl check` passes.
 
 Mutation result: 24 mutants, 24 killed, none survived. The test file kills
 every one; the fuzzer independently kills the ones that change a
