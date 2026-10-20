@@ -213,7 +213,7 @@ about 200 lines).
 
 Tests and audit tools:
 
-* tests/variadics.test (59 tests, new);
+* tests/variadics.test (58 tests, new);
 * tests/c-ffi.test's `cf-va-*` (27, new), with tests/cffi/fixture.c
   extended by genuine stdarg callees and machine-state capture;
 * tests/c-bindgen.test (4 new tests, updated counts);

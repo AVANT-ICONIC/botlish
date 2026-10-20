@@ -628,7 +628,7 @@ proc hir::traits::Implementation {req witness owner kind} {
                 return [dict create ok 0 reason "$qualified declares flags ([join [lmap f [dict get $info flags] {string cat : $f}] {, }]): implementations with flags are not supported yet" found $found]
             }
             if {[dict getdef $info variadic 0]} {
-                return [dict create ok 0 reason "$qualified is variadic: a trait requirement is a fixed signature, and a variadic function is no implementation of one (VARIADICS-VERTICAL-SLICE-1.md)" found $found]
+                return [dict create ok 0 reason "$qualified is variadic: a trait requirement is a fixed signature, and a variadic function is no implementation of one" found $found]
             }
             if {[dict get $info contexts] ne {}} {
                 return [dict create ok 0 reason "$qualified requires a context ([join [lmap c [dict get $info contexts] {dict get $c context}] {, }]): context-dependent implementations are not supported yet" found $found]

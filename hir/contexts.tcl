@@ -285,7 +285,7 @@ proc hir::contexts::TraitImplementation {req w owner} {
         return [dict create ok 0 reason "$qualified declares flags ([join [lmap f [dict get $info flags] {string cat : $f}] {, }]): implementations with flags are not supported yet" found $found]
     }
     if {[dict getdef $info variadic 0]} {
-        return [dict create ok 0 reason "$qualified is variadic: a context-trait operation is a fixed signature, and a variadic function is no implementation of one (VARIADICS-VERTICAL-SLICE-1.md)" found $found]
+        return [dict create ok 0 reason "$qualified is variadic: a context-trait operation is a fixed signature, and a variadic function is no implementation of one" found $found]
     }
     set contexts [dict get $info contexts]
     if {[llength $contexts] == 0} {
