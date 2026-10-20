@@ -20,7 +20,8 @@
 #     alternative is address arithmetic the lowering folds away: a scalar
 #     alternative of a union held by a record, a record alternative's
 #     field, an array alternative's element at a dynamic index, a pointer
-#     alternative, three reads switching interpretations, a wide and a
+#     alternative, three reads switching interpretations, the first and
+#     the last of a union of 64 alternatives, a wide and a
 #     narrow alternative's store, an element of an array of unions against
 #     an element of an array of records; in byte storage, binary::read and
 #     binary::write through an alternative against an ordinary field.
@@ -108,7 +109,17 @@ layout ARRP:
     field n: binary::U32 at 0
     field ps: array 7 of CELL at 8
 
+MANY_UNION
 }
+
+# MANY: a union of 64 alternatives of three widths, for the first against
+# the last -- both U64, so that only the position differs (a narrower
+# load costs differently, in a union or out of one).
+set many "union layout MANY:\n    size 8\n    align 8\n"
+for {set i 0} {$i < 64} {incr i} {
+    append many "    alternative a$i: [lindex {binary::U64 binary::U8 binary::U32} [expr {$i % 3}]]\n"
+}
+set prelude [string map [list MANY_UNION $many] $prelude]
 
 # A function `f(n: int, k: int) -> int` of BODY lines, called with N and
 # the dynamic index 3 under handlers.
@@ -132,6 +143,7 @@ set plainSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi:
 set arruSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(64))))" "v = binary::native::view(ARRU, p)"}
 set arrpSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(64))))" "v = binary::native::view(ARRP, p)"}
 set bytesSetup {"d = abi::bytes::zeroed(abi::usize(24))" "b = abi::bytes::freeze(d)"}
+set manySetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(8))))" "v = binary::native::view(MANY, p)"}
 
 proc programText {kind n} {
     # A program that makes a view or an edit is low-level (DIRECT-MODULES.md).
@@ -152,6 +164,9 @@ proc programText {kind n} {
         arru-element    { append p [Fn $n [Each $::arruSetup {"binary::element(v.us, k).whole"}]] }
         arrp-base       { append p [Fn $n [Each $::arrpSetup {i}]] }
         arrp-element    { append p [Fn $n [Each $::arrpSetup {"binary::element(v.ps, k).whole"}]] }
+        many-base       { append p [Fn $n [Each $::manySetup {i}]] }
+        many-first      { append p [Fn $n [Each $::manySetup {"v.a0"}]] }
+        many-last       { append p [Fn $n [Each $::manySetup {"v.a63"}]] }
         bytes-base      { append p [Fn $n [Each $::bytesSetup {i}]] }
         bytes-read-alt  { append p [Fn $n [Each $::bytesSetup {"binary::read(b, OUTER.u.parts.high)"}]] }
         bytes-read-plain { append p [Fn $n [Each $::bytesSetup {"binary::read(b, PLAIN.after)"}]] }
@@ -198,6 +213,8 @@ set operations {
     "view: an array alternative's element, dynamic index (binary::element(v.u.words, k - 2))" outer-word outer-base
     "view: a pointer alternative (q = v.u.p, ffi::c::null?(q))" outer-pointer outer-base
     "view: three reads switching interpretations (whole, parts.low, whole)" outer-switch outer-base
+    "view: the first of 64 alternatives (v.a0, a U64)" many-first many-base
+    "view: the last of 64 alternatives (v.a63, a U64)" many-last many-base
     "edit: a U64 alternative's store (OUTER.u.whole)" outer-store outer-base
     "edit: the same U64 as an ordinary field's store (PLAIN.whole)" plain-store plain-base
     "edit: a narrow alternative's store, 2 of the union's 8 bytes (OUTER.u.parts.high)" outer-narrow outer-base
