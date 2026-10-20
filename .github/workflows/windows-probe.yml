@@ -1,0 +1,208 @@
+name: windows probe
+
+# The Windows toolchain census's probe (WINDOWS-TOOLCHAIN-CENSUS.md): what
+# Botlish's native backend does on a real Windows x86-64 host with MSVC's
+# and with MinGW-w64's toolchain. It is evidence for the census, not a test
+# tier: nothing here gates anything, and the jobs record what happens rather
+# than require it to pass.
+#
+#   tcl     Tcl 9.0.1 (AGENTS.md's baseline) built from its pinned source
+#           release with MSVC's nmake, cached
+#   probe   one job per toolchain (msvc: rustc x86_64-pc-windows-msvc,
+#           linking with link.exe; gnu: rustc x86_64-pc-windows-gnu,
+#           linking with MSYS2's MinGW-w64 gcc and GNU ld). Each one:
+#             - checks the unpatched native crate (it does not compile for
+#               Windows: the census's build blockers)
+#             - builds the driver with audit/windows-toolchain/probe.patch
+#             - runs the native crate's unit tests
+#             - builds the probe's C library (programs/bwp.c) four ways:
+#               cl.exe static and DLL, MinGW-w64 gcc static and DLL
+#             - runs audit/windows-toolchain/tools/probe.tcl: main.tcl's
+#               Tcl backends, the JIT, GC stress, objects, executables, C
+#               calls through every library build, Win32 console output
+#             - runs a few existing test files on Windows
+#             - dumps the program object and the executables' imports
+#
+# The driver, its links and the tests run in a plain shell: rustc finds
+# link.exe and the Windows SDK itself (msvc) or uses MSYS2's gcc on PATH
+# (gnu). Only the C library and dumpbin steps enter vcvars64.bat.
+#
+# It runs on pushes that change it or audit/windows-toolchain/, and on
+# demand (workflow_dispatch).
+
+on:
+  push:
+    paths:
+      - ".github/workflows/windows-probe.yml"
+      - "audit/windows-toolchain/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TCL_VERSION: "9.0.1"
+  TCL_SHA256: a72b1607d7a399c75148c80fcdead88ed3371a29884181f200f2200cdee33bbc
+  TCL_PREFIX: C:\botlish-tcl
+
+jobs:
+  tcl:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: C:\botlish-tcl
+          key: tcl-9.0.1-msvc-windows-2025-v1
+      - name: Download Tcl 9.0.1
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $urls = @("https://downloads.sourceforge.net/project/tcl/Tcl/$env:TCL_VERSION/tcl$env:TCL_VERSION-src.tar.gz",
+                    "https://prdownloads.sourceforge.net/tcl/tcl$env:TCL_VERSION-src.tar.gz")
+          foreach ($url in $urls) {
+            try { Invoke-WebRequest -Uri $url -OutFile tcl-src.tar.gz -MaximumRetryCount 3 -RetryIntervalSec 5; break } catch { Write-Host "failed: $url" }
+          }
+          $hash = (Get-FileHash tcl-src.tar.gz -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:TCL_SHA256) { throw "sha256 mismatch: $hash" }
+          tar -xzf tcl-src.tar.gz
+      - name: Build Tcl 9.0.1 with MSVC
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS=%%i
+          call "%VS%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          cd tcl%TCL_VERSION%\win || exit /b 1
+          nmake /nologo /f makefile.vc release INSTALLDIR=%TCL_PREFIX% || exit /b 1
+          nmake /nologo /f makefile.vc install INSTALLDIR=%TCL_PREFIX% || exit /b 1
+          dir %TCL_PREFIX%\bin
+
+  probe:
+    needs: tcl
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [msvc, gnu]
+    runs-on: windows-2025
+    timeout-minutes: 150
+    env:
+      PROBE_OUT: ${{ github.workspace }}\probe-out
+      CLIB: ${{ github.workspace }}\clib
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: C:\botlish-tcl
+          key: tcl-9.0.1-msvc-windows-2025-v1
+          fail-on-cache-miss: true
+      - name: Locate vcvars64.bat (the driver and its links run without it; only the C library and dumpbin steps enter it)
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          "VCVARS=$vs\VC\Auxiliary\Build\vcvars64.bat" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$env:TCL_PREFIX\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Get-Command link.exe -All -ErrorAction SilentlyContinue | Select-Object Source
+      - name: MinGW-w64 gcc (MSYS2's mingw64, the msvcrt runtime Rust's windows-gnu target uses)
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -Sy --noconfirm --needed mingw-w64-x86_64-gcc
+          if ($LASTEXITCODE -ne 0) { throw "pacman failed" }
+          if ("${{ matrix.toolchain }}" -eq "gnu") { "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8 }
+      - name: Rust (${{ matrix.toolchain }})
+        shell: pwsh
+        run: |
+          $toolchain = if ("${{ matrix.toolchain }}" -eq "gnu") { "stable-x86_64-pc-windows-gnu" } else { "stable-x86_64-pc-windows-msvc" }
+          rustup toolchain install $toolchain --profile minimal
+          rustup default $toolchain
+      - name: Versions
+        shell: pwsh
+        run: |
+          rustc -vV
+          cargo -V
+          $tclsh = (Get-ChildItem "$env:TCL_PREFIX\bin\tclsh*.exe" | Select-Object -First 1).FullName
+          "TCLSH=$tclsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          'puts "Tcl [info patchlevel] [encoding system] $tcl_platform(os) $tcl_platform(machine)"' | & $tclsh
+          cmd /c "`"$env:VCVARS`" >nul && cl 2>&1" | Select-Object -First 1
+          & C:\msys64\mingw64\bin\gcc.exe --version | Select-Object -First 1
+          & C:\msys64\mingw64\bin\gcc.exe -dumpmachine
+      - name: The unpatched native crate does not compile for Windows (expected)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          cargo check --release --manifest-path native/Cargo.toml --lib --bins 2>&1 | Tee-Object -FilePath unpatched.log | Select-String -Pattern '^error' | Select-Object -First 40
+          if ($LASTEXITCODE -eq 0) { Write-Host "UNEXPECTED: the unpatched crate compiled" } else { throw "unpatched: does not compile (expected)" }
+      - name: Build the patched driver
+        shell: pwsh
+        env:
+          RUSTFLAGS: -C force-frame-pointers=yes
+        run: |
+          git apply audit/windows-toolchain/probe.patch
+          git diff --stat
+          cargo build --release --manifest-path native/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+          Get-ChildItem native\target\release\*.exe, native\target\release\*.rlib
+      - name: Native unit tests
+        shell: pwsh
+        continue-on-error: true
+        env:
+          RUSTFLAGS: -C force-frame-pointers=yes
+        run: |
+          cargo test --release --manifest-path native/Cargo.toml --lib --bins --no-fail-fast 2>&1 | Tee-Object -FilePath unit-tests.log | Select-String -Pattern 'test result|FAILED|panicked|error:'
+          if ($LASTEXITCODE -ne 0) { throw "unit tests failed" }
+      - name: The probe's C library, four builds
+        shell: cmd
+        run: |
+          call "%VCVARS%" >nul || exit /b 1
+          set SRC=%GITHUB_WORKSPACE%\audit\windows-toolchain\programs\bwp.c
+          for %%d in (msvc-static msvc-dll gnu-static gnu-dll) do mkdir "%CLIB%\%%d"
+          cd /d "%CLIB%\msvc-static" && cl /nologo /O2 /MD /c "%SRC%" && lib /nologo /OUT:bwp.lib bwp.obj || exit /b 1
+          cd /d "%CLIB%\msvc-dll" && cl /nologo /O2 /MD /LD /DBWP_DLL "%SRC%" /Fe:bwp.dll || exit /b 1
+          set PATH=C:\msys64\mingw64\bin;%PATH%
+          cd /d "%CLIB%\gnu-static" && gcc -O2 -c "%SRC%" -o bwp.o && ar rcs libbwp.a bwp.o && copy libbwp.a bwp.lib || exit /b 1
+          cd /d "%CLIB%\gnu-dll" && gcc -O2 -shared -DBWP_DLL "%SRC%" -o bwp.dll -Wl,--out-implib,libbwp.dll.a && copy libbwp.dll.a bwp.lib || exit /b 1
+          dir /s /b "%CLIB%"
+      - name: Probe
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $target = if ("${{ matrix.toolchain }}" -eq "gnu") { @("-target", "windows-x86_64-gnu") } else { @() }
+          & $env:TCLSH audit/windows-toolchain/tools/probe.tcl -out $env:PROBE_OUT -timeout 300 @target `
+            -lib "msvc-static=$env:CLIB\msvc-static" -lib "msvc-dll=$env:CLIB\msvc-dll" `
+            -lib "gnu-static=$env:CLIB\gnu-static" -lib "gnu-dll=$env:CLIB\gnu-dll" 2>&1 | Tee-Object -FilePath probe.txt
+          "## windows probe: ${{ matrix.toolchain }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Get-Content probe.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      - name: The program object and the executables, as MSVC's tools see them
+        shell: cmd
+        continue-on-error: true
+        run: |
+          call "%VCVARS%" >nul || exit /b 1
+          dumpbin /nologo /headers /symbols /relocations "%PROBE_OUT%\fib.obj" > "%PROBE_OUT%\fib.obj.dumpbin.txt"
+          powershell -NoProfile -Command "Get-Content '%PROBE_OUT%\fib.obj.dumpbin.txt' -TotalCount 80"
+          for /r "%PROBE_OUT%" %%f in (fib fib.exe ffi-probe ffi-probe.exe win32 win32.exe) do if exist "%%f" (echo == %%f & dumpbin /nologo /dependents "%%f" | findstr /i "\.dll")
+      - name: Existing test files on Windows
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $tmp = "$env:RUNNER_TEMP\botlish-tests"
+          foreach ($file in "target-model", "c-abi-types", "main-cli", "argv", "c-ffi", "application-modules") {
+            New-Item -ItemType Directory -Force "$tmp\$file" | Out-Null
+            Write-Host "== tests/$file.test"
+            & $env:TCLSH "tests/$file.test" -tmpdir "$tmp\$file" 2>&1 | Tee-Object -FilePath "$env:PROBE_OUT\test-$file.log" | Select-String -Pattern '^(====|---- .* FAILED|.*Total\s)' | Select-Object -First 60
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-probe-${{ matrix.toolchain }}
+          path: |
+            probe-out
+            probe.txt
+            unpatched.log
+            unit-tests.log
+          if-no-files-found: warn
